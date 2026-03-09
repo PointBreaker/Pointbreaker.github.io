@@ -57,6 +57,11 @@ const links = [
   { name: 'Email', url: 'mailto:hello@example.com', icon: 'email' }
 ]
 
+// 更多项目链接（导航索引）
+const moreProjects = [
+  // 示例：{ name: 'Blog', desc: '技术博客', url: '/blog/' },
+]
+
 const currentSection = ref('about')
 const navItems = [
   { key: 'about', label: 'Education' },
@@ -206,6 +211,18 @@ const navItems = [
 
       </div>
     </main>
+
+    <!-- More Projects -->
+    <section v-if="moreProjects.length > 0" class="more-projects">
+      <h2 class="more-title">More Projects</h2>
+      <div class="more-grid">
+        <a v-for="p in moreProjects" :key="p.name" :href="p.url" class="more-card">
+          <span class="more-name">{{ p.name }}</span>
+          <span class="more-desc">{{ p.desc }}</span>
+          <span class="more-arrow">→</span>
+        </a>
+      </div>
+    </section>
 
     <!-- Footer -->
     <footer class="footer">
@@ -723,6 +740,73 @@ const navItems = [
   border-radius: 4px;
   font-size: 0.6875rem;
   font-weight: 500;
+  color: var(--accent);
+}
+
+/* More Projects Section */
+.more-projects {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 2rem 2rem;
+}
+
+.more-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.more-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.more-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.more-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.more-name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.more-desc {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.more-arrow {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 1rem;
+  transition: transform 0.2s;
+}
+
+.more-card:hover .more-arrow {
+  transform: translateY(-50%) translateX(4px);
   color: var(--accent);
 }
 

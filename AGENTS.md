@@ -8,11 +8,28 @@
 
 | 属性 | 值 |
 |------|-----|
-| **项目名称** | PointBreaker's Personal Page |
+| **项目名称** | dax's Page (个人简历主页) |
 | **GitHub** | https://github.com/PointBreaker/Pointbreaker.github.io |
 | **访问地址** | https://pointbreaker.github.io/ |
 | **技术栈** | Vue 3 + Vite 5 |
 | **本地克隆** | `/tmp/Pointbreaker.github.io/` |
+| **最后更新** | 2026-03-10 |
+
+---
+
+## 📄 页面内容
+
+### 简历主页 (当前)
+- **姓名：** dax
+- **职位：** AI开发工程师
+- **学历：** 硕士 深圳大学 / 本科 南昌大学
+- **经历：** 腾讯 (2025.08-至今) / 深信服 (2024.07-2025.08)
+- **技能：** Python / Java / C C++ / AI (CV+NLP) / 网络安全 (Pwn+Web)
+
+### 页面结构
+- Education - 学历信息
+- Skills - 技能进度条
+- Experience - 工作经历时间线
 
 ---
 
