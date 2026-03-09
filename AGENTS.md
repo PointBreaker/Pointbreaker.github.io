@@ -101,6 +101,23 @@ npm run preview
 
 ---
 
+## 📦 添加新页面
+
+在 `src/App.vue` 的 `moreProjects` 数组中添加：
+
+```js
+const moreProjects = [
+  { name: 'Blog', desc: '技术博客', url: '/blog/' },
+  { name: 'Demo', desc: '项目演示', url: '/demo/' },
+]
+```
+
+添加后会在简历底部显示 "More Projects" 卡片导航区域。
+
+**注意：** 新页面需要单独创建 HTML 入口或使用子目录部署。
+
+---
+
 ## 📝 修改流程
 
 ```bash
