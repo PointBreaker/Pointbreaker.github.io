@@ -130,7 +130,6 @@ const navItems = [
               <div class="edu-content">
                 <div class="edu-header">
                   <h3 class="edu-school">{{ edu.school }}</h3>
-                  <span class="edu-period">{{ edu.period }}</span>
                 </div>
                 <p class="edu-degree">{{ edu.degree }} · {{ edu.major }}</p>
               </div>
