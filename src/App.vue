@@ -3,74 +3,86 @@ import { ref } from 'vue'
 
 // === 个人信息配置 ===
 const profile = {
-  name: 'PointBreaker',
-  title: 'Full-Stack Developer',
+  name: 'dax',
+  title: 'AI & Security Engineer',
   avatar: '🧑‍💻',
-  bio: 'Building elegant solutions to complex problems. Passionate about clean code, open source, and continuous learning.',
-  location: 'Earth',
+  bio: '热爱技术，专注于人工智能与网络安全领域。在CV/NLP和Pwn/Web方向有深入研究，持续探索前沿技术。',
+  location: 'Shenzhen, China',
   email: 'hello@example.com',
-  status: 'Open to opportunities'
+  status: 'Tencent · 2025'
 }
 
+const education = [
+  {
+    degree: '硕士',
+    school: '深圳大学',
+    period: '2022 - 2024',
+    major: '计算机科学'
+  },
+  {
+    degree: '本科',
+    school: '南昌大学',
+    period: '2018 - 2022',
+    major: '计算机科学与技术'
+  }
+]
+
 const skills = [
-  { name: 'JavaScript / TypeScript', level: 95 },
-  { name: 'Vue / React', level: 90 },
-  { name: 'Node.js', level: 85 },
-  { name: 'Python', level: 80 },
-  { name: 'Go', level: 70 },
-  { name: 'Docker / K8s', level: 75 }
+  { name: 'Python', level: 95 },
+  { name: 'Java', level: 85 },
+  { name: 'C / C++', level: 88 },
+  { name: '人工智能 (CV + NLP)', level: 90 },
+  { name: '网络安全 (Pwn + Web)', level: 88 }
 ]
 
 const experience = [
   {
-    role: 'Senior Developer',
-    company: 'Tech Company',
-    period: '2023 - Present',
-    desc: 'Leading frontend architecture and building scalable applications.'
+    role: '安全工程师',
+    company: '腾讯',
+    period: '2025.08 - 至今',
+    desc: '负责安全研究与漏洞挖掘，参与红蓝对抗项目。'
   },
   {
-    role: 'Full-Stack Developer',
-    company: 'Startup',
-    period: '2021 - 2023',
-    desc: 'Built end-to-end features and improved system performance by 40%.'
-  },
-  {
-    role: 'Junior Developer',
-    company: 'Agency',
-    period: '2019 - 2021',
-    desc: 'Delivered 20+ client projects and mastered modern web technologies.'
+    role: '算法工程师',
+    company: '深信服',
+    period: '2024.07 - 2025.08',
+    desc: '从事AI安全相关研发，参与威胁检测模型的设计与优化。'
   }
 ]
 
 const projects = [
   {
-    name: 'OpenClaw',
-    desc: 'AI-powered personal assistant framework',
-    tech: ['Vue', 'Node.js', 'AI'],
-    link: 'https://github.com/PointBreaker'
-  },
-  {
-    name: 'Project Alpha',
-    desc: 'Real-time collaboration platform',
-    tech: ['React', 'WebSocket', 'Go'],
+    name: 'AI Security',
+    desc: 'AI驱动的安全检测与分析平台',
+    tech: ['Python', 'PyTorch', 'CV'],
     link: '#'
   },
   {
-    name: 'DevTools',
-    desc: 'Developer productivity toolkit',
-    tech: ['TypeScript', 'Electron'],
+    name: 'Pwn Toolkit',
+    desc: '二进制漏洞利用框架',
+    tech: ['Python', 'C', 'Pwn'],
+    link: '#'
+  },
+  {
+    name: 'NLP Engine',
+    desc: '自然语言处理引擎',
+    tech: ['Python', 'Transformers', 'NLP'],
     link: '#'
   }
 ]
 
 const links = [
   { name: 'GitHub', url: 'https://github.com/PointBreaker', icon: 'github' },
-  { name: 'Twitter', url: 'https://twitter.com', icon: 'twitter' },
-  { name: 'LinkedIn', url: 'https://linkedin.com', icon: 'linkedin' },
   { name: 'Email', url: 'mailto:hello@example.com', icon: 'email' }
 ]
 
 const currentSection = ref('about')
+const navItems = [
+  { key: 'about', label: 'Education' },
+  { key: 'skills', label: 'Skills' },
+  { key: 'experience', label: 'Experience' },
+  { key: 'projects', label: 'Projects' }
+]
 </script>
 
 <template>
@@ -85,12 +97,12 @@ const currentSection = ref('about')
         <span class="nav-logo">{{ profile.name }}</span>
         <div class="nav-links">
           <button 
-            v-for="section in ['about', 'skills', 'experience', 'projects']" 
-            :key="section"
-            :class="['nav-link', { active: currentSection === section }]"
-            @click="currentSection = section"
+            v-for="item in navItems" 
+            :key="item.key"
+            :class="['nav-link', { active: currentSection === item.key }]"
+            @click="currentSection = item.key"
           >
-            {{ section }}
+            {{ item.label }}
           </button>
         </div>
       </div>
@@ -126,7 +138,20 @@ const currentSection = ref('about')
         
         <!-- About -->
         <section v-if="currentSection === 'about'" class="section about-section">
-          <h2 class="section-title">About</h2>
+          <h2 class="section-title">Education</h2>
+          <div class="education-list">
+            <div v-for="(edu, i) in education" :key="i" class="education-item">
+              <div class="edu-icon">{{ edu.degree === '硕士' ? '🎓' : '📚' }}</div>
+              <div class="edu-content">
+                <div class="edu-header">
+                  <h3 class="edu-school">{{ edu.school }}</h3>
+                  <span class="edu-period">{{ edu.period }}</span>
+                </div>
+                <p class="edu-degree">{{ edu.degree }} · {{ edu.major }}</p>
+              </div>
+            </div>
+          </div>
+          <h2 class="section-title" style="margin-top: 2rem;">Info</h2>
           <div class="about-grid">
             <div class="about-card">
               <span class="card-icon">📍</span>
@@ -134,19 +159,19 @@ const currentSection = ref('about')
               <span class="card-value">{{ profile.location }}</span>
             </div>
             <div class="about-card">
-              <span class="card-icon">💼</span>
+              <span class="card-icon">🎯</span>
               <span class="card-label">Focus</span>
-              <span class="card-value">Full-Stack Development</span>
-            </div>
-            <div class="about-card">
-              <span class="card-icon">🚀</span>
-              <span class="card-label">Experience</span>
-              <span class="card-value">5+ Years</span>
+              <span class="card-value">AI & Security</span>
             </div>
             <div class="about-card">
               <span class="card-icon">🌐</span>
               <span class="card-label">Languages</span>
               <span class="card-value">EN / 中文</span>
+            </div>
+            <div class="about-card">
+              <span class="card-icon">💻</span>
+              <span class="card-label">Tech Stack</span>
+              <span class="card-value">Python / C++ / Java</span>
             </div>
           </div>
         </section>
@@ -490,6 +515,66 @@ const currentSection = ref('about')
 .card-value {
   font-weight: 600;
   color: var(--text);
+}
+
+/* Education Section */
+.education-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.education-item {
+  display: flex;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  transition: all 0.2s;
+}
+
+.education-item:hover {
+  border-color: var(--accent-light);
+}
+
+.edu-icon {
+  width: 44px;
+  height: 44px;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.edu-content {
+  flex: 1;
+}
+
+.edu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.25rem;
+}
+
+.edu-school {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.edu-period {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+.edu-degree {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
 }
 
 /* Skills Section */
