@@ -1,49 +1,104 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 const loading = ref(true)
 const feeds = ref([])
 const lastUpdate = ref('')
+const error = ref('')
 
-// 热点数据（测试用，后续接入真实 API）
-const mockNews = [
-  // AI
-  { category: 'AI', title: 'OpenAI 发布 GPT-5，性能大幅提升', source: 'TechCrunch', time: '2h', url: '#', hot: true },
-  { category: 'AI', title: 'Claude 4 发布，支持超长上下文', source: 'Anthropic', time: '5h', url: '#', hot: true },
-  { category: 'AI', title: 'Google DeepMind 新突破：AI 解决数学难题', source: 'Nature', time: '8h', url: '#' },
-  { category: 'AI', title: '国内大模型价格战打响', source: '36氪', time: '12h', url: '#' },
-  
-  // 科技
-  { category: '科技', title: '苹果 Vision Pro 2 或于今年发布', source: 'Bloomberg', time: '3h', url: '#', hot: true },
-  { category: '科技', title: '特斯拉 FSD V13 开放测试', source: 'Electrek', time: '6h', url: '#' },
-  { category: '科技', title: '英伟达市值突破 3 万亿美元', source: 'Reuters', time: '1d', url: '#' },
-  
-  // 互联网
-  { category: '互联网', title: '微信测试新功能：AI 助手', source: '微信派', time: '4h', url: '#', hot: true },
-  { category: '互联网', title: '抖音电商 GMV 突破 3 万亿', source: '晚点LatePost', time: '10h', url: '#' },
-  { category: '互联网', title: '美团外卖推出无人机配送', source: '36氪', time: '1d', url: '#' },
+// RSS 数据源配置（通过 rss2json 代理）
+const RSS_SOURCES = [
+  // AI & 科技
+  { name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: '科技', icon: '📰' },
+  { name: 'TechCrunch', url: 'https://techcrunch.com/feed/', category: '科技', icon: '🔧' },
+  { name: 'The Verge', url: 'https://www.theverge.com/rss/full.xml', category: '科技', icon: '📱' },
+  { name: 'VentureBeat', url: 'https://venturebeat.com/feed/', category: '科技', icon: '💼' },
+  { name: 'Product Hunt', url: 'https://www.producthunt.com/feed', category: '产品', icon: '🚀' },
+  { name: 'Wired', url: 'https://www.wired.com/feed/rss', category: '科技', icon: '🔌' },
 ]
 
-const categories = ['全部', 'AI', '科技', '互联网']
+const categories = ['全部', '科技', '产品', 'AI']
 const activeCategory = ref('全部')
 
-const filteredNews = ref(mockNews)
+const filteredFeeds = computed(() => {
+  if (activeCategory.value === '全部') return feeds.value
+  return feeds.value.filter(f => f.category === activeCategory.value)
+})
 
 const filterByCategory = (cat) => {
   activeCategory.value = cat
-  if (cat === '全部') {
-    filteredNews.value = mockNews
-  } else {
-    filteredNews.value = mockNews.filter(n => n.category === cat)
+}
+
+// RSS 转 JSON 代理服务
+const RSS_PROXY = 'https://api.rss2json.com/v1/api.json?rss_url='
+
+async function fetchFeed(source) {
+  try {
+    const res = await fetch(RSS_PROXY + encodeURIComponent(source.url))
+    const data = await res.json()
+    
+    if (data.status === 'ok' && data.items) {
+      return data.items.slice(0, 5).map(item => ({
+        title: item.title,
+        url: item.link,
+        source: source.name,
+        category: source.category,
+        icon: source.icon,
+        time: formatTime(item.pubDate),
+        hot: false
+      }))
+    }
+    return []
+  } catch (e) {
+    console.error(`Failed to fetch ${source.name}:`, e)
+    return []
+  }
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now - date
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+  
+  if (diffMins < 60) return `${diffMins}m`
+  if (diffHours < 24) return `${diffHours}h`
+  if (diffDays < 7) return `${diffDays}d`
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+}
+
+async function loadFeeds() {
+  loading.value = true
+  error.value = ''
+  
+  try {
+    const results = await Promise.all(RSS_SOURCES.map(fetchFeed))
+    const allItems = results.flat()
+    
+    // 按时间排序
+    allItems.sort((a, b) => {
+      if (!a.time || !b.time) return 0
+      return a.time.localeCompare(b.time)
+    })
+    
+    // 标记热门（前5个）
+    allItems.slice(0, 5).forEach(item => item.hot = true)
+    
+    feeds.value = allItems
+    lastUpdate.value = new Date().toLocaleString('zh-CN')
+  } catch (e) {
+    error.value = '加载失败，请稍后重试'
+    console.error(e)
+  } finally {
+    loading.value = false
   }
 }
 
 onMounted(() => {
-  // 模拟加载
-  setTimeout(() => {
-    loading.value = false
-    lastUpdate.value = new Date().toLocaleString('zh-CN')
-  }, 500)
+  loadFeeds()
 })
 </script>
 
@@ -69,39 +124,55 @@ onMounted(() => {
       >
         {{ cat }}
       </button>
+      <button class="cat-btn refresh-btn" @click="loadFeeds" :disabled="loading">
+        {{ loading ? '...' : '↻' }}
+      </button>
       <span class="update-time">{{ lastUpdate }}</span>
     </div>
 
+    <!-- Error -->
+    <div v-if="error" class="error-msg">
+      {{ error }}
+    </div>
+
     <!-- Loading -->
-    <div v-if="loading" class="loading">
+    <div v-if="loading && feeds.length === 0" class="loading">
       <div class="spinner"></div>
-      <span>加载中...</span>
+      <span>抓取热点中...</span>
     </div>
 
     <!-- News List -->
     <div v-else class="news-list">
       <a 
-        v-for="(news, i) in filteredNews" 
+        v-for="(news, i) in filteredFeeds" 
         :key="i" 
         :href="news.url" 
         target="_blank"
+        rel="noopener"
         class="news-item"
       >
         <div class="news-main">
-          <span class="news-category">{{ news.category }}</span>
+          <div class="news-header">
+            <span class="news-icon">{{ news.icon }}</span>
+            <span class="news-category">{{ news.category }}</span>
+            <span class="news-source">{{ news.source }}</span>
+          </div>
           <span class="news-title">{{ news.title }}</span>
-          <span class="news-source">{{ news.source }}</span>
         </div>
         <div class="news-meta">
-          <span v-if="news.hot" class="hot-badge">🔥 热</span>
+          <span v-if="news.hot" class="hot-badge">🔥</span>
           <span class="news-time">{{ news.time }}</span>
         </div>
       </a>
+      
+      <div v-if="filteredFeeds.length === 0" class="empty-state">
+        暂无内容
+      </div>
     </div>
 
     <!-- Footer -->
     <footer class="daily-footer">
-      <span>数据来源：RSS / API 聚合（测试版）</span>
+      <span>数据来源：Hacker News · TechCrunch · The Verge · VentureBeat · Product Hunt · Wired</span>
     </footer>
   </div>
 </template>
@@ -110,8 +181,6 @@ onMounted(() => {
 .daily-page {
   min-height: 100vh;
   background: var(--bg);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--text);
   position: relative;
 }
 
@@ -180,7 +249,7 @@ onMounted(() => {
   transition: all 0.2s;
 }
 
-.cat-btn:hover {
+.cat-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -191,10 +260,28 @@ onMounted(() => {
   color: white;
 }
 
+.cat-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.refresh-btn {
+  padding: 0.5rem 0.75rem;
+}
+
 .update-time {
   margin-left: auto;
   font-size: 0.75rem;
   color: var(--text-muted);
+}
+
+/* Error */
+.error-msg {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  color: #ef4444;
+  font-size: 0.875rem;
 }
 
 /* Loading */
@@ -253,7 +340,19 @@ onMounted(() => {
 .news-main {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.375rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.news-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.news-icon {
+  font-size: 0.875rem;
 }
 
 .news-category {
@@ -264,15 +363,19 @@ onMounted(() => {
   letter-spacing: 0.05em;
 }
 
+.news-source {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
 .news-title {
   font-size: 0.9375rem;
   font-weight: 500;
   line-height: 1.4;
-}
-
-.news-source {
-  font-size: 0.75rem;
-  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .news-meta {
@@ -281,16 +384,22 @@ onMounted(() => {
   align-items: flex-end;
   gap: 0.25rem;
   flex-shrink: 0;
+  margin-left: 1rem;
 }
 
 .hot-badge {
-  font-size: 0.6875rem;
-  color: #f59e0b;
-  font-weight: 600;
+  font-size: 0.875rem;
 }
 
 .news-time {
   font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem;
   color: var(--text-muted);
 }
 
@@ -299,7 +408,7 @@ onMounted(() => {
   text-align: center;
   padding: 2rem;
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 /* Responsive */
@@ -321,6 +430,12 @@ onMounted(() => {
     padding: 0 1rem;
   }
   
+  .update-time {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+  
   .news-list {
     padding: 0 1rem 3rem;
   }
@@ -336,6 +451,7 @@ onMounted(() => {
     align-items: center;
     width: 100%;
     justify-content: space-between;
+    margin-left: 0;
   }
 }
 </style>
