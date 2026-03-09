@@ -37,39 +37,20 @@ const skills = [
 
 const experience = [
   {
-    role: '安全工程师',
+    role: 'AI开发工程师',
     company: '腾讯',
     period: '2025.08 - 至今',
-    desc: '负责安全研究与漏洞挖掘，参与红蓝对抗项目。'
+    desc: '负责AI模型开发与安全相关研究。'
   },
   {
-    role: '算法工程师',
+    role: 'AI开发工程师',
     company: '深信服',
     period: '2024.07 - 2025.08',
     desc: '从事AI安全相关研发，参与威胁检测模型的设计与优化。'
   }
 ]
 
-const projects = [
-  {
-    name: 'AI Security',
-    desc: 'AI驱动的安全检测与分析平台',
-    tech: ['Python', 'PyTorch', 'CV'],
-    link: '#'
-  },
-  {
-    name: 'Pwn Toolkit',
-    desc: '二进制漏洞利用框架',
-    tech: ['Python', 'C', 'Pwn'],
-    link: '#'
-  },
-  {
-    name: 'NLP Engine',
-    desc: '自然语言处理引擎',
-    tech: ['Python', 'Transformers', 'NLP'],
-    link: '#'
-  }
-]
+const projects = []
 
 const links = [
   { name: 'GitHub', url: 'https://github.com/PointBreaker', icon: 'github' },
@@ -80,8 +61,7 @@ const currentSection = ref('about')
 const navItems = [
   { key: 'about', label: 'Education' },
   { key: 'skills', label: 'Skills' },
-  { key: 'experience', label: 'Experience' },
-  { key: 'projects', label: 'Projects' }
+  { key: 'experience', label: 'Experience' }
 ]
 </script>
 
