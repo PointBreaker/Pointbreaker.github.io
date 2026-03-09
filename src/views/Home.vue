@@ -58,16 +58,17 @@ const links = [
   { name: 'Email', url: 'mailto:hello@example.com', icon: 'email' }
 ]
 
-// 更多项目链接
+// 更多项目链接（暂时为空）
 const moreProjects = [
-  { name: 'Daily', desc: '热点资讯', url: '#/daily' },
+  // 示例：{ name: 'Blog', desc: '技术博客', url: '/blog' },
 ]
 
 const currentSection = ref('about')
 const navItems = [
   { key: 'about', label: 'Education' },
   { key: 'skills', label: 'Skills' },
-  { key: 'experience', label: 'Experience' }
+  { key: 'experience', label: 'Experience' },
+  { key: 'daily', label: 'Daily', route: '/daily' }
 ]
 </script>
 
@@ -82,14 +83,22 @@ const navItems = [
       <div class="nav-inner">
         <router-link to="/" class="nav-logo">{{ profile.name }}</router-link>
         <div class="nav-links">
-          <button 
-            v-for="item in navItems" 
-            :key="item.key"
-            :class="['nav-link', { active: currentSection === item.key }]"
-            @click="currentSection = item.key"
-          >
-            {{ item.label }}
-          </button>
+          <template v-for="item in navItems" :key="item.key">
+            <router-link 
+              v-if="item.route" 
+              :to="item.route" 
+              class="nav-link"
+            >
+              {{ item.label }}
+            </router-link>
+            <button 
+              v-else
+              :class="['nav-link', { active: currentSection === item.key }]"
+              @click="currentSection = item.key"
+            >
+              {{ item.label }}
+            </button>
+          </template>
         </div>
       </div>
     </nav>

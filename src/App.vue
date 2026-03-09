@@ -83,6 +83,8 @@ a {
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s;
+  text-decoration: none;
+  display: inline-block;
 }
 
 .nav-link:hover {
