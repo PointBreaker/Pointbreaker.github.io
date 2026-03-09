@@ -4,8 +4,7 @@ import { ref } from 'vue'
 // === 索引页面配置 ===
 // 在这里添加 dax 让你生成的随机页面
 const pages = ref([
-  // 示例：
-  // { name: 'Demo', desc: '演示页面', url: '/demo', icon: '🎮', date: '2026-03-10' },
+  { name: 'Gravity Field', desc: '引力场模拟器 - 点击创建引力源', url: '/gravity', icon: '🌌', date: '2026-03-10', category: '演示' },
 ])
 
 const categories = ['全部', '工具', '游戏', '演示', '其他']
