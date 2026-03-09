@@ -103,18 +103,27 @@ npm run preview
 
 ## 📦 添加新页面
 
-在 `src/App.vue` 的 `moreProjects` 数组中添加：
+**Index 页面** (`/#/index`) 是随机页面索引，用于链接 dax 生成的各种页面。
 
-```js
-const moreProjects = [
-  { name: 'Blog', desc: '技术博客', url: '/blog/' },
-  { name: 'Demo', desc: '项目演示', url: '/demo/' },
-]
-```
+### 添加新页面步骤：
 
-添加后会在简历底部显示 "More Projects" 卡片导航区域。
+1. 创建新的 Vue 组件：`src/views/YourPage.vue`
+2. 在 `src/router.js` 中添加路由：
+   ```js
+   { path: '/your-page', component: YourPage }
+   ```
+3. 在 `src/views/Index.vue` 的 `pages` 数组中添加索引：
+   ```js
+   { name: 'Your Page', desc: '页面描述', url: '/your-page', icon: '📄', date: '2026-03-10' }
+   ```
 
-**注意：** 新页面需要单独创建 HTML 入口或使用子目录部署。
+### Index 页面字段说明：
+- `name`: 页面名称
+- `desc`: 简短描述
+- `url`: 路由路径（如 `/demo`）
+- `icon`: emoji 图标（可选）
+- `date`: 创建日期
+- `category`: 分类（工具/游戏/演示/其他，可选）
 
 ---
 
