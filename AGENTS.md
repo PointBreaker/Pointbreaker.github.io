@@ -63,8 +63,13 @@ Pointbreaker.github.io/
 │   └── workflows/
 │       └── deploy.yml   # CI/CD
 └── src/
-    ├── main.js          # Vue 入口
-    └── App.vue          # 主组件
+    ├── main.js          # Vue 入口 + Router 挂载
+    ├── App.vue          # 根组件（全局样式）
+    ├── router.js        # 路由配置
+    └── views/
+        ├── Home.vue     # 简历主页
+        ├── Index.vue    # 随机页面索引
+        └── *.vue        # 其他页面
 ```
 
 ---
@@ -103,18 +108,33 @@ npm run preview
 
 ## 📦 添加新页面
 
+> ⚠️ **重要规则**：当 dax 要求生成新页面时，必须按照以下步骤操作！
+
 **Index 页面** (`/#/index`) 是随机页面索引，用于链接 dax 生成的各种页面。
 
 ### 添加新页面步骤：
 
-1. 创建新的 Vue 组件：`src/views/YourPage.vue`
-2. 在 `src/router.js` 中添加路由：
+1. **创建 Vue 组件**：`src/views/YourPage.vue`
+   
+2. **添加路由**：在 `src/router.js` 中添加：
    ```js
+   import YourPage from './views/YourPage.vue'
+   // 在 routes 数组中添加：
    { path: '/your-page', component: YourPage }
    ```
-3. 在 `src/views/Index.vue` 的 `pages` 数组中添加索引：
+
+3. **添加索引**：在 `src/views/Index.vue` 的 `pages` ref 中添加：
    ```js
-   { name: 'Your Page', desc: '页面描述', url: '/your-page', icon: '📄', date: '2026-03-10' }
+   const pages = ref([
+     { name: 'Your Page', desc: '页面描述', url: '/your-page', icon: '📄', date: '2026-03-10', category: '演示' },
+   ])
+   ```
+
+4. **构建并推送**：
+   ```bash
+   cd /tmp/Pointbreaker.github.io
+   npm run build
+   git add -A && git commit -m "feat: 添加 Your Page" && git push
    ```
 
 ### Index 页面字段说明：
@@ -124,6 +144,9 @@ npm run preview
 - `icon`: emoji 图标（可选）
 - `date`: 创建日期
 - `category`: 分类（工具/游戏/演示/其他，可选）
+
+### 已有页面：
+- `/#/gravity` - Gravity Field（引力场模拟器）
 
 ---
 
