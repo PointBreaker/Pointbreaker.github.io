@@ -4,6 +4,7 @@ import { ref } from 'vue'
 // === 索引页面配置 ===
 // 在这里添加 dax 让你生成的随机页面
 const pages = ref([
+  { name: 'Crypto Market', desc: '加密货币实时行情与市场分析', url: '/crypto', icon: '₿', date: '2026-03-10', category: '工具' },
   { name: 'Gravity Field', desc: '引力场模拟器 - 点击创建引力源', url: '/gravity', icon: '🌌', date: '2026-03-10', category: '演示' },
 ])
 
