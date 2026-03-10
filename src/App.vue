@@ -14,18 +14,22 @@
 }
 
 :root {
-  --bg: #fafafa;
-  --bg-card: #ffffff;
-  --text: #1a1a2e;
-  --text-secondary: #64648c;
-  --text-muted: #9494b8;
+  --bg: #0a0a0f;
+  --bg-card: #1a1a2e;
+  --text: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-muted: rgba(255, 255, 255, 0.4);
   --accent: #6366f1;
   --accent-light: #818cf8;
-  --border: #e5e5e5;
-  --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1);
-  --shadow-lg: 0 10px 40px rgba(0,0,0,0.08);
+  --border: rgba(255, 255, 255, 0.08);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 40px rgba(99, 102, 241, 0.15);
   --radius: 12px;
   --radius-sm: 6px;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -33,6 +37,8 @@ body {
   color: var(--text);
   line-height: 1.6;
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
@@ -40,76 +46,32 @@ a {
   text-decoration: none;
 }
 
-/* 共享样式：导航栏 */
-.nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  background: rgba(250, 250, 250, 0.8);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
-  z-index: 100;
+button {
+  font-family: inherit;
 }
 
-.nav-inner {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 1rem 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
 
-.nav-logo {
-  font-weight: 600;
-  font-size: 1.125rem;
-  color: var(--text);
-  text-decoration: none;
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.nav-links {
-  display: flex;
-  gap: 0.25rem;
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
 }
 
-.nav-link {
-  padding: 0.5rem 1rem;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s;
-  text-decoration: none;
-  display: inline-block;
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-.nav-link:hover {
-  color: var(--text);
-  background: rgba(0,0,0,0.04);
-}
-
-.nav-link.active {
-  color: var(--accent);
-  background: rgba(99, 102, 241, 0.1);
-}
-
-/* 响应式 */
-@media (max-width: 640px) {
-  .nav-inner {
-    padding: 0.875rem 1rem;
-  }
-  
-  .nav-links {
-    gap: 0;
-  }
-  
-  .nav-link {
-    padding: 0.5rem 0.625rem;
-    font-size: 0.8125rem;
-  }
+/* 选择文本样式 */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: #fff;
 }
 </style>
