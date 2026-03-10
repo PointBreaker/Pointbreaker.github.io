@@ -1,991 +1,333 @@
-<script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-
-// === 个人信息配置 ===
-const profile = {
-  name: 'dax',
-  title: 'AI & Security Engineer',
-  avatar: '🧑‍💻',
-  bio: '热爱技术，专注于人工智能与网络安全领域。在CV/NLP和Pwn/Web方向有深入研究，持续探索前沿技术。',
-  location: 'Shenzhen, China',
-  email: 'hello@example.com',
-  status: 'Tencent · 2025'
-}
-
-const education = [
-  {
-    degree: '硕士',
-    school: '深圳大学',
-    period: '2022 - 2024',
-    major: '计算机科学'
-  },
-  {
-    degree: '本科',
-    school: '南昌大学',
-    period: '2018 - 2022',
-    major: '计算机科学与技术'
-  }
-]
-
-const skills = [
-  { name: 'Python', level: 95 },
-  { name: 'Java', level: 85 },
-  { name: 'C / C++', level: 88 },
-  { name: '人工智能 (CV + NLP)', level: 90 },
-  { name: '网络安全 (Pwn + Web)', level: 88 }
-]
-
-const experience = [
-  {
-    role: 'AI开发工程师',
-    company: '腾讯',
-    period: '2025.08 - 至今',
-    desc: '负责AI模型开发与安全相关研究。'
-  },
-  {
-    role: 'AI开发工程师',
-    company: '深信服',
-    period: '2024.07 - 2025.08',
-    desc: '从事AI安全相关研发，参与威胁检测模型的设计与优化。'
-  }
-]
-
-const links = [
-  { name: 'GitHub', url: 'https://github.com/PointBreaker', icon: 'github' },
-  { name: 'Email', url: 'mailto:hello@example.com', icon: 'email' }
-]
-
-const currentSection = ref('about')
-const navItems = [
-  { key: 'about', label: 'Education' },
-  { key: 'skills', label: 'Skills' },
-  { key: 'experience', label: 'Experience' }
-]
-
-// === 粒子背景 ===
-const particlesCanvas = ref(null)
-let particles = []
-let animationId = null
-let ctx = null
-
-const initParticles = () => {
-  const canvas = particlesCanvas.value
-  if (!canvas) return
-  
-  ctx = canvas.getContext('2d')
-  resizeCanvas()
-  
-  const particleCount = Math.floor((canvas.width * canvas.height) / 15000)
-  particles = []
-  
-  for (let i = 0; i < particleCount; i++) {
-    particles.push({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: (Math.random() - 0.5) * 0.5,
-      radius: Math.random() * 2 + 1,
-      opacity: Math.random() * 0.5 + 0.2
-    })
-  }
-  
-  animate()
-}
-
-const resizeCanvas = () => {
-  const canvas = particlesCanvas.value
-  if (!canvas) return
-  canvas.width = window.innerWidth
-  canvas.height = window.innerHeight
-}
-
-const animate = () => {
-  const canvas = particlesCanvas.value
-  if (!canvas || !ctx) return
-  
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-  
-  particles.forEach(p => {
-    p.x += p.vx
-    p.y += p.vy
-    
-    if (p.x < 0 || p.x > canvas.width) p.vx *= -1
-    if (p.y < 0 || p.y > canvas.height) p.vy *= -1
-    
-    ctx.beginPath()
-    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(99, 102, 241, ${p.opacity})`
-    ctx.fill()
-  })
-  
-  particles.forEach((p1, i) => {
-    particles.slice(i + 1).forEach(p2 => {
-      const dx = p1.x - p2.x
-      const dy = p1.y - p2.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      
-      if (dist < 120) {
-        ctx.beginPath()
-        ctx.moveTo(p1.x, p1.y)
-        ctx.lineTo(p2.x, p2.y)
-        ctx.strokeStyle = `rgba(99, 102, 241, ${0.15 * (1 - dist / 120)})`
-        ctx.lineWidth = 0.5
-        ctx.stroke()
-      }
-    })
-  })
-  
-  animationId = requestAnimationFrame(animate)
-}
-
-// === 鼠标跟随光效 ===
-const mouseX = ref(0)
-const mouseY = ref(0)
-const showCursorGlow = ref(false)
-
-const handleMouseMove = (e) => {
-  mouseX.value = e.clientX
-  mouseY.value = e.clientY
-  showCursorGlow.value = true
-}
-
-const handleMouseLeave = () => {
-  showCursorGlow.value = false
-}
-
-// === 生命周期 ===
-onMounted(() => {
-  initParticles()
-  window.addEventListener('resize', resizeCanvas)
-  document.addEventListener('mousemove', handleMouseMove)
-  document.addEventListener('mouseleave', handleMouseLeave)
-})
-
-onUnmounted(() => {
-  if (animationId) {
-    cancelAnimationFrame(animationId)
-  }
-  window.removeEventListener('resize', resizeCanvas)
-  document.removeEventListener('mousemove', handleMouseMove)
-  document.removeEventListener('mouseleave', handleMouseLeave)
-})
-</script>
-
 <template>
-  <div class="cv-page">
-    <!-- 粒子背景 Canvas -->
-    <canvas ref="particlesCanvas" class="particles-bg"></canvas>
-    
-    <!-- 流动渐变背景 -->
-    <div class="bg-gradient-animated"></div>
-    
-    <!-- 鼠标跟随光效 -->
-    <div 
-      class="cursor-glow" 
-      :style="{ 
-        left: mouseX + 'px', 
-        top: mouseY + 'px',
-        opacity: showCursorGlow ? 1 : 0
-      }"
-    ></div>
+  <div class="page-content">
+    <h1 class="page-title slide-up">Curriculum Vitae</h1>
 
-    <!-- Navigation -->
-    <nav class="nav">
-      <div class="nav-inner">
-        <router-link to="/" class="nav-logo">{{ profile.name }} hub</router-link>
-        <div class="nav-links">
-          <router-link to="/" class="nav-link">Hub</router-link>
-          <router-link to="/cv" class="nav-link active">CV</router-link>
-          <router-link to="/links" class="nav-link">Links</router-link>
-          <router-link to="/guestbook" class="nav-link">Guestbook</router-link>
+    <!-- Tab 切换 -->
+    <div class="tabs slide-up" style="animation-delay: 0.1s">
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        :class="['tab-button', { active: activeTab === tab.id }]"
+        @click="activeTab = tab.id"
+      >
+        {{ tab.label }}
+      </button>
+    </div>
+
+    <!-- Tab 内容 -->
+    <div class="tab-content slide-up" style="animation-delay: 0.2s">
+      <!-- Education -->
+      <div v-if="activeTab === 'education'" class="tab-section">
+        <div v-for="edu in education" :key="edu.id" class="cv-item glass-card">
+          <div class="cv-item-header">
+            <h3>{{ edu.degree }}</h3>
+            <span class="cv-year">{{ edu.year }}</span>
+          </div>
+          <p class="cv-school">{{ edu.school }}</p>
+          <p class="cv-description">{{ edu.description }}</p>
         </div>
       </div>
-    </nav>
 
-    <!-- Main Content -->
-    <main class="main">
-      <!-- Hero Section -->
-      <section class="hero">
-        <div class="hero-content">
-          <div class="avatar-wrapper">
-            <div class="avatar-glow"></div>
-            <div class="avatar">{{ profile.avatar }}</div>
-            <div class="status-badge">
-              <span class="status-dot"></span>
-              {{ profile.status }}
-            </div>
-          </div>
-          
-          <h1 class="name">{{ profile.name }}</h1>
-          <p class="title">{{ profile.title }}</p>
-          <p class="bio">{{ profile.bio }}</p>
-          
-          <div class="social-links">
-            <a v-for="link in links" :key="link.name" :href="link.url" target="_blank" class="social-link">
-              {{ link.name }}
-            </a>
-          </div>
-        </div>
-      </section>
-
-      <!-- Section Tabs -->
-      <div class="section-tabs">
-        <button 
-          v-for="item in navItems" 
-          :key="item.key"
-          :class="['tab-btn', { active: currentSection === item.key }]"
-          @click="currentSection = item.key"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-
-      <!-- Sections -->
-      <div class="sections">
-        
-        <!-- Education -->
-        <section v-if="currentSection === 'about'" class="section about-section">
-          <h2 class="section-title">Education</h2>
-          <div class="education-list">
-            <div v-for="(edu, i) in education" :key="i" class="education-item glass-card">
-              <div class="edu-icon">{{ edu.degree === '硕士' ? '🎓' : '📚' }}</div>
-              <div class="edu-content">
-                <div class="edu-header">
-                  <h3 class="edu-school">{{ edu.school }}</h3>
-                </div>
-                <p class="edu-degree">{{ edu.degree }} · {{ edu.major }}</p>
-              </div>
-            </div>
-          </div>
-          <h2 class="section-title" style="margin-top: 2rem;">Info</h2>
-          <div class="about-grid">
-            <div class="about-card glass-card">
-              <span class="card-icon">📍</span>
-              <span class="card-label">Location</span>
-              <span class="card-value">{{ profile.location }}</span>
-            </div>
-            <div class="about-card glass-card">
-              <span class="card-icon">🎯</span>
-              <span class="card-label">Focus</span>
-              <span class="card-value">AI & Security</span>
-            </div>
-            <div class="about-card glass-card">
-              <span class="card-icon">🌐</span>
-              <span class="card-label">Languages</span>
-              <span class="card-value">EN / 中文</span>
-            </div>
-            <div class="about-card glass-card">
-              <span class="card-icon">💻</span>
-              <span class="card-label">Tech Stack</span>
-              <span class="card-value">Python / C++ / Java</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- Skills -->
-        <section v-if="currentSection === 'skills'" class="section">
-          <h2 class="section-title">Skills</h2>
+      <!-- Skills -->
+      <div v-if="activeTab === 'skills'" class="tab-section">
+        <div v-for="category in skills" :key="category.category" class="skill-category glass-card">
+          <h3>{{ category.category }}</h3>
           <div class="skills-list">
-            <div v-for="(skill, index) in skills" :key="skill.name" class="skill-item glass-card">
-              <div class="skill-header">
-                <span class="skill-name">{{ skill.name }}</span>
-                <span class="skill-percent">{{ skill.level }}%</span>
-              </div>
-              <div class="skill-bar">
-                <div 
-                  class="skill-fill" 
-                  :style="{ 
-                    '--target-width': skill.level + '%',
-                    'animation-delay': (index * 0.15) + 's'
-                  }"
-                ></div>
-              </div>
-            </div>
+            <span v-for="skill in category.items" :key="skill" class="skill-tag">{{ skill }}</span>
           </div>
-        </section>
-
-        <!-- Experience -->
-        <section v-if="currentSection === 'experience'" class="section">
-          <h2 class="section-title">Experience</h2>
-          <div class="timeline">
-            <div v-for="(exp, i) in experience" :key="i" class="timeline-item">
-              <div class="timeline-marker"></div>
-              <div class="timeline-content glass-card">
-                <div class="timeline-header">
-                  <h3 class="timeline-role">{{ exp.role }}</h3>
-                  <span class="timeline-period">{{ exp.period }}</span>
-                </div>
-                <p class="timeline-company">{{ exp.company }}</p>
-                <p class="timeline-desc">{{ exp.desc }}</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
+        </div>
       </div>
-    </main>
 
-    <!-- Footer -->
-    <footer class="footer">
-      <span>© 2026 {{ profile.name }}</span>
-      <span class="divider">·</span>
-      <span>Built with Vue</span>
-    </footer>
+      <!-- Experience -->
+      <div v-if="activeTab === 'experience'" class="tab-section">
+        <div v-for="exp in experience" :key="exp.id" class="cv-item glass-card">
+          <div class="cv-item-header">
+            <h3>{{ exp.title }}</h3>
+            <span class="cv-year">{{ exp.period }}</span>
+          </div>
+          <p class="cv-company">{{ exp.company }}</p>
+          <ul class="cv-responsibilities">
+            <li v-for="resp in exp.responsibilities" :key="resp">{{ resp }}</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
+<script setup lang="ts">
+import { ref } from 'vue'
+
+interface Tab {
+  id: string
+  label: string
+}
+
+interface Education {
+  id: number
+  degree: string
+  school: string
+  year: string
+  description: string
+}
+
+interface SkillCategory {
+  category: string
+  items: string[]
+}
+
+interface Experience {
+  id: number
+  title: string
+  company: string
+  period: string
+  responsibilities: string[]
+}
+
+const tabs: Tab[] = [
+  { id: 'education', label: 'Education' },
+  { id: 'skills', label: 'Skills' },
+  { id: 'experience', label: 'Experience' }
+]
+
+const activeTab = ref('education')
+
+const education: Education[] = [
+  {
+    id: 1,
+    degree: 'Bachelor of Computer Science',
+    school: 'University of Technology',
+    year: '2018 - 2022',
+    description: 'Specialized in Software Engineering with focus on Web Development and Machine Learning.'
+  },
+  {
+    id: 2,
+    degree: 'Master of Data Science',
+    school: 'Tech Institute',
+    year: '2022 - 2024',
+    description: 'Advanced studies in Machine Learning, Data Engineering, and Distributed Systems.'
+  }
+]
+
+const skills: SkillCategory[] = [
+  {
+    category: 'Programming Languages',
+    items: ['TypeScript', 'Python', 'Java', 'Go', 'Rust']
+  },
+  {
+    category: 'Frontend',
+    items: ['Vue.js', 'React', 'Next.js', 'Vite', 'Tailwind CSS']
+  },
+  {
+    category: 'Backend',
+    items: ['Node.js', 'Express', 'Fastify', 'Django', 'PostgreSQL']
+  },
+  {
+    category: 'DevOps & Tools',
+    items: ['Docker', 'Kubernetes', 'Git', 'CI/CD', 'AWS', 'Linux']
+  },
+  {
+    category: 'Other',
+    items: ['Machine Learning', 'Data Analysis', 'System Design', 'API Design']
+  }
+]
+
+const experience: Experience[] = [
+  {
+    id: 1,
+    title: 'Senior Software Engineer',
+    company: 'Tech Corp',
+    period: '2023 - Present',
+    responsibilities: [
+      'Lead development of microservices architecture',
+      'Mentor junior developers and conduct code reviews',
+      'Optimize system performance reducing latency by 40%'
+    ]
+  },
+  {
+    id: 2,
+    title: 'Software Developer',
+    company: 'Startup Inc',
+    period: '2022 - 2023',
+    responsibilities: [
+      'Built full-stack web applications using Vue.js and Node.js',
+      'Implemented RESTful APIs and database designs',
+      'Collaborated with design team to create responsive UIs'
+    ]
+  },
+  {
+    id: 3,
+    title: 'Intern Developer',
+    company: 'Code Labs',
+    period: '2021 - 2022',
+    responsibilities: [
+      'Assisted in developing and testing software features',
+      'Participated in agile development processes',
+      'Learned industry best practices and coding standards'
+    ]
+  }
+]
+</script>
+
 <style scoped>
-/* === CV Page Styles === */
-.cv-page {
-  min-height: 100vh;
-  background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0f0f1a 100%);
-  position: relative;
-  overflow-x: hidden;
-}
-
-/* === 粒子背景 === */
-.particles-bg {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* === 流动渐变背景 === */
-.bg-gradient-animated {
-  position: fixed;
-  inset: 0;
-  background: 
-    radial-gradient(ellipse at 20% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 70%);
-  animation: gradientShift 15s ease-in-out infinite alternate;
-  pointer-events: none;
-  z-index: 0;
-}
-
-@keyframes gradientShift {
-  0% {
-    transform: scale(1) rotate(0deg);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.1) rotate(5deg);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1) rotate(-5deg);
-    opacity: 1;
-  }
-}
-
-/* === 鼠标跟随光效 === */
-.cursor-glow {
-  position: fixed;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1;
-  transform: translate(-50%, -50%);
-  transition: opacity 0.3s ease;
-}
-
-/* === 玻璃态卡片 === */
-.glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.glass-card:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(99, 102, 241, 0.3);
-  box-shadow: 
-    0 12px 40px rgba(99, 102, 241, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
-}
-
-/* Main Content */
-.main {
-  position: relative;
-  z-index: 10;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 6rem 2rem 4rem;
-}
-
-/* Navigation */
-.nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  padding: 1rem 0;
-  background: rgba(10, 10, 15, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.nav-inner {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.nav-logo {
-  font-weight: 700;
-  font-size: 1.125rem;
-  color: var(--text);
-  text-decoration: none;
-  letter-spacing: -0.02em;
-}
-
-.nav-links {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.nav-link {
-  padding: 0.5rem 0.875rem;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: all 0.2s;
-}
-
-.nav-link:hover,
-.nav-link.active {
-  color: var(--accent);
-  background: rgba(99, 102, 241, 0.1);
-}
-
-/* Hero */
-.hero {
+.page-title {
   text-align: center;
-  padding: 3rem 0 2rem;
-}
-
-.avatar-wrapper {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 1.5rem;
-}
-
-.avatar-glow {
-  position: absolute;
-  inset: -20px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, transparent 70%);
-  border-radius: 50%;
-  animation: pulse-glow 3s ease-in-out infinite;
-  filter: blur(20px);
-}
-
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 0.6;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.1);
-  }
-}
-
-.avatar {
-  position: relative;
-  width: 100px;
-  height: 100px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
-  border: 2px solid rgba(99, 102, 241, 0.3);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin-bottom: 40px;
   font-size: 2.5rem;
-  animation: float 4s ease-in-out infinite;
-  box-shadow: 
-    0 0 40px rgba(99, 102, 241, 0.3),
-    inset 0 0 20px rgba(99, 102, 241, 0.1);
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-.status-badge {
-  position: absolute;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  background: rgba(15, 15, 25, 0.9);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  border-radius: 100px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  background: #22c55e;
-  border-radius: 50%;
-  animation: pulse-dot 2s infinite;
-  box-shadow: 0 0 8px #22c55e;
-}
-
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.9); }
-}
-
-.name {
-  font-size: 2.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 0.25rem;
-  background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.8) 100%);
+  background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-.title {
-  font-size: 1.125rem;
-  background: linear-gradient(135deg, var(--accent) 0%, #a78bfa 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  font-weight: 500;
-  margin-bottom: 1rem;
-}
-
-.bio {
-  max-width: 480px;
-  margin: 0 auto 2rem;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 1rem;
-  line-height: 1.7;
-}
-
-.social-links {
+.tabs {
   display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
   justify-content: center;
-  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.social-link {
-  padding: 0.5rem 1rem;
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  border-radius: 10px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.social-link:hover {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.4);
-  color: var(--accent);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
-}
-
-/* Section Tabs */
-.section-tabs {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-}
-
-.tab-btn {
-  padding: 0.625rem 1.25rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 100px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-btn:hover {
+.tab-button {
+  padding: 12px 24px;
   background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.tab-btn.active {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: rgba(99, 102, 241, 0.3);
-  color: var(--accent);
-}
-
-/* Sections */
-.sections {
-  min-height: 300px;
-}
-
-.section {
-  animation: fadeIn 0.4s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.section-title {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 1.5rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* About Grid */
-.about-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-}
-
-.about-card {
-  border-radius: 12px;
-  padding: 1.25rem;
-}
-
-.card-icon {
-  display: block;
-  font-size: 1.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.card-label {
-  display: block;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 0.25rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.card-value {
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-/* Education */
-.education-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 0.5rem;
-}
-
-.education-item {
-  display: flex;
-  gap: 1rem;
-  border-radius: 12px;
-  padding: 1.25rem;
-}
-
-.edu-icon {
-  width: 48px;
-  height: 48px;
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  flex-shrink: 0;
-}
-
-.edu-content {
-  flex: 1;
-}
-
-.edu-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 0.25rem;
-}
-
-.edu-school {
-  font-size: 1rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.edu-period {
-  font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.edu-degree {
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-primary);
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-/* Skills */
-.skills-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.skill-item {
-  border-radius: 12px;
-  padding: 1.25rem;
-}
-
-.skill-header {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.75rem;
-}
-
-.skill-name {
   font-weight: 500;
-  font-size: 0.9375rem;
-  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: var(--transition);
 }
 
-.skill-percent {
-  font-size: 0.8125rem;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.skill-bar {
-  height: 6px;
+.tab-button:hover {
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  overflow: hidden;
+  border-color: var(--accent-color);
 }
 
-.skill-fill {
-  height: 100%;
-  width: 0;
-  background: linear-gradient(90deg, var(--accent) 0%, #a78bfa 50%, #ec4899 100%);
-  border-radius: 3px;
-  animation: fillBar 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  animation-delay: var(--animation-delay, 0s);
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.5);
-  position: relative;
+.tab-button.active {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
 }
 
-.skill-fill::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
-  animation: shimmer 2s infinite;
+.tab-content {
+  min-height: 400px;
 }
 
-@keyframes fillBar {
-  from {
-    width: 0;
-  }
-  to {
-    width: var(--target-width);
-  }
+.tab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+.cv-item {
+  margin-bottom: 0;
 }
 
-/* Timeline */
-.timeline {
-  position: relative;
-  padding-left: 1.5rem;
-}
-
-.timeline::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: linear-gradient(180deg, var(--accent) 0%, transparent 100%);
-  border-radius: 1px;
-}
-
-.timeline-item {
-  position: relative;
-  padding-bottom: 2rem;
-}
-
-.timeline-item:last-child {
-  padding-bottom: 0;
-}
-
-.timeline-marker {
-  position: absolute;
-  left: -1.5rem;
-  top: 8px;
-  width: 12px;
-  height: 12px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 15px var(--accent);
-  animation: pulse-marker 2s infinite;
-}
-
-@keyframes pulse-marker {
-  0%, 100% {
-    box-shadow: 0 0 15px var(--accent);
-  }
-  50% {
-    box-shadow: 0 0 25px var(--accent);
-  }
-}
-
-.timeline-content {
-  border-radius: 12px;
-  padding: 1.25rem;
-  margin-left: 0.5rem;
-}
-
-.timeline-header {
+.cv-item-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0.25rem;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.timeline-role {
-  font-size: 1rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+.cv-item-header h3 {
+  font-size: 1.25rem;
+  margin: 0;
 }
 
-.timeline-period {
-  font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.4);
-  flex-shrink: 0;
-}
-
-.timeline-company {
+.cv-year {
+  padding: 4px 12px;
+  background: rgba(124, 58, 237, 0.2);
+  border-radius: 4px;
   font-size: 0.875rem;
-  background: linear-gradient(90deg, var(--accent), #a78bfa);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #a78bfa;
   font-weight: 500;
-  margin-bottom: 0.5rem;
 }
 
-.timeline-desc {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.6);
+.cv-school,
+.cv-company {
+  color: var(--accent-color);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.cv-description {
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 
-/* Footer */
-.footer {
-  text-align: center;
-  padding: 2rem;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 0.8125rem;
+.cv-responsibilities {
+  list-style: none;
+  padding: 0;
+  margin-top: 12px;
+}
+
+.cv-responsibilities li {
+  padding-left: 20px;
   position: relative;
-  z-index: 10;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  line-height: 1.6;
 }
 
-.divider {
-  margin: 0 0.5rem;
+.cv-responsibilities li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--accent-color);
 }
 
-/* Responsive */
-@media (max-width: 640px) {
-  .main {
-    padding: 5rem 1rem 3rem;
-  }
-  
-  .hero {
-    padding: 2rem 0 2rem;
-  }
-  
-  .name {
+.skill-category {
+  margin-bottom: 0;
+}
+
+.skill-category h3 {
+  margin-bottom: 16px;
+  font-size: 1.125rem;
+}
+
+.skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.skill-tag {
+  padding: 8px 16px;
+  background: rgba(124, 58, 237, 0.15);
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #a78bfa;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.skill-tag:hover {
+  background: rgba(124, 58, 237, 0.25);
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+  .page-title {
     font-size: 2rem;
   }
-  
-  .about-grid {
-    grid-template-columns: 1fr;
+
+  .tabs {
+    gap: 8px;
   }
-  
-  .timeline-header {
+
+  .tab-button {
+    padding: 10px 16px;
+    font-size: 0.8125rem;
+  }
+
+  .cv-item-header {
     flex-direction: column;
-  }
-  
-  .timeline-period {
-    margin-top: 0.25rem;
-  }
-  
-  .cursor-glow {
-    display: none;
-  }
-  
-  .nav-inner {
-    padding: 0 1rem;
-  }
-  
-  .nav-link {
-    padding: 0.5rem 0.625rem;
-    font-size: 0.8125rem;
-  }
-  
-  .section-tabs {
-    flex-wrap: wrap;
-  }
-  
-  .tab-btn {
-    padding: 0.5rem 1rem;
-    font-size: 0.8125rem;
   }
 }
 </style>
