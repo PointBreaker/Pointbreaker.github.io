@@ -68,7 +68,8 @@ const navItems = [
   { key: 'about', label: 'Education' },
   { key: 'skills', label: 'Skills' },
   { key: 'experience', label: 'Experience' },
-  { key: 'index', label: 'Index', route: '/index' }
+  { key: 'index', label: 'Index', route: '/index' },
+  { key: 'guestbook', label: 'Guestbook', route: '/guestbook' }
 ]
 </script>
 
