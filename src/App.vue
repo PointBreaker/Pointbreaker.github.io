@@ -9,6 +9,11 @@
         <router-link to="/links" class="nav-link">Links</router-link>
         <router-link to="/guestbook" class="nav-link">Guestbook</router-link>
         <router-link to="/gravity" class="nav-link">Gravity</router-link>
+        <button v-if="!user" class="nav-link login-btn" @click="login">Login</button>
+        <div v-else class="user-info">
+          <span class="username">{{ user.login }}</span>
+          <button class="nav-link logout-btn" @click="logout">Logout</button>
+        </div>
       </div>
     </nav>
     <router-view v-slot="{ Component }">
@@ -20,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import ParticleBackground from './components/ParticleBackground.vue'
 
@@ -28,6 +33,38 @@ const route = useRoute()
 
 // Show particle background on all pages except Gravity
 const showBackground = computed(() => route.path !== '/gravity')
+
+// User state
+const user = ref<any>(null)
+
+// Check login status on mount
+onMounted(() => {
+  const savedUser = localStorage.getItem('user')
+  if (savedUser) {
+    try {
+      user.value = JSON.parse(savedUser)
+    } catch (e) {
+      localStorage.removeItem('user')
+    }
+  }
+})
+
+// Login - redirect to GitHub OAuth
+const login = async () => {
+  try {
+    const res = await fetch('https://daxd.top:4433/api/auth/github/')
+    const data = await res.json()
+    window.location.href = data.authorization_url
+  } catch (e) {
+    console.error('Failed to get auth URL:', e)
+  }
+}
+
+// Logout
+const logout = () => {
+  user.value = null
+  localStorage.removeItem('user')
+}
 </script>
 
 <style>
@@ -89,6 +126,39 @@ const showBackground = computed(() => route.path !== '/gravity')
 .nav-link.router-link-active {
   color: var(--accent-color);
   background: rgba(124, 58, 237, 0.1);
+}
+
+.login-btn {
+  background: rgba(124, 58, 237, 0.2);
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  cursor: pointer;
+}
+
+.login-btn:hover {
+  background: rgba(124, 58, 237, 0.3);
+  border-color: var(--accent-color);
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.username {
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.logout-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+.logout-btn:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* Page transition */
