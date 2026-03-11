@@ -2,30 +2,23 @@
   <div class="page-content">
     <h1 class="page-title slide-up">Guestbook</h1>
 
+    <!-- 未登录提示 -->
+    <div v-if="!user" class="login-prompt slide-up glass-card" style="animation-delay: 0.1s">
+      <p>🔒 请先登录后再留言</p>
+      <button class="btn" @click="goLogin">去登录</button>
+    </div>
+
     <!-- 留言表单 -->
-    <div class="form-section slide-up" style="animation-delay: 0.1s">
+    <div v-else class="form-section slide-up" style="animation-delay: 0.1s">
       <div class="glass-card">
-        <h2>Leave a Message</h2>
+        <div class="user-info-header">
+          <img :src="user.avatar_url" :alt="user.login" class="user-avatar" />
+          <div class="user-details">
+            <span class="user-name">{{ user.login }}</span>
+            <span class="user-id">ID: {{ user.id }}</span>
+          </div>
+        </div>
         <form @submit.prevent="submitMessage" class="guestbook-form">
-          <div class="form-group">
-            <label for="name">Name</label>
-            <input
-              id="name"
-              v-model="form.name"
-              type="text"
-              placeholder="Your name"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label for="email">Email (optional)</label>
-            <input
-              id="email"
-              v-model="form.email"
-              type="email"
-              placeholder="your@email.com"
-            />
-          </div>
           <div class="form-group">
             <label for="message">Message</label>
             <textarea
@@ -51,10 +44,24 @@
       <div v-else class="messages-list">
         <div v-for="message in messages" :key="message.id" class="message-card glass-card">
           <div class="message-header">
-            <span class="message-author">{{ message.name }}</span>
+            <div class="message-author-info">
+              <img 
+                v-if="message.avatar_url" 
+                :src="message.avatar_url" 
+                :alt="message.username" 
+                class="message-avatar" 
+              />
+              <div class="message-author-default" v-else>
+                {{ message.username?.charAt(0).toUpperCase() || '?' }}
+              </div>
+              <div class="message-author-details">
+                <span class="message-author">{{ message.username || 'Anonymous' }}</span>
+                <span class="message-github-id" v-if="message.github_id">GitHub: {{ message.github_id }}</span>
+              </div>
+            </div>
             <span class="message-date">{{ formatDate(message.created_at) }}</span>
           </div>
-          <p class="message-content">{{ message.message }}</p>
+          <p class="message-content">{{ message.content }}</p>
         </div>
       </div>
     </div>
@@ -62,27 +69,39 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
 interface Message {
-  id: number
-  name: string
-  email?: string
-  message: string
+  id: string
+  username: string
+  github_id: number
+  avatar_url: string
+  content: string
   created_at: string
 }
 
 interface Form {
-  name: string
-  email: string
   message: string
 }
 
 const API_BASE = 'https://daxd.top:4433/api'
+const router = useRouter()
+
+// 用户状态
+const user = computed(() => {
+  const savedUser = localStorage.getItem('user')
+  if (savedUser) {
+    try {
+      return JSON.parse(savedUser)
+    } catch (e) {
+      return null
+    }
+  }
+  return null
+})
 
 const form = ref<Form>({
-  name: '',
-  email: '',
   message: ''
 })
 
@@ -90,9 +109,13 @@ const messages = ref<Message[]>([])
 const loading = ref(true)
 const isSubmitting = ref(false)
 
+const goLogin = () => {
+  router.push('/')
+}
+
 const fetchMessages = async () => {
   try {
-    const response = await fetch(`${API_BASE}/messages`)
+    const response = await fetch(`${API_BASE}/messages/`)
     if (response.ok) {
       const data = await response.json()
       messages.value = data || []
@@ -105,28 +128,26 @@ const fetchMessages = async () => {
 }
 
 const submitMessage = async () => {
-  if (isSubmitting.value) return
+  if (isSubmitting.value || !user.value) return
 
   isSubmitting.value = true
   try {
-    const response = await fetch(`${API_BASE}/messages`, {
+    const response = await fetch(`${API_BASE}/messages/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        name: form.value.name,
-        email: form.value.email || undefined,
-        message: form.value.message
+        content: form.value.message,
+        username: user.value.login,
+        github_id: user.value.id,
+        avatar_url: user.value.avatar_url
       })
     })
 
     if (response.ok) {
-      // Clear form
-      form.value = { name: '', email: '', message: '' }
-      // Refresh messages
+      form.value = { message: '' }
       await fetchMessages()
-      alert('Message sent successfully!')
     } else {
       alert('Failed to send message. Please try again.')
     }
@@ -140,7 +161,7 @@ const submitMessage = async () => {
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
+  return date.toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -165,6 +186,19 @@ onMounted(() => {
   background-clip: text;
 }
 
+.login-prompt {
+  max-width: 400px;
+  margin: 0 auto 48px;
+  padding: 32px;
+  text-align: center;
+}
+
+.login-prompt p {
+  font-size: 1.125rem;
+  margin-bottom: 20px;
+  color: var(--text-secondary);
+}
+
 .form-section {
   margin-bottom: 48px;
 }
@@ -174,10 +208,37 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.form-section h2 {
-  text-align: center;
+.user-info-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin-bottom: 24px;
-  font-size: 1.5rem;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-color);
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+
+.user-id {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
 }
 
 .guestbook-form {
@@ -198,15 +259,50 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
+textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 1rem;
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
+}
+
+textarea::placeholder {
+  color: var(--text-secondary);
+}
+
 .btn {
   width: 100%;
   padding: 14px;
   font-size: 1rem;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
 }
 
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+  transform: none;
 }
 
 .messages-section {
@@ -240,10 +336,42 @@ onMounted(() => {
 .message-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 12px;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
+}
+
+.message-author-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(124, 58, 237, 0.3);
+}
+
+.message-author-default {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: white;
+  font-size: 1.125rem;
+}
+
+.message-author-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .message-author {
@@ -252,9 +380,15 @@ onMounted(() => {
   font-size: 1rem;
 }
 
+.message-github-id {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 .message-date {
   font-size: 0.75rem;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .message-content {
@@ -262,6 +396,7 @@ onMounted(() => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-wrap: break-word;
+  padding-left: 52px;
 }
 
 @media (max-width: 768px) {
@@ -276,6 +411,11 @@ onMounted(() => {
   .message-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .message-content {
+    padding-left: 0;
+    margin-top: 8px;
   }
 }
 </style>
