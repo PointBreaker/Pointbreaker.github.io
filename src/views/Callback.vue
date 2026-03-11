@@ -2,41 +2,57 @@
   <div class="callback-page">
     <div class="loading">
       <div class="spinner"></div>
-      <p>Logging in...</p>
+      <p>{{ status }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const route = useRoute()
+const status = ref('Logging in...')
 
 onMounted(() => {
-  const userB64 = route.query.user as string
+  // 解析 URL 参数（hash 模式下用 window.location）
+  const hash = window.location.hash // #/callback?user=xxx
+  const queryStart = hash.indexOf('?')
   
-  if (userB64) {
-    try {
-      // 解码用户信息
-      const userJson = atob(userB64)
-      const user = JSON.parse(userJson)
-      
-      // 保存到 localStorage
-      localStorage.setItem('user', JSON.stringify(user))
-      
-      // 跳转到首页
-      setTimeout(() => {
-        router.push('/')
-      }, 500)
-    } catch (e) {
-      console.error('Failed to parse user info:', e)
-      router.push('/')
-    }
-  } else {
-    // 没有 user 参数，跳转到首页
-    router.push('/')
+  if (queryStart === -1) {
+    status.value = 'No user data found'
+    setTimeout(() => router.push('/'), 1500)
+    return
+  }
+  
+  const queryString = hash.substring(queryStart + 1)
+  const params = new URLSearchParams(queryString)
+  const userB64 = params.get('user')
+  
+  if (!userB64) {
+    status.value = 'No user data'
+    setTimeout(() => router.push('/'), 1500)
+    return
+  }
+  
+  try {
+    // Base64 解码
+    const userJson = atob(userB64)
+    const user = JSON.parse(userJson)
+    
+    // 保存到 localStorage
+    localStorage.setItem('user', JSON.stringify(user))
+    
+    status.value = `Welcome, ${user.login}!`
+    
+    // 跳转到首页
+    setTimeout(() => {
+      window.location.href = '/#/'
+    }, 1000)
+  } catch (e) {
+    console.error('Failed to parse user info:', e)
+    status.value = 'Login failed'
+    setTimeout(() => router.push('/'), 1500)
   }
 })
 </script>
@@ -69,5 +85,6 @@ onMounted(() => {
 
 p {
   color: var(--text-secondary);
+  font-size: 1rem;
 }
 </style>

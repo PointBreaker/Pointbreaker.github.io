@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import ParticleBackground from './components/ParticleBackground.vue'
 
@@ -37,16 +37,29 @@ const showBackground = computed(() => route.path !== '/gravity')
 // User state
 const user = ref<any>(null)
 
-// Check login status on mount
-onMounted(() => {
+// 检查登录状态
+const checkLoginStatus = () => {
   const savedUser = localStorage.getItem('user')
   if (savedUser) {
     try {
       user.value = JSON.parse(savedUser)
     } catch (e) {
       localStorage.removeItem('user')
+      user.value = null
     }
+  } else {
+    user.value = null
   }
+}
+
+// 监听路由变化时检查登录状态
+watch(() => route.path, () => {
+  checkLoginStatus()
+}, { immediate: true })
+
+// 监听 localStorage 变化
+window.addEventListener('storage', () => {
+  checkLoginStatus()
 })
 
 // Login - redirect to GitHub OAuth
