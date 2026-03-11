@@ -17,11 +17,13 @@
         </div>
       </div>
     </nav>
-    <router-view v-slot="{ Component }">
-      <transition name="fade" mode="out-in">
-        <component :is="Component" />
-      </transition>
-    </router-view>
+    <main class="main-content">
+      <router-view v-slot="{ Component }">
+        <transition name="fade" mode="out-in">
+          <component :is="Component" />
+        </transition>
+      </router-view>
+    </main>
   </div>
 </template>
 
@@ -84,6 +86,11 @@ const logout = () => {
 <style>
 #app {
   position: relative;
+  min-height: 100vh;
+}
+
+.main-content {
+  padding-top: 70px; /* 导航栏高度 */
   min-height: 100vh;
 }
 
@@ -186,6 +193,11 @@ const logout = () => {
   opacity: 0;
 }
 
+.main-content {
+  padding-top: var(--navbar-height);
+  min-height: 100vh;
+}
+
 @media (max-width: 768px) {
   .nav {
     flex-direction: column;
@@ -202,6 +214,10 @@ const logout = () => {
   .nav-link {
     font-size: 0.8125rem;
     padding: 6px 10px;
+  }
+
+  .main-content {
+    padding-top: 100px; /* Mobile nav is taller due to column layout */
   }
 }
 </style>
