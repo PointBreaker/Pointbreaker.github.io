@@ -95,75 +95,58 @@ const activeTab = ref('education')
 const education: Education[] = [
   {
     id: 1,
-    degree: 'Bachelor of Computer Science',
-    school: 'University of Technology',
-    year: '2018 - 2022',
-    description: 'Specialized in Software Engineering with focus on Web Development and Machine Learning.'
+    degree: '硕士 · 计算机科学',
+    school: '深圳大学',
+    year: '2022 - 2024',
+    description: '专注于人工智能与计算机视觉方向的研究与应用。'
   },
   {
     id: 2,
-    degree: 'Master of Data Science',
-    school: 'Tech Institute',
-    year: '2022 - 2024',
-    description: 'Advanced studies in Machine Learning, Data Engineering, and Distributed Systems.'
+    degree: '本科 · 计算机科学与技术',
+    school: '南昌大学',
+    year: '2018 - 2022',
+    description: '计算机科学基础学习，对安全与编程产生兴趣。'
   }
 ]
 
 const skills: SkillCategory[] = [
   {
-    category: 'Programming Languages',
-    items: ['TypeScript', 'Python', 'Java', 'Go', 'Rust']
+    category: 'AI & ML',
+    items: ['PyTorch', 'TensorFlow', 'Computer Vision', 'NLP', 'LLM']
   },
   {
-    category: 'Frontend',
-    items: ['Vue.js', 'React', 'Next.js', 'Vite', 'Tailwind CSS']
+    category: 'Security',
+    items: ['Pwn', 'Web Security', 'CTF', 'Penetration Testing']
   },
   {
-    category: 'Backend',
-    items: ['Node.js', 'Express', 'Fastify', 'Django', 'PostgreSQL']
+    category: 'Programming',
+    items: ['Python', 'C/C++', 'Java', 'TypeScript', 'Go']
   },
   {
-    category: 'DevOps & Tools',
-    items: ['Docker', 'Kubernetes', 'Git', 'CI/CD', 'AWS', 'Linux']
-  },
-  {
-    category: 'Other',
-    items: ['Machine Learning', 'Data Analysis', 'System Design', 'API Design']
+    category: 'Development',
+    items: ['Vue.js', 'Django', 'Docker', 'MySQL', 'Linux']
   }
 ]
 
 const experience: Experience[] = [
   {
     id: 1,
-    title: 'Senior Software Engineer',
-    company: 'Tech Corp',
-    period: '2023 - Present',
+    title: 'AI开发工程师',
+    company: '腾讯',
+    period: '2025.08 - 至今',
     responsibilities: [
-      'Lead development of microservices architecture',
-      'Mentor junior developers and conduct code reviews',
-      'Optimize system performance reducing latency by 40%'
+      '负责AI模型开发与安全相关研究',
+      '探索前沿技术在业务场景中的应用'
     ]
   },
   {
     id: 2,
-    title: 'Software Developer',
-    company: 'Startup Inc',
-    period: '2022 - 2023',
+    title: 'AI开发工程师',
+    company: '深信服',
+    period: '2024.07 - 2025.08',
     responsibilities: [
-      'Built full-stack web applications using Vue.js and Node.js',
-      'Implemented RESTful APIs and database designs',
-      'Collaborated with design team to create responsive UIs'
-    ]
-  },
-  {
-    id: 3,
-    title: 'Intern Developer',
-    company: 'Code Labs',
-    period: '2021 - 2022',
-    responsibilities: [
-      'Assisted in developing and testing software features',
-      'Participated in agile development processes',
-      'Learned industry best practices and coding standards'
+      '从事AI安全相关研发',
+      '参与威胁检测模型的设计与优化'
     ]
   }
 ]
