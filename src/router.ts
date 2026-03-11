@@ -4,6 +4,7 @@ import CV from './views/CV.vue'
 import Links from './views/Links.vue'
 import Guestbook from './views/Guestbook.vue'
 import Gravity from './views/Gravity.vue'
+import Callback from './views/Callback.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -30,6 +31,11 @@ const routes: Array<RouteRecordRaw> = [
     path: '/gravity',
     name: 'Gravity',
     component: Gravity
+  },
+  {
+    path: '/callback',
+    name: 'Callback',
+    component: Callback
   },
   {
     path: '/:pathMatch(.*)*',
