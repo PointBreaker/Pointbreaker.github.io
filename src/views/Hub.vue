@@ -71,12 +71,37 @@
           </div>
         </div>
       </div>
+
+      <!-- 访问统计 -->
+      <div class="glass-card stats-card slide-up" style="animation-delay: 0.6s">
+        <div class="card-header">
+          <h3>📊 Visits</h3>
+          <span class="total-visits">Total: {{ visitStats.total }}</span>
+        </div>
+        <div class="stats-content">
+          <div class="stats-chart">
+            <div
+              v-for="(day, index) in recentVisits"
+              :key="day.date"
+              class="chart-bar-container"
+            >
+              <div class="chart-bar-wrapper">
+                <div
+                  class="chart-bar"
+                  :style="{ height: getBarHeight(day.count) + '%' }"
+                ></div>
+              </div>
+              <span class="chart-label">{{ getDayLabel(day.date, index) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 
 interface Weather {
   temp: number
@@ -96,11 +121,19 @@ interface Shortcut {
   icon: string
 }
 
+interface VisitStats {
+  daily: Array<{ date: string; count: number }>
+  total: number
+}
+
+const API_BASE = 'https://daxd.top:4433/api'
+
 const currentTime = ref('')
 const currentDate = ref('')
 const weather = ref<Weather | null>(null)
 const dailyQuote = ref<Quote>({ text: '', author: '' })
 const aboutMe = ref('Hello! I\'m a passionate developer exploring the intersection of technology and creativity. Welcome to my personal hub.')
+const visitStats = ref<VisitStats>({ daily: [], total: 0 })
 
 const shortcuts: Shortcut[] = [
   { name: 'GitHub', url: 'https://github.com/Pointbreaker', icon: '🐙' },
@@ -119,6 +152,29 @@ const quotes: Quote[] = [
   { text: 'Technology is best when it brings people together', author: 'Matt Mullenweg' },
   { text: 'Make it work, make it right, make it fast', author: 'Kent Beck' }
 ]
+
+// 获取最近7天的访问数据
+const recentVisits = computed(() => {
+  return visitStats.value.daily.slice(-7)
+})
+
+// 计算柱状图高度
+const getBarHeight = (count: number) => {
+  const maxCount = Math.max(...recentVisits.value.map(d => d.count), 1)
+  return Math.max((count / maxCount) * 100, 2)
+}
+
+// 获取日期标签
+const getDayLabel = (dateStr: string, index: number) => {
+  const date = new Date(dateStr)
+  const today = new Date()
+  const isToday = date.toDateString() === today.toDateString()
+  
+  if (isToday) return 'Today'
+  
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return days[date.getDay()]
+}
 
 const updateTime = () => {
   const now = new Date()
@@ -165,6 +221,27 @@ const fetchWeather = async () => {
   }
 }
 
+const fetchVisitStats = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/visits/stats/`)
+    visitStats.value = await response.json()
+  } catch (error) {
+    console.error('Failed to fetch visit stats:', error)
+  }
+}
+
+const recordVisit = async () => {
+  try {
+    await fetch(`${API_BASE}/visits/record/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: window.location.hash || '/' })
+    })
+  } catch (error) {
+    console.error('Failed to record visit:', error)
+  }
+}
+
 let timeInterval: number | null = null
 
 onMounted(() => {
@@ -172,6 +249,8 @@ onMounted(() => {
   timeInterval = setInterval(updateTime, 1000) as unknown as number
   getDailyQuote()
   fetchWeather()
+  fetchVisitStats()
+  recordVisit()
 })
 
 onUnmounted(() => {
@@ -339,6 +418,55 @@ onUnmounted(() => {
 .about-link:hover {
   color: var(--accent-hover);
   text-decoration: underline;
+}
+
+.total-visits {
+  font-size: 0.875rem;
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.stats-content {
+  padding: 10px 0;
+}
+
+.stats-chart {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 120px;
+  gap: 8px;
+}
+
+.chart-bar-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-bar-wrapper {
+  width: 100%;
+  height: 100px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.chart-bar {
+  width: 80%;
+  max-width: 40px;
+  background: linear-gradient(180deg, var(--accent-color) 0%, rgba(124, 58, 237, 0.3) 100%);
+  border-radius: 4px 4px 0 0;
+  transition: height 0.3s ease;
+  min-height: 4px;
+}
+
+.chart-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 @media (max-width: 768px) {
