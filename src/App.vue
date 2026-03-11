@@ -66,7 +66,7 @@ window.addEventListener('storage', () => {
 // Login - redirect to GitHub OAuth
 const login = async () => {
   try {
-    const res = await fetch('https://daxd.top:4433/api/auth/github/')
+    const res = await fetch('http://120.77.151.207:8000/api/auth/github/')
     const data = await res.json()
     window.location.href = data.authorization_url
   } catch (e) {

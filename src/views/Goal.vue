@@ -101,7 +101,7 @@ interface Form {
   note: string
 }
 
-const API_BASE = 'https://daxd.top:4433/api'
+const API_BASE = 'http://120.77.151.207:8000/api'
 const router = useRouter()
 
 // 用户状态
