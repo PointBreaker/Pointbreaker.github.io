@@ -2,8 +2,7 @@
   <div class="gravity-container">
     <canvas ref="canvas" class="gravity-canvas"></canvas>
     <div class="gravity-ui">
-      <h1 class="gravity-title">Gravity Field</h1>
-      <p class="gravity-hint">Click and drag to create gravity wells</p>
+      <!-- 中间不显示文字 -->
     </div>
   </div>
 </template>
