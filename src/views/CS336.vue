@@ -61,8 +61,10 @@
               🎥 Video
             </a>
           </div>
-          <div v-if="lecture.notes" class="item-notes">
-            <strong>Notes:</strong> {{ lecture.notes }}
+          <div v-if="lecture.notes" class="item-notes" :class="{ expanded: expandedLectures.includes(lecture.number) }" @click="toggleLectureNotes(lecture.number)">
+            <strong>📝 Notes</strong>
+            <span class="expand-icon">{{ expandedLectures.includes(lecture.number) ? '▼' : '▶' }}</span>
+            <div v-if="expandedLectures.includes(lecture.number)" class="notes-content">{{ lecture.notes }}</div>
           </div>
         </div>
       </div>
@@ -94,8 +96,10 @@
               🔗 Assignment Link
             </a>
           </div>
-          <div v-if="assignment.notes" class="item-notes">
-            <strong>Notes:</strong> {{ assignment.notes }}
+          <div v-if="assignment.notes" class="item-notes" :class="{ expanded: expandedAssignments.includes(assignment.number) }" @click="toggleAssignmentNotes(assignment.number)">
+            <strong>📝 Notes</strong>
+            <span class="expand-icon">{{ expandedAssignments.includes(assignment.number) ? '▼' : '▶' }}</span>
+            <div v-if="expandedAssignments.includes(assignment.number)" class="notes-content">{{ assignment.notes }}</div>
           </div>
         </div>
       </div>
@@ -148,6 +152,8 @@ const activeTab = ref('lectures')
 const lectures = ref<Lecture[]>([])
 const assignments = ref<Assignment[]>([])
 const courseNotes = ref(localStorage.getItem('cs336-notes') || '')
+const expandedLectures = ref<number[]>([])
+const expandedAssignments = ref<number[]>([])
 
 const lectureProgress = computed(() => {
   return lectures.value.filter(l => l.status === 'completed').length
@@ -156,6 +162,24 @@ const lectureProgress = computed(() => {
 const assignmentProgress = computed(() => {
   return assignments.value.filter(a => a.status === 'completed').length
 })
+
+const toggleLectureNotes = (number: number) => {
+  const index = expandedLectures.value.indexOf(number)
+  if (index > -1) {
+    expandedLectures.value.splice(index, 1)
+  } else {
+    expandedLectures.value.push(number)
+  }
+}
+
+const toggleAssignmentNotes = (number: number) => {
+  const index = expandedAssignments.value.indexOf(number)
+  if (index > -1) {
+    expandedAssignments.value.splice(index, 1)
+  } else {
+    expandedAssignments.value.push(number)
+  }
+}
 
 const fetchData = async () => {
   try {
@@ -375,6 +399,33 @@ onMounted(() => {
   border-radius: 6px;
   font-size: 0.875rem;
   color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid transparent;
+}
+
+.item-notes:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--glass-border);
+}
+
+.item-notes strong {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.expand-icon {
+  font-size: 0.75rem;
+  transition: transform 0.3s ease;
+}
+
+.item-notes .notes-content {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border);
+  line-height: 1.6;
+  color: var(--text-primary);
 }
 
 .items-list {
