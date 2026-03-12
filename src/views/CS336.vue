@@ -174,6 +174,32 @@ const saveNotes = () => {
   localStorage.setItem('cs336-notes', courseNotes.value)
 }
 
+const updateLectureStatus = async (lecture: Lecture, newStatus: string) => {
+  try {
+    await fetch(`${API_BASE}/courses/lectures/${lecture.id}/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    })
+    lecture.status = newStatus
+  } catch (e) {
+    console.error('Failed to update lecture status:', e)
+  }
+}
+
+const updateAssignmentStatus = async (assignment: Assignment, newStatus: string) => {
+  try {
+    await fetch(`${API_BASE}/courses/assignments/${assignment.id}/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    })
+    assignment.status = newStatus
+  } catch (e) {
+    console.error('Failed to update assignment status:', e)
+  }
+}
+
 onMounted(() => {
   fetchData()
 })
