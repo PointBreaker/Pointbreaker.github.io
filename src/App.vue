@@ -9,6 +9,7 @@
         <router-link to="/links" class="nav-link">Links</router-link>
         <router-link to="/guestbook" class="nav-link">Guestbook</router-link>
         <router-link to="/goal" class="nav-link">Goal</router-link>
+        <router-link to="/monitor" class="nav-link">Monitor</router-link>
         <router-link to="/gravity" class="nav-link">Gravity</router-link>
         <button v-if="!user" class="nav-link login-btn" @click="login">Login</button>
         <div v-else class="user-info">
