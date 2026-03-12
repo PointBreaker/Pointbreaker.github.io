@@ -2,7 +2,7 @@
   <div class="monitor-container">
     <div class="monitor-header slide-up">
       <h1>Server Monitor</h1>
-      <p class="subtitle">Real-time server status and performance metrics</p>
+      <p class="subtitle">Real-time status for Local & Aliyun servers</p>
     </div>
 
     <div v-if="loading" class="loading-state">
@@ -10,121 +10,198 @@
       <p>Loading server data...</p>
     </div>
 
-    <div v-else class="monitor-grid">
-      <!-- CPU Card -->
-      <div class="glass-card metric-card slide-up" style="animation-delay: 0.1s">
-        <div class="card-header">
-          <h3>🖥️ CPU</h3>
-          <span class="metric-value">{{ serverData?.cpu.percent.toFixed(1) }}%</span>
+    <div v-else class="machines-wrapper">
+      <!-- Local Machine -->
+      <div class="machine-section slide-up" style="animation-delay: 0.1s">
+        <div class="machine-header">
+          <h2>🖥️ Local Machine</h2>
+          <span class="machine-badge">Home</span>
         </div>
-        <div class="progress-container">
-          <div class="progress-bar cpu-bar" :style="{ width: serverData?.cpu.percent + '%' }"></div>
-        </div>
-        <div class="metric-details">
-          <div class="detail-item">
-            <span class="label">Cores</span>
-            <span class="value">{{ serverData?.cpu.count }}</span>
+        <div class="machine-grid">
+          <!-- CPU -->
+          <div class="glass-card metric-card">
+            <div class="card-header">
+              <h3>CPU</h3>
+              <span class="metric-value">{{ localData?.cpu.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar cpu-bar" :style="{ width: localData?.cpu.percent + '%' }"></div>
+            </div>
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="label">Cores</span>
+                <span class="value">{{ localData?.cpu.count }}</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Freq</span>
+                <span class="value">{{ localData?.cpu.freq_mhz.toFixed(0) }} MHz</span>
+              </div>
+            </div>
           </div>
-          <div class="detail-item">
-            <span class="label">Frequency</span>
-            <span class="value">{{ serverData?.cpu.freq_mhz.toFixed(0) }} MHz</span>
+
+          <!-- Memory -->
+          <div class="glass-card metric-card">
+            <div class="card-header">
+              <h3>Memory</h3>
+              <span class="metric-value">{{ localData?.memory.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar memory-bar" :style="{ width: localData?.memory.percent + '%' }"></div>
+            </div>
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="label">Used</span>
+                <span class="value">{{ localData?.memory.used_gb.toFixed(2) }} GB</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Total</span>
+                <span class="value">{{ localData?.memory.total_gb.toFixed(2) }} GB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Disk -->
+          <div class="glass-card metric-card">
+            <div class="card-header">
+              <h3>Disk</h3>
+              <span class="metric-value">{{ localData?.disk.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar disk-bar" :style="{ width: localData?.disk.percent + '%' }"></div>
+            </div>
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="label">Used</span>
+                <span class="value">{{ localData?.disk.used_gb.toFixed(2) }} GB</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Total</span>
+                <span class="value">{{ localData?.disk.total_gb.toFixed(2) }} GB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- System Info -->
+          <div class="glass-card info-card">
+            <div class="card-header">
+              <h3>System</h3>
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Platform</span>
+                <span class="info-value">{{ localData?.system.platform }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Hostname</span>
+                <span class="info-value">{{ localData?.system.hostname }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Uptime</span>
+                <span class="info-value">{{ localData?.system.uptime_days }} days</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Memory Card -->
-      <div class="glass-card metric-card slide-up" style="animation-delay: 0.2s">
-        <div class="card-header">
-          <h3>💾 Memory</h3>
-          <span class="metric-value">{{ serverData?.memory.percent.toFixed(1) }}%</span>
+      <!-- Aliyun Server -->
+      <div class="machine-section slide-up" style="animation-delay: 0.2s">
+        <div class="machine-header">
+          <h2>☁️ Aliyun Server</h2>
+          <span class="machine-badge cloud">Cloud</span>
         </div>
-        <div class="progress-container">
-          <div class="progress-bar memory-bar" :style="{ width: serverData?.memory.percent + '%' }"></div>
-        </div>
-        <div class="metric-details">
-          <div class="detail-item">
-            <span class="label">Used</span>
-            <span class="value">{{ serverData?.memory.used_gb.toFixed(2) }} GB</span>
+        <div class="machine-grid">
+          <!-- CPU -->
+          <div class="glass-card metric-card">
+            <div class="card-header">
+              <h3>CPU</h3>
+              <span class="metric-value">{{ serverData?.cpu.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar cpu-bar" :style="{ width: serverData?.cpu.percent + '%' }"></div>
+            </div>
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="label">Cores</span>
+                <span class="value">{{ serverData?.cpu.count }}</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Freq</span>
+                <span class="value">{{ serverData?.cpu.freq_mhz.toFixed(0) }} MHz</span>
+              </div>
+            </div>
           </div>
-          <div class="detail-item">
-            <span class="label">Total</span>
-            <span class="value">{{ serverData?.memory.total_gb.toFixed(2) }} GB</span>
+
+          <!-- Memory -->
+          <div class="glass-card metric-card">
+            <div class="card-header">
+              <h3>Memory</h3>
+              <span class="metric-value">{{ serverData?.memory.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar memory-bar" :style="{ width: serverData?.memory.percent + '%' }"></div>
+            </div>
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="label">Used</span>
+                <span class="value">{{ serverData?.memory.used_gb.toFixed(2) }} GB</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Total</span>
+                <span class="value">{{ serverData?.memory.total_gb.toFixed(2) }} GB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Disk -->
+          <div class="glass-card metric-card">
+            <div class="card-header">
+              <h3>Disk</h3>
+              <span class="metric-value">{{ serverData?.disk.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="progress-container">
+              <div class="progress-bar disk-bar" :style="{ width: serverData?.disk.percent + '%' }"></div>
+            </div>
+            <div class="metric-details">
+              <div class="detail-item">
+                <span class="label">Used</span>
+                <span class="value">{{ serverData?.disk.used_gb.toFixed(2) }} GB</span>
+              </div>
+              <div class="detail-item">
+                <span class="label">Total</span>
+                <span class="value">{{ serverData?.disk.total_gb.toFixed(2) }} GB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- System Info -->
+          <div class="glass-card info-card">
+            <div class="card-header">
+              <h3>System</h3>
+            </div>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="info-label">Platform</span>
+                <span class="info-value">{{ serverData?.system.platform }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Hostname</span>
+                <span class="info-value">{{ serverData?.system.hostname }}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Uptime</span>
+                <span class="info-value">{{ serverData?.system.uptime_days }} days</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Disk Card -->
-      <div class="glass-card metric-card slide-up" style="animation-delay: 0.3s">
-        <div class="card-header">
-          <h3>💿 Disk</h3>
-          <span class="metric-value">{{ serverData?.disk.percent.toFixed(1) }}%</span>
-        </div>
-        <div class="progress-container">
-          <div class="progress-bar disk-bar" :style="{ width: serverData?.disk.percent + '%' }"></div>
-        </div>
-        <div class="metric-details">
-          <div class="detail-item">
-            <span class="label">Used</span>
-            <span class="value">{{ serverData?.disk.used_gb.toFixed(2) }} GB</span>
-          </div>
-          <div class="detail-item">
-            <span class="label">Total</span>
-            <span class="value">{{ serverData?.disk.total_gb.toFixed(2) }} GB</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- System Info Card -->
-      <div class="glass-card info-card slide-up" style="animation-delay: 0.4s">
-        <div class="card-header">
-          <h3>ℹ️ System Info</h3>
-        </div>
-        <div class="info-grid">
-          <div class="info-item">
-            <span class="info-label">Platform</span>
-            <span class="info-value">{{ serverData?.system.platform }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Hostname</span>
-            <span class="info-value">{{ serverData?.system.hostname }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Uptime</span>
-            <span class="info-value">{{ serverData?.system.uptime_days }} days</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Boot Time</span>
-            <span class="info-value">{{ formatBootTime(serverData?.system.boot_time) }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">Processes</span>
-            <span class="info-value">{{ serverData?.process_count }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Network Card -->
-      <div class="glass-card network-card slide-up" style="animation-delay: 0.5s">
-        <div class="card-header">
-          <h3>🌐 Network</h3>
-        </div>
-        <div class="network-stats">
-          <div class="network-item">
-            <span class="network-label">📤 Sent</span>
-            <span class="network-value">{{ serverData?.network.bytes_sent_mb.toFixed(2) }} MB</span>
-          </div>
-          <div class="network-item">
-            <span class="network-label">📥 Received</span>
-            <span class="network-value">{{ serverData?.network.bytes_recv_mb.toFixed(2) }} MB</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Services Card -->
-      <div class="glass-card services-card slide-up" style="animation-delay: 0.6s">
+      <!-- Services (Shared) -->
+      <div class="glass-card services-card slide-up" style="animation-delay: 0.3s">
         <div class="card-header">
           <h3>🔧 Services</h3>
-          <span class="refresh-hint">Auto-refresh: 5s</span>
+          <span class="refresh-hint">Auto-refresh: 10s</span>
         </div>
         <div class="services-list">
           <div class="service-item" :class="{ active: services?.django }">
@@ -143,7 +220,7 @@
       </div>
     </div>
 
-    <div class="last-update slide-up" style="animation-delay: 0.7s">
+    <div class="last-update slide-up" style="animation-delay: 0.4s">
       <span>Last updated: {{ lastUpdate }}</span>
     </div>
   </div>
@@ -152,7 +229,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 
-interface ServerData {
+interface MachineData {
   cpu: {
     percent: number
     count: number
@@ -169,17 +246,10 @@ interface ServerData {
     percent: number
   }
   system: {
-    boot_time: string
-    uptime_days: number
     platform: string
     hostname: string
+    uptime_days: number
   }
-  network: {
-    bytes_sent_mb: number
-    bytes_recv_mb: number
-  }
-  process_count: number
-  timestamp: string
 }
 
 interface Services {
@@ -190,22 +260,26 @@ interface Services {
 
 const API_BASE = 'https://daxd.top:4433/api'
 
-const serverData = ref<ServerData | null>(null)
+const localData = ref<MachineData | null>(null)
+const serverData = ref<MachineData | null>(null)
 const services = ref<Services | null>(null)
 const loading = ref(true)
 const lastUpdate = ref('')
 const refreshInterval = ref<number | null>(null)
 
+const fetchLocalData = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/monitor/local/status/`)
+    localData.value = await response.json()
+  } catch (error) {
+    console.error('Failed to fetch local data:', error)
+  }
+}
+
 const fetchServerData = async () => {
   try {
     const response = await fetch(`${API_BASE}/monitor/server/`)
     serverData.value = await response.json()
-    lastUpdate.value = new Date().toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    })
   } catch (error) {
     console.error('Failed to fetch server data:', error)
   }
@@ -221,26 +295,19 @@ const fetchServices = async () => {
 }
 
 const fetchAll = async () => {
-  await Promise.all([fetchServerData(), fetchServices()])
-  loading.value = false
-}
-
-const formatBootTime = (bootTime: string | undefined) => {
-  if (!bootTime) return 'N/A'
-  const date = new Date(bootTime)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+  await Promise.all([fetchLocalData(), fetchServerData(), fetchServices()])
+  lastUpdate.value = new Date().toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
     hour12: false
   })
+  loading.value = false
 }
 
 onMounted(() => {
   fetchAll()
-  refreshInterval.value = setInterval(fetchAll, 5000) as unknown as number
+  refreshInterval.value = setInterval(fetchAll, 10000) as unknown as number
 })
 
 onUnmounted(() => {
@@ -309,44 +376,83 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.monitor-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
+.machines-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
   width: 100%;
   max-width: 1200px;
+}
+
+.machine-section {
+  width: 100%;
+}
+
+.machine-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.machine-header h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.machine-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(124, 58, 237, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+}
+
+.machine-badge.cloud {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.machine-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .card-header h3 {
-  font-size: 1.125rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .metric-value {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--accent-color);
 }
 
 .progress-container {
   width: 100%;
-  height: 12px;
+  height: 10px;
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
+  border-radius: 5px;
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .progress-bar {
   height: 100%;
-  border-radius: 6px;
+  border-radius: 5px;
   transition: width 0.5s ease;
 }
 
@@ -365,37 +471,37 @@ onUnmounted(() => {
 .metric-details {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .detail-item {
   display: flex;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 8px 10px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 6px;
 }
 
 .detail-item .label {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
 }
 
 .detail-item .value {
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
 }
 
 .info-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .info-item {
   display: flex;
   justify-content: space-between;
-  padding: 12px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 6px;
   border: 1px solid var(--glass-border);
@@ -403,61 +509,41 @@ onUnmounted(() => {
 
 .info-label {
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
 }
 
 .info-value {
   font-weight: 500;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
 }
 
-.network-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.network-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  border: 1px solid var(--glass-border);
-}
-
-.network-label {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-}
-
-.network-value {
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--accent-color);
+.services-card {
+  margin-top: 20px;
 }
 
 .refresh-hint {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-secondary);
   opacity: 0.7;
 }
 
 .services-list {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
 .service-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 12px 16px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 8px;
   border: 1px solid var(--glass-border);
   transition: var(--transition);
+  flex: 1;
+  min-width: 150px;
 }
 
 .service-item.active {
@@ -466,18 +552,19 @@ onUnmounted(() => {
 }
 
 .service-status {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
 }
 
 .service-name {
   font-weight: 500;
+  font-size: 0.9rem;
 }
 
 .last-update {
   margin-top: 32px;
   text-align: center;
   color: var(--text-secondary);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   opacity: 0.7;
 }
 
@@ -486,12 +573,20 @@ onUnmounted(() => {
     font-size: 2rem;
   }
 
-  .monitor-grid {
+  .machine-grid {
     grid-template-columns: 1fr;
   }
 
   .metric-details {
     grid-template-columns: 1fr;
+  }
+
+  .services-list {
+    flex-direction: column;
+  }
+
+  .service-item {
+    min-width: 100%;
   }
 }
 </style>
