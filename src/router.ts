@@ -7,6 +7,7 @@ import Gravity from './views/Gravity.vue'
 import Callback from './views/Callback.vue'
 import Goal from './views/Goal.vue'
 import Monitor from './views/Monitor.vue'
+import CS336 from './views/CS336.vue'
 
 const routes: Array<RouteRecordRaw> = [
   { path: '/', name: 'Hub', component: Hub },
@@ -17,6 +18,7 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/callback', name: 'Callback', component: Callback },
   { path: '/goal', name: 'Goal', component: Goal },
   { path: '/monitor', name: 'Monitor', component: Monitor },
+  { path: '/cs336', name: 'CS336', component: CS336 },
   { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
