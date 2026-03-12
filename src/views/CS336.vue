@@ -52,7 +52,7 @@
           </div>
           <h3 class="item-title">{{ lecture.title }}</h3>
           <p class="item-date">{{ lecture.date }}</p>
-          <p class="item-desc">{{ lecture.description }}</p>
+          <p class="item-desc">{{ lecture.description || 'No description available' }}</p>
           <div class="item-links">
             <a v-if="lecture.slides_url" :href="lecture.slides_url" target="_blank" class="link-btn">
               📊 Slides
@@ -88,7 +88,7 @@
             <span v-if="assignment.out_date">📅 Out: {{ assignment.out_date }}</span>
             <span v-if="assignment.due_date">⏰ Due: {{ assignment.due_date }}</span>
           </div>
-          <p class="item-desc">{{ assignment.description }}</p>
+          <p class="item-desc">{{ assignment.description || 'No description available' }}</p>
           <div class="item-links">
             <a v-if="assignment.url" :href="assignment.url" target="_blank" class="link-btn">
               🔗 Assignment Link
