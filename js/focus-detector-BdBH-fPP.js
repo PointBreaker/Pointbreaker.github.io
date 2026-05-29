@@ -1,1 +1,0 @@
-import{vn as e,xn as t}from"../jse/index-index-XVke9V1V.js";function n(e,t){let{target:n}=e;for(;n;){if(n.dataset&&n.dataset[t]!==void 0)return!0;n=n.parentElement}return!1}var r=e({props:{onFocus:Function,onBlur:Function},setup(e){return()=>t(`div`,{style:`width: 0; height: 0`,tabindex:0,onFocus:e.onFocus,onBlur:e.onBlur})}});export{n,r as t};
