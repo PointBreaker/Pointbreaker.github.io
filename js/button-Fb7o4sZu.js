@@ -1,1 +1,0 @@
-import{n as e}from"./chunk-BOhHC3M6.js";import{t}from"./Button-C6IOvCQJ.js";var n=e({NButton:()=>t});export{n as t};
