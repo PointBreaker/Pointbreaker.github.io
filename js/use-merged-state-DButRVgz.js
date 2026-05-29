@@ -1,0 +1,1 @@
+import{Jn as e,cn as t}from"../jse/index-index-DIT7kaf9.js";function n(n,r){return e(n,e=>{e!==void 0&&(r.value=e)}),t(()=>n.value===void 0?r.value:n.value)}export{n as t};
