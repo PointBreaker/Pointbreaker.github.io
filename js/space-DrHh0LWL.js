@@ -1,0 +1,1 @@
+import{t as e}from"./Space-CYxL7tKH.js";export{e as NSpace};
