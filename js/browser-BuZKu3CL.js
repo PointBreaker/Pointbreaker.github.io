@@ -1,1 +1,0 @@
-import{t as e}from"./is-browser-DHsbcSdc.js";var t=e&&`chrome`in window;e&&navigator.userAgent.includes(`Firefox`);var n=e&&navigator.userAgent.includes(`Safari`)&&!t;export{n as t};

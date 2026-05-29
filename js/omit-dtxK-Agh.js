@@ -1,1 +1,0 @@
-function e(e){return Object.keys(e)}function t(e,t=[],n){let r={};return Object.getOwnPropertyNames(e).forEach(n=>{t.includes(n)||(r[n]=e[n])}),Object.assign(r,n)}export{e as n,t};

@@ -1,1 +1,0 @@
-function e(e,t=[],n){let r={};return t.forEach(t=>{r[t]=e[t]}),Object.assign(r,n)}export{e as t};
