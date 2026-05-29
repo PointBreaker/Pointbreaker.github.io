@@ -1,0 +1,1 @@
+import{t as e}from"./objectSpread2-BHJFn0bq.js";import{In as t,gr as n,un as r,vn as i}from"../jse/index-index-445rTvS3.js";import{t as a}from"./fallback-FhEb50pq.js";var o=i(e(e({},{name:`Fallback500Demo`}),{},{__name:`internal-error`,setup(e){return(e,i)=>(t(),r(n(a),{status:`500`}))}}));export{o as default};
