@@ -1,0 +1,1 @@
+import{t as e}from"./use-theme-DHAUM9Qh.js";import{t}from"./light-DuRnGIhv.js";import{i as n}from"./button-xBUf5M8j.js";import{t as r}from"./light-BWmCKyNW.js";function i(e){let{textColorDisabled:t}=e;return{iconColorDisabled:t}}var a=e({name:`InputNumber`,common:t,peers:{Button:n,Input:r},self:i});export{a as t};

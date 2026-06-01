@@ -1,1 +1,0 @@
-import{Wn as e,in as t,rr as n}from"../jse/index-index-DFxUuOiR.js";function r(r){let i=t(r),a=n(i.value);return e(i,e=>{a.value=e}),typeof r==`function`?a:{__v_isRef:!0,get value(){return a.value},set value(e){r.set(e)}}}export{r as t};
