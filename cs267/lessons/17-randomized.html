@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 17 课：随机化算法 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 17 课</p>
+    <h1>随机化算法</h1>
+    <p class="lede">随机化算法在内部使用随机性来加速计算、提升可扩展性或增强可靠性。本课程分为两部分：第一部分介绍随机化数值线性代数（Randomized NLA），通过线性草图（sketching）将高维问题压缩到低维子空间；第二部分介绍随机化在数据科学与 HPC 中的应用，包括加权采样、数据流中的基数估计，以及 Luby 的并行最大独立集算法。</p>
+    <div class="meta">
+      <span>授课：Aydin Buluc</span>
+      <span>视频：<a href="https://youtu.be/1kekrJUghDg">YouTube</a></span>
+      <span>预计用时：80 分钟</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="overview">概述</h2>
+    <p>随机化算法通过引入随机性，在保持可控误差的前提下显著降低计算成本。与传统确定性算法不同，随机化算法的正确性通常以概率保证（例如 (ε, δ) 近似）。本课程涵盖两类核心应用：</p>
+    <ul>
+      <li><strong>随机化数值线性代数（Randomized NLA）</strong>：通过随机投影将矩阵/向量压缩到低维空间，保留关键几何信息，从而加速最小二乘、低秩逼近等问题。</li>
+      <li><strong>随机化数据科学算法</strong>：在数据流、采样、并行图算法等场景中利用随机性实现亚线性复杂度或高效并行化。</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>核心思想：用随机性换取效率</h3>
+      <p>随机化算法的本质是以精度换速度。通过精心设计的随机变换，我们可以在不丢失关键信息的前提下，将问题规模从 n 降低到 d（目标维度），从而获得数量级的加速。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="part1">第一部分：随机化数值线性代数</h2>
+
+    <h3 id="linear-sketching">线性草图（Linear Sketching）</h3>
+    <p>线性草图的核心思想是将原始问题通过一个随机线性变换 <em>S</em> 压缩到低维空间。给定一个高维向量 <code>x ∈ ℝⁿ</code>，其草图为 <code>Sx ∈ ℝᵐ</code>，其中 m ≪ n。</p>
+    <p>典型形式：对于矩阵 <code>A ∈ ℝⁿˣᵈ</code>，构造草图 <code>SA</code>，其中 <code>S ∈ ℝᵐˣⁿ</code> 是一个随机矩阵。草图保留了 <code>A</code> 的列空间的关键几何性质。</p>
+
+    <h3 id="subspace-embedding">子空间嵌入（Subspace Embedding）</h3>
+    <p>一个矩阵 <code>S</code> 被称为 <code>A</code> 的 <strong>ε-子空间嵌入（ε-subspace embedding）</strong>，如果对所有 <code>x ∈ ℝᵈ</code> 满足：</p>
+    <pre><code>(1 - ε) ||Ax||² ≤ ||SAx||² ≤ (1 + ε) ||Ax||²</code></pre>
+    <p>这保证了草图 <code>SA</code> 保留了 <code>A</code> 的列空间中所有向量的范数（即内积和距离）至多 ε 倍的相对误差。</p>
+
+    <div class="card tip">
+      <h3>子空间嵌入的直觉</h3>
+      <p>可以将其理解为"近似保距"：高维空间中的任意向量在随机投影后，其长度几乎不变。这与 Johnson-Lindenstrauss 引理密切相关，但子空间嵌入要求对<strong>所有</strong>向量同时成立，而不仅仅是单个向量。</p>
+    </div>
+
+    <h3 id="ose-theorem">Oblivious Subspace Embedding 定理</h3>
+    <p><strong>定理（Oblivious Subspace Embedding, OSE）</strong>：设 <code>S ∈ ℝᵐˣⁿ</code> 的每个元素独立地取值为 ±1/√m（等概率）。如果 <code>m = O(d²/ε²)</code>，那么 <code>S</code> 以至少 2/3 的概率成为任意固定 d 维子空间的 ε-子空间嵌入。</p>
+    <div class="card warning">
+      <h3>维度依赖 d² 的问题</h3>
+      <p>朴素随机 ±1 矩阵需要 m = O(d²/ε²)，这在 d 较大时开销过高。后续我们将介绍如何通过结构化矩阵将 m 降低到 O(d log d / ε²) 甚至 O(d/ε²)。</p>
+    </div>
+
+    <h3 id="choose-s">如何选择 S：快速结构化矩阵</h3>
+    <p>实际应用中，我们需要在以下性质之间权衡：</p>
+    <table>
+      <thead>
+        <tr>
+          <th>矩阵类型</th>
+          <th>m 的阶</th>
+          <th>应用代价 SA</th>
+          <th>并行性</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>稠密随机 ±1</td>
+          <td>O(d²/ε²)</td>
+          <td>O(nmd)</td>
+          <td>良好</td>
+        </tr>
+        <tr>
+          <td>SHRT（Subsampled Randomized Hadamard Transform）</td>
+          <td>O(d²/ε²)</td>
+          <td>O(nd log n)</td>
+          <td>良好</td>
+        </tr>
+        <tr>
+          <td>CountSketch</td>
+          <td>O(d²/ε²)</td>
+          <td>O(nnz(A))</td>
+          <td>优秀</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 id="shrt">Fast Johnson-Lindenstrauss Transform / SHRT</h3>
+    <p><strong>SHRT（Subsampled Randomized Hadamard Transform）</strong> 将 <code>S</code> 分解为三个算子的乘积：</p>
+    <pre><code>S = PHD</code></pre>
+    <ul>
+      <li><strong>D</strong>：对角矩阵，对角线元素为随机 ±1（随机符号翻转，消除方向偏好）。</li>
+      <li><strong>H</strong>：归一化的 Hadamard 矩阵（利用快速 Hadamard 变换，FHT）。</li>
+      <li><strong>P</strong>：随机采样矩阵，从 n 行中均匀采样 m 行。</li>
+    </ul>
+    <p>应用代价仅为 <code>O(n log n)</code>（由 FHT 决定），远优于稠密矩阵的 <code>O(nm)</code>。</p>
+
+    <pre><code class="language-python">import numpy as np
+from scipy.linalg import hadamard
+
+def shrt_sketch(A, m):
+    """应用 SHRT 到矩阵 A，返回 m 行的草图"""
+    n, d = A.shape
+    # Step 1: 随机符号翻转
+    D = np.random.choice([-1, 1], size=n)
+    AD = A * D[:, np.newaxis]
+    # Step 2: 快速 Hadamard 变换
+    H = hadamard(n) / np.sqrt(n)
+    AHD = H @ AD
+    # Step 3: 随机采样 m 行
+    idx = np.random.choice(n, size=m, replace=False)
+    return AHD[idx, :] / np.sqrt(m / n)
+</code></pre>
+
+    <h3 id="bshrt">Block SHRT（BSHRT）：并行化</h3>
+    <p>为了在并行环境中高效应用 SHRT，可以使用 <strong>Block SHRT（BSHRT）</strong>。核心思想是将矩阵按行分块，每块独立应用 SHRT，然后合并结果。BSHRT 采用 1D 外积算法：</p>
+    <ul>
+      <li>每个进程持有矩阵的一个行块 <code>A_i</code>。</li>
+      <li>每个进程独立应用 SHRT 到本地块。</li>
+      <li>通过 all-gather 或 reduce-scatter 合并草图。</li>
+    </ul>
+    <div class="card tip">
+      <h3>BSHRT 的通信优势</h3>
+      <p>BSHRT 将通信从全局 Hadamard 变换（需要 all-to-all）降低为仅在所有进程间交换 m×d 的草图矩阵，通信量显著减少。</p>
+    </div>
+
+    <h3 id="sketch-solve">最小二乘问题：Sketch-and-Solve</h3>
+    <p>对于超定最小二乘问题 <code>min_x ||Ax - b||₂</code>，经典解法需要 <code>O(nd²)</code> 时间。<strong>Sketch-and-Solve</strong> 方法：</p>
+    <ol>
+      <li>构造草图 <code>SA</code> 和 <code>Sb</code>（S 是子空间嵌入）。</li>
+      <li>求解压缩后的问题：<code>x* = min_x ||SAx - Sb||₂</code>。</li>
+      <li>返回 x* 作为原问题的近似解。</li>
+    </ol>
+    <p><strong>(ε, δ) 保证</strong>：以至少 1-δ 的概率，<code>||Ax* - b||₂ ≤ (1+ε) · min_x ||Ax - b||₂</code>。</p>
+
+    <pre><code class="language-python">import numpy as np
+
+def sketch_and_solve(A, b, m):
+    """Sketch-and-Solve 求解最小二乘问题"""
+    n, d = A.shape
+    # 构造高斯随机草图矩阵
+    S = np.random.randn(m, n) / np.sqrt(m)
+    SA = S @ A
+    Sb = S @ b
+    # 求解压缩后的问题
+    x_star, _, _, _ = np.linalg.lstsq(SA, Sb, rcond=None)
+    return x_star
+</code></pre>
+
+    <div class="card warning">
+      <h3>Sketch-and-Solve 的局限</h3>
+      <p>Sketch-and-Solve 对病态矩阵（ill-conditioned）敏感。实践中常结合迭代精化（iterative refinement）或使用 CountSketch 等更鲁棒的草图方法。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="part2">第二部分：数据科学与 HPC 中的随机化算法</h2>
+
+    <h3 id="weighted-sampling">从加权分布中采样</h3>
+    <p>许多应用需要从离散分布 <code>p = (p₁, p₂, ..., pₙ)</code> 中按权重采样。常用方法：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>方法</th>
+          <th>预处理</th>
+          <th>单次采样</th>
+          <th>备注</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>逆变换采样（Inverse Transform）</td>
+          <td>O(n)</td>
+          <td>O(log n)（二分查找）</td>
+          <td>简单通用</td>
+        </tr>
+        <tr>
+          <td>拒绝采样（Rejection Sampling）</td>
+          <td>O(1)</td>
+          <td>O(1) 期望</td>
+          <td>需要提议分布</td>
+        </tr>
+        <tr>
+          <td>别名方法（Alias Method）</td>
+          <td>O(n)</td>
+          <td>O(1)</td>
+          <td>最优单次采样</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h4>别名方法（Alias Method）</h4>
+    <p>别名方法通过将概率分布重构为 n 个"桶"，每个桶最多包含两个元素，实现 O(1) 采样：</p>
+
+    <pre><code class="language-python">
+import numpy as np
+
+class AliasMethod:
+    """别名方法：O(n) 预处理，O(1) 采样"""
+    def __init__(self, probs):
+        n = len(probs)
+        self.prob = np.zeros(n)
+        self.alias = np.zeros(n, dtype=int)
+        scaled = np.array(probs) * n
+        small, large = [], []
+        for i, p in enumerate(scaled):
+            (small if p < 1.0 else large).append(i)
+        while small and large:
+            s, l = small.pop(), large.pop()
+            self.prob[s] = scaled[s]
+            self.alias[s] = l
+            scaled[l] = scaled[l] + scaled[s] - 1.0
+            (small if scaled[l] < 1.0 else large).append(l)
+        for idx in large + small:
+            self.prob[idx] = 1.0
+
+    def sample(self):
+        i = np.random.randint(len(self.prob))
+        return i if np.random.rand() < self.prob[i] else self.alias[i]
+</code></pre>
+
+    <h3 id="distinct-items">数据流中不同元素的计数</h3>
+    <p>给定一个数据流，估计其中不同元素的数量（cardinality estimation），要求空间远小于 n。</p>
+
+    <h4>PCSA / Flajolet-Martin 算法</h4>
+    <p><strong>Probabilistic Counting with Stochastic Averaging (PCSA)</strong> 的核心思想：</p>
+    <ul>
+      <li>对每个元素应用哈希函数 h，观察 h(x) 的二进制表示中末尾 0 的个数（即 ρ(h(x)）。</li>
+      <li>维护一个位图（bitmap），记录遇到的最大 ρ 值。</li>
+      <li>估计值 ≈ 2^R / φ，其中 R 是最大 ρ 值，φ ≈ 0.77351。</li>
+    </ul>
+    <div class="card idea">
+      <h3>直觉：抛硬币类比</h3>
+      <p>反复抛硬币，出现 k 次连续正面的概率是 2^{-k}。如果最多看到 k 次连续正面，大约抛了 2^k 次。类似地，哈希值的末尾 0 的个数反映了已见元素的数量级。</p>
+    </div>
+
+    <h4>HyperLogLog：调和平均改进</h4>
+    <p><strong>HyperLogLog</strong> 使用<strong>调和平均（harmonic mean）</strong> 替代 PCSA 的几何平均，显著降低异常值的影响：</p>
+    <ul>
+      <li>将流分成 m 个子流（使用哈希值的前 log₂m 位作为桶索引）。</li>
+      <li>每个桶维护最大 ρ 值。</li>
+      <li>使用调和平均合并桶的估计值。</li>
+    </ul>
+    <p>误差率：<code>O(1/√m)</code>，空间复杂度：<code>O(m log log n)</code>。</p>
+
+    <pre><code class="language-python">
+import hashlib
+import numpy as np
+
+def rho(x):
+    """计算二进制表示中末尾 0 的个数 + 1"""
+    if x == 0:
+        return 64
+    n = 0
+    while (x & 1) == 0:
+        n += 1
+        x >>= 1
+    return n + 1
+
+class HyperLogLog:
+    """HyperLogLog 基数估计器"""
+    def __init__(self, b=10):
+        self.b = b          # 桶的指数
+        self.m = 1 << b     # 桶的数量
+        self.registers = np.zeros(self.m, dtype=np.int32)
+        self.alpha = self._correction(self.m)
+
+    def _correction(self, m):
+        if m == 16: return 0.673
+        if m == 32: return 0.697
+        if m == 64: return 0.709
+        return 0.7213 / (1.0 + 1.079 / m)
+
+    def add(self, item):
+        h = int(hashlib.md5(str(item).encode()).hexdigest()[:16], 16)
+        idx = h >> (64 - self.b)
+        self.registers[idx] = max(self.registers[idx], rho(h))
+
+    def estimate(self):
+        Z = np.sum(2.0 ** (-self.registers))
+        E = self.alpha * self.m ** 2 / Z
+        return int(E)
+</code></pre>
+
+    <h3 id="parallel-pcsa">PCSA 中的并行化</h3>
+    <p>PCSA 和 HyperLogLog 天然支持并行化：</p>
+    <ul>
+      <li><strong>可合并草图（Mergeable Sketches）</strong>：每个进程维护本地草图。</li>
+      <li><strong>合并操作</strong>：位图的合并等价于按位 OR（bitwise OR）。</li>
+      <li><strong>全局聚合</strong>：使用 <code>all-reduce</code>（按位 OR）合并所有进程的草图。</li>
+    </ul>
+
+    <pre><code class="language-python">
+from mpi4py import MPI
+
+def parallel_hll(local_stream, b=10):
+    """并行 HyperLogLog 基数估计"""
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    # 每个进程本地估计
+    hll = HyperLogLog(b)
+    for item in local_stream:
+        hll.add(item)
+    local_regs = hll.registers.copy()
+
+    # all-reduce: 按位取最大值（等价于位图的 OR）
+    global_regs = np.zeros_like(local_regs)
+    comm.Allreduce([local_regs, MPI.INT],
+                   [global_regs, MPI.INT],
+                   op=MPI.MAX)
+
+    # 在 rank 0 上计算最终估计
+    if rank == 0:
+        hll.registers = global_regs
+        return hll.estimate()
+    return None
+</code></pre>
+
+    <div class="card tip">
+      <h3>可合并草图的重要性</h3>
+      <p>可合并草图（mergeable sketches）是并行和分布式环境中的关键原语。它们允许分片处理数据后高效合并，无需保留原始数据。</p>
+    </div>
+
+    <h3 id="mis">最大独立集（Maximal Independent Set, MIS）</h3>
+    <p><strong>问题</strong>：给定无向图 G = (V, E)，找一个极大独立集（即一组互不相邻的顶点，且无法再添加任何顶点）。</p>
+
+    <h4>顺序算法的困境</h4>
+    <p>贪心 MIS 算法顺序复杂度为 O(n)，但并行跨度（span）为 O(n)——本质上是顺序的。</p>
+
+    <h4>Luby 的并行随机化算法</h4>
+    <p><strong>Luby 算法（1986）</strong> 通过随机化实现 O(log n) 跨度：</p>
+    <ol>
+      <li>每个顶点独立地随机生成一个标签 r(v) ∈ (0, 1)。</li>
+      <li>如果一个顶点 v 的标签比其所有邻居都小（局部最小值），则 v 加入独立集。</li>
+      <li>移除 v 及其所有邻居（它们不能再加入）。</li>
+      <li>在剩余图上重复上述过程。</li>
+    </ol>
+
+    <div class="card idea">
+      <h3>为什么随机标签有效？</h3>
+      <p>每个顶点有约 1/(deg(v)+1) 的概率成为局部最小值。期望中，每轮至少移除常数比例的顶点，因此期望在 O(log n) 轮后终止。</p>
+    </div>
+
+    <pre><code class="language-python">
+import random
+from collections import defaultdict
+
+def luby_mis(n, adj):
+    """Luby 的并行 MIS 算法"""
+    in_graph = set(range(n))
+    mis = set()
+
+    while in_graph:
+        # Step 1: 为每个顶点分配随机标签
+        labels = {v: random.random() for v in in_graph}
+
+        # Step 2: 局部最小值加入 MIS
+        chosen = set()
+        for v in in_graph:
+            if all(labels[v] < labels[u] for u in adj[v] if u in in_graph):
+                chosen.add(v)
+
+        mis.update(chosen)
+
+        # Step 3: 移除 chosen 及其邻居
+        to_remove = set(chosen)
+        for v in chosen:
+            to_remove.update(u for u in adj[v] if u in in_graph)
+        in_graph -= to_remove
+
+    return mis
+</code></pre>
+
+    <p><strong>复杂度分析</strong>：</p>
+    <ul>
+      <li>每轮期望移除至少一半的边。</li>
+      <li>期望轮数：O(log n)。</li>
+      <li>每轮工作量：O(m)（检查邻居）。</li>
+      <li>总期望工作量：O(m log n)，跨度：O(log n)。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="bonus">Bonus：Balls into Bins</h2>
+    <p>经典的"球入箱"问题展示了随机化的力量：</p>
+    <ul>
+      <li><strong>纯随机</strong>：将 n 个球随机放入 n 个箱，最重箱的负载期望为 <code>O(ln n / ln ln n)</code>。</li>
+      <li><strong>Power of 2 Choices</strong>：每个球随机选 2 个箱，放入负载较轻者，最重箱负载降为 <code>O(ln ln n)</code>。</li>
+    </ul>
+    <div class="card idea">
+      <h3>指数级改进</h3>
+      <p>仅仅增加一个选择（从 1 到 2），最大负载就从 Θ(ln n / ln ln n) 降低到 Θ(ln ln n)——这是指数级的改进！这一原理广泛应用于负载均衡、哈希表设计、路由网络等场景。</p>
+    </div>
+
+    <pre><code class="language-python">
+import random
+
+def balls_into_bins(n, two_choices=False):
+    """模拟 balls into bins 实验"""
+    bins = [0] * n
+    for _ in range(n):
+        if two_choices:
+            i, j = random.randrange(n), random.randrange(n)
+            idx = i if bins[i] <= bins[j] else j
+        else:
+            idx = random.randrange(n)
+        bins[idx] += 1
+    return max(bins)
+
+# 示例：n=10000 时
+n = 10000
+print(f"纯随机: {balls_into_bins(n, False)}")
+print(f"2-choices: {balls_into_bins(n, True)}")
+</code></pre>
+
+    <table>
+      <thead>
+        <tr>
+          <th>策略</th>
+          <th>最重箱负载（n 球入 n 箱）</th>
+          <th>改进</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>纯随机</td>
+          <td>Θ(ln n / ln ln n)</td>
+          <td>基线</td>
+        </tr>
+        <tr>
+          <td>Power of 2 Choices</td>
+          <td>Θ(ln ln n)</td>
+          <td>指数改进</td>
+        </tr>
+        <tr>
+          <td>Power of d Choices</td>
+          <td>Θ(ln ln n / ln d)</td>
+          <td>进一步改进</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>随机化 NLA</h3>
+        <p>通过线性草图（SA）压缩高维问题，ε-子空间嵌入保证几何结构。SHRT 提供 O(n log n) 的快速应用。</p>
+      </article>
+      <article>
+        <h3>Sketch-and-Solve</h3>
+        <p>将大规模最小二乘问题压缩为 (ε, δ) 近似问题，以可控误差换取显著加速。</p>
+      </article>
+      <article>
+        <h3>加权采样</h3>
+        <p>别名方法实现 O(1) 采样；逆变换与拒绝采样各有适用场景。</p>
+      </article>
+      <article>
+        <h3>基数估计</h3>
+        <p>HyperLogLog 用调和平均改进 PCSA，O(m log log n) 空间实现 O(1/√m) 误差。</p>
+      </article>
+      <article>
+        <h3>并行 MIS</h3>
+        <p>Luby 算法通过随机标签实现 O(log n) 跨度，打破顺序贪心算法的瓶颈。</p>
+      </article>
+      <article>
+        <h3>Power of 2 Choices</h3>
+        <p>微小的额外随机性（2 个选择 vs 1 个）带来指数级负载均衡改进。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="b" data-incorrect="a,c,d">
+      <p><strong>问题 1：</strong>ε-子空间嵌入保证什么性质对所有 x ∈ ℝᵈ 成立？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">SA 保留了 A 的秩</button>
+        <button data-choice="b" aria-pressed="false">(1-ε)||Ax||² ≤ ||SAx||² ≤ (1+ε)||Ax||²</button>
+        <button data-choice="c" aria-pressed="false">SA 与 A 有相同的奇异值</button>
+        <button data-choice="d" aria-pressed="false">SA 是 A 的最佳低秩逼近</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="c" data-incorrect="a,b,d">
+      <p><strong>问题 2：</strong>SHRT (Subsampled Randomized Hadamard Transform) 中 S = PHD 的三个算子按顺序分别是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">置换、哈达玛、对角</button>
+        <button data-choice="b" aria-pressed="false">投影、哈希、对角</button>
+        <button data-choice="c" aria-pressed="false">采样、哈达玛、对角（随机符号翻转）</button>
+        <button data-choice="d" aria-pressed="false">采样、Householder、对角</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="a" data-incorrect="b,c,d">
+      <p><strong>问题 3：</strong>关于 HyperLogLog 与 PCSA 的比较，以下哪项是正确的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">HyperLogLog 使用调和平均，比 PCSA 的几何平均对异常值更鲁棒</button>
+        <button data-choice="b" aria-pressed="false">HyperLogLog 的空间复杂度比 PCSA 更高</button>
+        <button data-choice="c" aria-pressed="false">HyperLogLog 不能并行化而 PCSA 可以</button>
+        <button data-choice="d" aria-pressed="false">HyperLogLog 使用几何平均，PCSA 使用调和平均</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="d" data-incorrect="a,b,c">
+      <p><strong>问题 4：</strong>Luby 的并行 MIS 算法中，一个顶点 v 加入独立集的条件是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">v 的度数最小</button>
+        <button data-choice="b" aria-pressed="false">v 的随机标签大于所有邻居的标签</button>
+        <button data-choice="c" aria-pressed="false">v 是图中编号最小的顶点</button>
+        <button data-choice="d" aria-pressed="false">v 的随机标签严格小于其在图中所有邻居的标签</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="b" data-incorrect="a,c,d">
+      <p><strong>问题 5：</strong>在 "balls into bins" 问题中，"power of 2 choices" 策略相比纯随机策略，最重箱的负载从 Θ(ln n / ln ln n) 降低到多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">Θ(1)</button>
+        <button data-choice="b" aria-pressed="false">Θ(ln ln n)</button>
+        <button data-choice="c" aria-pressed="false">Θ(ln n)</button>
+        <button data-choice="d" aria-pressed="false">Θ(√n)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="nav">
+      <a href="16-dense-la.html">← 第 16 课</a>
+      <a href="18-structured.html">第 18 课 →</a>
+    </div>
+    <footer>CS267: Applications of Parallel Computers · UC Berkeley · Spring 2025</footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

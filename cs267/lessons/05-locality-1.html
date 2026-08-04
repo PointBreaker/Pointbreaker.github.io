@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 5 课：模拟中的并行性与局部性（上）— CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 5 课 · James Demmel</p>
+    <h1>模拟中的并行性与局部性（上）</h1>
+    <p class="lede">并行性和数据局部性是性能的关键。真实世界的问题天然具有并行性和局部性：许多对象独立运行，依赖近处多于远处，远处依赖可以简化。</p>
+
+    <div class="meta">
+      <p><strong>授课教师：</strong>James Demmel</p>
+      <p><strong>日期：</strong>2025-02-04</p>
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>视频：</strong><a href="https://youtu.be/D80PZmkRlDM" target="_blank" rel="noopener">Lecture 5 Video</a></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>模拟的基本类型</h2>
+    <p>科学计算模拟可以分为四大类：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>类型</th>
+          <th>时间</th>
+          <th>空间</th>
+          <th>示例</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>离散事件系统</strong></td>
+          <td>离散</td>
+          <td>离散</td>
+          <td>Game of Life、制造系统、电路</td>
+        </tr>
+        <tr>
+          <td><strong>粒子系统</strong></td>
+          <td>连续</td>
+          <td>离散（粒子）</td>
+          <td>N-body、分子动力学</td>
+        </tr>
+        <tr>
+          <td><strong>集中参数系统 (ODEs)</strong></td>
+          <td>连续</td>
+          <td>离散（变量）</td>
+          <td>电路模拟、结构力学</td>
+        </tr>
+        <tr>
+          <td><strong>分布参数系统 (PDEs)</strong></td>
+          <td>连续</td>
+          <td>连续</td>
+          <td>热传导、流体力学</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>离散事件系统 (Discrete Event Systems)</h2>
+    <h3>基本概念</h3>
+    <ul>
+      <li>系统表示为<strong>有限变量集</strong></li>
+      <li>变量的所有取值构成<strong>状态 (state)</strong></li>
+      <li>每个变量通过<strong>转移函数</strong>更新，依赖于其他变量</li>
+    </ul>
+
+    <h3>同步 vs 异步</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>类型</th>
+          <th>描述</th>
+          <th>示例</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Synchronous</td><td>每个时间步评估所有转移函数</td><td>Game of Life</td></tr>
+        <tr><td>Asynchronous</td><td>仅在输入变化时评估（事件驱动）</td><td>电路模拟、交通仿真</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Game of Life 的并行性</h3>
+    <p>每个新网格单元仅依赖于旧网格中的 9 个单元（自身 + 8 邻居）。</p>
+    <div class="card idea">
+      <p><strong>并行化策略：Domain Decomposition（区域分解）</strong></p>
+      <ul>
+        <li>将物理区域划分为多个 patch</li>
+        <li>每个处理器负责一个 patch</li>
+        <li>只需与邻居交换边界值</li>
+        <li>使用大 patch 实现局部性</li>
+      </ul>
+    </div>
+
+    <h3>网格分区：最小化通信</h3>
+    <p>对于 n×n 网格，p 个处理器：</p>
+    <table>
+      <thead>
+        <tr>
+          <th>分区方式</th>
+          <th>边交叉数</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>条状 (slab)</td><td>$n \cdot (p-1)$</td></tr>
+        <tr><td>块状 (block)</td><td>$2n(\sqrt{p} - 1)$</td></tr>
+      </tbody>
+    </table>
+    <p><strong>结论：</strong>最小化通信 = 最小化分区表面积/体积比</p>
+
+    <h3>异步模拟的挑战</h3>
+    <div class="card warning">
+      <p><strong>保守调度 (Conservative)：</strong>仅模拟到输入消息的最小时间戳。</p>
+      <ul>
+        <li>需要死锁检测（图中有环时）</li>
+      </ul>
+      <p><strong>投机调度 (Speculative/Optimistic)：</strong>假设无新输入，继续模拟。</p>
+      <ul>
+        <li>如果假设错误，需要回滚 (rollback)</li>
+        <li>TimeWarp 算法</li>
+      </ul>
+    </div>
+
+    <h2>粒子系统 (Particle Systems)</h2>
+    <h3>基本概念</h3>
+    <ul>
+      <li>有限数量的粒子</li>
+      <li>按牛顿定律运动 ($F = ma$)</li>
+      <li>时间和位置连续</li>
+    </ul>
+
+    <h3>力的分类</h3>
+    <p>$$\text{force} = \text{external\_force} + \text{nearby\_force} + \text{far\_field\_force}$$</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>力类型</th>
+          <th>并行性</th>
+          <th>通信需求</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>外力</strong></td>
+          <td>"尴尬并行"（Embarrassingly Parallel）</td>
+          <td>无需通信</td>
+        </tr>
+        <tr>
+          <td><strong>近邻力</strong></td>
+          <td>Domain Decomposition</td>
+          <td>近邻通信</td>
+        </tr>
+        <tr>
+          <td><strong>远场力</strong></td>
+          <td>需要巧妙算法</td>
+          <td>全对全（All-to-all）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>外力：尴尬并行</h3>
+    <pre><code>// 每个粒子独立计算
+for each particle p on processor
+  apply_external_force(p)
+// 可能需要 reduce 计算全局时间步</code></pre>
+    <p>任意分布均可，局部性不是问题。</p>
+
+    <h3>近邻力：Domain Decomposition</h3>
+    <div class="card idea">
+      <p><strong>挑战 1：边界交互</strong></p>
+      <ul>
+        <li>边界附近的粒子需要与邻居通信</li>
+        <li>使用 Ghost Zone / Halo</li>
+        <li>低表面积/体积比 → 低通信量</li>
+        <li>使用正方形/立方体而非条状分区</li>
+      </ul>
+    </div>
+
+    <div class="card warning">
+      <p><strong>挑战 2：负载不均衡</strong></p>
+      <ul>
+        <li>粒子可能聚集（如星系、电子束）</li>
+        <li>解决方案：不均匀空间划分</li>
+        <li>2D: Quad-tree，3D: Oct-tree</li>
+        <li>每个区域包含大致相同数量的粒子</li>
+      </ul>
+    </div>
+
+    <h3>远场力：从 $O(n^2)$ 到 $O(n \log n)$</h3>
+
+    <h4>Particle-Mesh 方法</h4>
+    <ol>
+      <li>叠加规则网格</li>
+      <li>将粒子"移动"到最近网格点（scatter）</li>
+      <li>在网格上求解 PDE（FFT、Multigrid）</li>
+      <li>从网格插值力到粒子（gather）</li>
+    </ol>
+    <p>复杂度：$O(n \log n)$ 或 $O(n)$</p>
+
+    <h4>Tree 方法</h4>
+    <p>远处粒子群的力可以近似为单个大粒子：</p>
+    <ul class="checklist">
+      <li><strong>Barnes-Hut：</strong>2D/3D 树，基于角度阈值近似</li>
+      <li><strong>FMM (Fast Multipole Method)：</strong>Greengard & Rokhlin，更精确</li>
+      <li><strong>Anderson 方法</strong></li>
+    </ul>
+    <p>复杂度：$O(n \log n)$ 或 $O(n)$</p>
+
+    <h2>集中参数系统 (ODEs)</h2>
+    <h3>系统描述</h3>
+    <ul>
+      <li>"集中"变量依赖于连续参数（通常是时间）</li>
+      <li>形成常微分方程组 (ODEs)</li>
+      <li>示例：电路、结构力学、化学反应</li>
+    </ul>
+
+    <h3>电路示例</h3>
+    <p>状态变量：</p>
+    <ul>
+      <li>$v_n(t)$ — 节点电压</li>
+      <li>$i_b(t)$ — 支路电流</li>
+      <li>$v_b(t)$ — 支路电压</li>
+    </ul>
+
+    <p>方程（KCL、KVL、欧姆定律）：</p>
+    <p>$$\begin{pmatrix} 0 & A & 0 \\ A^T & 0 & -I \\ 0 & R & -I \end{pmatrix} \begin{pmatrix} v_n \\ 0 \\ i_b \end{pmatrix} = \begin{pmatrix} S \\ 0 \\ 0 \end{pmatrix}$$</p>
+
+    <h3>Solving ODEs：显式方法</h3>
+    <p>假设 ODE 为 $x'(t) = f(x) = A \cdot x(t)$，其中 A 是稀疏矩阵：</p>
+    <pre><code>// Forward Euler
+x[i+1] = x[i] + dt * A * x[i]  // 稀疏矩阵-向量乘法</code></pre>
+    <p><strong>优点：</strong>简单（只需 SpMV）</p>
+    <p><strong>缺点：</strong>稳定性问题，刚性系统需要极小时间步</p>
+
+    <h3>Solving ODEs：隐式方法</h3>
+    <pre><code>// Backward Euler
+(I - dt*A) * x[i+1] = x[i]  // 需要求解稀疏线性系统</code></pre>
+    <p><strong>优点：</strong>可取更大时间步，尤其适合刚性问题</p>
+    <p><strong>缺点：</strong>每步需要求解线性系统</p>
+
+    <h3>稀疏矩阵-向量乘法 (SpMV)</h3>
+    <p>CSR (Compressed Sparse Row) 格式：</p>
+    <pre><code>for each row i
+  for k = ptr[i] to ptr[i+1]-1
+    y[i] = y[i] + val[k] * x[ind[k]]</code></pre>
+
+    <h3>并行 SpMV</h3>
+    <div class="card idea">
+      <p><strong>分区策略：</strong></p>
+      <ul>
+        <li>划分索引集 $\{1, ..., n\} = N_1 \cup N_2 \cup ... \cup N_p$</li>
+        <li>处理器 k 存储 $y[i], x[i], A[i,:]$，其中 $i \in N_k$</li>
+        <li>处理器 k 计算 $y[i] = (A[i,:]) \cdot x$（稀疏点积）</li>
+      </ul>
+      <p><strong>Owner-Computes 规则：</strong>拥有数据的处理器负责计算。</p>
+    </div>
+
+    <h3>矩阵重排序与图分区</h3>
+    <p><strong>理想结构：</strong>块对角矩阵（无通信）</p>
+    <p><strong>目标：</strong></p>
+    <ul class="checklist">
+      <li>负载均衡（每处理器非零元数大致相等）</li>
+      <li>最小化通信（最小化非对角非零元）</li>
+      <li>改善寄存器/缓存重用</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>粒子系统中，哪种力的计算是"尴尬并行"的？</p>
+      <div class="quiz-options">
+        <button data-answer="correct" data-correct="正确！外力作用于每个粒子，无需通信。">A. 外力</button>
+        <button data-answer="wrong" data-incorrect="近邻力需要近邻通信。">B. 近邻力</button>
+        <button data-answer="wrong" data-incorrect="远场力需要全对全通信或巧妙算法。">C. 远场力</button>
+        <button data-answer="wrong" data-incorrect="三种力的并行性不同。">D. 都是</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>对于 2D 网格，哪种分区方式通信量更小？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="条状分区通信量更大。">A. 条状分区 (slab)</button>
+        <button data-answer="correct" data-correct="正确！块状分区有更小的表面积/体积比。">B. 块状分区 (block)</button>
+        <button data-answer="wrong" data-incorrect="两者通信量不同。">C. 一样</button>
+        <button data-answer="wrong" data-incorrect="随机分区通常更差。">D. 随机分区</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>Particle-Mesh 方法的主要优势是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="Particle-Mesh 有近似。">A. 精确计算所有力</button>
+        <button data-answer="correct" data-incorrect="Particle-Mesh 通过网格近似将复杂度从 O(n²) 降到 O(n log n)。">B. 将远场力计算从 O(n²) 降到 O(n log n)</button>
+        <button data-answer="wrong" data-incorrect="Particle-Mesh 需要通信。">C. 无需通信</button>
+        <button data-answer="wrong" data-incorrect="Particle-Mesh 需要网格。">D. 无需网格</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>显式方法求解 ODE 的主要缺点是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="显式方法每步只需 SpMV。">A. 每步需要求解线性系统</button>
+        <button data-answer="correct" data-incorrect="显式方法有稳定性问题，刚性系统需要极小时间步。">B. 稳定性问题，需要极小时间步</button>
+        <button data-answer="wrong" data-incorrect="显式方法可以并行。">C. 不能并行</button>
+        <button data-answer="wrong" data-incorrect="显式方法适用于稀疏矩阵。">D. 只能用于稠密矩阵</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>并行 SpMV 中，Owner-Computes 规则是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="correct" data-incorrect="Owner-Computes 规则：拥有数据的处理器负责计算。">A. 拥有数据的处理器负责计算</button>
+        <button data-answer="wrong" data-incorrect="与主从模型不同。">B. 主处理器分配任务</button>
+        <button data-answer="wrong" data-incorrect="与循环调度不同。">C. 循环分配任务</button>
+        <button data-answer="wrong" data-incorrect="与动态调度不同。">D. 动态负载均衡</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>模拟分四类</h3>
+        <p>离散事件、粒子系统、ODEs、PDEs。每类有不同的并行化策略。</p>
+      </article>
+      <article>
+        <h3>Domain Decomposition</h3>
+        <p>将物理区域划分给处理器，最小化表面积/体积比以减少通信。</p>
+      </article>
+      <article>
+        <h3>远场力的优化</h3>
+        <p>Particle-Mesh 和 Tree 方法将全对全交互从 O(n²) 降到 O(n log n)。</p>
+      </article>
+      <article>
+        <h3>稀疏矩阵并行</h3>
+        <p>SpMV 是许多算法的核心。图分区决定并行效率和通信量。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li>James Demmel, <em>Applied Numerical Linear Algebra</em>, SIAM, 1997</li>
+      <li><a href="http://graphics.berkeley.edu/papers/Parker-RTD-2009-08/" target="_blank" rel="noopener">Real-Time Decision Making in Games</a></li>
+      <li>Barnes & Hut, "A hierarchical O(N log N) force-calculation algorithm," <em>Nature</em>, 1986</li>
+      <li><a href="https://www.netlib.org/linalg/html_templates/Templates.html" target="_blank" rel="noopener">Matrix Decision Tree</a></li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="04-shared-memory.html">← 第 4 课</a>
+      <a href="06-locality-2.html">第 6 课 →</a>
+    </div>
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

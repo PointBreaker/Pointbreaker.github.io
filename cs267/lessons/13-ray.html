@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ray 分布式框架 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 13 课</p>
+    <h1>Ray 分布式框架</h1>
+    <p class="lede">从课程项目到全球分布式计算平台：Ion Stoica 讲述 Ray 如何通过极简 API 与统一计算模型，让 Python 开发者轻松编写分布式 AI 应用。</p>
+    <div class="meta">
+      <span>授课：Ion Stoica</span>
+      <span>视频：<a href="https://youtu.be/n5c1S8ksIRs">YouTube</a></span>
+      <span>预计用时：75 分钟</span>
+    </div>
+    <hr class="rule">
+
+    <h2>Ray 的诞生背景</h2>
+    <p>Ray 起源于 2016 年加州大学伯克利分校的 ODI（Observatory on Distributed Intelligence）项目，由 Ion Stoica 和 Joseph E. Gonzalez 指导的学生团队（包括 Philipp Moritz、Robert Nishihara 等）最初作为课程研究项目的产物。其核心动机是：强化学习等新兴 AI 工作负载需要一种比 MapReduce / Spark 更灵活的分布式编程模型。</p>
+
+    <div class="card idea">
+      <h3>从 RLlib 到 Anyscale</h3>
+      <ul class="checklist">
+        <li><strong>RLlib</strong>：Ray 上构建的强化学习库，展示了 Ray 在复杂 RL 训练循环中的优势</li>
+        <li><strong>Ray v1.0</strong>（2020）：核心 API 稳定，任务/ Actor 模型成熟</li>
+        <li><strong>Ray v2.0</strong>（2022）：引入compiled graph，支持静态 DAG 低延迟执行</li>
+        <li><strong>Anyscale</strong>：由同一团队创立的商业公司，提供托管 Ray 云服务</li>
+      </ul>
+    </div>
+
+    <h2>为什么需要 Ray？AI 工作负载的三大趋势</h2>
+    <p>Ion Stoica 指出，推动 Ray 需求的三大趋势是：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>趋势</th>
+          <th>含义</th>
+          <th>对框架的要求</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>AI 需求 > 硬件增长</strong></td>
+          <td>AI 计算需求每年增长 10x，远超摩尔定律</td>
+          <td>必须能横向扩展到数千 GPU</td>
+        </tr>
+        <tr>
+          <td><strong>异构集群</strong></td>
+          <td>单机多卡 → 多机多卡 → CPU/GPU/TPU 混合</td>
+          <td>统一管理异构资源和调度</td>
+        </tr>
+        <tr>
+          <td><strong>复杂 AI 工作负载</strong></td>
+          <td>训练、推理、数据处理、超参搜索交织</td>
+          <td>统一框架支持多阶段 pipeline</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>传统框架的局限</h3>
+      <p>Spark/MapReduce 适合批处理；MPI 适合 HPC 科学计算；但 AI 工作负载需要<strong>嵌套并行</strong>（任务中包含任务）、<strong>异构任务</strong>（CPU 预处理 + GPU 训练）和<strong>有状态计算</strong>（参数服务器、环境模拟器）。现有框架无法优雅地表达这些模式。</p>
+    </div>
+
+    <h2>Ray 的核心设计理念：统一计算框架</h2>
+    <p>Ray 的目标是成为一个<strong>统一的计算框架</strong>，用同一套 API 表达从单机 Python 程序到数千节点的分布式应用。其设计哲学是"minimalist API"——用最少的概念覆盖最多的场景。</p>
+
+    <h2>极简 API：六行代码入门</h2>
+    <p>Ray 的 API 核心仅由几个函数和装饰器组成：</p>
+
+    <pre><code class="language-python">import ray
+
+# 1. 连接到 Ray 集群（或本地启动）
+ray.init()
+
+# 2. 将普通函数转为分布式任务（Task）
+@ray.remote
+def compute(x):
+    return x * x
+
+# 3. 异步提交任务，返回 Future
+futures = [compute.remote(i) for i in range(10)]
+
+# 4. 获取结果
+results = ray.get(futures)
+
+# 5. 将对象存入共享内存 Object Store
+ref = ray.put(large_object)
+
+# 6. 等待部分结果（不阻塞全部）
+done, pending = ray.wait(futures, num_returns=3)</code></pre>
+
+    <table>
+      <thead>
+        <tr>
+          <th>API</th>
+          <th>作用</th>
+          <th>特点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>ray.init()</code></td><td>初始化 Ray 运行时</td><td>连接集群或本地启动</td></tr>
+        <tr><td><code>@ray.remote</code></td><td>装饰器：函数→Task，类→Actor</td><td>声明式并行</td></tr>
+        <tr><td><code>.remote()</code></td><td>异步调用 remote 函数/方法</td><td>返回 ObjectRef (Future)</td></tr>
+        <tr><td><code>ray.get()</code></td><td>阻塞等待并获取结果</td><td>可传入列表批量获取</td></tr>
+        <tr><td><code>ray.put()</code></td><td>将对象存入 Object Store</td><td>获得引用，零拷贝共享</td></tr>
+        <tr><td><code>ray.wait()</code></td><td>非阻塞等待部分结果</td><td>支持超时和 num_returns</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <h2>FAST 计算模型</h2>
+    <p>Ray 用四个核心抽象（FAST）统一所有分布式计算模式：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>抽象</th>
+          <th>英文</th>
+          <th>语义</th>
+          <th>类比</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>F</strong>unction</td>
+          <td>Task</td>
+          <td>无状态、幂等的远程函数执行</td>
+          <td>类似函数调用，无副作用</td>
+        </tr>
+        <tr>
+          <td><strong>A</strong>ctor</td>
+          <td>Actor</td>
+          <td>有状态的分布式对象，方法串行执行</td>
+          <td>带邮箱的 Actor 模型</td>
+        </tr>
+        <tr>
+          <td><strong>S</strong>chedule</td>
+          <td>调度器</td>
+          <td>全局 + 两级调度，感知数据位置</td>
+          <td>混合调度架构</td>
+        </tr>
+        <tr>
+          <td><strong>T</strong>ransport</td>
+          <td>Object Store</td>
+          <td>共享内存对象存储，零拷贝传输</td>
+          <td>分布式共享内存</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Python 示例：从函数到 Task，从类到 Actor</h3>
+    <pre><code class="language-python">import ray
+
+ray.init()
+
+# ===== Task：无状态函数 =====
+@ray.remote
+def add(a, b):
+    return a + b
+
+# 提交 1000 个任务，自动并行
+refs = [add.remote(i, i) for i in range(1000)]
+results = ray.get(refs)
+
+# ===== Actor：有状态对象 =====
+@ray.remote
+class Counter:
+    def __init__(self):
+        self.value = 0
+
+    def increment(self):
+        self.value += 1
+        return self.value
+
+# 创建 10 个独立 Actor 实例
+counters = [Counter.remote() for _ in range(10)]
+# 每个 Actor 内部状态独立
+refs = [c.increment.remote() for c in counters]
+print(ray.get(refs))  # [1, 1, 1, ...]</code></pre>
+
+    <div class="card tip">
+      <h3>Task vs Actor 选择指南</h3>
+      <ul>
+        <li><strong>Task</strong>：无状态、 embarrassingly parallel、自动负载均衡</li>
+        <li><strong>Actor</strong>：需要维护状态（模型权重、环境、参数服务器）、需要资源亲和性（绑定 GPU）</li>
+      </ul>
+    </div>
+
+    <h2>共享内存 Object Store：零拷贝的魔法</h2>
+    <p>Ray 的核心创新之一是<strong>跨节点的共享内存 Object Store</strong>，基于 Apache Arrow  Plasma 对象存储实现：</p>
+
+    <div class="card idea">
+      <h3>零拷贝传输</h3>
+      <p>当 Task A 产生一个大数组（如 1GB 的 NumPy 数组），Task B 消费它时：</p>
+      <ul class="checklist">
+        <li>数据写入本地 Object Store（基于共享内存）</li>
+        <li>Task B 通过引用（ObjectRef）访问</li>
+        <li>同一节点：零拷贝（共享内存直接读取）</li>
+        <li>跨节点：仅传输一次，后续 Task 从本地缓存读取</li>
+      </ul>
+      <p>这避免了 Spark 的序列化/反序列化开销，对 AI 工作负载（大张量传输）至关重要。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>Ray 生态系统</h2>
+    <p>基于 Ray Core，社区构建了一系列高层库，覆盖 ML 全生命周期：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>库</th>
+          <th>功能</th>
+          <th>典型场景</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Ray Core</strong></td><td>Task/Actor/API 基础</td><td>自定义分布式应用</td></tr>
+        <tr><td><strong>Ray Data</strong></td><td>分布式数据加载/预处理</td><td>ETL、数据湖读取</td></tr>
+        <tr><td><strong>Ray Train</strong></td><td>分布式训练</td><td>PyTorch/TF 多机训练</td></tr>
+        <tr><td><strong>Ray Tune</strong></td><td>超参数搜索</td><td>大规模 HP 优化</td></tr>
+        <tr><td><strong>Ray Serve</strong></td><td>模型服务/在线推理</td><td>低延迟模型部署</td></tr>
+        <tr><td><strong>RLlib</strong></td><td>强化学习</td><td>分布式 RL 训练</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Compiled Graph：静态 DAG 的低开销执行</h2>
+    <p>Ray v2.0 引入 <strong>Compiled Graph</strong>（原名 Ray DAG），适用于延迟敏感的场景：</p>
+    <ul class="checklist">
+      <li>用户用 <code>@ray.remote</code> 声明静态计算图（DAG）</li>
+      <li>Ray 在启动时预分配资源、预编译执行计划</li>
+      <li>运行时直接执行，跳过调度开销</li>
+      <li>适合在线推理（要求 P99 延迟极低）</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>GPU-GPU 传输：NCCL 集成</h3>
+      <p>Compiled Graph 中，相邻 GPU 节点之间的数据传输通过 <strong>NCCL</strong>（NVIDIA Collective Communications Library）完成，支持 GPUDirect RDMA，绕过 CPU 拷贝，实现 100+ GB/s 的 GPU 间带宽。</p>
+    </div>
+
+    <h2>应用场景示例</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>场景</th>
+          <th>Ray 如何支持</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>在线推理</strong></td>
+          <td>Compiled Graph + Serve，静态 DAG 实现微秒级 P99 延迟</td>
+        </tr>
+        <tr>
+          <td><strong>模型微调</strong></td>
+          <td>Train + Data，分布式数据并行 + 流水线并行</td>
+        </tr>
+        <tr>
+          <td><strong>多模态搜索</strong></td>
+          <td>Data 处理异构数据，Train 嵌入模型，Serve 在线查询</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <h2>Ray 架构深度解析</h2>
+
+    <h3>全局控制存储（GCS）</h3>
+    <p><strong>GCS</strong>（Global Control Store）是 Ray 集群的元数据中枢：</p>
+    <ul class="checklist">
+      <li>存储所有 Actor 的位置、任务调度信息、对象位置映射</li>
+      <li>基于 Redis 的改进版，支持 TTL 和故障检测</li>
+      <li>集群中<strong>唯一</strong>的全局状态源（single source of truth）</li>
+    </ul>
+
+    <h3>分布式调度器</h3>
+    <p>Ray 采用<strong>两级调度</strong>架构：p>
+    <table>
+      <thead>
+        <tr>
+          <th>层级</th>
+          <th>职责</th>
+          <th>位置</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>全局调度器</strong></td>
+          <td>跨节点调度，考虑数据位置和资源约束</td>
+          <td>GCS 内</td>
+        </tr>
+        <tr>
+          <td><strong>本地调度器</strong></td>
+          <td>节点内任务排队、CPU/GPU 资源分配</td>
+          <td>每个 Node 上</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card tip">
+      <h3>可扩展性：分片 GCS</h3>
+      <p>随着集群规模增长，GCS 可能成为瓶颈。Ray 通过<strong>分片 GCS</strong>（Sharded GCS）将元数据分散到多个 GCS 分片，每个分片负责一部分 Actor/对象，从而支持 1000+ 节点的集群。</p>
+    </div>
+
+    <h3>容错机制</h3>
+    <p>Ray 提供两种互补的容错策略：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>机制</th>
+          <th>原理</th>
+          <th>适用场景</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Lineage-based</strong></td>
+          <td>每个对象记录其计算 lineage（依赖图），丢失时重算</td>
+          <td>Task（无状态，可重放）</td>
+        </tr>
+        <tr>
+          <td><strong>Ownership</strong></td>
+          <td>Actor 由 Owner 管理，Owner 失效则 Actor 不可恢复</td>
+          <td>Actor（有状态，需外部存储 checkpoint）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>Actor 容错的限制</h3>
+      <p>与 Task 不同，Actor 是有状态的，Ray <strong>不会自动重建</strong>失效的 Actor。开发者需要自行实现 checkpoint 机制（如将状态保存到 S3），或使用 <code>max_restarts</code> 参数让 Ray 尝试重建空壳 Actor。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>为什么需要 Actor？（深度分析）</h2>
+    <p>Ion Stoica 强调，Actor 模型解决了 Task 无法表达的几种关键模式：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>场景</th>
+          <th>为什么 Task 不够</th>
+          <th>Actor 如何解决</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>参数服务器</strong></td>
+          <td>需维护全局模型状态</td>
+          <td>Actor 持有模型，方法串行更新</td>
+        </tr>
+        <tr>
+          <td><strong>环境模拟</strong></td>
+          <td>RL 环境需连续状态</td>
+          <td>Actor 封装环境，step() 保持状态</td>
+        </tr>
+        <tr>
+          <td><strong>GPU 亲和性</strong></td>
+          <td>Task 无绑定，GPU 切换开销大</td>
+          <td>Actor 绑定 GPU，避免 context switch</td>
+        </tr>
+        <tr>
+          <td><strong>流水线阶段</strong></td>
+          <td>需长期运行的计算阶段</td>
+          <td>Actor 常驻内存，低延迟响应</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>传递 Actor Handle：构建分布式应用</h3>
+    <p>Ray 允许将一个 Actor 的 <strong>handle</strong> 作为参数传递给另一个 Task/Actor，实现复杂的分布式拓扑：</p>
+
+    <pre><code class="language-python">@ray.remote
+class Worker:
+    def __init__(self, param_server_handle):
+        self.ps = param_server_handle  # 持有参数服务器的引用
+
+    def train_step(self, batch):
+        # 通过 handle 远程调用参数服务器
+        weights = ray.get(self.ps.get_weights.remote())
+        grads = compute_gradients(weights, batch)
+        self.ps.apply_gradients.remote(grads)
+
+# 创建参数服务器 Actor
+param_server = ParameterServer.remote()
+
+# 将 handle 传给所有 Worker
+workers = [Worker.remote(param_server) for _ in range(8)]
+ray.get([w.train_step.remote(batch) for w, batch in zip(workers, batches)])</code></pre>
+
+    <h2>调度演进：从 Direct Actor Call 到 ESCHER</h2>
+    <p>Ray 的调度策略经历了三代演进：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>代</th>
+          <th>策略</th>
+          <th>特点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>第 1 代</strong></td>
+          <td>Direct Actor Call</td>
+          <td>Actor 方法调用直接发送到目标节点，简单但无法全局优化</td>
+        </tr>
+        <tr>
+          <td><strong>第 2 代</strong></td>
+          <td>集中式调度</td>
+          <td>所有调度决策经 GCS，全局最优但 GCS 成为瓶颈</td>
+        </tr>
+        <tr>
+          <td><strong>第 3 代</strong></td>
+          <td>ESCHER</td>
+          <td>Ephemeral Resources：调度时动态创建临时资源，实现细粒度负载均衡</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>ESCHER：临时资源调度</h3>
+      <p>ESCHER（Ephemeral Resources for Scheduling）的核心思想：为每个<strong>任务执行槽</strong>创建临时资源名（如 "slot_12345"），调度器将任务绑定到具体槽位，完成后销毁资源。这避免了"资源碎片"问题，实现近似最优的负载均衡，同时保持调度延迟极低。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article><h3>极简 API</h3><p>6 个核心 API 覆盖分布式编程全流程，Python 开发者零门槛上手。</p></article>
+      <article><h3>FAST 模型</h3><p>Function/Actor/Schedule/Transport 四大抽象统一所有分布式计算模式。</p></article>
+      <article><h3>零拷贝 Object Store</h3><p>基于共享内存的对象存储，同节点零拷贝，跨节点单次传输。</p></article>
+      <article><h3>两级调度 + 分片 GCS</h3><p>全局调度器跨节点优化，本地调度器节点内分配，分片 GCS 实现水平扩展。</p></article>
+      <article><h3>生态完整</h3><p>Core/Data/Train/Tune/Serve/RLlib 覆盖 ML 全生命周期。</p></article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！Ray 起源于 2016 年伯克利的 ODI 课程项目。" data-incorrect="不正确。Ray 起源于 2016 年伯克利的 ODI 课程项目，不是 Google、Facebook 或 DeepMind。">
+      <p><strong>问题 1：</strong>Ray 最初起源于哪里？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. Google Brain 的内部项目</button>
+        <button data-choice="b" aria-pressed="false">B. UC Berkeley 的 ODI 课程项目</button>
+        <button data-choice="c" aria-pressed="false">C. Facebook AI Research</button>
+        <button data-choice="d" aria-pressed="false">D. DeepMind 的分布式团队</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！Task 无状态可重算（lineage），Actor 有状态不自动恢复。" data-incorrect="不正确。Task 通过 lineage 自动恢复，Actor 不会自动重建。">
+      <p><strong>问题 2：</strong>关于 Ray 的容错机制，以下哪项正确？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. Task 和 Actor 都会自动重建</button>
+        <button data-choice="b" aria-pressed="false">B. Task 通过 lineage 自动恢复，Actor 不会自动重建</button>
+        <button data-choice="c" aria-pressed="false">C. Task 和 Actor 都不会自动恢复</button>
+        <button data-choice="d" aria-pressed="false">D. Actor 通过 lineage 自动恢复，Task 不会</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！同一节点的 Object Store 基于共享内存，实现零拷贝。" data-incorrect="不正确。同一节点通过共享内存实现零拷贝，不需要序列化。">
+      <p><strong>问题 3：</strong>Ray Object Store 的零拷贝特性适用于哪种场景？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 仅适用于跨节点传输</button>
+        <button data-choice="b" aria-pressed="false">B. 仅适用于同一节点内的 Task 之间</button>
+        <button data-choice="c" aria-pressed="false">C. 同一节点零拷贝，跨节点通过 NCCL 传输</button>
+        <button data-choice="d" aria-pressed="false">D. 零拷贝适用于所有场景</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！ESCHER 通过临时资源实现细粒度负载均衡。" data-incorrect="不正确。ESCHER 使用 Ephemeral Resources（临时资源）策略。">
+      <p><strong>问题 4：</strong>Ray 的 ESCHER 调度策略的核心思想是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 所有调度决策集中在 GCS</button>
+        <button data-choice="b" aria-pressed="false">B. 为每个任务执行槽创建临时资源，实现细粒度负载均衡</button>
+        <button data-choice="c" aria-pressed="false">C. 仅支持静态 DAG 调度</button>
+        <button data-choice="d" aria-pressed="false">D. 完全去中心化的 P2P 调度</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！Compiled Graph 跳过调度开销，适合在线推理等低延迟场景。" data-incorrect="不正确。Compiled Graph 的优势是低延迟（跳过调度），不是动态灵活性。">
+      <p><strong>问题 5：</strong>Ray v2.0 引入的 Compiled Graph 最适合以下哪种场景？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 需要频繁修改计算图的交互式探索</button>
+        <button data-choice="b" aria-pressed="false">B. 在线推理等需要极低 P99 延迟的场景</button>
+        <button data-choice="c" aria-pressed="false">C. 需要动态创建/销毁 Actor 的场景</button>
+        <button data-choice="d" aria-pressed="false">D. 大规模批处理 ETL 任务</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="nav">
+      <a href="12-ml-supervised.html">← 第 12 课：机器学习（监督）</a>
+      <a href="14-ml-unsupervised.html">第 14 课：机器学习（无监督） →</a>
+    </div>
+    <footer>CS267: Applications of Parallel Computers · UC Berkeley · Spring 2025</footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

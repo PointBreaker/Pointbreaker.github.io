@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CUDA 与 GPU 导论 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 9 课</p>
+    <h1>CUDA 与 GPU 导论</h1>
+    <p class="lede">从 GPU 架构的演进出发，理解 CUDA 编程模型的核心抽象——线程、块、网格与内存层次，并掌握写出高效 GPU 代码的关键技术。</p>
+    <div class="meta">
+      <span>授课：Aydin Buluc</span>
+      <span>视频：<a href="https://youtu.be/j_tkXQQjZeWo">YouTube</a></span>
+      <span>预计用时：90 分钟</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="why-gpu">为什么要用 GPU？</h2>
+    <p>GPU（Graphics Processing Unit）最初为图形渲染设计，但因其极高的吞吐能力，逐渐成为科学计算与机器学习的主力加速器。GPU 并非万能，它擅长的是<strong>大规模数据并行</strong>任务——对大量数据执行相同或相似的操作。</p>
+
+    <div class="card idea">
+      <h3>核心权衡：吞吐 vs 延迟</h3>
+      <p><strong>CPU</strong> 优化的是<strong>延迟</strong>（latency）：少量复杂任务尽快完成。它有大缓存、复杂控制逻辑、高主频。</p>
+      <p><strong>GPU</strong> 优化的是<strong>吞吐</strong>（throughput）：大量简单任务同时完成。它用大量小核心、简单控制、高内存带宽来换取单位时间内的总工作量。</p>
+    </div>
+
+    <h2 id="five-ideas">GPU 硬件的 5 个关键思想</h2>
+    <p>现代 GPU 的设计建立在 5 个核心硬件思想之上，它们共同决定了 CUDA 编程模型：</p>
+    <table>
+      <thead>
+        <tr><th>#</th><th>思想</th><th>含义</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>简单核心</td><td>每个核心只做简单算术/访存，去掉乱序执行、分支预测等复杂逻辑</td></tr>
+        <tr><td>2</td><td>大量核心</td><td>上千个核心同时执行，吞吐远超 CPU</td></tr>
+        <tr><td>3</td><td>共享指令流（SIMT）</td><td>一组线程（warp）共享同一 PC，以锁步（lock-step）执行</td></tr>
+        <tr><td>4</td><td>分支掩码（masking）</td><td>warp 内线程走不同分支时，串行化执行两条路径，屏蔽不符合的线程</td></tr>
+        <tr><td>5</td><td>延迟隐藏（latency hiding）</td><td>当一个 warp 等待内存时，调度器切换到另一个就绪的 warp</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>分支发散（branch divergence）</h3>
+      <p>当 warp 内线程进入不同分支（如 <code>if (tid % 2 == 0)</code>），两个分支都要执行，被屏蔽的线程空转。这会使该 warp 的有效工作减半甚至更低。尽量让 warp 内线程走同一条路径。</p>
+    </div>
+
+    <h2 id="gpu-hardware">GPU 硬件细节：SM 与 Warp</h2>
+    <p>以 NVIDIA A100 为例：</p>
+    <ul>
+      <li><strong>SM（Streaming Multiprocessor）</strong>：A100 有 108 个 SM，每个 SM 拥有寄存器文件、共享内存（shared memory）、L1 cache、64 个 FP32 CUDA core 等。</li>
+      <li><strong>Warp</strong>：SM 以 32 个线程为一组（称为一个 warp）调度执行。Warp 是 GPU 调度的最小单位。</li>
+      <li><strong>线程块（thread block）</strong>：程序员指定的线程分组，一个 block 驻留在一个 SM 上，其中的线程可以协作（shared memory、同步）。</li>
+    </ul>
+
+    <div class="card tip">
+      <h3>A100 速览</h3>
+      <ul>
+        <li>6912 FP32 CUDA cores（108 SM × 64）</li>
+        <li>432 Tensor Cores</li>
+        <li>108 MB L2 cache</li>
+        <li>40/80 GB HBM2e，带宽 ~2 TB/s</li>
+        <li>峰值 FP64 性能 9.7 TFLOPS</li>
+      </ul>
+    </div>
+
+    <h2 id="cuda-model">CUDA 编程模型</h2>
+    <p>CUDA 是 NVIDIA 推出的并行计算平台与编程模型，本质上是 C/C++ 的一组扩展。核心抽象是 <strong>kernel</strong>——在 GPU 上执行的函数，由大量线程并行调用。</p>
+
+    <h3>从 CPU 向量加法到 GPU kernel 的演化</h3>
+    <p>先看一个朴素的 CPU 实现：</p>
+    <pre><code class="language-c">void vecAdd(float *a, float *b, float *c, int n) {
+  for (int i = 0; i &lt; n; i++)
+    c[i] = a[i] + b[i];
+}</code></pre>
+
+    <p>GPU 版本把循环去掉，让每个线程处理一个元素：</p>
+    <pre><code class="language-c">__global__ void vecAdd(float *a, float *b, float *c, int n) {
+  int i = threadIdx.x + blockIdx.x * blockDim.x;
+  if (i &lt; n)
+    c[i] = a[i] + b[i];
+}</code></pre>
+
+    <p>调用方式（host 代码）：</p>
+    <pre><code class="language-c">int n = 1&lt;&lt;20;
+int threads = 256;
+int blocks = (n + threads - 1) / threads;
+vecAdd&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(d_a, d_b, d_c, n);</code></pre>
+
+    <div class="card idea">
+      <h3>执行配置语法 <code>&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;</code></h3>
+      <p>这个特殊语法告诉 CUDA runtime：启动 <code>blocks</code> 个 block，每个 block 有 <code>threads</code> 个线程。所有线程执行同一个 kernel 函数，但通过自己的索引区分工作。</p>
+    </div>
+
+    <h2 id="hierarchy">线程层次：Thread、Block、Grid</h2>
+    <ul>
+      <li><strong>threadIdx</strong>：线程在 block 内的索引（x, y, z）。</li>
+      <li><strong>blockIdx</strong>：block 在 grid 内的索引。</li>
+      <li><strong>blockDim</strong>：每个 block 的线程数。</li>
+      <li><strong>gridDim</strong>：grid 中的 block 数。</li>
+    </ul>
+    <p>全局线程 ID 的计算：<code>i = threadIdx.x + blockIdx.x * blockDim.x</code>。</p>
+
+    <div class="card tip">
+      <h3>为什么用二维/三维？</h3>
+      <p>虽然一维索引足以覆盖任意规模，但二维/三维的 block 和 grid 让图像、矩阵等结构化数据的映射更直观，也更利于 shared memory 的协作模式。</p>
+    </div>
+
+    <h2 id="memory-hierarchy">GPU 内存层次</h2>
+    <table>
+      <thead>
+        <tr><th>内存</th><th>位置</th><th>延迟</th><th>生命周期</th><th>可见性</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>寄存器（register）</td><td>SM 上</td><td>~1 cycle</td><td>线程</td><td>仅本线程</td></tr>
+        <tr><td>共享内存（shared memory）</td><td>SM 上</td><td>~5 cycles</td><td>block</td><td>同 block 线程</td></tr>
+        <tr><td>L1 / L2 cache</td><td>SM / 芯片</td><td>~10–300 cycles</td><td>—</td><td>自动管理</td></tr>
+        <tr><td>全局内存（global memory）</td><td>HBM 显存</td><td>~400–800 cycles</td><td>应用</td><td>所有线程 + host</td></tr>
+      </tbody>
+    </table>
+
+    <p>在 CUDA 中：</p>
+    <pre><code class="language-c">__shared__ float s[256];   // 块内共享内存
+__device__ float g[1024];  // 全局内存（设备端声明）
+__constant__ float c[64];  // 常量内存（只读，有 cache）</code></pre>
+
+    <h2 id="stencil">Stencil 计算与 Halo Exchange</h2>
+    <p>Stencil 是科学计算中常见的模式，每个输出元素是输入中一个局部邻域的函数。例如一维 3-point stencil：<code>y[i] = c0*x[i-1] + c1*x[i] + c2*x[i+1]</code>。</p>
+
+    <p>在 GPU 上实现时，一个 block 负责一段输出，但需要左右相邻的"halo"元素。通常有两种策略：</p>
+    <ul>
+      <li><strong>加载 halo 到 shared memory</strong>：每个线程加载自己的元素，额外线程加载 halo，用 <code>__syncthreads()</code> 同步后再计算。</li>
+      <li><strong>每个线程加载多个输入</strong>：减少 halo 专用线程的开销。</li>
+    </ul>
+
+    <pre><code class="language-c">__global__ void stencil_1d(float *in, float *out, int n) {
+  extern __shared__ float s[];
+  int gid = threadIdx.x + blockIdx.x * blockDim.x;
+  int lid = threadIdx.x + 1;  // 留出 halo 位置
+
+  // 加载内部元素
+  s[lid] = (gid &lt; n) ? in[gid] : 0.0f;
+  // 加载左 halo
+  if (threadIdx.x == 0)
+    s[0] = (blockIdx.x &gt; 0) ? in[gid - 1] : 0.0f;
+  // 加载右 halo
+  if (threadIdx.x == blockDim.x - 1)
+    s[lid + 1] = (gid + 1 &lt; n) ? in[gid + 1] : 0.0f;
+
+  __syncthreads();  // 确保所有数据就绪
+
+  if (gid &lt; n)
+    out[gid] = c0 * s[lid - 1] + c1 * s[lid] + c2 * s[lid + 1];
+}</code></pre>
+
+    <div class="card warning">
+      <h3><code>__syncthreads()</code> 的陷阱</h3>
+      <p>它同步的是<strong>同一个 block</strong>内的所有线程。如果 block 内部分线程走了不同分支并调用了 <code>__syncthreads()</code>，会导致死锁。跨 block 的同步只能通过 kernel 结束或 <code>cooperative groups</code> 实现。</p>
+    </div>
+
+    <h2 id="sync">同步与通信</h2>
+    <p>GPU 上的同步层次：</p>
+    <ul>
+      <li><strong>Block 内</strong>：<code>__syncthreads()</code>、<code>__threadfence_block()</code>。</li>
+      <li><strong>Grid 内</strong>：传统上需要启动多个 kernel；Pascal+ 支持 <code>cooperative groups</code> 的 grid 级同步。</li>
+      <li><strong>Device 与 Host 之间</strong>：<code>cudaMemcpy</code> 隐式同步；<code>cudaDeviceSynchronize()</code> 显式同步。</li>
+    </ul>
+
+    <h2 id="coalescing">访存合并（Memory Coalescing）</h2>
+    <p>GPU 的内存访问以<strong>段（segment）</strong>为单位——通常 32 字节或 128 字节。如果 warp 中 32 个线程访问连续且对齐的地址，这些访问可以被合并为一次段事务。这就是<strong>coalesced access</strong>。</p>
+
+    <div class="card idea">
+      <h3>合并 vs 非合并</h3>
+      <p><strong>合并</strong>：<code>a[i]</code>，<code>i = tid</code> 连续 → 1 次 128B 事务服务 32 个 float。</p>
+      <p><strong>非合并</strong>：<code>a[tid * 16]</code> 跨步大 → 每个线程触发一次事务，带宽利用率极低。</p>
+    </div>
+
+    <p>规则要点：</p>
+    <ul>
+      <li>warp 内线程访问连续地址最好。</li>
+      <li>首地址对齐到 128 字节最好。</li>
+      <li>跨步访问（strided access）要尽量避免；若无法避免，可通过 shared memory 重组。</li>
+    </ul>
+
+    <h2 id="cuda-extensions">CUDA 对 C 的扩展速览</h2>
+    <table>
+      <thead>
+        <tr><th>扩展</th><th>用途</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>__global__</code></td><td>host 调用、device 执行的 kernel 函数</td></tr>
+        <tr><td><code>__device__</code></td><td>device 内部调用的函数</td></tr>
+        <tr><td><code>__host__</code></td><td>host 函数（默认）</td></tr>
+        <tr><td><code>__shared__</code></td><td>声明 block 内共享内存</td></tr>
+        <tr><td><code>__constant__</code></td><td>声明常量内存</td></tr>
+        <tr><td><code>__syncthreads()</code></td><td>block 内同步</td></tr>
+        <tr><td><code>&lt;&lt;&lt; &gt;&gt;&gt;</code></td><td>kernel 启动配置</td></tr>
+      </tbody>
+    </table>
+
+    <p>此外，CUDA 还提供了：</p>
+    <ul>
+      <li><strong>统一内存（Unified Memory）</strong>：<code>cudaMallocManaged</code> 让 host 和 device 共享同一指针，由驱动自动迁移页面。</li>
+      <li><strong>Streams</strong>：允许并发执行多个 kernel 或重叠计算与数据传输。</li>
+      <li><strong>库生态</strong>：cuBLAS、cuFFT、cuDNN、Thrust 等。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article><h3>吞吐 vs 延迟</h3><p>GPU 用大量简单核心换取高吞吐，适合数据并行任务。</p></article>
+      <article><h3>SIMT 与 Warp</h3><p>32 个线程以锁步执行；分支发散会串行化两条路径，降低效率。</p></article>
+      <article><h3>线程/块/网格</h3><p>三级并行抽象，让同一 kernel 映射到成百上千个核心。</p></article>
+      <article><h3>内存层次</h3><p>寄存器最快最小，全局内存最慢最大；shared memory 是程序员可控的"用户管理 cache"。</p></article>
+      <article><h3>Coalescing</h3><p>warp 内连续对齐的访存合并为少量段事务，是 GPU 性能的关键。</p></article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="b" data-incorrect="a,c,d">
+      <p><strong>问题 1：</strong>GPU 与 CPU 的核心设计目标差异是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">GPU 优化单线程延迟，CPU 优化吞吐</button>
+        <button data-choice="b" aria-pressed="false">CPU 优化延迟，GPU 优化吞吐</button>
+        <button data-choice="c" aria-pressed="false">两者都以延迟为目标</button>
+        <button data-choice="d" aria-pressed="false">两者都以吞吐为目标</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="c" data-incorrect="a,b,d">
+      <p><strong>问题 2：</strong>一个 warp 中的 32 个线程执行 <code>if (tid % 2 == 0) A; else B;</code>，会发生什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">所有线程同时执行 A 和 B</button>
+        <button data-choice="b" aria-pressed="false">奇数线程被永久挂起</button>
+        <button data-choice="c" aria-pressed="false">warp 串行执行 A 和 B 两条路径，不符合的线程被屏蔽</button>
+        <button data-choice="d" aria-pressed="false">硬件自动合并两条路径为一条</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="a" data-incorrect="b,c,d">
+      <p><strong>问题 3：</strong>关于 <code>__syncthreads()</code>，下列哪项是正确的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">它同步同一个 block 内的所有线程</button>
+        <button data-choice="b" aria-pressed="false">它可以同步 grid 中所有 block 的线程</button>
+        <button data-choice="c" aria-pressed="false">它保证全局内存写入对所有线程立即可见</button>
+        <button data-choice="d" aria-pressed="false">它可以在 <code>__device__</code> 函数之外调用</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="d" data-incorrect="a,b,c">
+      <p><strong>问题 4：</strong>下列哪种访问模式最可能实现 coalesced memory access？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">warp 内线程访问 <code>a[tid * 128]</code></button>
+        <button data-choice="b" aria-pressed="false">warp 内线程访问 <code>a[hash(tid)]</code>（随机）</button>
+        <button data-choice="c" aria-pressed="false">warp 内所有线程访问同一个地址</button>
+        <button data-choice="d" aria-pressed="false">warp 内线程访问 <code>a[tid]</code>（连续地址）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="b" data-incorrect="a,c,d">
+      <p><strong>问题 5：</strong>为什么 GPU 能用大量简单核心实现高吞吐？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">每个核心的时钟频率远高于 CPU</button>
+        <button data-choice="b" aria-pressed="false">当一个 warp 等待内存时，调度器切换到其他就绪的 warp 隐藏延迟</button>
+        <button data-choice="c" aria-pressed="false">GPU 核心支持乱序执行，单核效率接近 CPU</button>
+        <button data-choice="d" aria-pressed="false">GPU 不需要内存，所有数据都在寄存器中</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="08-advanced-mpi.html">← 第 8 课</a>
+      <a href="10-data-parallel.html">第 10 课 →</a>
+    </div>
+    <footer>CS267: Applications of Parallel Computers · UC Berkeley · Spring 2025</footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

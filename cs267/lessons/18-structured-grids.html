@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 18 课：结构化网格 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 18 课</p>
+    <h1>结构化网格</h1>
+    <p class="lede">泊松方程是科学计算的"hello world"。本课系统比较求解结构化网格上线性方程组的经典算法——从 Jacobi、Gauss-Seidel、SOR、共轭梯度到多重网格——理解为何 Multigrid 能突破 O(N²) 的壁垒，达到 O(N) 的最优复杂度。</p>
+
+    <div class="meta">
+      <p><strong>授课：</strong>James Demmel</p>
+      <p><strong>日期：</strong>2025-03-20</p>
+      <p><strong>预计用时：</strong>75 分钟</p>
+      <p><strong>难度：</strong>困难</p>
+      <p><strong>视频：</strong><a href="https://youtu.be/t-0TK2uoTjY" target="_blank" rel="noopener">课堂录像</a></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>课程大纲</h2>
+    <ul class="checklist">
+      <li>泊松方程回顾：1D/2D/3D 离散化与 stencil 表示</li>
+      <li>Jacobi 方法及其收敛性分析</li>
+      <li>通信避免的 Jacobi：Matrix Powers Kernel</li>
+      <li>Gauss-Seidel 与红黑 SOR</li>
+      <li>共轭梯度法 (Conjugate Gradient)</li>
+      <li>多重网格 (Multigrid)：V-Cycle 与 O(N) 复杂度</li>
+      <li>并行多重网格与性能模型</li>
+      <li>非结构化网格上的挑战</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>1. 泊松方程回顾</h2>
+
+    <h3>1D 泊松方程</h3>
+    <p>一维泊松方程写作 ∂²u/∂x² = f(x)，在均匀网格上用中心差分离散后，得到一个三对角线性系统 Tu = f。矩阵 T 的每一行只有三个非零元：对角线为 2，次对角线和超对角线为 -1。</p>
+
+    <pre><code class="language-plaintext">离散化后：
+  -u(i-1) + 2*u(i) - u(i+1) = h² · f(i)
+
+矩阵 T (n×n):
+    2  -1
+   -1   2  -1
+       -1   2  -1
+            ... ...
+                 -1   2  -1
+                      -1   2
+
+对应的 stencil：
+         [ -1   2   -1 ]
+</code></pre>
+
+    <div class="card idea">
+      <h3>Stencil 是结构化网格的核心抽象</h3>
+      <p>所谓 <strong>stencil</strong>，就是描述每个网格点如何依赖其邻居的模板。1D 泊松方程的 stencil 是 [-1, 2, -1]，2D 是十字形 5 点格式，3D 是 7 点格式。Stencil 计算天然适合并行：每个点的更新相互独立（Jacobi），或近邻间有依赖（Gauss-Seidel）。</p>
+    </div>
+
+    <h3>2D 泊松方程</h3>
+    <p>二维泊松方程 ∂²u/∂x² + ∂²u/∂y² = f(x,y) 在 n×n 网格上离散化后，矩阵 T 变为块三对角形式。每个网格点 (i,j) 依赖于上下左右四个邻居，对角线元素为 4，邻居位置为 -1。对应的 5 点 stencil 为：</p>
+
+    <pre><code class="language-plaintext">2D 5 点 stencil：
+              [  -1  ]
+         [ -1   4  -1 ]
+              [  -1  ]
+
+矩阵 T (N = n² 个未知量)：
+    4  -1          -1
+   -1   4  -1          -1
+       -1   4  -1          -1
+   -1          -1   4  -1          -1
+       -1          -1   4  -1          -1
+            ...     ...     ...
+</code></pre>
+
+    <p>3D 情况完全类似，使用 7 点 stencil：中心为 6，六个面邻居各为 -1。未知量总数 N = n³。</p>
+
+    <div class="rule"></div>
+
+    <h2>2. 算法比较总览</h2>
+    <p>James Demmel 在《Applied Numerical Linear Algebra》(1997) 中系统总结了求解 2D/3D 泊松方程的各类算法复杂度。N = n² (2D) 或 N = n³ (3D) 为未知量总数。</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>算法</th>
+          <th>串行复杂度</th>
+          <th>PRAM 复杂度</th>
+          <th>内存</th>
+          <th>处理器数</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Dense LU</td><td>N³</td><td>N</td><td>N²</td><td>N²</td></tr>
+        <tr><td>Band LU</td><td>N² (N⁷ᐟ³)</td><td>N</td><td>N³ᐟ² (N⁵ᐟ³)</td><td>N (N⁴ᐟ³)</td></tr>
+        <tr><td>Jacobi</td><td>N² (N⁵ᐟ³)</td><td>N (N²ᐟ³)</td><td>N</td><td>N</td></tr>
+        <tr><td>Explicit Inverse</td><td>N²</td><td>log N</td><td>N²</td><td>N²</td></tr>
+        <tr><td>Conjugate Gradient</td><td>N³ᐟ² (N⁴ᐟ³)</td><td>N¹ᐟ² (N¹ᐟ³)·log N</td><td>N</td><td>N</td></tr>
+        <tr><td>Red/Black SOR</td><td>N³ᐟ² (N⁴ᐟ³)</td><td>N¹ᐟ² (N¹ᐟ³)</td><td>N</td><td>N</td></tr>
+        <tr><td>Sparse LU</td><td>N³ᐟ² (N²)</td><td>N¹ᐟ²</td><td>N·log N (N⁴ᐟ³)</td><td>N</td></tr>
+        <tr><td>FFT</td><td>N·log N</td><td>log N</td><td>N</td><td>N</td></tr>
+        <tr><td><strong>Multigrid</strong></td><td><strong>N</strong></td><td>log² N</td><td>N</td><td>N</td></tr>
+        <tr><td>Lower bound</td><td>N</td><td>log N</td><td>—</td><td>—</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>PRAM 是理想化模型</h3>
+      <p><strong>PRAM</strong>（Parallel Random Access Machine）假设通信零成本、处理器间无竞争。实际机器的通信延迟和带宽使得 PRAM 复杂度只是一个下界。但 Multigrid 即使在考虑通信后，仍是最优选择——它的串行复杂度 O(N) 已达下界。</p>
+    </div>
+
+    <p>上表中括号内为 3D 结果。可以看出，<strong>Multigrid 在串行复杂度上达到理论下界 O(N)</strong>，PRAM 复杂度 log² N 也接近下界 log N。FFT 串行复杂度为 O(N log N)，稍逊于 Multigrid，但 FFT 要求规则网格和均匀步长。</p>
+
+    <div class="rule"></div>
+
+    <h2>3. Jacobi 方法</h2>
+
+    <h3>公式推导</h3>
+    <p>将泊松方程 Tu = b 改写，使 u(i,j) 单独出现在等式左侧：</p>
+
+    <pre><code class="language-plaintext">u(i,j) = ( u(i-1,j) + u(i+1,j) + u(i,j-1) + u(i,j+1) + b(i,j) ) / 4</code></pre>
+
+    <p>设 u(i,j,m) 为第 m 步迭代后 u(i,j) 的近似值，Jacobi 迭代公式为：</p>
+
+    <pre><code class="language-plaintext">u(i,j,m+1) = ( u(i-1,j,m) + u(i+1,j,m) + u(i,j-1,m) + u(i,j+1,m) + b(i,j) ) / 4</code></pre>
+
+    <p>即 u(i,j,m+1) 是其四个邻居和右端项 b(i,j) 的加权平均。<strong>动机</strong>：u(i,j,m+1) 的选取使得方程在 (i,j) 点被精确满足。</p>
+
+    <h3>收敛性分析</h3>
+    <p>Jacobi 方法是最近邻计算：每步迭代中，信息只能传播一个网格点。要在 n×n 网格上传播信息到对角，至少需要 O(n) = O(N¹ᐟ²) 步。因此：</p>
+    <ul>
+      <li><strong>迭代步数</strong>：O(n) = O(N¹ᐟ²)（2D），O(n) = O(N¹ᐟ³)（3D）</li>
+      <li><strong>每步计算量</strong>：O(N)（每个点一次 stencil 计算）</li>
+      <li><strong>串行总复杂度</strong>：O(n·N) = O(N²)（2D），O(N⁵ᐟ³)（3D）</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>收敛速度 = 信息传播速度</h3>
+      <p>Jacobi 的慢收敛本质是<strong>信息瓶颈</strong>：每步只能与直接邻居交换信息。这是所有基于稀疏矩阵-向量乘（SpMV）的迭代法的共同局限——信息传播速度被限制在每步一个网格点。Multigrid 的突破正在于打破这一限制。</p>
+    </div>
+
+    <h3>并行化</h3>
+    <p>Jacobi 方法可归结为稀疏矩阵-向量乘法：</p>
+    <pre><code class="language-plaintext">U(m+1) = (T/4 - I) · U(m) + B/4</code></pre>
+    <p>每个 U(m+1) 的分量可独立更新，只需维护两份副本（第 m 步和第 m+1 步）。在分布式内存系统中，每个处理器拥有 n²/p 个待更新元素，每步只需与邻居通信边界上的 n/p¹ᐟ² 个值。当 n >> p 时，通信量相对较小，计算与通信比良好。</p>
+
+    <div class="rule"></div>
+
+    <h2>4. 通信避免的 Jacobi (Communication-Avoiding Jacobi)</h2>
+
+    <h3>核心思想</h3>
+    <p>理想情况：我们希望以 1 次迭代的通信代价，完成 k >> 1 次迭代的计算。<strong>关键洞察</strong>：在 Jacobi 中我们不需要存储矩阵 A 本身（stencil 是隐式的），也不一定要保留所有中间结果，只需要最终输出 Aᵏx。</p>
+
+    <h3>Matrix Powers Kernel [Ax, A²x, ..., Aᵏx]</h3>
+    <p>用计算 [Ax, A²x, ..., Aᵏx] 替代 k 次独立的 y = Ax 迭代。以三对角矩阵 A、n=32、k=3 为例：</p>
+
+    <pre><code class="language-plaintext">串行算法（假设 1/4 数据可放入缓存）：
+  将数据分块，逐块流水线计算 Ax, A²x, A³x
+  只需在块边界移动 O(n) 字，而非 O(kn) 字
+
+并行算法（允许少量冗余计算）：
+  Proc 1  |  Proc 2  |  Proc 3  |  Proc 4
+  --------+----------+----------+--------
+  每个处理器多算一些重叠区域（三角形区域）
+  只需发送 O(1) 条消息，而非 O(k) 条
+</code></pre>
+
+    <div class="card idea">
+      <h3>冗余计算换取通信减少</h3>
+      <p>通信避免 Jacobi 的核心权衡是<strong>用少量冗余计算换取通信次数从 O(k) 降到 O(1)</strong>。这在通信代价远高于计算代价的现代并行机上尤其有效。同样的思想（Matrix Powers Kernel）也适用于 CG 等 Krylov 子空间方法。</p>
+    </div>
+
+    <p>对于 2D Laplacian，计算 [x, Ax, A²x, A³x] 时每个网格点依赖的区域随幂次扩大。并行实现中，处理器在重叠区域（图中三角形）进行冗余计算，但只需一次消息交换。</p>
+
+    <div class="card warning">
+      <h3>数值稳定性</h3>
+      <p>Matrix Powers Kernel 虽然减少了通信，但多次矩阵幂可能放大舍入误差。实际应用中需要权衡通信节省与数值稳定性。对于条件数适中的泊松问题，这一方法效果良好。</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>5. Gauss-Seidel 与红黑 SOR</h2>
+
+    <h3>Gauss-Seidel：逐点更新</h3>
+    <p>Jacobi 的改进方向之一是"使用最新可用的值"。按从左到右、从上到下的顺序更新时，u(i-1,j) 和 u(i,j-1) 已经是第 m+1 步的值：</p>
+
+    <pre><code class="language-plaintext">for i = 1 to n:
+  for j = 1 to n:
+    u(i,j,m+1) = ( u(i-1,j,m+1) + u(i+1,j,m)
+                 + u(i,j-1,m+1) + u(i,j+1,m) + b(i,j) ) / 4</code></pre>
+
+    <p>但 Gauss-Seidel <strong>无法并行化</strong>——更新 u(i,j) 依赖于同一次迭代中已更新的邻居，形成数据依赖链。</p>
+
+    <h3>红黑排序 (Red-Black Ordering)</h3>
+    <p>为了恢复并行性，采用<strong>红黑排序</strong>：将网格点按棋盘模式染成红色和黑色。更新策略为：</p>
+
+    <pre><code class="language-plaintext">forall 黑点 u(i,j):
+    u(i,j,m+1) = 邻居红点的平均 + b(i,j)/4   ← 所有红点都是第 m 步的值
+
+forall 红点 u(i,j):
+    u(i,j,m+1) = 邻居黑点的平均 + b(i,j)/4   ← 所有黑点已更新为第 m+1 步</code></pre>
+
+    <div class="card idea">
+      <h3>图着色的视角</h3>
+      <p>红黑排序本质上是<strong>图着色</strong>：泊松方程的依赖图 T 是二分图，因此 2-可着色。对一般图，可使用重复的最大独立集（Maximal Independent Sets）算法进行着色。同色节点之间无依赖，可同时更新。</p>
+    </div>
+
+    <h3>逐次超松弛 (SOR)</h3>
+    <p>将基本迭代步改写为"当前值 + 修正量"的形式：</p>
+    <pre><code class="language-plaintext">u(i,j,m+1) = u(i,j,m) + correction(i,j,m)</code></pre>
+    <p>如果修正方向是好的，应当更激进地沿该方向移动（w > 1）：</p>
+    <pre><code class="language-plaintext">u(i,j,m+1) = u(i,j,m) + w · correction(i,j,m)</code></pre>
+    <p>这称为<strong>逐次超松弛 (SOR, Successive OverRelaxation)</strong>。对于泊松方程，最优松弛因子为：</p>
+    <pre><code class="language-plaintext">w_opt = 2 / (1 + sin(π/(n+1)))</code></pre>
+
+    <p>红黑 SOR 的收敛速度是 Jacobi 的两倍（步数从 O(n²) 降到 O(n)），但由于每步有两轮（红+黑），<strong>并行复杂度仍为 O(n)</strong>。串行复杂度为 O(n³) = O(N³ᐟ²)（2D），比 Jacobi 的 O(N²) 有明显改善。</p>
+
+    <div class="rule"></div>
+
+    <h2>6. 共轭梯度法 (Conjugate Gradient)</h2>
+
+    <h3>算法步骤</h3>
+    <p>共轭梯度法 (CG) 是求解对称正定线性方程组 Ax = b 的 Krylov 子空间方法。对于泊松方程（A = T），CG 比 SOR 更通用（不依赖最优松弛因子的先验知识）：</p>
+
+    <pre><code class="language-python"># Conjugate Gradient Algorithm for Ax = b
+x = initial_guess
+r = b - A @ x          # 残差
+rho = r @ r
+p = r                  # 搜索方向
+j = 1
+
+while rho > tolerance:
+    q = A @ p                       # 稀疏矩阵-向量乘（stencil）
+    alpha = rho / (p @ q)
+    x = x + alpha * p               # 更新解
+    r = r - alpha * q               # 更新残差
+    old_rho = rho
+    rho = r @ r
+    beta = rho / old_rho
+    p = r + beta * p                # 更新搜索方向
+    j += 1</code></pre>
+
+    <h3>收敛性</h3>
+    <ul>
+      <li><strong>收敛步数</strong>：O(n) = O(N¹ᐟ²)（2D），与 SOR 相当</li>
+      <li><strong>串行复杂度</strong>：O(N³ᐟ²)（2D），O(N⁴ᐟ³)（3D）</li>
+      <li><strong>每步代价</strong>：1 次 SpMV + 若干 dot product + saxpy</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>CG 比 SOR 更通用</h3>
+      <p>SOR 需要知道最优松弛因子 w_opt（仅对特定问题如泊松方程可推导）。<strong>CG 不需要任何参数</strong>，适用于一般对称正定矩阵。CG 也可通过 Matrix Powers Kernel 实现通信避免版本（见 Carson 2015、Hoemmen 2010 论文）。</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>7. 多重网格 (Multigrid)</h2>
+
+    <h3>核心动机</h3>
+    <p>回顾 Jacobi、SOR、CG 的共同局限：它们都基于 SpMV，信息每步只能传播一个网格点。要在 n×n 网格上传播信息至少需要 O(n) 步。<strong>Multigrid 的核心突破</strong>：粗网格上"远处问题看起来更简单"，信息可以更快传播。</p>
+
+    <div class="card idea">
+      <h3>统一主题：远处问题看起来更简单</h3>
+      <p>这一思想贯穿多个领域：</p>
+      <ul>
+        <li><strong>Multigrid</strong>：用粗网格近似求解 PDE，O(n) 时间</li>
+        <li><strong>图划分</strong>：用粗图近似原图以并行化 SpMV</li>
+        <li><strong>快速多极子方法 / Barnes-Hut</strong>：远距离粒子群近似为质心，O(n log n) 计算引力</li>
+      </ul>
+    </div>
+
+    <h3>多重网格算子</h3>
+    <p>对于问题序列 P(m), P(m-1), ..., P(1)（从最细到最粗），定义三个核心算子：</p>
+
+    <table>
+      <thead>
+        <tr><th>算子</th><th>符号</th><th>功能</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>限制算子 (Restriction)</td><td>R(i)</td><td>将细网格问题映射到粗网格：b(i-1) = R(i)(b(i))</td></tr>
+        <tr><td>插值算子 (Interpolation)</td><td>In(i-1)</td><td>将粗网格解映射到细网格：x(i) = In(i-1)(x(i-1))</td></tr>
+        <tr><td>光滑算子 (Smoother)</td><td>S(i)</td><td>在单层网格上用加权 Jacobi/SOR 消除高频误差</td></tr>
+      </tbody>
+    </table>
+
+    <h3>V-Cycle 算法</h3>
+    <pre><code class="language-python"># Multigrid V-Cycle: 求解 T(i)*x(i) = b(i)
+def MGV(b, i, x):
+    if i == 1:
+        return exact_solution(b[1])      # 最粗网格直接求解
+    else:
+        x = S(b[i], x)                    # 前光滑：消除高频误差
+        r = T[i] @ x - b[i]              # 计算残差
+        d = In(i-1)(MGV(R(i)(r), i-1, 0))  # 递归求解粗网格修正
+        x = x - d                         # 修正细网格解
+        x = S(b[i], x)                    # 后光滑
+        return x</code></pre>
+
+    <p>之所以称为"V-Cycle"，是因为调用图呈 V 形：从最细网格逐层下降到最粗，再逐层上升回最细。</p>
+
+    <h3>复杂度分析</h3>
+    <p><strong>串行复杂度</strong>：第 i 层有 O(4ⁱ) 个未知量（2D）。V-Cycle 总代价：</p>
+    <pre><code class="language-plaintext">Total = Σ(i=1 to m) O(4ⁱ) = O(4ᵐ) = O(# unknowns) = O(N)</code></pre>
+    <p><strong>PRAM 复杂度</strong>：每层常数时间（处理器数与未知量数匹配），共 m 层，总时间为 O(m) = O(log N)。</p>
+
+    <h3>收敛定理</h3>
+    <div class="card idea">
+      <h3>Multigrid 的最关键性质</h3>
+      <p><strong>定理</strong>：一次 Multigrid V-Cycle 后，误差满足 error_after ≤ 0.5 · error_before，<strong>与网格大小无关</strong>！</p>
+      <p><strong>推论</strong>：可以在与网格大小无关的固定步数内将误差降到任意容差。这是 Multigrid 区别于所有其他方法的核心——Jacobi/SOR/CG 的收敛速度随网格变细而下降，Multigrid 不会。</p>
+    </div>
+
+    <h3>算子细节</h3>
+    <p><strong>加权 Jacobi 光滑算子 S(i)</strong>：在 1D 中，加权 Jacobi 使用 1/3 而非 1/2 的权重：</p>
+    <pre><code class="language-plaintext">x(j) := (x(j-1) + x(j) + x(j+1) + b(j)) / 3</code></pre>
+    <p>加权 Jacobi 的选择是为了<strong>有效消除高频误差分量</strong>。经过几步加权 Jacobi 后，误差变得"光滑"（高频分量被阻尼），此时粗网格修正能高效处理低频分量。</p>
+
+    <p><strong>限制算子 R(i)</strong>：1D 情况下对邻居加权平均：</p>
+    <pre><code class="language-plaintext">x_coarse(i) = 1/4 · x_fine(i-1) + 1/2 · x_fine(i) + 1/4 · x_fine(i+1)</code></pre>
+    <p>2D 情况下使用全部 8 个邻居（N, S, E, W, NE, NW, SE, SW）加权平均。</p>
+
+    <p><strong>插值算子 In(i-1)</strong>：1D 情况下线性插值：</p>
+    <pre><code class="language-plaintext">若 i 也是粗网格点：x_fine(i) = x_coarse(i)
+否则：            x_fine(i) = 1/2 · x_coarse(left) + 1/2 · x_coarse(right)</code></pre>
+    <p>2D 情况下取 4 个最近邻（NW, SW, NE, SE）的加权平均。</p>
+
+    <h3>Multigrid 作为分治算法</h3>
+    <p>Multigrid 的每一次 V-Cycle 在不同频率域上降低误差：细网格负责高频误差，粗网格负责低频误差。这种<strong>频率分解</strong>的视角使 Multigrid 成为一种分治算法——将全频谱误差分解到不同尺度上分别处理。</p>
+
+    <div class="rule"></div>
+
+    <h2>8. 并行多重网格</h2>
+
+    <h3>2D 实现</h3>
+    <p>在 n = 2ᵐ⁺¹ × 2ᵐ⁺¹ 网格上使用 s × s 处理器网格（p = s²）：</p>
+    <ul>
+      <li>每层网格需要最多 8 邻居计算（2D 9 点 stencil）</li>
+      <li>处理器从 2ᵐ⁻ᵏ × 2ᵐ⁻ᵏ 子网格开始</li>
+      <li>粗网格层可能无法占满所有处理器</li>
+    </ul>
+
+    <h3>性能模型</h3>
+    <p>设 p = 4ᵏ 个处理器排成 2ᵏ × 2ᵏ 网格。对 V-Cycle 从第 m 层开始：</p>
+
+    <table>
+      <thead>
+        <tr><th>层级 j</th><th>计算 (Flops)</th><th>消息数 (latency)</th><th>通信量 (bandwidth)</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>j ≥ k</td><td>O(4ʲ⁻ᵏ)</td><td>O(1)·α</td><td>O(2ʲ⁻ᵏ)·β</td></tr>
+        <tr><td>j < k</td><td>O(1)</td><td>O(1)·α</td><td>O(1)·β</td></tr>
+      </tbody>
+    </table>
+
+    <h3>方法比较</h3>
+    <table>
+      <thead>
+        <tr><th>方法</th><th># Flops</th><th># Messages</th><th># Words sent</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Multigrid</td><td>N/p + log p · log N</td><td>(log N)²</td><td>(N/p)¹ᐟ² + log p · log N</td></tr>
+        <tr><td>FFT</td><td>N·log N / p</td><td>p¹ᐟ²</td><td>N/p</td></tr>
+        <tr><td>SOR</td><td>N³ᐟ² / p</td><td>N¹ᐟ²</td><td>N/p</td></tr>
+      </tbody>
+    </table>
+
+    <p>SOR 在所有指标上都更差。MG 的总通信量（bandwidth）更优，但消息数（latency）取决于 α 和 β 的相对大小。当 α >> β（延迟主导）时，FFT 可能更优。</p>
+
+    <div class="card warning">
+      <h3>粗网格的并行效率</h3>
+      <p>实际实现中不会粗到 P(1)。在并行机上，粗网格通信代价不可忽视：</p>
+      <ul>
+        <li>1000 未知量/处理器时，2D 通信面占 13%，3D 占 50%</li>
+        <li>nCUBE2 上 64×64 网格（每处理器 4 未知量）V-Cycle 效率仅 0.02</li>
+        <li>1024×1024 网格效率提升到 0.7（V-Cycle）和 0.42（FMG）</li>
+      </ul>
+      <p>现代框架如 Chombo 和 AMREx（LBL）仍需处理粗网格通信问题。</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>9. 非结构化网格上的多重网格</h2>
+
+    <h3>挑战</h3>
+    <p>实际工程问题（如骨骼力学分析、流体力学）常使用非结构化有限元网格。在非结构化网格上应用 Multigrid 面临根本性挑战：</p>
+    <ul>
+      <li><strong>粗化</strong>：不能再简单取"每隔一个节点"，需要使用最大独立集等图算法</li>
+      <li><strong>算子定义</strong>：R()、In() 需要基于网格几何/拓扑重新定义</li>
+      <li><strong>粗网格矩阵</strong>：不再有 Poisson 这样的显式公式，需要 Galerkin 投影 T_coarse = R · T_fine · In</li>
+      <li><strong>并行效率</strong>：粗网格可能需要切换为更少处理器或另一种求解器</li>
+    </ul>
+
+    <h3>应用实例：骨骼力学分析</h3>
+    <p>M. Adams 等（2004 Gordon Bell Prize）用 Multigrid 进行非线性弹性骨骼分析：</p>
+    <ul>
+      <li>微观 CT 扫描 → 22 µm 分辨率 3D 图像 → 有限元网格</li>
+      <li>2.5 mm³ 样本，44 µm 单元，最多 <strong>5.37 亿未知量</strong></li>
+      <li>ASCI White 超算，4088 处理器，<strong>70% 并行效率</strong></li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>10. 参考实现与工具</h2>
+
+    <h3>Stencil 优化工具</h3>
+    <table>
+      <thead>
+        <tr><th>工具</th><th>来源</th><th>功能</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Halide</strong></td><td>Ragan-Kelley et al.</td><td>图像处理 DSL，支持 stencil 优化</td></tr>
+        <tr><td><strong>Pochoir</strong></td><td>Leiserson @ MIT</td><td>Stencil 编译器，自动分块和并行化</td></tr>
+        <tr><td><strong>SEJITS</strong></td><td>Fox et al. @ UCB</td><td>Python 领域专用 JIT 并行化</td></tr>
+        <tr><td><strong>Bebop</strong></td><td>Datta @ UCB</td><td>面向多核的 stencil 自动调优</td></tr>
+      </tbody>
+    </table>
+
+    <h3>多重网格框架</h3>
+    <table>
+      <thead>
+        <tr><th>框架</th><th>来源</th><th>功能</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Chombo</strong></td><td>LBL</td><td>AMR（自适应网格加密）+ Multigrid</td></tr>
+        <tr><td><strong>AMREx</strong></td><td>LBL</td><td>下一代 AMR 框架（GPU 支持）</td></tr>
+        <tr><td><strong>BoxLib</strong></td><td>LBL</td><td>块结构 AMR 基础库</td></tr>
+      </tbody>
+    </table>
+
+    <div class="rule"></div>
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>Jacobi 方法在 2D n×n 网格上的串行复杂度为何是 O(N²)？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="每步是 O(N)，但步数是 O(n) = O(N¹ᐟ²)，总复杂度 O(N·N¹ᐟ²) = O(N³ᐟ²)。">A. 因为每步需要 O(N²) 次运算</button>
+        <button data-answer="correct" data-correct="正确！Jacobi 需要 O(n) = O(N¹ᐟ²) 步传播信息，每步 O(N)，总复杂度 O(N·N¹ᐟ²) = O(N³ᐟ²)。">B. 因为需要 O(n) 步收敛，每步 O(N) 计算量</button>
+        <button data-answer="wrong" data-incorrect="Jacobi 的复杂度与条件数无直接关系。">C. 因为矩阵条件数是 O(N)</button>
+        <button data-answer="wrong" data-incorrect="Jacobi 的通信量是 O(n) 而非 O(N²)。">D. 因为每步需要 O(N²) 通信量</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>Communication-Avoiding Jacobi 的核心思想是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="它不减少计算量，而是用冗余计算换通信。">A. 减少总计算量</button>
+        <button data-answer="wrong" data-incorrect="它不减少内存使用。">B. 减少内存使用</button>
+        <button data-answer="correct" data-correct="正确！通过计算 [Ax, A²x, ..., Aᵏx]，用少量冗余计算将 k 次通信降为 1 次。">C. 用冗余计算换取通信次数从 O(k) 降到 O(1)</button>
+        <button data-answer="wrong" data-incorrect="它不提高精度。">D. 提高数值精度</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>为什么 Multigrid 的收敛速度与网格大小无关？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="Multigrid 的每步计算量是 O(N)，不是 O(1)。">A. 因为每步计算量是 O(1)</button>
+        <button data-answer="correct" data-correct="正确！粗网格上信息传播更快，每轮 V-Cycle 误差至少减半，与网格大小无关。">B. 因为粗网格上信息传播更快，每轮 V-Cycle 误差至少减半</button>
+        <button data-answer="wrong" data-incorrect="Multigrid 不直接求逆。">C. 因为直接求逆矩阵</button>
+        <button data-answer="wrong" data-incorrect="Multigrid 不依赖预处理。">D. 因为使用预处理技术</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>红黑 SOR 中，红点和黑点的更新顺序是？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="红黑 SOR 不是同时更新。">A. 同时更新所有点</button>
+        <button data-answer="correct" data-correct="正确！先并行更新所有黑点（依赖红点旧值），再并行更新所有红点（依赖黑点新值）。">B. 先更新所有黑点，再更新所有红点</button>
+        <button data-answer="wrong" data-incorrect="顺序不影响正确性，但红黑 SOR 的标准做法是先黑后红。">C. 先更新所有红点，再更新所有黑点</button>
+        <button data-answer="wrong" data-incorrect="逐点更新是 Gauss-Seidel，不是红黑 SOR。">D. 逐点从左到右更新</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>在非结构化网格上实现 Multigrid 的主要挑战不包括？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="粗化确实是非结构化网格的挑战。">A. 如何粗化网格</button>
+        <button data-answer="wrong" data-incorrect="定义 R 和 In 是核心挑战。">B. 如何定义限制和插值算子</button>
+        <button data-answer="wrong" data-incorrect="粗网格矩阵需要 Galerkin 投影。">C. 如何构造粗网格矩阵</button>
+        <button data-answer="correct" data-correct="正确！非结构化网格的依赖图不一定是二分图，可能需要多于 2 种颜色。">D. 依赖图一定是二分图，只需 2 种颜色</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>信息传播速度决定收敛速度</h3>
+        <p>Jacobi/SOR/CG 的瓶颈在于信息每步只能传播一个网格点。Multigrid 通过粗网格打破这一限制，实现 O(N) 最优复杂度。</p>
+      </article>
+      <article>
+        <h3>频率分解是 Multigrid 的核心</h3>
+        <p>细网格消除高频误差，粗网格处理低频误差。这种分治策略使每轮 V-Cycle 误差减半，与网格大小无关。</p>
+      </article>
+      <article>
+        <h3>通信避免是并行算法的关键</h3>
+        <p>Matrix Powers Kernel 用冗余计算换取通信减少，适用于 Jacobi、CG 等迭代法。在现代通信瓶颈显著的并行机上效果显著。</p>
+      </article>
+      <article>
+        <h3>非结构化网格仍需突破</h3>
+        <p>实际工程问题需要非结构化网格上的 Multigrid，但粗化、算子定义、并行效率仍是活跃的研究领域。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li>James Demmel, <em>Applied Numerical Linear Algebra</em>, SIAM, 1997 — 本课算法比较表的来源</li>
+      <li><a href="https://people.csail.mit.edu/yuantang/" target="_blank" rel="noopener">Pochoir</a> — Charles Leiserson 的 stencil 编译器</li>
+      <li><a href="https://halide-lang.org" target="_blank" rel="noopener">Halide</a> — 图像处理 DSL，支持 stencil 优化</li>
+      <li>E. Carson, "Communication Avoiding Krylov Subspace Methods," UCB PhD Thesis, 2015</li>
+      <li>M. Hoemmen, "Communication Avoiding Krylov Subspace Methods," UCB PhD Thesis, 2010</li>
+      <li>K. Datta et al., "Optimization and Performance Modeling of Stencil Computations," <em>SIAM Review</em>, 2008</li>
+      <li>Tuminaro & Womble, "Analysis of Multigrid on 1024 nCUBE2," <em>SIAM J. Sci. Comp.</em>, 1993</li>
+      <li>M. Adams et al., "Multigrid for Nonlinear Elastic Analysis of Bone," Gordon Bell Prize, 2004</li>
+      <li><a href="https://youtu.be/t-0TK2uoTjY" target="_blank" rel="noopener">Lecture 18 课堂录像</a></li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="17-randomized.html">← 第 17 课：随机化算法</a>
+      <a href="19-sparse-mv.html">第 19 课：稀疏矩阵-向量乘法 →</a>
+    </div>
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley · 本课完全覆盖 Lecture 18 内容</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>
