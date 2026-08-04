@@ -59,12 +59,12 @@
       <li><strong>Span (S) / Depth</strong>：关键路径长度，即无限多处理器时的最短执行时间。</li>
     </ul>
     <p>在 P 个处理器上的执行时间满足：</p>
-    <pre><code>T(P) ≥ max(W/P, S)</code></pre>
+    <pre><code>T(P) $≥$ max(W/P, S)</code></pre>
     <p>并行度（parallelism）定义为 <code>W / S</code>。算法能达到的最大加速比受限于并行度。</p>
 
     <div class="card tip">
       <h3>Brent 定理</h3>
-      <p>若一个并行算法的 work 为 W、span 为 S，则在 P 个处理器上的运行时间 <code>T(P) ≤ W/P + S</code>。这意味着只要 P ≤ W/S，就能获得接近线性的加速。</p>
+      <p>若一个并行算法的 work 为 W、span 为 S，则在 P 个处理器上的运行时间 <code>T(P) $≤$ W/P + S</code>。这意味着只要 P $≤$ W/S，就能获得接近线性的加速。</p>
     </div>
 
     <h2 id="blelloch">Blelloch 并行前缀算法</h2>
@@ -90,15 +90,15 @@ for d = log(n)-1 down to 0:
 
     <div class="card idea">
       <h3>Work 与 Span</h3>
-      <p>Blelloch 算法的 work = $\\(O(\1)\\)，span = $\\(O(\1)\\)。虽然它比 naive 的 $\\(O(\1)\\) 版本做了更多操作，但它是 <strong>work-efficient</strong> 的——总操作数与串行算法同阶，这是并行算法设计的重要目标。</p>
+      <p>Blelloch 算法的 work = $\\($O(\1)$\\)，span = $\\($O(\1)$\\)。虽然它比 naive 的 $\\($O(\1)$\\) 版本做了更多操作，但它是 <strong>work-efficient</strong> 的——总操作数与串行算法同阶，这是并行算法设计的重要目标。</p>
     </div>
 
     <h2 id="lower-bound">归约的下界证明</h2>
-    <p>对基于二元算子 ⊕ 的归约，我们证明其 span 的下界为 Ω(log n)。</p>
+    <p>对基于二元算子 ⊕ 的归约，我们证明其 span 的下界为 $Ω$(log n)。</p>
 
     <div class="card warning">
       <h3>证明思路</h3>
-      <p>假设 ⊕ 满足结合律但不满足交换律（最一般情况）。归约必须产生一个长度为 n-1 的二叉树。任何二叉树在 n 个叶节点上的高度至少为 ⌈log₂ n⌉。因此，任何并行归约算法的 span 至少为 Ω(log n)。</p>
+      <p>假设 ⊕ 满足结合律但不满足交换律（最一般情况）。归约必须产生一个长度为 n-1 的二叉树。任何二叉树在 n 个叶节点上的高度至少为 ⌈log₂ n⌉。因此，任何并行归约算法的 span 至少为 $Ω$(log n)。</p>
       <p>这意味着 Blelloch 算法达到了<strong>最优 span</strong>。</p>
     </div>
 
@@ -108,9 +108,9 @@ for d = log(n)-1 down to 0:
     <h3>1. 流压缩（Stream Compression）</h3>
     <p>给定数组 <code>A</code> 和布尔掩码 <code>M</code>，保留 <code>M[i]==true</code> 的元素并紧凑排列。</p>
     <pre><code>// 对掩码做 exclusive scan，得到输出下标
-scan(M, out_idx)  // out_idx[i] = 前面 true 的个数
+scan(M, ou$t_{idx}$)  // ou$t_{idx}$[i] = 前面 true 的个数
 parallel for i:
-  if M[i]: B[out_idx[i]] = A[i]</code></pre>
+  if M[i]: B[ou$t_{idx}$[i]] = A[i]</code></pre>
 
     <h3>2. 基数排序（Radix Sort）</h3>
     <p>基数排序的每一轮都可以用 scan 实现：统计每个桶的元素个数，用 scan 确定每个桶的起始偏移，再用 scatter 把元素放到正确位置。</p>
@@ -126,7 +126,7 @@ pos1 = (key & 1) * (total0 + pos1_raw) + ...
 // 5. scatter 到输出数组</code></pre>
 
     <h3>3. 链表排名（List Ranking / Pointer Doubling）</h3>
-    <p>给定一个链表，计算每个节点到尾部的距离。串行是 $\\(O(\1)\\)，并行用 pointer doubling 可达 $\\(O(\1)\\)。</p>
+    <p>给定一个链表，计算每个节点到尾部的距离。串行是 $\\($O(\1)$\\)，并行用 pointer doubling 可达 $\\($O(\1)$\\)。</p>
     <pre><code>// Pointer doubling for list ranking
 // next[i] = 下一个节点的下标，-1 表示尾
 // dist[i] = 到 next[i] 的距离（初始为 1，尾节点为 0）
@@ -139,17 +139,17 @@ while any next[i] != -1:
 
     <div class="card tip">
       <h3>Pointer Doubling 的精髓</h3>
-      <p>每一步把每个节点的"下一个"指针向前跳两步，同时累加距离。经过 $\\(O(\1)\\) 步后，所有节点都指向尾部，距离即为答案。</p>
+      <p>每一步把每个节点的"下一个"指针向前跳两步，同时累加距离。经过 $\\($O(\1)$\\) 步后，所有节点都指向尾部，距离即为答案。</p>
     </div>
 
     <h3>4. 斐波那契数列（Fibonacci via Matrix Prefix）</h3>
     <p>斐波那契递推可以写成矩阵乘法：</p>
     <pre><code>[F(n+1)]   [1 1]^n   [F(1)]
-[ F(n) ] = [1 0]   × [F(0)]</code></pre>
+[ F(n) ] = [1 0]   $\times$ [F(0)]</code></pre>
     <p>因此 <code>F(n)</code> 就是矩阵 <code>[[1,1],[1,0]]</code> 的 n 次幂。多个 n 对应的值可以通过<strong>矩阵乘法并行前缀</strong>一次性算出。</p>
 
     <h3>5. n 位整数加法（Parallel Prefix Addition）</h3>
-    <p>超大规模整数加法可以通过并行前缀进位（carry-lookahead）实现 $\\(O(\1)\\) span。核心思想：</p>
+    <p>超大规模整数加法可以通过并行前缀进位（carry-lookahead）实现 $\\($O(\1)$\\) span。核心思想：</p>
     <ul>
       <li>对每一位计算 <strong>generate</strong>（g = a & b）和 <strong>propagate</strong>（p = a ⊕ b）。</li>
       <li>进位 <code>c[i]</code> 满足：<code>c[i+1] = g[i] OR (p[i] AND c[i])</code>。</li>
@@ -167,12 +167,12 @@ sum[i] = p[i] ^ carry[i]</code></pre>
 
     <h3>6. 词法分析（Lexical Analysis）</h3>
     <p>在编译器中，需要判断每个字符是否是 token 的起始位置。这可以通过 scan 实现：</p>
-    <pre><code>// is_start[i] = 1 当且仅当 A[i] 是 token 的第一个字符
+    <pre><code>// i$s_{start}$[i] = 1 当且仅当 A[i] 是 token 的第一个字符
 // 规则：A[i] 与 A[i-1] 属于不同字符类
-is_start[0] = 1
+i$s_{start}$[0] = 1
 parallel for i = 1..n-1:
-  is_start[i] = (class(A[i]) != class(A[i-1]))
-// 如果需要给每个 token 编号，对 is_start 做 exclusive scan</code></pre>
+  i$s_{start}$[i] = (class(A[i]) != class(A[i-1]))
+// 如果需要给每个 token 编号，对 i$s_{start}$ 做 exclusive scan</code></pre>
 
     <h3>7. 矩阵求逆（Triangular / Dense Matrix Inversion）</h3>
     <p>三角矩阵的求逆可以通过分块 + 并行前缀实现。对于稠密矩阵，LU 分解中的多个步骤都可以识别出 scan 模式。</p>
@@ -230,7 +230,7 @@ result= [1, 3, 6 | 4, 9 | 6, 13, 21]</code></pre>
       <article><h3>数据并行</h3><p>对大量数据执行相同操作，是最自然的并行来源。</p></article>
       <article><h3>Reduce 与 Scan</h3><p>全局归约与并行前缀是数据并行中最核心的两个算子。</p></article>
       <article><h3>Span 与 Work</h3><p>并行算法的两个基本度量；Brent 定理连接理想模型与现实执行。</p></article>
-      <article><h3>Blelloch 算法</h3><p>Work-efficient、span $\\(O(\1)\\) 的并行前缀算法，达到归约下界。</p></article>
+      <article><h3>Blelloch 算法</h3><p>Work-efficient、span $\\($O(\1)$\\) 的并行前缀算法，达到归约下界。</p></article>
       <article><h3>应用广泛</h3><p>从流压缩、基数排序到链表排名、大整数加法，scan 模式无处不在。</p></article>
     </div>
 
@@ -252,10 +252,10 @@ result= [1, 3, 6 | 4, 9 | 6, 13, 21]</code></pre>
     <div class="quiz" data-quiz="2" data-correct="b" data-incorrect="a,c,d">
       <p><strong>问题 2：</strong>并行归约（reduce）的 span 下界是什么？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">Ω(1)</button>
-        <button data-choice="b" aria-pressed="false">Ω(log n)</button>
-        <button data-choice="c" aria-pressed="false">Ω(n)</button>
-        <button data-choice="d" aria-pressed="false">Ω(n log n)</button>
+        <button data-choice="a" aria-pressed="false">$Ω$(1)</button>
+        <button data-choice="b" aria-pressed="false">$Ω$(log n)</button>
+        <button data-choice="c" aria-pressed="false">$Ω$(n)</button>
+        <button data-choice="d" aria-pressed="false">$Ω$(n log n)</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
@@ -263,10 +263,10 @@ result= [1, 3, 6 | 4, 9 | 6, 13, 21]</code></pre>
     <div class="quiz" data-quiz="3" data-correct="a" data-incorrect="b,c,d">
       <p><strong>问题 3：</strong>Blelloch 并行前缀算法的 work 和 span 分别是多少？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">Work = $\\(O(\1)\\), Span = $\\(O(\1)\\)</button>
-        <button data-choice="b" aria-pressed="false">Work = $\\(O(\1)\\), Span = $\\(O(\1)\\)</button>
-        <button data-choice="c" aria-pressed="false">Work = $\\(O(\1)\\), Span = $\\(O(\1)\\)</button>
-        <button data-choice="d" aria-pressed="false">Work = $\\(O(\1)\\), Span = $\\(O(\1)\\)</button>
+        <button data-choice="a" aria-pressed="false">Work = $\\($O(\1)$\\), Span = $\\($O(\1)$\\)</button>
+        <button data-choice="b" aria-pressed="false">Work = $\\($O(\1)$\\), Span = $\\($O(\1)$\\)</button>
+        <button data-choice="c" aria-pressed="false">Work = $\\($O(\1)$\\), Span = $\\($O(\1)$\\)</button>
+        <button data-choice="d" aria-pressed="false">Work = $\\($O(\1)$\\), Span = $\\($O(\1)$\\)</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>

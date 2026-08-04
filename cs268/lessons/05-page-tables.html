@@ -66,7 +66,7 @@
     <h2>三级页表：节省空间</h2>
 
     <h3>为什么不用单级页表？</h3>
-    <p>如果使用单级数组，需要 USD 2^{27}$ 个 PTE × 8 字节 ≈ 1 GB 每个地址空间——即使进程只使用几 KB 内存，也要占 1 GB 页表空间，完全不可接受。</p>
+    <p>如果使用单级数组，需要 USD 2^{27}$ 个 PTE $\times$ 8 字节 $≈$ 1 GB 每个地址空间——即使进程只使用几 KB 内存，也要占 1 GB 页表空间，完全不可接受。</p>
 
     <h3>三级树形结构</h3>
     <pre><code>VA: [L2 索引 9位 | L1 索引 9位 | L0 索引 9位 | 页内偏移 12位]
@@ -78,7 +78,7 @@ Level 2 目录 ──→ Level 1 目录 ──→ Level 0 目录 ──→ 物�
 
     <div class="card idea">
       <h3>为什么是 9 位？</h3>
-      <p>9 bits → 512 个 PTE × 8 字节 = 4096 字节 = 正是一个页的大小。每个目录刚好占一页，方便分配与管理。</p>
+      <p>9 bits → 512 个 PTE $\times$ 8 字节 = 4096 字节 = 正是一个页的大小。每个目录刚好占一页，方便分配与管理。</p>
     </div>
 
     <h3>TLB：加速地址翻译</h3>
@@ -137,10 +137,10 @@ Level 2 目录 ──→ Level 1 目录 ──→ Level 0 目录 ──→ 物�
       <thead><tr><th>地址范围</th><th>内容</th></tr></thead>
       <tbody>
         <tr><td>低地址</td><td>text → data → heap（向上增长）</td></tr>
-        <tr><td>stack 下方</td><td>stack guard（无 PTE_U，不可访问）</td></tr>
+        <tr><td>stack 下方</td><td>stack guard（无 PT$E_{U}$，不可访问）</td></tr>
         <tr><td>stack</td><td>用户栈（向下增长）</td></tr>
-        <tr><td>0x3ffffff000</td><td>Trampoline（无 PTE_U）</td></tr>
-        <tr><td>0x3fffffe000</td><td>Trapframe（无 PTE_U）</td></tr>
+        <tr><td>0x3ffffff000</td><td>Trampoline（无 PT$E_{U}$）</td></tr>
+        <tr><td>0x3fffffe000</td><td>Trapframe（无 PT$E_{U}$）</td></tr>
       </tbody>
     </table>
 
@@ -148,37 +148,37 @@ Level 2 目录 ──→ Level 1 目录 ──→ Level 0 目录 ──→ 物�
 
     <h3>1. 建立内核页表：kvmmake()</h3>
     <pre><code>// kernel/vm.c
-pagetable_t kvmmake(void) {
-    pagetable_t kpgtbl = (pagetable_t) kalloc();
+pagetabl$e_{t}$ kvmmake(void) {
+    pagetabl$e_{t}$ kpgtbl = (pagetabl$e_{t}$) kalloc();
     memset(kpgtbl, 0, PGSIZE);
 
     // UART0 直接映射
-    kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+    kvmmap(kpgtbl, UART0, UART0, PGSIZE, PT$E_{R}$ | PT$E_{W}$);
 
     // VIRTIO0
-    kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+    kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PT$E_{R}$ | PT$E_{W}$);
 
     // 物理 RAM 直接映射
     kvmmap(kpgtbl, KERNBASE, KERNBASE, PHYSTOP - KERNBASE,
-           PTE_R | PTE_W);
+           PT$E_{R}$ | PT$E_{W}$);
 
     // 内核栈
-    proc_mapstacks(kpgtbl);
+    pro$c_{mapstacks}$(kpgtbl);
     return kpgtbl;
 }</code></pre>
 
     <h3>2. 添加映射：kvmmap() → mappages()</h3>
     <pre><code>// kernel/vm.c
-void kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa,
+void kvmmap(pagetabl$e_{t}$ kpgtbl, uint64 va, uint64 pa,
             uint64 size, int perm) {
     mappages(kpgtbl, va, size, pa, perm);
 }
 
 // 为 [va, va+size) 的每个页建立映射
-int mappages(pagetable_t pagetable, uint64 va, uint64 size,
+int mappages(pagetabl$e_{t}$ pagetable, uint64 va, uint64 size,
               uint64 pa, int perm) {
     uint64 a, last;
-    pte_t *pte;
+    pt$e_{t}$ *pte;
 
     a = PGROUNDDOWN(va);
     last = PGROUNDDOWN(va + size - 1);
@@ -186,10 +186,10 @@ int mappages(pagetable_t pagetable, uint64 va, uint64 size,
         // walk 找到 va 对应的 PTE 地址（必要时创建目录页）
         if((pte = walk(pagetable, a, 1)) == 0)
             return -1;
-        if(*pte & PTE_V)
+        if(*pte & PT$E_{V}$)
             panic("remap");
         // 设置 PTE：物理页号 + 权限 + Valid
-        *pte = PA2PTE(pa) | perm | PTE_V;
+        *pte = PA2PTE(pa) | perm | PT$E_{V}$;
         if(a == last)
             break;
         a += PGSIZE;
@@ -201,21 +201,21 @@ int mappages(pagetable_t pagetable, uint64 va, uint64 size,
     <h3>3. 页表遍历：walk()</h3>
     <p><code>walk()</code> 模拟硬件的页表遍历过程：</p>
     <pre><code>// kernel/vm.c
-pte_t *walk(pagetable_t pagetable, uint64 va, int alloc) {
+pt$e_{t}$ *walk(pagetabl$e_{t}$ pagetable, uint64 va, int alloc) {
     if(va >= MAXVA)
         panic("walk");
 
     for(int level = 2; level > 0; level--) {
-        pte_t *pte = &pagetable[PX(level, va)];  // 提取 9 位索引
-        if(*pte & PTE_V) {
+        pt$e_{t}$ *pte = &pagetable[PX(level, va)];  // 提取 9 位索引
+        if(*pte & PT$E_{V}$) {
             // 下一级目录已存在
-            pagetable = (pagetable_t)PTE2PA(*pte);
+            pagetable = (pagetabl$e_{t}$)PTE2PA(*pte);
         } else {
             // 需要分配新的目录页
-            if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
+            if(!alloc || (pagetable = (pd$e_{t}$*)kalloc()) == 0)
                 return 0;
             memset(pagetable, 0, PGSIZE);
-            *pte = PA2PTE(pagetable) | PTE_V;
+            *pte = PA2PTE(pagetable) | PT$E_{V}$;
         }
     }
     // 最后一级：返回叶 PTE 的地址
@@ -226,8 +226,8 @@ pte_t *walk(pagetable_t pagetable, uint64 va, int alloc) {
     <pre><code>// kernel/vm.c
 void kvminithart() {
     // satp 需要页表的物理地址！
-    w_satp(MAKE_SATP(kernel_pagetable));
-    sfence_vma();  // 刷新 TLB
+    $w_{satp}$(MAK$E_{SATP}$(kerne$l_{pagetable}$));
+    sfenc$e_{vma}$();  // 刷新 TLB
 }</code></pre>
 
     <h3>手动计算示例：UART0 = 0x10000000</h3>
@@ -238,7 +238,7 @@ L0 索引 = 0x10000 & 0x1FF = 0x0
 页内偏移 = 0x10000000 & 0xFFF = 0x0
 
 PTE 低 10 位 = 0x7 = 0b000111
-→ PTE_R (0b00001) | PTE_W (0b00010) | PTE_V (0b00001)</code></pre>
+→ PT$E_{R}$ (0b00001) | PT$E_{W}$ (0b00010) | PT$E_{V}$ (0b00001)</code></pre>
 
     <h2>调试技巧</h2>
     <ul>
@@ -266,7 +266,7 @@ PTE 低 10 位 = 0x7 = 0b000111
       <div class="quiz-options">
         <button data-choice="a" data-incorrect="三级页表更慢（需要多次查表）。">A. 单级页表更快</button>
         <button data-choice="b" data-incorrect="三级页表不能映射更多地址。">B. 单级页表能映射更多地址</button>
-        <button data-choice="c" data-correct="正确！三级页表只为实际使用的地址分配目录页，节省内存。单级页表需要 2^27 × 8 字节 ≈ 1 GB。">C. 三级页表节省内存，只分配实际使用的部分</button>
+        <button data-choice="c" data-correct="正确！三级页表只为实际使用的地址分配目录页，节省内存。单级页表需要 2^2$7 \times 8$ 字节 $≈$ 1 GB。">C. 三级页表节省内存，只分配实际使用的部分</button>
         <button data-choice="d" data-incorrect="单级页表也能实现隔离。">D. 单级页表不能实现隔离</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>    </div>

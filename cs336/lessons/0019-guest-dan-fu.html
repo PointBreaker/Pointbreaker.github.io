@@ -57,21 +57,21 @@
     <h2 id="flashattention">FlashAttention：案例研究</h2>
 
     <h3>问题</h3>
-    <p>标准 Attention 的 $\\(O(\1)\\) 内存是长序列的瓶颈：</p>
+    <p>标准 Attention 的 $\\($O(\1)$\\) 内存是长序列的瓶颈：</p>
     <pre><code class="language-python"># 标准 Attention:
-# 1. 计算 S = Q @ K^T        [n × n]
-# 2. 计算 P = softmax(S)     [n × n]
-# 3. 计算 O = P @ V          [n × d]
+# 1. 计算 S = Q @ K^T        [n $\times$ n]
+# 2. 计算 P = softmax(S)     [n $\times$ n]
+# 3. 计算 O = P @ V          [n $\times$ d]
 
-# 问题: 需要存储 n × n 的中间矩阵 S 和 P
+# 问题: 需要存储 n $\times$ n 的中间矩阵 S 和 P
 # n = 100K 时, n² = 10^10 个元素 → 几十 GB 内存</code></pre>
 
     <h3>FlashAttention 的核心思想</h3>
     <p>不存储完整的 attention matrix，而是分块计算：</p>
     <pre><code class="language-python"># FlashAttention 的关键洞察:
 # 1. softmax 可以分块计算 (online softmax)
-# 2. 不需要存储完整的 n × n attention matrix
-# 3. 只需要 $\\(O(\1)\\) 的额外内存
+# 2. 不需要存储完整的 n $\times$ n attention matrix
+# 3. 只需要 $\\($O(\1)$\\) 的额外内存
 
 # 算法:
 # 1. 将 Q, K, V 分成小块 (blocks)
@@ -84,8 +84,8 @@
 #    c. 写回最终输出
 
 # 结果:
-# - 内存: $\\(O(\1)\\) → $\\(O(\1)\\)
-# - 速度: 2-4× 加速（减少 HBM 访问）
+# - 内存: $\\($O(\1)$\\) → $\\($O(\1)$\\)
+# - 速度: 2-4$\times$ 加速（减少 HBM 访问）
 # - 精确: 与标准 attention 完全一致（无近似）</code></pre>
 
     <h3>为什么 FlashAttention 有效？</h3>
@@ -97,7 +97,7 @@
       <tr><td>Registers</td><td>~256 KB/SM</td><td>~100 TB/s</td><td>当前计算的数据</td></tr>
     </table>
 
-    <p>标准 attention 的问题：n×n 矩阵存在 HBM 中，每次计算都需要从 HBM 读取。FlashAttention 让数据在 SRAM 中完成计算，大幅减少 HBM 访问。</p>
+    <p>标准 attention 的问题：n$\times$n 矩阵存在 HBM 中，每次计算都需要从 HBM 读取。FlashAttention 让数据在 SRAM 中完成计算，大幅减少 HBM 访问。</p>
 
     <div class="card">
       <p><strong>关键洞察</strong>：FlashAttention 没有改变 attention 的数学定义，只是改变了计算顺序。这是"硬件感知算法"的典范——同样的数学，不同的实现，巨大的性能差异。</p>
@@ -128,7 +128,7 @@
     <h3>Roofline 模型</h3>
     <p>理解 kernel 性能的基本工具：</p>
     <pre><code class="language-python"># Roofline 模型:
-# 性能 = min(峰值算力, 带宽 × 算术强度)
+# 性能 = min(峰值算力, 带宽 $\times$ 算术强度)
 
 # 算术强度 = FLOPs / bytes transferred
 
@@ -262,7 +262,7 @@
     <h3>The Bitter Lesson</h3>
     <div class="card warning">
       <p><strong>The Bitter Lesson（苦涩教训）</strong>：历史上，利用计算量的通用方法最终胜出。但这不意味着算法不重要——而是<strong>能随规模扩展的算法</strong>才是关键。效率在大规模时更加重要——你承受不起浪费。</p>
-      <p>公式：<strong>accuracy = efficiency × resources</strong></p>
+      <p>公式：<strong>accuracy = efficiency $\times$ resources</strong></p>
     </div>
 
     <h3>未来方向</h3>
@@ -298,23 +298,23 @@
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！FlashAttention 通过分块计算和 online softmax 将内存从 $\\(O(\1)\\) 降到 $\\(O(\1)\\)，同时保持精确。" data-incorrect="FlashAttention 通过分块和 online softmax 减少内存，同时保持精确。">
+    <div class="quiz" data-quiz="1" data-correct="正确！FlashAttention 通过分块计算和 online softmax 将内存从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\)，同时保持精确。" data-incorrect="FlashAttention 通过分块和 online softmax 减少内存，同时保持精确。">
       <p><strong>问题 1：</strong>FlashAttention 的核心贡献是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">近似 attention 计算</button>
-        <button data-choice="b" aria-pressed="false">通过分块计算将内存从 $\\(O(\1)\\) 降到 $\\(O(\1)\\)，保持精确</button>
+        <button data-choice="b" aria-pressed="false">通过分块计算将内存从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\)，保持精确</button>
         <button data-choice="c" aria-pressed="false">减少 FLOPs</button>
         <button data-choice="d" aria-pressed="false">只适用于短序列</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！Roofline 模型中，性能 = min(峰值算力, 带宽 × 算术强度)。Ridge point 是两者相等的点。" data-incorrect="Roofline 模型: 性能 = min(峰值算力, 带宽 × 算术强度)。">
+    <div class="quiz" data-quiz="2" data-correct="正确！Roofline 模型中，性能 = min(峰值算力, 带宽 $\times$ 算术强度)。Ridge point 是两者相等的点。" data-incorrect="Roofline 模型: 性能 = min(峰值算力, 带宽 $\times$ 算术强度)。">
       <p><strong>问题 2：</strong>Roofline 模型的含义是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">性能 = 峰值算力</button>
-        <button data-choice="b" aria-pressed="false">性能 = min(峰值算力, 带宽 × 算术强度)</button>
-        <button data-choice="c" aria-pressed="false">性能 = 带宽 × 数据大小</button>
+        <button data-choice="b" aria-pressed="false">性能 = min(峰值算力, 带宽 $\times$ 算术强度)</button>
+        <button data-choice="c" aria-pressed="false">性能 = 带宽 $\times$ 数据大小</button>
         <button data-choice="d" aria-pressed="false">性能 = FLOPs / 时间</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
@@ -332,7 +332,7 @@
     </div>
 
     <div class="quiz" data-quiz="4" data-correct="正确！The Bitter Lesson 的核心是：能随规模扩展的算法才是关键，效率在大规模时更加重要。" data-incorrect="The Bitter Lesson 强调能随规模扩展的算法和效率。">
-      <p><strong>问题 4：</strong>CS336 的核心公式 accuracy = efficiency × resources 的含义是什么？</p>
+      <p><strong>问题 4：</strong>CS336 的核心公式 accuracy = efficiency $\times$ resources 的含义是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">资源越多越好</button>
         <button data-choice="b" aria-pressed="false">给定资源，效率决定最终性能</button>

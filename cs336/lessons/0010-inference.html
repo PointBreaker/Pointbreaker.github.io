@@ -69,21 +69,21 @@
 
 # 2. Generation: 逐个生成 token
 #    - 每次只处理 1 个 token（T=1）
-#    - 算术强度 ≈ 1
+#    - 算术强度 $≈$ 1
 #    - 永远 memory-bound！</code></pre>
 
     <h3>MLP 层的算术强度</h3>
     <pre><code class="language-python"># MLP 前向传播（SwiGLU）:
-# 读 X (B×T×D), W_gate (D×F), W_up (D×F), W_down (F×D)
-# 计算: U = X @ W_gate, G = X @ W_up, Y = Swish(G)*U @ W_down
-# 写 Y (B×T×D)
+# 读 X (B$\times$T$\times$D), $W_{gate}$ (D$\times$F), $W_{up}$ (D$\times$F), $W_{down}$ (F$\times$D)
+# 计算: U = X @ $W_{gate}$, G = X @ $W_{up}$, Y = Swish(G)*U @ $W_{down}$
+# 写 Y (B$\times$T$\times$D)
 
-FLOPs = 6 × B × T × D × F
+FLOPs = 6 $\times$ B $\times$ T $\times$ D $\times$ F
 Bytes = 4BTD + 6DF + 4BTD + 4BTD + 4BTF + 4BTD
-      ≈ 4BTD + 4BTF + 6DF (忽略写入)
+      $≈$ 4BTD + 4BTF + 6DF (忽略写入)
 
 # 假设 B*T << D, F:
-算术强度 ≈ B*T
+算术强度 $≈$ B*T
 
 # Prefill: B*T 很大 → compute-bound
 # Generation: B*T = B（batch size）
@@ -92,17 +92,17 @@ Bytes = 4BTD + 6DF + 4BTD + 4BTD + 4BTF + 4BTD
 
     <h3>Attention 层的算术强度</h3>
     <pre><code class="language-python"># Attention（FlashAttention 优化后）:
-# 读 Q (B×T×D), K (B×S×D), V (B×S×D)
+# 读 Q (B$\times$T$\times$D), K (B$\times$S$\times$D), V (B$\times$S$\times$D)
 # 计算: Q @ K^T, softmax, @ V
-# 写 Y (B×T×D)
+# 写 Y (B$\times$T$\times$D)
 
-FLOPs = 4 × B × S × T × D
-Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
+FLOPs = 4 $\times$ B $\times$ S $\times$ T $\times$ D
+Bytes = 4BSD + 4BTD + 4BTD $≈$ 4BSD + 4BTD
 
 算术强度 = S*T / (S + T)
 
 # Prefill: T = S → 强度 = S/2 → 大 S 时 compute-bound
-# Generation: T = 1 → 强度 ≈ 1 → memory-bound
+# Generation: T = 1 → 强度 $≈$ 1 → memory-bound
 
 # 关键发现: Attention 的强度不依赖 B！
 # 所以 batching 不能改善 attention 的 memory-bound 问题</code></pre>
@@ -139,17 +139,17 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 
     <h3>为什么 KV cache 是瓶颈？</h3>
     <pre><code class="language-python"># KV cache 大小（每 token 每 layer）:
-# MHA: n_heads × d_head × 2 (K+V) × 2 (bf16)
-#     = 64 × 128 × 2 × 2 = 32 KB/token/layer
+# MHA: $n_{heads}$ $\times$ $d_{head}$ $\times$ 2 (K+V) $\times$ 2 (bf16)
+#     = 6$4 \times 1$2$8 \times 2$ $\times$ 2 = 32 KB/token/layer
 
 # 100K 序列, 80 层:
-# = 32 KB × 100K × 80 = 256 GB！
+# = 32 KB $\times$ 100K $\times$ 80 = 256 GB！
 
 # 大 batch 时 KV cache 远超模型参数大小</code></pre>
 
     <h3>GQA（复习）</h3>
-    <pre><code class="language-python"># GQA 把 KV cache 缩小 n_heads / n_kv_heads 倍
-# Llama 2 70B: 64 Q heads, 8 KV heads → 8× 缩小</code></pre>
+    <pre><code class="language-python"># GQA 把 KV cache 缩小 $n_{heads}$ / $n_{kv}$_heads 倍
+# Llama 2 70B: 64 Q heads, 8 KV heads → 8$\times$ 缩小</code></pre>
 
     <h3>Multi-head Latent Attention (MLA)</h3>
     <pre><code class="language-python"># DeepSeek-V2 的 MLA:
@@ -158,8 +158,8 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # 需要时通过上投影恢复
 
 # KV cache: 512 + 64 (for RoPE) = 576 维
-# vs MHA: 64 × 128 × 2 = 16,384 维
-# 压缩比: 28×！</code></pre>
+# vs MHA: 6$4 \times 1$2$8 \times 2$ = 16,384 维
+# 压缩比: 28$\times$！</code></pre>
 
     <h3>Cross-layer Attention (CLA)</h3>
     <pre><code class="language-python"># 跨层共享 KV:
@@ -167,7 +167,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # CLA 是共享 KV across layers
 
 # 例如: 每 4 层共享一组 KV
-# KV cache 缩小 4×</code></pre>
+# KV cache 缩小 4$\times$</code></pre>
 
     <h3>Local Attention</h3>
     <pre><code class="language-python"># 部分层用 local attention（只关注附近 token）
@@ -176,7 +176,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # 混合策略（character.ai）:
 # - 每 6 层有 1 层 global attention
 # - 其余 5 层用 local attention
-# - 有效上下文 = window_size × num_layers</code></pre>
+# - 有效上下文 = windo$w_{size}$ $\times$ nu$m_{layers}$</code></pre>
 
     <hr class="rule">
 
@@ -190,15 +190,15 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # 量化级别:
 # fp32 (4 bytes) → bf16 (2 bytes) → fp8 (1 byte) → int4 (0.5 byte)
 
-# int4: 8× 压缩 vs fp32
-# 理论上 8× 加速（如果 memory-bound）</code></pre>
+# int4: 8$\times$ 压缩 vs fp32
+# 理论上 8$\times$ 加速（如果 memory-bound）</code></pre>
 
     <h3>Post-training Quantization (PTQ)</h3>
     <pre><code class="language-python"># 训练后量化: 不需要重新训练
 
 # 简单量化（per-tensor）:
 scale = max(abs(x)) / 127  # int8
-x_quantized = round(x / scale)
+$x_{quantized}$ = round(x / scale)
 
 # 问题: outlier 会导致精度大幅下降
 # LLM 中有 ~0.1% 的 outlier（值特别大的元素）</code></pre>
@@ -221,7 +221,7 @@ x_quantized = round(x / scale)
 # 2. 重要权重保持 fp16
 # 3. 其余量化到 int3/int4
 
-# 效果: 4× 内存降低, 3.2× 加速</code></pre>
+# 效果: 4$\times$ 内存降低, 3.2$\times$ 加速</code></pre>
 
     <hr class="rule">
 
@@ -238,7 +238,7 @@ x_quantized = round(x / scale)
     <h3>算法</h3>
     <pre><code class="language-python"># 投机解码 (Leviathan et al., 2023; Chen et al., 2023)
 
-# 1. Draft 模型（小）生成 γ 个 token: d₁, d₂, ..., dᵧ
+# 1. Draft 模型（小）生成 $γ$ 个 token: d₁, d₂, ..., dᵧ
 # 2. Target 模型（大）一次性评估: p(x|prefix + d₁ + ... + dᵧ)
 # 3. 逐个验证:
 #    - 如果 p(d₁) > q(d₁) → 接受 d₁
@@ -250,14 +250,14 @@ x_quantized = round(x / scale)
 
     <h3>为什么能加速？</h3>
     <pre><code class="language-python"># 不使用投机解码:
-# 生成 γ 个 token → γ 次大模型前向 → γ × T_large
+# 生成 $γ$ 个 token → $γ$ 次大模型前向 → $γ$ $\times$ $T_{large}$
 
 # 使用投机解码:
 # 1 次 draft 前向 + 1 次大模型前向
-# → T_small × γ + T_large
-# → 如果 draft 足够准 ≈ T_large（一次前向生成 γ 个 token）
+# → $T_{small}$ $\times$ $γ$ + $T_{large}$
+# → 如果 draft 足够准 $≈$ $T_{large}$（一次前向生成 $γ$ 个 token）
 
-# 实际加速: 2-3×（取决于 draft 质量和接受率）</code></pre>
+# 实际加速: 2-3$\times$（取决于 draft 质量和接受率）</code></pre>
 
     <h3>Draft 模型的选择</h3>
     <ul>
@@ -274,7 +274,7 @@ x_quantized = round(x / scale)
 
     <h3>问题：推理的 batch 是动态的</h3>
     <pre><code class="language-python"># 训练: 固定 batch, 固定长度
-# batch_size × sequence_length × hidden_dim
+# batc$h_{size}$ $\times$ sequenc$e_{length}$ $\times$ hidde$n_{dim}$
 
 # 推理: 请求动态到达，长度不一
 # 请求 1: 已生成 10 tokens
@@ -293,14 +293,14 @@ x_quantized = round(x / scale)
 # 2. 检查是否有请求完成 → 移除
 # 3. 对所有活跃请求做一步 decode
 
-# 效果: 吞吐量 10-20× 提升</code></pre>
+# 效果: 吞吐量 10-20$\times$ 提升</code></pre>
 
     <h3>Selective Batching</h3>
     <pre><code class="language-python"># 问题: 不同请求长度不同，不能组成规则 tensor
 
 # 解决方案:
 # - Attention: 每个序列单独处理（或 padding）
-# - 非 attention: 拼接所有序列 [total_tokens, hidden_dim]
+# - 非 attention: 拼接所有序列 [tota$l_{tokens}$, hidde$n_{dim}$]
 
 # 这样非 attention 部分仍然高效</code></pre>
 
@@ -311,10 +311,10 @@ x_quantized = round(x / scale)
 
     <h3>问题：KV cache 内存碎片</h3>
     <pre><code class="language-python"># 朴素 KV cache 分配:
-# 每个请求预留 max_seq_len 的空间
+# 每个请求预留 ma$x_{seq}$_len 的空间
 
 # 问题 1: 内部碎片
-# 大多数请求远不到 max_seq_len
+# 大多数请求远不到 ma$x_{seq}$_len
 # 预留的空间浪费
 
 # 问题 2: 外部碎片
@@ -348,7 +348,7 @@ x_quantized = round(x / scale)
 
     <h3>State Space Models</h3>
     <pre><code class="language-python"># Mamba, Jamba, etc.
-# 用 $\\(O(\1)\\) 状态替代 $\\(O(\1)\\) KV cache
+# 用 $\\($O(\1)$\\) 状态替代 $\\($O(\1)$\\) KV cache
 # 推理时不需要存储整个 KV cache
 
 # 但: 不擅长 associative recall
@@ -369,10 +369,10 @@ x_quantized = round(x / scale)
     <h3>推理优化的四个方向</h3>
     <table>
       <tr><th>方向</th><th>技术</th><th>效果</th></tr>
-      <tr><td>减少 KV cache</td><td>GQA, MLA, CLA, local</td><td>2-32× 内存节省</td></tr>
-      <tr><td>减少权重量化</td><td>int8, int4, AWQ</td><td>2-8× 内存/速度</td></tr>
-      <tr><td>投机解码</td><td>draft model</td><td>2-3× 加速</td></tr>
-      <tr><td>系统优化</td><td>continuous batching, paged attention</td><td>10-20× 吞吐</td></tr>
+      <tr><td>减少 KV cache</td><td>GQA, MLA, CLA, local</td><td>2-32$\times$ 内存节省</td></tr>
+      <tr><td>减少权重量化</td><td>int8, int4, AWQ</td><td>2-8$\times$ 内存/速度</td></tr>
+      <tr><td>投机解码</td><td>draft model</td><td>2-3$\times$ 加速</td></tr>
+      <tr><td>系统优化</td><td>continuous batching, paged attention</td><td>10-20$\times$ 吞吐</td></tr>
     </table>
 
     <div class="card idea">
@@ -390,11 +390,11 @@ x_quantized = round(x / scale)
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！Generation 时 T=1，attention 的算术强度 ≈ 1，永远 memory-bound。" data-incorrect="Generation 时每次只处理 1 个 token，attention 的算术强度 ≈ 1，是 memory-bound 的。">
+    <div class="quiz" data-quiz="1" data-correct="正确！Generation 时 T=1，attention 的算术强度 $≈$ 1，永远 memory-bound。" data-incorrect="Generation 时每次只处理 1 个 token，attention 的算术强度 $≈$ 1，是 memory-bound 的。">
       <p><strong>问题 1：</strong>为什么推理的 generation 阶段是 memory-bound 的？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">因为计算量太大</button>
-        <button data-choice="b" aria-pressed="false">因为每次只处理 1 个 token，算术强度 ≈ 1</button>
+        <button data-choice="b" aria-pressed="false">因为每次只处理 1 个 token，算术强度 $≈$ 1</button>
         <button data-choice="c" aria-pressed="false">因为 GPU 太慢</button>
         <button data-choice="d" aria-pressed="false">因为 batch size 太大</button>
       </div>
@@ -460,7 +460,7 @@ x_quantized = round(x / scale)
       </article>
       <article>
         <h3>投机解码</h3>
-        <p>小模型猜、大模型验证，2-3× 加速</p>
+        <p>小模型猜、大模型验证，2-3$\times$ 加速</p>
       </article>
       <article>
         <h3>系统优化</h3>

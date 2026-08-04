@@ -38,16 +38,16 @@
     <h3>Benchmark 的正确姿势</h3>
     <pre><code class="language-python">import time
 
-def benchmark(func, num_warmups=1, num_trials=5):
+def benchmark(func, nu$m_{warmups}$=1, nu$m_{trials}$=5):
     """正确的 benchmark 方法。"""
     # 1. 预热: 让 JIT 编译、缓存预热
-    for _ in range(num_warmups):
+    for _ in range(nu$m_{warmups}$):
         func()
     torch.cuda.synchronize()  # 等待 GPU 完成！
 
     # 2. 正式计时
     times = []
-    for _ in range(num_trials):
+    for _ in range(nu$m_{trials}$):
         start = time.time()
         func()
         torch.cuda.synchronize()  # 关键！GPU 是异步的
@@ -65,16 +65,16 @@ def benchmark(func, num_warmups=1, num_trials=5):
 
 with torch.profiler.profile(
     activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-    with_stack=True,
+    wit$h_{stack}$=True,
 ) as prof:
     loss = model(x).mean()
     loss.backward()
 
 # 打印时间排名
-print(prof.key_averages().table(sort_by="cuda_time_total"))
+print(prof.ke$y_{averages}$().table(sor$t_{by}$="cud$a_{time}$_total"))
 
 # 导出 flame graph（可视化调用栈）
-prof.export_stacks("stacks.txt", "self_cuda_time_total")</code></pre>
+prof.expor$t_{stacks}$("stacks.txt", "sel$f_{cuda}$_tim$e_{total}$")</code></pre>
 
     <h3>Benchmarking 能回答什么？</h3>
     <ul>
@@ -116,15 +116,15 @@ output = gelu(tmp)   # 读 tmp from HBM; 写 output to HBM
 
     <h3>Benchmark 对比</h3>
     <pre><code class="language-python"># GeLU 的 benchmark 结果（dim=16384, bf16）:
-# manual_gelu (不 fused):  ~2.5 ms  ← 多次 HBM 读写
-# pytorch_gelu (fused):    ~0.8 ms  ← 一次 HBM 读写
+# manua$l_{gelu}$ (不 fused):  ~2.5 ms  ← 多次 HBM 读写
+# pytorc$h_{gelu}$ (fused):    ~0.8 ms  ← 一次 HBM 读写
 
-# Fused 版本快 3×！</code></pre>
+# Fused 版本快 3$\times$！</code></pre>
 
     <h3>PyTorch 自动 fusion</h3>
     <pre><code class="language-python"># torch.compile 可以自动融合
 @torch.compile
-def fused_operation(x, w):
+def fuse$d_{operation}$(x, w):
     return gelu(x @ w)  # 自动融合 matmul + gelu
 
 # 但手动写 kernel 仍然有价值:
@@ -143,48 +143,48 @@ def fused_operation(x, w):
 # Thread: 基本执行单位
 
 # 启动 kernel
-kernel_name&lt;&lt;&lt;num_blocks, block_size&gt;&gt;&gt;(args)
+kerne$l_{name}$&lt;&lt;&lt;nu$m_{blocks}$, bloc$k_{size}$&gt;&gt;&gt;(args)
 
-# 例如: 1024 个 thread, block_size=256
-# → num_blocks = 4
+# 例如: 1024 个 thread, bloc$k_{size}$=256
+# → nu$m_{blocks}$ = 4
 # → 4 个 block, 每个 256 个 thread</code></pre>
 
     <h3>第一个 CUDA Kernel：GeLU</h3>
     <pre><code class="language-python">// gelu.cu
-#include &lt;cuda_fp16.h&gt;
+#include &lt;cud$a_{fp16}$.h&gt;
 
-__global__ void gelu_kernel(
+__global__ void gel$u_{kernel}$(
     const half* __restrict__ x,
     half* __restrict__ y,
-    int num_elements
+    int nu$m_{elements}$
 ) {
     // 每个 thread 处理一个元素
     int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (i &lt; num_elements) {
+    if (i &lt; nu$m_{elements}$) {
         float xi = __half2float(x[i]);
         // tanh approximation of GELU
         float a = 0.79788456f * (xi + 0.044715f * xi * xi * xi);
-        float exp_2a = expf(2.0f * a);
-        float tanh_a = (exp_2a - 1.0f) / (exp_2a + 1.0f);
-        float result = 0.5f * xi * (1.0f + tanh_a);
+        float ex$p_{2a}$ = expf(2.0f * a);
+        float tan$h_{a}$ = (ex$p_{2a}$ - 1.0f) / (ex$p_{2a}$ + 1.0f);
+        float result = 0.5f * xi * (1.0f + tan$h_{a}$);
         y[i] = __float2half(result);
     }
 }</code></pre>
 
     <h3>在 Python 中加载</h3>
-    <pre><code class="language-python">from torch.utils.cpp_extension import load_inline
+    <pre><code class="language-python">from torch.utils.cp$p_{extension}$ import loa$d_{inline}$
 
-cuda_source = open("gelu.cu").read()
-cpp_source = "torch::Tensor gelu(torch::Tensor x);"
+cud$a_{source}$ = open("gelu.cu").read()
+cp$p_{source}$ = "torch::Tensor gelu(torch::Tensor x);"
 
-module = load_inline(
-    cuda_sources=[cuda_source],
-    cpp_sources=[cpp_source],
+module = loa$d_{inline}$(
+    cud$a_{sources}$=[cud$a_{source}$],
+    cp$p_{sources}$=[cp$p_{source}$],
     functions=["gelu"],
-    extra_cflags=["-O2"],
-    name="inline_gelu",
-    build_directory="var/cuda_gelu",
+    extr$a_{cflags}$=["-O2"],
+    name="inlin$e_{gelu}$",
+    buil$d_{directory}$="var/cud$a_{gelu}$",
 )
 
 # 使用
@@ -215,21 +215,21 @@ y = module.gelu(x)</code></pre>
 import triton.language as tl
 
 @triton.jit
-def gelu_kernel(
-    x_ptr, y_ptr,
-    num_elements,
-    BLOCK_SIZE: tl.constexpr,
+def gel$u_{kernel}$(
+    $x_{ptr}$, $y_{ptr}$,
+    nu$m_{elements}$,
+    BLOC$K_{SIZE}$: tl.constexpr,
 ):
-    # 每个 program (block) 处理 BLOCK_SIZE 个元素
-    pid = tl.program_id(0)
-    block_start = pid * BLOCK_SIZE
+    # 每个 program (block) 处理 BLOC$K_{SIZE}$ 个元素
+    pid = tl.progra$m_{id}$(0)
+    bloc$k_{start}$ = pid * BLOC$K_{SIZE}$
 
     # 这个 block 处理的元素索引
-    offsets = block_start + tl.arange(0, BLOCK_SIZE)
-    mask = offsets &lt; num_elements  # 边界保护
+    offsets = bloc$k_{start}$ + tl.arange(0, BLOC$K_{SIZE}$)
+    mask = offsets &lt; nu$m_{elements}$  # 边界保护
 
     # 读取
-    x = tl.load(x_ptr + offsets, mask=mask)
+    x = tl.load($x_{ptr}$ + offsets, mask=mask)
 
     # 计算 (和标准 GeLU 一样)
     a = 0.79788456 * (x + 0.044715 * x * x * x)
@@ -238,14 +238,14 @@ def gelu_kernel(
     y = 0.5 * x * (1 + tanh)
 
     # 写回
-    tl.store(y_ptr + offsets, y, mask=mask)
+    tl.store($y_{ptr}$ + offsets, y, mask=mask)
 
-def triton_gelu(x):
-    y = torch.empty_like(x)
-    num_elements = x.numel()
-    block_size = 1024
-    num_blocks = triton.cdiv(num_elements, block_size)
-    gelu_kernel[(num_blocks,)](x, y, num_elements, BLOCK_SIZE=block_size)
+def trito$n_{gelu}$(x):
+    y = torch.empt$y_{like}$(x)
+    nu$m_{elements}$ = x.numel()
+    bloc$k_{size}$ = 1024
+    nu$m_{blocks}$ = triton.cdiv(nu$m_{elements}$, bloc$k_{size}$)
+    gel$u_{kernel}$[(nu$m_{blocks}$,)](x, y, nu$m_{elements}$, BLOC$K_{SIZE}$=bloc$k_{size}$)
     return y</code></pre>
 
     <h3>Triton 的优势</h3>
@@ -263,58 +263,58 @@ def triton_gelu(x):
 
     <h3>Naive Softmax 的问题</h3>
     <pre><code class="language-python"># Naive 实现: 5 次遍历数据
-def manual_softmax(x):
-    x_max = x.max(dim=1)[0]      # 遍历 1: 求 max
-    x = x - x_max[:, None]        # 遍历 2: 减 max
+def manua$l_{softmax}$(x):
+    $x_{max}$ = x.max(dim=1)[0]      # 遍历 1: 求 max
+    x = x - $x_{max}$[:, None]        # 遍历 2: 减 max
     numerator = torch.exp(x)      # 遍历 3: exp
     denominator = numerator.sum(dim=1)  # 遍历 4: sum
     y = numerator / denominator[:, None]  # 遍历 5: 除法
     return y
 
 # 5MN 次读取 + 3MN 次写入
-# 理论上只需要 MN 读 + MN 写（4× 差距！）</code></pre>
+# 理论上只需要 MN 读 + MN 写（4$\times$ 差距！）</code></pre>
 
     <h3>Fused Softmax Kernel</h3>
     <pre><code class="language-python">@triton.jit
-def softmax_kernel(
-    x_ptr, y_ptr,
-    x_row_stride, y_row_stride,
-    num_cols,
-    BLOCK_SIZE: tl.constexpr,
+def softma$x_{kernel}$(
+    $x_{ptr}$, $y_{ptr}$,
+    $x_{row}$_stride, $y_{row}$_stride,
+    nu$m_{cols}$,
+    BLOC$K_{SIZE}$: tl.constexpr,
 ):
     # 每个 program 处理一行
-    row_idx = tl.program_id(0)
-    col_offsets = tl.arange(0, BLOCK_SIZE)
+    ro$w_{idx}$ = tl.progra$m_{id}$(0)
+    co$l_{offsets}$ = tl.arange(0, BLOC$K_{SIZE}$)
 
     # 读取一行（从 HBM 到 SRAM）
-    x_start_ptr = x_ptr + row_idx * x_row_stride
-    x_ptrs = x_start_ptr + col_offsets
-    x_row = tl.load(x_ptrs, mask=col_offsets &lt; num_cols, other=float("-inf"))
+    $x_{start}$_ptr = $x_{ptr}$ + ro$w_{idx}$ * $x_{row}$_stride
+    $x_{ptrs}$ = $x_{start}$_ptr + co$l_{offsets}$
+    $x_{row}$ = tl.load($x_{ptrs}$, mask=co$l_{offsets}$ &lt; nu$m_{cols}$, other=float("-inf"))
 
     # 在 SRAM 中完成所有计算
-    x_row = x_row - tl.max(x_row, axis=0)        # 减 max
-    numerator = tl.exp(x_row)                     # exp
+    $x_{row}$ = $x_{row}$ - tl.max($x_{row}$, axis=0)        # 减 max
+    numerator = tl.exp($x_{row}$)                     # exp
     denominator = tl.sum(numerator, axis=0)       # sum
-    y_row = numerator / denominator                # 除法
+    $y_{row}$ = numerator / denominator                # 除法
 
     # 写回 HBM
-    y_start_ptr = y_ptr + row_idx * y_row_stride
-    y_ptrs = y_start_ptr + col_offsets
-    tl.store(y_ptrs, y_row, mask=col_offsets &lt; num_cols)</code></pre>
+    $y_{start}$_ptr = $y_{ptr}$ + ro$w_{idx}$ * $y_{row}$_stride
+    $y_{ptrs}$ = $y_{start}$_ptr + co$l_{offsets}$
+    tl.store($y_{ptrs}$, $y_{row}$, mask=co$l_{offsets}$ &lt; nu$m_{cols}$)</code></pre>
 
     <div class="card idea">
       <p><strong>关键：</strong>整个 softmax 在 SRAM 中完成，HBM 只读一次、写一次。</p>
       <p>Naive: 5MN reads + 3MN writes</p>
       <p>Fused: MN reads + MN writes</p>
-      <p><strong>理论加速：4×</strong></p>
+      <p><strong>理论加速：4$\times$</strong></p>
     </div>
 
     <h3>性能对比</h3>
     <pre><code class="language-python"># dim=16384, bf16, H100
-# manual_softmax:  ~2.5 ms
-# pytorch_softmax: ~0.7 ms  ← PyTorch 已实现 fused
-# triton_softmax:  ~0.7 ms  ← 接近 PyTorch
-# compiled_softmax: ~0.7 ms  ← torch.compile 也能 fused</code></pre>
+# manua$l_{softmax}$:  ~2.5 ms
+# pytorc$h_{softmax}$: ~0.7 ms  ← PyTorch 已实现 fused
+# trito$n_{softmax}$:  ~0.7 ms  ← 接近 PyTorch
+# compile$d_{softmax}$: ~0.7 ms  ← torch.compile 也能 fused</code></pre>
 
     <hr class="rule">
 
@@ -322,21 +322,21 @@ def softmax_kernel(
     <h2 id="tiling">Tiling（分块）与 Shared Memory</h2>
 
     <h3>为什么需要 Tiling？</h3>
-    <p>矩阵乘法 <code>C = A × B</code>，朴素实现每个元素独立计算：</p>
+    <p>矩阵乘法 <code>C = A $\times$ B</code>，朴素实现每个元素独立计算：</p>
     <pre><code class="language-python"># 朴素 matmul: 每个 C[i,j] 独立读 A 的一行和 B 的一列
 # C 有 MN 个元素，每个需要读 K 个元素
-# 总读取: 2 × M × N × K 次 HBM 访问
+# 总读取: 2 $\times$ M $\times$ N $\times$ K 次 HBM 访问
 
 # 问题: A 的同一行被读了 N 次（每列一次）
 #       B 的同一列被读了 M 次（每行一次）</code></pre>
 
     <h3>Tiled Matmul</h3>
     <pre><code class="language-python"># 关键思想: 分块加载到 shared memory
-# 每个 block 计算 C 的一个 TILE_SIZE × TILE_SIZE 子矩阵
+# 每个 block 计算 C 的一个 TIL$E_{SIZE}$ $\times$ TIL$E_{SIZE}$ 子矩阵
 
 # 步骤:
-# 1. 把 A 的一个 TILE × TILE 块加载到 shared memory
-# 2. 把 B 的一个 TILE × TILE 块加载到 shared memory
+# 1. 把 A 的一个 TILE $\times$ TILE 块加载到 shared memory
+# 2. 把 B 的一个 TILE $\times$ TILE 块加载到 shared memory
 # 3. 用这两个 shared memory 块计算部分结果
 # 4. 重复直到覆盖整个 K 维度
 
@@ -345,7 +345,7 @@ def softmax_kernel(
     <h3>Triton 的自动 Tiling</h3>
     <pre><code class="language-python"># Triton 的 matmul kernel 自动处理 tiling:
 @triton.jit
-def matmul_kernel(A, B, C, M, N, K, BLOCK_M: tl.constexpr, ...):
+def matmu$l_{kernel}$(A, B, C, M, N, K, BLOC$K_{M}$: tl.constexpr, ...):
     # Triton 自动:
     # - 选择 tile 大小
     # - 管理 shared memory
@@ -393,11 +393,11 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
 
     <table>
       <tr><th>方式</th><th>示例</th><th>性能</th><th>易用性</th></tr>
-      <tr><td>手写 Python</td><td><code>manual_gelu</code></td><td>最慢</td><td>最易</td></tr>
+      <tr><td>手写 Python</td><td><code>manua$l_{gelu}$</code></td><td>最慢</td><td>最易</td></tr>
       <tr><td>PyTorch 原生</td><td><code>F.gelu</code></td><td>中-高</td><td>最易</td></tr>
       <tr><td>torch.compile</td><td><code>@torch.compile</code></td><td>高</td><td>易</td></tr>
-      <tr><td>手写 CUDA</td><td><code>cuda_gelu</code></td><td>高</td><td>难</td></tr>
-      <tr><td>手写 Triton</td><td><code>triton_gelu</code></td><td>高</td><td>中</td></tr>
+      <tr><td>手写 CUDA</td><td><code>cud$a_{gelu}$</code></td><td>高</td><td>难</td></tr>
+      <tr><td>手写 Triton</td><td><code>trito$n_{gelu}$</code></td><td>高</td><td>中</td></tr>
     </table>
 
     <div class="card idea">

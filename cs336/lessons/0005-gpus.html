@@ -89,7 +89,7 @@
     <pre><code class="language-python">H100 (SXM5) 关键数字:
   计算峰值 (bf16): 989 TFLOP/s
   内存带宽:       3.35 TB/s
-  Ridge point:    989e12 / 3.35e12 ≈ 295 FLOP/byte
+  Ridge point:    989e12 / 3.35e12 $≈$ 295 FLOP/byte
 
   这意味着: 每从 HBM 读 1 字节数据，需要做 295 次浮点运算
   才能"掩盖"内存延迟，达到 compute-bound。</code></pre>
@@ -126,9 +126,9 @@ Grid
       <p><strong>分支发散（Branch Divergence）：</strong>如果 warp 中的一些线程走 if 分支，一些走 else 分支，GPU 会串行执行两个分支。这会导致性能下降。</p>
       <pre><code class="language-python"># 坏: 分支发散
 if threadIdx.x % 2 == 0:
-    do_A()  # 16 个线程执行
+    d$o_{A}$()  # 16 个线程执行
 else:
-    do_B()  # 16 个线程执行
+    d$o_{B}$()  # 16 个线程执行
 # 实际执行时间 = time(A) + time(B)
 
 # 好: 无分支
@@ -167,7 +167,7 @@ else:
     │  ridge point</code></pre>
 
     <ul>
-      <li><strong>低算术强度</strong>：在斜线上 → memory-bound，性能 = 带宽 × 算术强度</li>
+      <li><strong>低算术强度</strong>：在斜线上 → memory-bound，性能 = 带宽 $\times$ 算术强度</li>
       <li><strong>高算术强度</strong>：在平顶下 → compute-bound，性能 = 计算峰值</li>
     </ul>
 
@@ -206,8 +206,8 @@ else:
     <h3>什么是 Tensor Core？</h3>
     <p>Tensor Core 是 GPU 上的专用硬件单元，专门做矩阵乘法：</p>
     <pre><code class="language-python"># 一个 Tensor Core 每个时钟周期执行:
-# D = A × B + C
-# 其中 A, B, C, D 是小矩阵 (如 16×16)
+# D = A $\times$ B + C
+# 其中 A, B, C, D 是小矩阵 (如 1$6 \times 1$6)
 
 # H100 第四代 Tensor Core:
 # - 支持 FP8, FP16, BF16, TF32, FP64
@@ -228,7 +228,7 @@ else:
 # 但用 Tensor Core 加速！
 
 # 使用方式: PyTorch 默认开启
-# torch.backends.cuda.matmul.allow_tf32 = True</code></pre>
+# torch.backends.cuda.matmul.allo$w_{tf32}$ = True</code></pre>
 
     <hr class="rule">
 
@@ -295,7 +295,7 @@ else:
 #   1024 卡: 5.07e17 FLOP/s
 #   时间: ~69 天
 
-# H100 vs A100: ~3.3× 加速</code></pre>
+# H100 vs A100: ~3.3$\times$ 加速</code></pre>
 
     <hr class="rule">
 
@@ -335,7 +335,7 @@ else:
 
     <h3>CUDA C++</h3>
     <pre><code class="language-python">// 最底层，最灵活，最复杂
-__global__ void vector_add(float *a, float *b, float *c, int n) {
+__global__ void vecto$r_{add}$(float *a, float *b, float *c, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {
         c[i] = a[i] + b[i];
@@ -343,23 +343,23 @@ __global__ void vector_add(float *a, float *b, float *c, int n) {
 }
 
 // 启动 kernel
-vector_add&lt;&lt;&lt;num_blocks, block_size&gt;&gt;&gt;(d_a, d_b, d_b, n);</code></pre>
+vecto$r_{add}$&lt;&lt;&lt;nu$m_{blocks}$, bloc$k_{size}$&gt;&gt;&gt;($d_{a}$, $d_{b}$, $d_{b}$, n);</code></pre>
 
     <h3>Triton</h3>
     <pre><code class="language-python"># Python 语法，自动优化
 @triton.jit
-def vector_add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK: tl.constexpr):
-    pid = tl.program_id(0)
+def vecto$r_{add}$_kernel($x_{ptr}$, $y_{ptr}$, ou$t_{ptr}$, n, BLOCK: tl.constexpr):
+    pid = tl.progra$m_{id}$(0)
     offsets = pid * BLOCK + tl.arange(0, BLOCK)
     mask = offsets < n
-    x = tl.load(x_ptr + offsets, mask=mask)
-    y = tl.load(y_ptr + offsets, mask=mask)
-    tl.store(out_ptr + offsets, x + y, mask=mask)</code></pre>
+    x = tl.load($x_{ptr}$ + offsets, mask=mask)
+    y = tl.load($y_{ptr}$ + offsets, mask=mask)
+    tl.store(ou$t_{ptr}$ + offsets, x + y, mask=mask)</code></pre>
 
     <h3>torch.compile</h3>
     <pre><code class="language-python"># 不写 kernel，让编译器自动优化
 @torch.compile
-def fused_operation(x, w):
+def fuse$d_{operation}$(x, w):
     return gelu(x @ w)  # 自动融合 matmul + gelu</code></pre>
 
     <table>
@@ -375,7 +375,7 @@ def fused_operation(x, w):
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！Ridge point = 989/3.35 ≈ 295。算术强度 > 295 时 compute-bound。" data-incorrect="Ridge point = 算力/带宽 = 989 TFLOP/s / 3.35 TB/s ≈ 295。">
+    <div class="quiz" data-quiz="1" data-correct="正确！Ridge point = 989/3.35 $≈$ 295。算术强度 > 295 时 compute-bound。" data-incorrect="Ridge point = 算力/带宽 = 989 TFLOP/s / 3.35 TB/s $≈$ 295。">
       <p><strong>问题 1：</strong>H100 的 ridge point 大约是多少？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">~10</button>
@@ -441,7 +441,7 @@ def fused_operation(x, w):
       </article>
       <article>
         <h3>Ridge Point</h3>
-        <p>H100 ≈ 295，决定 compute vs memory bound</p>
+        <p>H100 $≈$ 295，决定 compute vs memory bound</p>
       </article>
       <article>
         <h3>Tensor Cores</h3>
@@ -457,7 +457,7 @@ def fused_operation(x, w):
 
     <h2 id="reading">延伸阅读</h2>
     <ul>
-      <li>Horace He: <a href="https://horace.io/brrr_intro.html">Making Deep Learning Go Brrr</a> — 仓库/工厂类比</li>
+      <li>Horace He: <a href="https://horace.io/brr$r_{intro}$.html">Making Deep Learning Go Brrr</a> — 仓库/工厂类比</li>
       <li>NVIDIA <a href="https://resources.nvidia.com/en-us-tensor-core/nvidia-tensor-core-gpu-datasheet">H100 Datasheet</a></li>
       <li><a href="https://docs.nvidia.com/cuda/parallel-thread-execution/">PTX ISA</a> — GPU 汇编语言</li>
       <li>CUDA MODE: <a href="https://www.youtube.com/watch?v=lTmYrKwjSOU">Compute and Memory Basics</a></li>

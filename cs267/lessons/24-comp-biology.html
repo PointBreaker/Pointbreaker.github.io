@@ -118,7 +118,7 @@
     </div>
 
     <h4>Pass 2：All-to-All 通信与精确计数</h4>
-    <p>每个处理器将其 k-mers 哈希到"所有者"处理器，通过 all-to-all 通信分发。All-to-all 是通信密集型操作——每个处理器需要向其他所有处理器发送数据，总通信量为 $\\(O(\1)\\)。接收方仅在 Bloom Filter 显示该 k-mer 曾出现过时才将其存入本地集合进行精确计数。频率为 1 的 k-mers 被视为错误并安全剔除（它们要么来自测序错误，要么无法与错误区分）。</p>
+    <p>每个处理器将其 k-mers 哈希到"所有者"处理器，通过 all-to-all 通信分发。All-to-all 是通信密集型操作——每个处理器需要向其他所有处理器发送数据，总通信量为 $\\($O(\1)$\\)。接收方仅在 Bloom Filter 显示该 k-mer 曾出现过时才将其存入本地集合进行精确计数。频率为 1 的 k-mers 被视为错误并安全剔除（它们要么来自测序错误，要么无法与错误区分）。</p>
 
     <h4>Pass 3：扩展分析</h4>
     <p>对每个 k-mer 的 4 种可能碱基扩展（A/C/G/T）进行类似 pass 2 的处理。每个 k-mer 不仅自己发送给所有者，还将其"扩展对"（k-mer + 候选扩展碱基）一起发送。接收方记录每个 k-mer 各扩展的出现次数，使用阈值筛选高质量扩展。输出格式为 "ACCCA → CT" 这样的 k-mer 到扩展列表的映射，为后续构建 De Bruijn 图提供边信息。</p>
@@ -130,7 +130,7 @@
 
     <h3>Bloom Filter</h3>
     <p>Bloom Filter 是一种紧凑的概率数据结构，用于集合成员查询。它由一个 m 位的位数组和 h 个独立的哈希函数组成：插入元素时，计算 h 个哈希值并将对应位设为 1；查询元素时，若 h 个哈希位置全为 1 则回答"可能在集合中"（可能有假阳性），否则回答"肯定不在"（无假阴性）。</p>
-    <p>假阳性率 p 与位数组大小 m、哈希函数数量 h、插入元素数量 n 的关系：当 h = (m/n) ln 2 时，p ≈ (1 - e^{-hn/m})^h。实践中选择 m/n = 10-15、h = 7-8 可将假阳性率控制在 1-5%。对 10⁹ 个 k-mer，仅需约 1.2 GB 内存（m/n = 10）即可达到 ~2% 假阳性率——这比存储完整 k-mer 集合（数十 GB）节省超过 30 倍空间。</p>
+    <p>假阳性率 p 与位数组大小 m、哈希函数数量 h、插入元素数量 n 的关系：当 h = (m/n) ln 2 时，p $≈$ (1 - e^{-hn/m})^h。实践中选择 m/n = 10-15、h = 7-8 可将假阳性率控制在 1-5%。对 10⁹ 个 k-mer，仅需约 1.2 GB 内存（m/n = 10）即可达到 ~2% 假阳性率——这比存储完整 k-mer 集合（数十 GB）节省超过 30 倍空间。</p>
     <ul class="checklist">
       <li><strong>"见过这个 k-mer 吗？"</strong> — 回答"肯定没有"或"可能有"</li>
       <li><strong>无假阴性（No false negatives）</strong>：若元素在集合中，必然回答"是"</li>
@@ -240,7 +240,7 @@
 
     <div class="card idea">
       <h3>Seed Index 数据结构</h3>
-      <p>Seed index 是一个从 k-mer 序列到 (target_id, position) 列表的哈希映射。构建时遍历所有 contigs 的所有 k-mer，查询时直接查找 read 的 k-mer 是否存在于索引中。由于使用了精确 k-mer 匹配作为种子，meraligner 能高效过滤大量不相关的比对候选。</p>
+      <p>Seed index 是一个从 k-mer 序列到 (targe$t_{id}$, position) 列表的哈希映射。构建时遍历所有 contigs 的所有 k-mer，查询时直接查找 read 的 k-mer 是否存在于索引中。由于使用了精确 k-mer 匹配作为种子，meraligner 能高效过滤大量不相关的比对候选。</p>
     </div>
 
     <h2>6. 长读段组装</h2>
@@ -262,10 +262,10 @@
     <h3>稀疏矩阵方法</h3>
     <p>diBELLA.2D 将重叠检测建模为<strong>稀疏矩阵乘法（SpGEMM）</strong>，这是一个优雅的计算抽象：将生物问题转化为线性代数问题，直接利用成熟的并行线性代数库和通信优化算法。这种"抽象层"的方法避免了为每个生物问题重新发明并行算法。</p>
     <ul class="checklist">
-      <li>构建 reads × k-mers 的稀疏矩阵 A（读段 i 包含 k-mer j 则 A(i,j)=1）</li>
-      <li>计算 C = A × A^T，得到 reads × reads 的重叠矩阵（C(i,j) 表示读段 i 和 j 共享的 k-mer 数）</li>
-      <li>X-drop 比对：对 C 中非零位置的读段对执行精确比对，M = filter(C, alignment_score)</li>
-      <li>传递性归约（Transitive Reduction）：M_{i+1} = Prune(M_i M_i ⊙ M_i)，将 overlap graph 转换为 string graph</li>
+      <li>构建 reads $\times$ k-mers 的稀疏矩阵 A（读段 i 包含 k-mer j 则 A(i,j)=1）</li>
+      <li>计算 C = A $\times$ A^T，得到 reads $\times$ reads 的重叠矩阵（C(i,j) 表示读段 i 和 j 共享的 k-mer 数）</li>
+      <li>X-drop 比对：对 C 中非零位置的读段对执行精确比对，M = filter(C, alignmen$t_{score}$)</li>
+      <li>传递性归约（Transitive Reduction）：M_{i+1} = Prune($M_{i}$ $M_{i}$ ⊙ $M_{i}$)，将 overlap graph 转换为 string graph</li>
     </ul>
 
     <table>
@@ -289,8 +289,8 @@
     <h3>PASTIS：多对多蛋白质相似性搜索</h3>
     <p>PASTIS（Parallel protein Alignment Search Technology for Iterative Searches）使用稀疏矩阵方法进行大规模蛋白质相似性搜索。与 BELLA 不同的是，PASTIS 需要捕获更弱的信号（~30% ANI，平均核苷酸一致性），因此引入了<strong>替换 k-mer</strong> 的概念——允许一个或两个碱基替换的 k-mer 可能比精确匹配更有价值，因为它们能捕捉进化距离更远的相似性：</p>
     <ul class="checklist">
-      <li>精确 k-mer：C = A × A^T（A 是 proteins × k-mers 矩阵）</li>
-      <li>含替换的 k-mer：C = A × S × A^T（S 是替换矩阵，存储替换代价）</li>
+      <li>精确 k-mer：C = A $\times$ A^T（A 是 proteins $\times$ k-mers 矩阵）</li>
+      <li>含替换的 k-mer：C = A $\times$ S $\times$ A^T（S 是替换矩阵，存储替换代价）</li>
     </ul>
     <p>新引入的半环（semiring）将乘法和加法操作重新定义，以正确组合替换代价，确保最终得分反映真实的进化相似性。</p>
 
@@ -309,7 +309,7 @@
     </div>
 
     <h3>HipMCL 的并行实现</h3>
-    <p>HipMCL（High-performance MCL）使用 SUMMA（Scalable Universal Matrix Multiplication Algorithm）的稀疏变体进行分布式 SpGEMM。SUMMA 算法在 p×p 的处理器网格上执行：每个阶段将矩阵 A 的一列块和矩阵 B 的一行块广播到对应行/列的处理器，各处理器计算其子矩阵乘积。批次大小 b 决定了并行度和内存使用的权衡：b=1 等价于稀疏矩阵-向量乘法（传统 MCL），b=N 等价于完整 SpGEMM。HipMCL 动态选择 b 以适配可用内存。关键优化：</p>
+    <p>HipMCL（High-performance MCL）使用 SUMMA（Scalable Universal Matrix Multiplication Algorithm）的稀疏变体进行分布式 SpGEMM。SUMMA 算法在 p$\times$p 的处理器网格上执行：每个阶段将矩阵 A 的一列块和矩阵 B 的一行块广播到对应行/列的处理器，各处理器计算其子矩阵乘积。批次大小 b 决定了并行度和内存使用的权衡：b=1 等价于稀疏矩阵-向量乘法（传统 MCL），b=N 等价于完整 SpGEMM。HipMCL 动态选择 b 以适配可用内存。关键优化：</p>
     <ul class="checklist">
       <li><strong>动态批次大小 b</strong>：根据可用内存动态选择每次处理的列数</li>
       <li><strong>随机内存估计</strong>：避免符号分析阶段</li>
@@ -341,7 +341,7 @@
   M(i, j-1)   + gap,
   M(i-1, j-1) + score(sᵢ, tⱼ)
 }</code></pre>
-    <p>可以从底向上按行、按列或按对角线填充 DP 表，只要满足数据依赖关系。时间复杂度 $\\(O(\1)\\)，空间复杂度 $\\(O(\1)\\)。</p>
+    <p>可以从底向上按行、按列或按对角线填充 DP 表，只要满足数据依赖关系。时间复杂度 $\\($O(\1)$\\)，空间复杂度 $\\($O(\1)$\\)。</p>
 
     <h3>Smith-Waterman 局部比对</h3>
     <p>Needleman-Wunsch 强制从序列头到尾进行全局比对，但生物学中经常只需要找到局部相似区域（如蛋白质结构域与完整序列的匹配、短保守 motif 的识别、功能位点定位、外显子边界确定、调控元件识别、序列数据库搜索、引物设计验证）。Smith-Waterman 算法在 Needleman-Wunsch 基础上增加"不归债"机制——当 DP 值为负时重置为 0，表示比对可以从当前位置重新开始。这一机制使得算法能够自动忽略两端的低相似区域，仅保留显著相似的局部区段：</p>
@@ -371,12 +371,12 @@
     <h3>时间复杂度分析</h3>
     <p>Hirschberg 算法的总时间复杂度推导：</p>
     <pre><code>T(n) = nm + (n/2)m + (n/4)m + ... + 2m = Θ(mn)
-因为 n ≤ n + n/2 + n/4 + ... + 2 ≤ 2n</code></pre>
-    <p>这是一个等比数列，公比为 1/2，总和不超过 2nm。因此，Hirschberg 算法在保持 $\\(O(\1)\\) 时间复杂度的同时将空间复杂度从 $\\(O(\1)\\) 降低到 $\\(O(\1)\\)——这是算法设计中"时间换空间"策略的经典范例。对于两条长度均为 10000 的序列，空间从 100 MB 降至 20 KB，节省超过 5000 倍。</p>
+因为 n $≤$ n + n/2 + n/4 + ... + 2 $≤$ 2n</code></pre>
+    <p>这是一个等比数列，公比为 1/2，总和不超过 2nm。因此，Hirschberg 算法在保持 $\\($O(\1)$\\) 时间复杂度的同时将空间复杂度从 $\\($O(\1)$\\) 降低到 $\\($O(\1)$\\)——这是算法设计中"时间换空间"策略的经典范例。对于两条长度均为 10000 的序列，空间从 100 MB 降至 20 KB，节省超过 5000 倍。</p>
 
     <h3>并行序列比对</h3>
     <p>细粒度并行可以沿 DP 表的反对角线进行——每条反对角线上的单元格仅依赖前两条反对角线上的单元格，因此同一条反对角线上的所有单元格可以并行计算。这种方法适合 GPU 等细粒度并行架构。</p>
-    <p>粗粒度并行可利用 Hirschberg 递归将子问题分配给不同处理器：每次分割产生的两个子问题可以独立求解。已知最优结果（Rajko & Aluru, 2004）：使用 p 个处理器可在 $\\(O(\1)\\) 时间和 $\\(O(\1)\\)/p) 空间内完成比对，达到线性加速比和线性空间缩减。这一结果在理论上是完美的——时间和空间都随处理器数线性下降。</p>
+    <p>粗粒度并行可利用 Hirschberg 递归将子问题分配给不同处理器：每次分割产生的两个子问题可以独立求解。已知最优结果（Rajko & Aluru, 2004）：使用 p 个处理器可在 $\\($O(\1)$\\) 时间和 $\\($O(\1)$\\)/p) 空间内完成比对，达到线性加速比和线性空间缩减。这一结果在理论上是完美的——时间和空间都随处理器数线性下降。</p>
 
     <h2>9. 后缀数组（Suffix Arrays）</h2>
     <p>后缀数组是字符串索引和压缩的哈希表替代方案，由 Udi Maninger 和 Gene Myers 在 1990 年提出。它在生物信息学中有广泛应用：基因组序列索引、重复序列检测、序列比对种子定位等。给定字符串 x（长度为 n），后缀数组 SA 是一个整数数组：</p>
@@ -399,22 +399,22 @@
  6: "sippi"
  3: "sissippi"
  2: "ssissippi"</code></pre>
-    <p>搜索示例：模式 P = "issip"。二分查找发现 SA[3..4] 范围匹配（"issippi" 和 "ississippi" 均以 "issip" 开头），说明 P 在位置 4 和 1 出现。这种 $\\(O(\1)\\) 的搜索复杂度使得后缀数组成为大规模基因组搜索的理想工具。</p>
+    <p>搜索示例：模式 P = "issip"。二分查找发现 SA[3..4] 范围匹配（"issippi" 和 "ississippi" 均以 "issip" 开头），说明 P 在位置 4 和 1 出现。这种 $\\($O(\1)$\\) 的搜索复杂度使得后缀数组成为大规模基因组搜索的理想工具。</p>
 
     <div class="card idea">
       <h3>后缀数组的核心动机</h3>
-      <p>每个子串都是某个后缀的前缀。因此，通过在后缀数组上二分查找，可以在 $\\(O(\1)\\) 时间内判断模式 P 是否出现在文本中，或 $\\(O(\1)\\)（配合 LCP 数组）。这比后缀树节省大量空间（后缀数组仅需 4n 字节，后缀树需要约 20n 字节），且缓存友好。</p>
+      <p>每个子串都是某个后缀的前缀。因此，通过在后缀数组上二分查找，可以在 $\\($O(\1)$\\) 时间内判断模式 P 是否出现在文本中，或 $\\($O(\1)$\\)（配合 LCP 数组）。这比后缀树节省大量空间（后缀数组仅需 4n 字节，后缀树需要约 20n 字节），且缓存友好。</p>
     </div>
 
     <h3>DC3/Skew 算法：线性时间构造</h3>
-    <p>Kärkkäinen 和 Sanders 在 2003 年提出的 DC3（Difference Cover modulo 3）算法，将后缀数组构造从 $\\(O(\1)\\) 朴素排序优化到 $\\(O(\1)\\)。"Skew"代表"sample by mod 3"的偏斜采样策略，后来被推广为更通用的 DC（Difference Cover）框架。该算法是字符串算法领域最重要的突破之一：</p>
+    <p>Kärkkäinen 和 Sanders 在 2003 年提出的 DC3（Difference Cover modulo 3）算法，将后缀数组构造从 $\\($O(\1)$\\) 朴素排序优化到 $\\($O(\1)$\\)。"Skew"代表"sample by mod 3"的偏斜采样策略，后来被推广为更通用的 DC（Difference Cover）框架。该算法是字符串算法领域最重要的突破之一：</p>
 
     <h4>Step 1：递归构造 SA₁₂</h4>
-    <p>选取所有 i mod 3 ≠ 0 的后缀（约 2n/3 个）。将它们的三元组（每个后缀的前三个字符）排序，分配字典序名称（lex-names）。将 mod 3 = 1 和 mod 3 = 2 的后缀名称拼接成新字符串 u，中间用分隔符 "#" 隔开。若所有名称唯一，则 SA(u) 直接给出 SA₁₂；否则递归构造 SA(u)（问题规模降为 2/3）。</p>
-    <p>为什么用 mod 3 而不是 mod 2？mod 3 使得递归规模降为 2/3（而非 1/2），保证递归深度为 $\\(O(\1)\\) 但每层工作量递减更快。关键性质：SA₁₂ 的排序信息足以在 $\\(O(\1)\\) 时间内比较任意两个 i mod 3 ≠ 0 的后缀。时间：T(n) = $\\(O(\1)\\) + T(2n/3) = $\\(O(\1)\\)。</p>
+    <p>选取所有 i mod 3 $≠$ 0 的后缀（约 2n/3 个）。将它们的三元组（每个后缀的前三个字符）排序，分配字典序名称（lex-names）。将 mod 3 = 1 和 mod 3 = 2 的后缀名称拼接成新字符串 u，中间用分隔符 "#" 隔开。若所有名称唯一，则 SA(u) 直接给出 SA₁₂；否则递归构造 SA(u)（问题规模降为 2/3）。</p>
+    <p>为什么用 mod 3 而不是 mod 2？mod 3 使得递归规模降为 2/3（而非 1/2），保证递归深度为 $\\($O(\1)$\\) 但每层工作量递减更快。关键性质：SA₁₂ 的排序信息足以在 $\\($O(\1)$\\) 时间内比较任意两个 i mod 3 $≠$ 0 的后缀。时间：T(n) = $\\($O(\1)$\\) + T(2n/3) = $\\($O(\1)$\\)。</p>
 
     <h4>Step 2：构造 SA₀</h4>
-    <p>对 i mod 3 = 0 的后缀，可将其写作 s[i] + s[i+1..]，其中 i+1 mod 3 ≠ 0（即在 SA₁₂ 中有定义）。按首字母排序，同首字母的后缀利用 SA₁₂ 中的顺序（通过逆映射 invSA₁₂）解决排序：若 s[i] = s[j] 且 i ≠ j，则比较 invSA₁₂[i+1] 与 invSA₁₂[j+1]。时间 $\\(O(\1)\\)。</p>
+    <p>对 i mod 3 = 0 的后缀，可将其写作 s[i] + s[i+1..]，其中 i+1 mod 3 $≠$ 0（即在 SA₁₂ 中有定义）。按首字母排序，同首字母的后缀利用 SA₁₂ 中的顺序（通过逆映射 invSA₁₂）解决排序：若 s[i] = s[j] 且 i $≠$ j，则比较 invSA₁₂[i+1] 与 invSA₁₂[j+1]。时间 $\\($O(\1)$\\)。</p>
 
     <h4>Step 3：合并 SA₁₂ 和 SA₀</h4>
     <p>合并两个已排序的后缀数组。根据待比较后缀的 i mod 3 值，使用不同的比较规则：</p>
@@ -422,9 +422,9 @@
       <li>i mod 3 = 1：比较 (s[i], rank(s[i+1..])) 与另一后缀，rank 从 SA₁₂ 查得</li>
       <li>i mod 3 = 2：比较 (s[i], s[i+1], rank(s[i+2..])) 与另一后缀</li>
     </ul>
-    <p>时间 $\\(O(\1)\\)。合并过程类似于归并排序的合并步骤，每个比较可在 $\\(O(\1)\\) 时间完成（rank 已知）。示例：比较 suffix[1] 与 suffix[4]，suffix[1] = i·s[2..]，suffix[4] = i·s[5..]，因为 s[2..] = "ss..." < s[5..] = "ss..."（通过 rank），所以 suffix[1] < suffix[4]。</p>
+    <p>时间 $\\($O(\1)$\\)。合并过程类似于归并排序的合并步骤，每个比较可在 $\\($O(\1)$\\) 时间完成（rank 已知）。示例：比较 suffix[1] 与 suffix[4]，suffix[1] = i·s[2..]，suffix[4] = i·s[5..]，因为 s[2..] = "ss..." < s[5..] = "ss..."（通过 rank），所以 suffix[1] < suffix[4]。</p>
 
-    <pre><code>T(n) = $\\(O(\1)\\) + T(2n/3) = $\\(O(\1)\\)  （线性时间！）</code></pre>
+    <pre><code>T(n) = $\\($O(\1)$\\) + T(2n/3) = $\\($O(\1)$\\)  （线性时间！）</code></pre>
 
     <h3>pDC3：并行 DC3 算法</h3>
     <p>Kulla 和 Sanders 提出的 pDC3 将 DC3 算法自然并行化，在 p 个处理器上实现：</p>
@@ -434,10 +434,10 @@
       <li>数据并行分割（Data Parallel Splitting）：按 mod 3 分组，各处理器独立处理其拥有的后缀</li>
       <li>All-to-All 通信（AlltoAllV）：在合并阶段交换后缀信息，每个处理器的发送量可能不同</li>
     </ul>
-    <p>并行化要点：Step 1 中的排序是全局操作，需要高效的并行排序算法（如并行样本排序，时间复杂度 $\\(O(\1)\\) log(n/p))）；Step 3 中的合并涉及不规则通信，使用 AlltoAllV（变长 All-to-All）按比较结果分发后缀。pDC3 的通信复杂度主要由排序和 AlltoAllV 决定，在分布式内存系统上这两者都是带宽密集型操作。实际实现中，pDC3 在数百万字符的基因组上展现出良好的强扩展性。</p>
+    <p>并行化要点：Step 1 中的排序是全局操作，需要高效的并行排序算法（如并行样本排序，时间复杂度 $\\($O(\1)$\\) log(n/p))）；Step 3 中的合并涉及不规则通信，使用 AlltoAllV（变长 All-to-All）按比较结果分发后缀。pDC3 的通信复杂度主要由排序和 AlltoAllV 决定，在分布式内存系统上这两者都是带宽密集型操作。实际实现中，pDC3 在数百万字符的基因组上展现出良好的强扩展性。</p>
 
-    <pre><code>T_pDC3 = T_parsort(n, p) + T_alltoall(n/p, p) + f(p) · log(n)
-其中 f(p) ∈ Ω(log p) 是实现相关的瓶颈项</code></pre>
+    <pre><code>$T_{pDC3}$ = $T_{parsort}$(n, p) + $T_{alltoall}$(n/p, p) + f(p) · log(n)
+其中 f(p) $∈$ $Ω$(log p) 是实现相关的瓶颈项</code></pre>
 
     <hr class="rule">
 
@@ -474,7 +474,7 @@
     </div>
 
     <div class="quiz" data-q="4">
-      <p><strong>Q4：</strong>Hirschberg 算法将序列比对的空间复杂度从 $\\(O(\1)\\) 降低到 $\\(O(\1)\\)，其核心思想是什么？</p>
+      <p><strong>Q4：</strong>Hirschberg 算法将序列比对的空间复杂度从 $\\($O(\1)$\\) 降低到 $\\($O(\1)$\\)，其核心思想是什么？</p>
       <div class="quiz-options">
         <button data-answer="wrong" data-incorrect="近似算法会牺牲精度，Hirschberg 算法是精确算法。">A. 使用近似算法牺牲精度换取空间</button>
         <button data-answer="wrong" data-incorrect=" Hirschberg 算法利用的是中间列（middle column），不是行。">B. 仅存储 DP 表的中间行</button>
@@ -484,12 +484,12 @@
     </div>
 
     <div class="quiz" data-q="5">
-      <p><strong>Q5：</strong>DC3/Skew 算法构造后缀数组的时间复杂度为 $\\(O(\1)\\)，其递归式是什么？</p>
+      <p><strong>Q5：</strong>DC3/Skew 算法构造后缀数组的时间复杂度为 $\\($O(\1)$\\)，其递归式是什么？</p>
       <div class="quiz-options">
-        <button data-answer="wrong" data-incorrect="这会导致 $\\(O(\1)\\) 时间复杂度。">A. T(n) = $\\(O(\1)\\) + 2T(n/2)</button>
-        <button data-answer="correct" data-correct="正确！DC3 将 2/3 的后缀递归处理，T(n) = $\\(O(\1)\\) + T(2n/3) = $\\(O(\1)\\)。">B. T(n) = $\\(O(\1)\\) + T(2n/3)</button>
-        <button data-answer="wrong" data-incorrect="这会导致 $\\(O(\1)\\) 时间复杂度。">C. T(n) = $\\(O(\1)\\) + T(n/3)</button>
-        <button data-answer="wrong" data-incorrect="这不是 DC3 的递归式。">D. T(n) = $\\(O(\1)\\) + T(n/2)</button>
+        <button data-answer="wrong" data-incorrect="这会导致 $\\($O(\1)$\\) 时间复杂度。">A. T(n) = $\\($O(\1)$\\) + 2T(n/2)</button>
+        <button data-answer="correct" data-correct="正确！DC3 将 2/3 的后缀递归处理，T(n) = $\\($O(\1)$\\) + T(2n/3) = $\\($O(\1)$\\)。">B. T(n) = $\\($O(\1)$\\) + T(2n/3)</button>
+        <button data-answer="wrong" data-incorrect="这会导致 $\\($O(\1)$\\) 时间复杂度。">C. T(n) = $\\($O(\1)$\\) + T(n/3)</button>
+        <button data-answer="wrong" data-incorrect="这不是 DC3 的递归式。">D. T(n) = $\\($O(\1)$\\) + T(n/2)</button>
       </div>
     </div>
 

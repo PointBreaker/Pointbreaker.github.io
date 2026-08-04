@@ -113,11 +113,11 @@ return RHR;</code></pre>
     <h2>GDB 实战：跟踪 UART 中断</h2>
     <p>以 shell 从控制台读取输入为例：</p>
     <ol>
-      <li><code>sys_read()</code> → <code>fileread()</code> → <code>consoleread()</code></li>
+      <li><code>sy$s_{read}$()</code> → <code>fileread()</code> → <code>consoleread()</code></li>
       <li><code>consoleread()</code> 看到缓冲区为空，调用 <code>sleep()</code></li>
       <li>UART → PLIC → <code>stvec</code> → <code>kernelvec</code>（内核中，使用调度器栈）</li>
       <li><code>kerneltrap()</code> → <code>devintr()</code></li>
-      <li><code>plic_claim()</code> 获取 IRQ = 10</li>
+      <li><code>pli$c_{claim}$()</code> 获取 IRQ = 10</li>
       <li><code>uartintr()</code> → <code>uartgetc()</code> → 读 LSR → 读 RHR</li>
       <li><code>consoleintr()</code> 处理字符 → <code>wakeup()</code></li>
       <li>调度器恢复 shell 的 <code>read()</code></li>
@@ -149,7 +149,7 @@ return RHR;</code></pre>
 
     <h2>并发与同步问题</h2>
     <h3>多设备同时中断</h3>
-    <p>PLIC 将中断分配到不同核心，不同中断可并行处理。每个中断由第一个调用 <code>plic_claim()</code> 的核心认领。每个设备最多只有一个中断在进行中（通过 <code>plic_complete()</code> 通知完成）。</p>
+    <p>PLIC 将中断分配到不同核心，不同中断可并行处理。每个中断由第一个调用 <code>pli$c_{claim}$()</code> 的核心认领。每个设备最多只有一个中断在进行中（通过 <code>pli$c_{complete}$()</code> 通知完成）。</p>
 
     <h3>中断可能在任意两条指令之间发生</h3>
     <pre><code>// bottom half:     n = n + 1
@@ -161,15 +161,15 @@ sw a4, n</code></pre>
     <p>如果中断发生在 <code>lw</code> 和 <code>add</code> 之间，两个 <code>n = n + 1</code> 可能只增加一次！</p>
 
     <h3>解决方案：暂时禁用中断</h3>
-    <pre><code>intr_off();
+    <pre><code>int$r_{off}$();
 n = n + 1;
-intr_on();</pre></pre>
+int$r_{on}$();</pre></pre>
     <div class="card warning">
       <h3>禁用中断不够！</h3>
       <p>中断可能在另一个 CPU 上发生。完整解决方案需要锁——下一讲的主题。</p>
     </div>
 
-    <h3>SSTATUS_SIE = 0 时中断去哪了？</h3>
+    <h3>SSTATU$S_{SIE}$ = 0 时中断去哪了？</h3>
     <p>PLIC/CPU 记住未决中断，在内核重新使能中断时投递。</p>
 
     <hr class="rule">
@@ -265,7 +265,7 @@ intr_on();</pre></pre>
     </div>
 
     <div class="quiz" data-quiz="5" data-correct="b" data-incorrect="a,c,d">
-      <p><strong>Q5：</strong>仅禁用中断（intr_off）为什么不足以保护并发？</p>
+      <p><strong>Q5：</strong>仅禁用中断（int$r_{off}$）为什么不足以保护并发？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">A. 中断无法被禁用</button>
         <button data-choice="b" aria-pressed="false">B. 中断可能在另一个 CPU 上发生</button>

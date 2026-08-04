@@ -56,29 +56,29 @@
 
     <h3>原版架构（Vaswani et al., 2017）</h3>
     <p>每个 Transformer block 包含：</p>
-    <pre><code class="language-python">Input: x  (batch, seq_len, d_model)
+    <pre><code class="language-python">Input: x  (batch, se$q_{len}$, $d_{model}$)
 
 # 1. Multi-Head Self-Attention
-attention_output = MultiHeadAttention(x, x, x)  # Q=K=V=x
-x = LayerNorm(x + attention_output)              # Post-norm + residual
+attentio$n_{output}$ = MultiHeadAttention(x, x, x)  # Q=K=V=x
+x = LayerNorm(x + attentio$n_{output}$)              # Post-norm + residual
 
 # 2. Feed-Forward Network
-ffn_output = FFN(x)                              # Linear → ReLU → Linear
-x = LayerNorm(x + ffn_output)                    # Post-norm + residual
+ff$n_{output}$ = FFN(x)                              # Linear → ReLU → Linear
+x = LayerNorm(x + ff$n_{output}$)                    # Post-norm + residual
 
 # 3. 重复 L 层
 
 # 4. 最终输出
-output = Linear(x)  # d_model → vocab_size</code></pre>
+output = Linear(x)  # $d_{model}$ → voca$b_{size}$</code></pre>
 
     <h3>关键维度</h3>
     <table>
       <tr><th>符号</th><th>含义</th><th>GPT-3 175B</th><th>Llama 2 70B</th></tr>
-      <tr><td>d_model</td><td>隐藏维度</td><td>12288</td><td>8192</td></tr>
-      <tr><td>n_layers</td><td>层数</td><td>96</td><td>80</td></tr>
-      <tr><td>n_heads</td><td>注意力头数</td><td>96</td><td>64</td></tr>
-      <tr><td>d_head</td><td>每头维度</td><td>128</td><td>128</td></tr>
-      <tr><td>d_ff</td><td>FFN 中间维度</td><td>49152</td><td>28672</td></tr>
+      <tr><td>$d_{model}$</td><td>隐藏维度</td><td>12288</td><td>8192</td></tr>
+      <tr><td>$n_{layers}$</td><td>层数</td><td>96</td><td>80</td></tr>
+      <tr><td>$n_{heads}$</td><td>注意力头数</td><td>96</td><td>64</td></tr>
+      <tr><td>$d_{head}$</td><td>每头维度</td><td>128</td><td>128</td></tr>
+      <tr><td>$d_{ff}$</td><td>FFN 中间维度</td><td>49152</td><td>28672</td></tr>
       <tr><td>V</td><td>词表大小</td><td>50257</td><td>32000</td></tr>
     </table>
 
@@ -123,20 +123,20 @@ x = x + LayerNorm(MultiHeadAttention(LayerNorm(x)))</code></pre>
     <p>原版 Transformer 用 ReLU。GPT-2 开始用 GELU：</p>
     <pre><code class="language-python">ReLU(x) = max(0, x)
 
-GELU(x) = x × Φ(x)   （Φ 是标准正态的 CDF）
-        ≈ 0.5 × x × (1 + tanh(√(2/π) × (x + 0.044715 × x³)))</code></pre>
+GELU(x) = x $\times$ Φ(x)   （Φ 是标准正态的 CDF）
+        $≈$ 0.5 $\times$ x $\times$ (1 + tanh($√$(2/$π$) $\times$ (x + 0.044715 $\times$ x³)))</code></pre>
 
     <p><strong>为什么 GELU 更好？</strong> ReLU 在 0 点不可导，且对负值完全截断。GELU 是平滑的，保留了负值的一些信息（乘以接近 0 但不等于 0 的权重）。</p>
 
     <h3>SwiGLU：现代 LLM 的标准</h3>
     <p>Llama 系列和 Mistral 使用 SwiGLU：</p>
     <pre><code class="language-python"># 标准 FFN
-FFN(x) = W₂ × ReLU(W₁ × x)
+FFN(x) = W₂ $\times$ ReLU(W₁ $\times$ x)
 
 # SwiGLU FFN（Noam Shazer 2020 提出）
-FFN(x) = W_down × (Swish(W_gate × x) ⊙ (W_up × x))
+FFN(x) = $W_{down}$ $\times$ (Swish($W_{gate}$ $\times$ x) ⊙ ($W_{up}$ $\times$ x))
 
-# 其中 Swish(x) = x × sigmoid(x)</code></pre>
+# 其中 Swish(x) = x $\times$ sigmoid(x)</code></pre>
 
     <p><strong>SwiGLU 的优势：</strong></p>
     <ul>
@@ -146,14 +146,14 @@ FFN(x) = W_down × (Swish(W_gate × x) ⊙ (W_up × x))
     </ul>
 
     <div class="card warning">
-      <p><strong>注意：</strong>SwiGLU 把 FFN 的中间维度从 4×d_model 改为 ~2.67×d_model（为了保持参数量一致）。Llama 的 d_ff ≈ 8/3 × d_model ≈ 2.67 × d_model。</p>
+      <p><strong>注意：</strong>SwiGLU 把 FFN 的中间维度从 4×$d_{model}$ 改为 ~2.67×$d_{model}$（为了保持参数量一致）。Llama 的 $d_{ff}$ $≈$ 8/3 $\times$ $d_{model}$ $≈$ 2.67 $\times$ $d_{model}$。</p>
     </div>
 
     <table>
       <tr><th>激活</th><th>公式</th><th>使用模型</th></tr>
       <tr><td>ReLU</td><td>max(0, x)</td><td>原版 Transformer, BERT</td></tr>
       <tr><td>GELU</td><td>x · Φ(x)</td><td>GPT-2, GPT-3, BERT</td></tr>
-      <tr><td>SwiGLU</td><td>Swish(W_g · x) ⊙ (W_u · x)</td><td>Llama, Mistral, Qwen</td></tr>
+      <tr><td>SwiGLU</td><td>Swish($W_{g}$ · x) ⊙ ($W_{u}$ · x)</td><td>Llama, Mistral, Qwen</td></tr>
     </table>
 
     <hr class="rule">
@@ -162,18 +162,18 @@ FFN(x) = W_down × (Swish(W_gate × x) ⊙ (W_up × x))
     <h2 id="positional">位置编码的演化</h2>
 
     <h3>Sinusoidal（原版 Transformer）</h3>
-    <pre><code class="language-python">PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))
-PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))</code></pre>
+    <pre><code class="language-python">PE(pos, 2i)   = sin(pos / 10000^(2i/$d_{model}$))
+PE(pos, 2i+1) = cos(pos / 10000^(2i/$d_{model}$))</code></pre>
 
     <p><strong>优势：</strong>可以外推到更长序列（理论上）。</p>
     <p><strong>劣势：</strong>实际表现不如可学习嵌入和 RoPE；推理时需要预先计算。</p>
 
     <h3>Learned Embedding</h3>
     <pre><code class="language-python"># GPT-2 风格
-position_embedding = nn.Embedding(max_seq_len, d_model)</code></pre>
+positio$n_{embedding}$ = nn.Embedding(ma$x_{seq}$_len, $d_{model}$)</code></pre>
 
     <p><strong>优势：</strong>简单，可学习。</p>
-    <p><strong>劣势：</strong>不能外推到训练时未见过的位置；需要固定 max_seq_len。</p>
+    <p><strong>劣势：</strong>不能外推到训练时未见过的位置；需要固定 ma$x_{seq}$_len。</p>
 
     <h3>RoPE（Rotary Position Embedding）—— 现代标准</h3>
     <p>RoPE 的核心思想：不直接编码位置，而是让 attention 分数自然包含相对位置信息。</p>
@@ -191,10 +191,10 @@ position_embedding = nn.Embedding(max_seq_len, d_model)</code></pre>
 R(m) = diag([e^{imθ_0}, e^{imθ_1}, ...])
 
 # 应用到 query 和 key:
-q_rotated = R(m) @ q
-k_rotated = R(n) @ k
+$q_{rotated}$ = R(m) @ q
+$k_{rotated}$ = R(n) @ k
 
-# attention score = q_rotated @ k_rotated^T
+# attention score = $q_{rotated}$ @ $k_{rotated}$^T
 # 只依赖 (m - n) —— 相对位置！</code></pre>
 
     <p><strong>RoPE 的优势：</strong></p>
@@ -206,8 +206,8 @@ k_rotated = R(n) @ k
 
     <h3>ALiBi（Attention with Linear Biases）</h3>
     <pre><code class="language-python"># 不加位置编码，直接在 attention score 上加偏置
-scores = Q @ K^T / √d
-scores[i, j] -= |i - j| × slope_head_i  # 距离越远，惩罚越大</code></pre>
+scores = Q @ K^T / $√$d
+scores[i, j] -= |i - j| $\times$ slop$e_{head}$_i  # 距离越远，惩罚越大</code></pre>
 
     <p>ALiBi 的优势是极强的外推能力，但 RoPE 在大多数任务上表现更好。</p>
 
@@ -228,22 +228,22 @@ scores[i, j] -= |i - j| × slope_head_i  # 距离越远，惩罚越大</code></p
     <pre><code class="language-python"># 原版 LayerNorm
 mean = x.mean(dim=-1, keepdim=True)
 var = x.var(dim=-1, keepdim=True, unbiased=False)
-x_norm = (x - mean) / sqrt(var + ε)
-output = γ × x_norm + β</code></pre>
+$x_{norm}$ = (x - mean) / sqrt(var + $ε$)
+output = $γ$ $\times$ $x_{norm}$ + $β$</code></pre>
 
-    <p><strong>参数量：</strong>2 × d_model（γ 和 β）</p>
+    <p><strong>参数量：</strong>2 $\times$ $d_{model}$（$γ$ 和 $β$）</p>
 
     <h3>RMSNorm</h3>
     <p>Llama 系列使用 RMSNorm——去掉 mean centering：</p>
     <pre><code class="language-python"># RMSNorm
-rms = sqrt(mean(x²) + ε)
-x_norm = x / rms
-output = γ × x_norm  # 没有 β！</code></pre>
+rms = sqrt(mean(x²) + $ε$)
+$x_{norm}$ = x / rms
+output = $γ$ $\times$ $x_{norm}$  # 没有 $β$！</code></pre>
 
     <div class="card idea">
       <p><strong>为什么去掉 mean centering？</strong></p>
       <ul>
-        <li>省 ~50% 的归一化参数（去掉 β）</li>
+        <li>省 ~50% 的归一化参数（去掉 $β$）</li>
         <li>计算更快（少一次减法 + 少算一个 mean）</li>
         <li>实验表明效果一样好甚至更好</li>
         <li>mean centering 对 Transformer 不是必需的——模型可以学习自己 shift</li>
@@ -264,19 +264,19 @@ x = x + FFN(RMSNorm(x))
     <h2 id="ffn-architecture">FFN 架构选择</h2>
 
     <h3>标准 FFN</h3>
-    <pre><code class="language-python">FFN(x) = W₂ × activation(W₁ × x)
-d_ff = 4 × d_model  （标准比例）</code></pre>
+    <pre><code class="language-python">FFN(x) = W₂ $\times$ activation(W₁ $\times$ x)
+$d_{ff}$ = 4 $\times$ $d_{model}$  （标准比例）</code></pre>
 
     <h3>门控 FFN（Gated Linear Unit, GLU）</h3>
     <pre><code class="language-python"># 标准 GLU
-GLU(x) = σ(W_gate × x) ⊙ (W_up × x)   # ⊙ 是逐元素乘
-FFN(x) = W_down × GLU(x)
+GLU(x) = $σ$($W_{gate}$ $\times$ x) ⊙ ($W_{up}$ $\times$ x)   # ⊙ 是逐元素乘
+FFN(x) = $W_{down}$ $\times$ GLU(x)
 
 # SwiGLU（用 Swish 替代 sigmoid）
-SwiGLU(x) = Swish(W_gate × x) ⊙ (W_up × x)
+SwiGLU(x) = Swish($W_{gate}$ $\times$ x) ⊙ ($W_{up}$ $\times$ x)
 
 # GeGLU（用 GELU 替代 sigmoid）
-GeGLU(x) = GELU(W_gate × x) ⊙ (W_up × x)</code></pre>
+GeGLU(x) = GELU($W_{gate}$ $\times$ x) ⊙ ($W_{up}$ $\times$ x)</code></pre>
 
     <p><strong>为什么门控更好？</strong></p>
     <ul>
@@ -286,7 +286,7 @@ GeGLU(x) = GELU(W_gate × x) ⊙ (W_up × x)</code></pre>
     </ul>
 
     <div class="card warning">
-      <p><strong>维度调整：</strong>SwiGLU 把 d_ff 从 4×d_model 改为 ~2.67×d_model（8/3），因为现在有三个矩阵（W_gate, W_up, W_down）。参数量大致相同。</p>
+      <p><strong>维度调整：</strong>SwiGLU 把 $d_{ff}$ 从 4×$d_{model}$ 改为 ~2.67×$d_{model}$（8/3），因为现在有三个矩阵（$W_{gate}$, $W_{up}$, $W_{down}$）。参数量大致相同。</p>
     </div>
 
     <hr class="rule">
@@ -295,15 +295,15 @@ GeGLU(x) = GELU(W_gate × x) ⊙ (W_up × x)</code></pre>
     <h2 id="attention-details">注意力机制的细节</h2>
 
     <h3>Multi-Head Attention（MHA）</h3>
-    <pre><code class="language-python"># 输入: Q, K, V  (batch, seq, d_model)
+    <pre><code class="language-python"># 输入: Q, K, V  (batch, seq, $d_{model}$)
 # 拆分成 h 个头
-Q = rearrange(Q, 'b s (h d) -> b h s d', h=num_heads)
-K = rearrange(K, 'b s (h d) -> b h s d', h=num_heads)
-V = rearrange(V, 'b s (h d) -> b h s d', h=num_heads)
+Q = rearrange(Q, 'b s (h d) -> b h s d', h=nu$m_{heads}$)
+K = rearrange(K, 'b s (h d) -> b h s d', h=nu$m_{heads}$)
+V = rearrange(V, 'b s (h d) -> b h s d', h=nu$m_{heads}$)
 
 # Scaled dot-product attention
-scores = Q @ K^T / √d_k
-scores = causal_mask(scores)  # 因果掩码
+scores = Q @ K^T / $√$d_k
+scores = causa$l_{mask}$(scores)  # 因果掩码
 attn = softmax(scores)
 output = attn @ V
 
@@ -312,9 +312,9 @@ output = rearrange(output, 'b h s d -> b s (h d)')</code></pre>
 
     <h3>Grouped-Query Attention（GQA）</h3>
     <p>下一课会详细讲，这里先预览：</p>
-    <pre><code class="language-python"># MHA: num_heads 个 Q 头, num_heads 个 K 头, num_heads 个 V 头
-# MQA: num_heads 个 Q 头, 1 个 K 头, 1 个 V 头
-# GQA: num_heads 个 Q 头, num_kv_heads 个 K 头, num_kv_heads 个 V 头
+    <pre><code class="language-python"># MHA: nu$m_{heads}$ 个 Q 头, nu$m_{heads}$ 个 K 头, nu$m_{heads}$ 个 V 头
+# MQA: nu$m_{heads}$ 个 Q 头, 1 个 K 头, 1 个 V 头
+# GQA: nu$m_{heads}$ 个 Q 头, nu$m_{kv}$_heads 个 K 头, nu$m_{kv}$_heads 个 V 头
 
 # 例如: 32 个 Q 头, 8 个 KV 头（每 4 个 Q 头共享 1 个 KV 头）</code></pre>
 
@@ -323,7 +323,7 @@ output = rearrange(output, 'b h s d -> b s (h d)')</code></pre>
     <div class="card idea">
       <p><strong>FlashAttention 的核心思想：</strong>不改变数学结果，但改变计算顺序——<strong>永远不把完整的 attention matrix 写入 HBM</strong>。</p>
       <p>通过 tiling + online softmax，在 SRAM 中完成每个 block 的 attention，只把最终输出写回 HBM。</p>
-      <p><strong>效果：</strong>内存 $\\(O(\1)\\) 而非 $\\(O(\1)\\)，速度 2-4× 提升。</p>
+      <p><strong>效果：</strong>内存 $\\($O(\1)$\\) 而非 $\\($O(\1)$\\)，速度 2-4$\times$ 提升。</p>
     </div>
 
     <hr class="rule">
@@ -334,36 +334,36 @@ output = rearrange(output, 'b h s d -> b s (h d)')</code></pre>
     <h3>核心超参数</h3>
     <table>
       <tr><th>超参数</th><th>含义</th><th>典型范围</th><th>影响</th></tr>
-      <tr><td>d_model</td><td>隐藏维度</td><td>512 - 12288</td><td>模型容量</td></tr>
-      <tr><td>n_layers</td><td>层数</td><td>12 - 120</td><td>模型深度</td></tr>
-      <tr><td>n_heads</td><td>注意力头数</td><td>8 - 96</td><td>并行注意力</td></tr>
-      <tr><td>d_head</td><td>每头维度</td><td>64 - 128</td><td>注意力表达力</td></tr>
-      <tr><td>d_ff</td><td>FFN 中间维度</td><td>4×d_model 或 2.67×d_model</td><td>FFN 容量</td></tr>
+      <tr><td>$d_{model}$</td><td>隐藏维度</td><td>512 - 12288</td><td>模型容量</td></tr>
+      <tr><td>$n_{layers}$</td><td>层数</td><td>12 - 120</td><td>模型深度</td></tr>
+      <tr><td>$n_{heads}$</td><td>注意力头数</td><td>8 - 96</td><td>并行注意力</td></tr>
+      <tr><td>$d_{head}$</td><td>每头维度</td><td>64 - 128</td><td>注意力表达力</td></tr>
+      <tr><td>$d_{ff}$</td><td>FFN 中间维度</td><td>4×$d_{model}$ 或 2.67×$d_{model}$</td><td>FFN 容量</td></tr>
       <tr><td>V</td><td>词表大小</td><td>32K - 256K</td><td>序列效率</td></tr>
     </table>
 
-    <h3>d_model vs n_layers 的权衡</h3>
-    <p>对于固定的参数量预算，应该选宽模型（大 d_model, 少层）还是深模型（小 d_model, 多层）？</p>
+    <h3>$d_{model}$ vs $n_{layers}$ 的权衡</h3>
+    <p>对于固定的参数量预算，应该选宽模型（大 $d_{model}$, 少层）还是深模型（小 $d_{model}$, 多层）？</p>
 
     <ul>
-      <li><strong>深模型：</strong>每层 FLOPs 少（d_model 小），但层数多 → 顺序依赖性更强，pipeline 并行效率低。</li>
-      <li><strong>宽模型：</strong>每层 FLOPs 多（d_model 大），层数少 → 更容易并行，但单卡内存压力大。</li>
-      <li><strong>经验：</strong>前沿模型倾向于适中的深度（80-120 层），用 d_model 控制总参数量。</li>
+      <li><strong>深模型：</strong>每层 FLOPs 少（$d_{model}$ 小），但层数多 → 顺序依赖性更强，pipeline 并行效率低。</li>
+      <li><strong>宽模型：</strong>每层 FLOPs 多（$d_{model}$ 大），层数少 → 更容易并行，但单卡内存压力大。</li>
+      <li><strong>经验：</strong>前沿模型倾向于适中的深度（80-120 层），用 $d_{model}$ 控制总参数量。</li>
     </ul>
 
     <h3>参数量估算</h3>
     <pre><code class="language-python"># Transformer 参数量（忽略 embedding 和 final head）
-# Attention: 4 × d_model²  (W_q, W_k, W_v, W_o 各 d_model × d_model)
-# FFN (SwiGLU): 3 × d_model × d_ff  (W_gate, W_up, W_down)
-# RMSNorm: 2 × d_model  (每层两个 norm)
+# Attention: 4 $\times$ $d_{model}$²  ($W_{q}$, $W_{k}$, $W_{v}$, $W_{o}$ 各 $d_{model}$ $\times$ $d_{model}$)
+# FFN (SwiGLU): 3 $\times$ $d_{model}$ $\times$ $d_{ff}$  ($W_{gate}$, $W_{up}$, $W_{down}$)
+# RMSNorm: 2 $\times$ $d_{model}$  (每层两个 norm)
 
-# 使用 SwiGLU (d_ff = 8/3 × d_model):
-per_layer = 4d² + 3d × (8/3)d + 2d = 4d² + 8d² + 2d = 12d² + 2d
-total_params ≈ n_layers × 12 × d_model²</code></pre>
+# 使用 SwiGLU ($d_{ff}$ = 8/3 $\times$ $d_{model}$):
+pe$r_{layer}$ = 4d² + 3d $\times$ (8/3)d + 2d = 4d² + 8d² + 2d = 12d² + 2d
+tota$l_{params}$ $≈$ $n_{layers}$ $\times$ 12 $\times$ $d_{model}$²</code></pre>
 
     <h3>Chinchilla 比例</h3>
     <p>根据 Hoffmann et al. (2022) 的 scaling law，compute-optimal 的模型满足：</p>
-    <pre><code class="language-python">D ≈ 20 × N
+    <pre><code class="language-python">D $≈$ 20 $\times$ N
 
 其中:
 D = 训练 token 数
@@ -377,11 +377,11 @@ N = 模型参数量
     <h2 id="modern-configs">现代模型配置对比</h2>
 
     <table>
-      <tr><th>模型</th><th>d_model</th><th>n_layers</th><th>n_heads</th><th>d_head</th><th>d_ff</th><th>激活</th><th>Position</th><th>Norm</th></tr>
+      <tr><th>模型</th><th>$d_{model}$</th><th>$n_{layers}$</th><th>$n_{heads}$</th><th>$d_{head}$</th><th>$d_{ff}$</th><th>激活</th><th>Position</th><th>Norm</th></tr>
       <tr><td>GPT-3 175B</td><td>12288</td><td>96</td><td>96</td><td>128</td><td>49152</td><td>GELU</td><td>Learned</td><td>Pre-LN</td></tr>
       <tr><td>Llama 2 70B</td><td>8192</td><td>80</td><td>64</td><td>128</td><td>28672</td><td>SwiGLU</td><td>RoPE</td><td>Pre-RMS</td></tr>
       <tr><td>Mistral 7B</td><td>4096</td><td>32</td><td>32</td><td>128</td><td>14336</td><td>SwiGLU</td><td>RoPE</td><td>Pre-RMS</td></tr>
-      <tr><td>Gemma 2 27B</td><td>4608</td><td>46</td><td>16</td><td>128</td><td>16 × d_model</td><td>GeGLU</td><td>RoPE</td><td>Pre-RMS</td></tr>
+      <tr><td>Gemma 2 27B</td><td>4608</td><td>46</td><td>16</td><td>128</td><td>16 $\times$ $d_{model}$</td><td>GeGLU</td><td>RoPE</td><td>Pre-RMS</td></tr>
     </table>
 
     <div class="card idea">
@@ -400,28 +400,28 @@ N = 模型参数量
     <h2 id="initialization">参数初始化策略</h2>
 
     <h3>Xavier/Glorot 初始化</h3>
-    <pre><code class="language-python"># 目标: 让输出的方差 ≈ 输入的方差
-# 对于 (input_dim, output_dim) 的权重矩阵:
-std = sqrt(2 / (input_dim + output_dim))  # Xavier uniform
-std = sqrt(1 / input_dim)                  # 简化版本（前向）
+    <pre><code class="language-python"># 目标: 让输出的方差 $≈$ 输入的方差
+# 对于 (inpu$t_{dim}$, outpu$t_{dim}$) 的权重矩阵:
+std = sqrt(2 / (inpu$t_{dim}$ + outpu$t_{dim}$))  # Xavier uniform
+std = sqrt(1 / inpu$t_{dim}$)                  # 简化版本（前向）
 
-w = torch.randn(input_dim, output_dim) * std</code></pre>
+w = torch.randn(inpu$t_{dim}$, outpu$t_{dim}$) * std</code></pre>
 
     <h3>Transformer 特定的初始化</h3>
     <p>很多现代模型对残差分支做特殊初始化：</p>
     <pre><code class="language-python"># GPT-2 风格
 # 残差投影初始化为 0.02（很小），让训练初期接近 identity
-w = torch.randn(d_model, d_model) * 0.02
+w = torch.randn($d_{model}$, $d_{model}$) * 0.02
 
 # T5 / PaLM 风格
-# 按层深度缩放: std = base_std / sqrt(2 * n_layers)
+# 按层深度缩放: std = bas$e_{std}$ / sqrt(2 * $n_{layers}$)
 # 深层层的残差贡献更小，保持梯度稳定</code></pre>
 
     <h3>In-Context-Learning 友好的初始化</h3>
     <p>PaLM 和后续模型使用特殊的初始化来增强 ICL 能力：</p>
     <ul>
       <li>Output projection 初始化为 0（让训练初期输出接近 0）</li>
-      <li>Attention 的 W_o 初始化为较小的值</li>
+      <li>Attention 的 $W_{o}$ 初始化为较小的值</li>
       <li>这些细节在实践中影响显著</li>
     </ul>
 
@@ -452,7 +452,7 @@ w = torch.randn(d_model, d_model) * 0.02
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！RMSNorm 去掉了 mean centering（减均值），只保留除以 RMS，省掉了 β 参数。" data-incorrect="RMSNorm 去掉了 mean centering 步骤，只除以 RMS，参数从 γ, β 简化为只有 γ。">
+    <div class="quiz" data-quiz="3" data-correct="正确！RMSNorm 去掉了 mean centering（减均值），只保留除以 RMS，省掉了 $β$ 参数。" data-incorrect="RMSNorm 去掉了 mean centering 步骤，只除以 RMS，参数从 $γ$, $β$ 简化为只有 $γ$。">
       <p><strong>问题 3：</strong>RMSNorm 和 LayerNorm 的区别是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">RMSNorm 多了一个参数</button>
@@ -463,13 +463,13 @@ w = torch.randn(d_model, d_model) * 0.02
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！SwiGLU 把 d_ff 从 4×d_model 改为 ~2.67×d_model（8/3），因为有三个矩阵 (W_gate, W_up, W_down)。" data-incorrect="SwiGLU 用三个矩阵替代两个，为了保持参数量一致，d_ff 从 4×d 改为 ~2.67×d。">
-      <p><strong>问题 4：</strong>使用 SwiGLU 时，d_ff 应该怎么调整？</p>
+    <div class="quiz" data-quiz="4" data-correct="正确！SwiGLU 把 $d_{ff}$ 从 4×$d_{model}$ 改为 ~2.67×$d_{model}$（8/3），因为有三个矩阵 ($W_{gate}$, $W_{up}$, $W_{down}$)。" data-incorrect="SwiGLU 用三个矩阵替代两个，为了保持参数量一致，$d_{ff}$ 从 4$\times$d 改为 ~2.67$\times$d。">
+      <p><strong>问题 4：</strong>使用 SwiGLU 时，$d_{ff}$ 应该怎么调整？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">保持 4×d_model 不变</button>
-        <button data-choice="b" aria-pressed="false">减少到 ~2.67×d_model（保持参数量一致）</button>
-        <button data-choice="c" aria-pressed="false">增加到 6×d_model</button>
-        <button data-choice="d" aria-pressed="false">d_ff 和 SwiGLU 无关</button>
+        <button data-choice="a" aria-pressed="false">保持 4×$d_{model}$ 不变</button>
+        <button data-choice="b" aria-pressed="false">减少到 ~2.67×$d_{model}$（保持参数量一致）</button>
+        <button data-choice="c" aria-pressed="false">增加到 6×$d_{model}$</button>
+        <button data-choice="d" aria-pressed="false">$d_{ff}$ 和 SwiGLU 无关</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
@@ -504,7 +504,7 @@ w = torch.randn(d_model, d_model) * 0.02
       </article>
       <article>
         <h3>FlashAttention</h3>
-        <p>不改数学，改计算顺序，$\\(O(\1)\\) 内存</p>
+        <p>不改数学，改计算顺序，$\\($O(\1)$\\) 内存</p>
       </article>
     </div>
 

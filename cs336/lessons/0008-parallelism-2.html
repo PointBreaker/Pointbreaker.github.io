@@ -32,14 +32,14 @@
     <p>在标准 Data Parallelism 中，每个 GPU 都存了完整副本：</p>
 
     <pre><code class="language-python"># 每个 GPU 存储（70B 模型, fp32 + AdamW）:
-参数:     4 × 70B = 280 GB
-梯度:     4 × 70B = 280 GB
-优化器 m: 4 × 70B = 280 GB
-优化器 v: 4 × 70B = 280 GB
+参数:     $4 \times 7$0B = 280 GB
+梯度:     $4 \times 7$0B = 280 GB
+优化器 m: $4 \times 7$0B = 280 GB
+优化器 v: $4 \times 7$0B = 280 GB
 ─────────────────────────────
 总计:     1120 GB  ← 远超单卡 80 GB！
 
-# 问题: 8 个 GPU 各存一份 → 8 × 1120 GB = 8960 GB
+# 问题: 8 个 GPU 各存一份 → $8 \times 1$120 GB = 8960 GB
 # 其中 7/8 是冗余的！</code></pre>
 
     <div class="card idea">
@@ -145,9 +145,9 @@ ZeRO Stage 3: 2P  = 140 GB/GPU   ← 还是放不下（但接近了！）
 # 包装模型
 model = FSDP(
     model,
-    sharding_strategy=ShardingStrategy.FULL_SHARD,  # ZeRO Stage 3
-    cpu_offload=CPUOffload(offload_params=False),
-    auto_wrap_policy=transformer_auto_wrap_policy,
+    shardin$g_{strategy}$=ShardingStrategy.FUL$L_{SHARD}$,  # ZeRO Stage 3
+    cp$u_{offload}$=CPUOffload(offloa$d_{params}$=False),
+    aut$o_{wrap}$_policy=transforme$r_{auto}$_wra$p_{policy}$,
 )</code></pre>
 
     <h3>FSDP 的工作流程</h3>
@@ -183,16 +183,16 @@ model = FSDP(
     <h3>FSDP 策略对比</h3>
     <table>
       <tr><th>策略</th><th>描述</th><th>内存</th><th>通信</th></tr>
-      <tr><td>FULL_SHARD</td><td>ZeRO Stage 3，全分片</td><td>最低</td><td>最高</td></tr>
-      <tr><td>SHARD_GRAD_OP</td><td>ZeRO Stage 2，只分片梯度+优化器</td><td>中</td><td>中</td></tr>
-      <tr><td>NO_SHARD</td><td>标准 DDP，不分片</td><td>最高</td><td>最低</td></tr>
-      <tr><td>HYBRID_SHARD</td><td>节点内分片，节点间复制</td><td>低</td><td>中</td></tr>
+      <tr><td>FUL$L_{SHARD}$</td><td>ZeRO Stage 3，全分片</td><td>最低</td><td>最高</td></tr>
+      <tr><td>SHAR$D_{GRAD}$_OP</td><td>ZeRO Stage 2，只分片梯度+优化器</td><td>中</td><td>中</td></tr>
+      <tr><td>N$O_{SHARD}$</td><td>标准 DDP，不分片</td><td>最高</td><td>最低</td></tr>
+      <tr><td>HYBRI$D_{SHARD}$</td><td>节点内分片，节点间复制</td><td>低</td><td>中</td></tr>
     </table>
 
     <div class="card idea">
-      <p><strong>HYBRID_SHARD（推荐）：</strong></p>
+      <p><strong>HYBRI$D_{SHARD}$（推荐）：</strong></p>
       <ul>
-        <li>节点内（8 GPU）：FULL_SHARD，利用 NVLink 高带宽</li>
+        <li>节点内（8 GPU）：FUL$L_{SHARD}$，利用 NVLink 高带宽</li>
         <li>节点间：DDP 复制，减少跨节点通信</li>
         <li>兼顾内存节省和通信效率</li>
       </ul>
@@ -232,14 +232,14 @@ model = FSDP(
     <p>用计算换内存——不保存中间激活，反向时重算：</p>
     <pre><code class="language-python">from torch.utils.checkpoint import checkpoint
 
-# 不 checkpoint: 保存所有激活 → 内存 $\\(O(\1)\\)
-# Checkpoint: 只保存 checkpoint 点 → $\\(O(\1)\\) 或 $\\(O(\1)\\)
+# 不 checkpoint: 保存所有激活 → 内存 $\\($O(\1)$\\)
+# Checkpoint: 只保存 checkpoint 点 → $\\($O(\1)$\\) 或 $\\($O(\1)$\\)
 
 # 在 FSDP 中:
 model = FSDP(
     model,
-    auto_wrap_policy=size_based_auto_wrap_policy,
-    transformer_layer_cls={TransformerBlock},  # 按层 checkpoint
+    aut$o_{wrap}$_policy=siz$e_{based}$_aut$o_{wrap}$_policy,
+    transforme$r_{layer}$_cls={TransformerBlock},  # 按层 checkpoint
 )</code></pre>
 
     <hr class="rule">
@@ -259,7 +259,7 @@ model = FSDP(
 # 每个 GPU 把自己的 1/N 结果在 ring 中传递
 # 经过 N-1 步，每个 GPU 有完整结果
 
-# 总通信量: 2 × (N-1)/N × data_size ≈ 2 × data_size
+# 总通信量: 2 $\times$ (N-1)/N $\times$ dat$a_{size}$ $≈$ 2 $\times$ dat$a_{size}$
 # 与 N 无关！这是 ring algorithm 的美妙之处</code></pre>
 
     <h3>NCCL：NVIDIA 的通信库</h3>
@@ -273,13 +273,13 @@ model = FSDP(
 import torch.distributed as dist
 
 # All-Reduce
-dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+dist.al$l_{reduce}$(tensor, op=dist.ReduceOp.SUM)
 
 # Reduce-Scatter
-dist.reduce_scatter_tensor(output, input, op=dist.ReduceOp.SUM)
+dist.reduc$e_{scatter}$_tensor(output, input, op=dist.ReduceOp.SUM)
 
 # All-Gather
-dist.all_gather_into_tensor(output_tensor, input_tensor)</code></pre>
+dist.al$l_{gather}$_int$o_{tensor}$(outpu$t_{tensor}$, inpu$t_{tensor}$)</code></pre>
 
     <h3>带宽测量</h3>
     <pre><code class="language-python"># 实测 NCCL 带宽:
@@ -288,14 +288,14 @@ tensor = torch.randn(100 * 1024**2, device='cuda')  # 400 MB
 
 # All-Reduce benchmark
 start = time.time()
-dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+dist.al$l_{reduce}$(tensor, op=dist.ReduceOp.SUM)
 torch.cuda.synchronize()
 duration = time.time() - start
 
 # 计算带宽
-size_bytes = tensor.element_size() * tensor.numel()
-# All-Reduce 发送量: 2 × (N-1)/N × size_bytes
-bandwidth = 2 * (world_size - 1) / world_size * size_bytes / duration
+siz$e_{bytes}$ = tensor.elemen$t_{size}$() * tensor.numel()
+# All-Reduce 发送量: 2 $\times$ (N-1)/N $\times$ siz$e_{bytes}$
+bandwidth = 2 * (worl$d_{size}$ - 1) / worl$d_{size}$ * siz$e_{bytes}$ / duration
 
 # 典型值:
 # NVLink (节点内 8 GPU): ~600-800 GB/s
@@ -307,15 +307,15 @@ bandwidth = 2 * (world_size - 1) / world_size * size_bytes / duration
     <h2 id="practical">实际训练配置</h2>
 
     <h3>70B 模型训练配置</h3>
-    <pre><code class="language-python"># 硬件: 16 节点 × 8 H100 = 128 GPU
+    <pre><code class="language-python"># 硬件: 16 节点 $\times$ 8 H100 = 128 GPU
 
 # 并行策略:
 TP = 8 (节点内)
 PP = 4 (4 个 pipeline stages)
-DP = 128 / (8 × 4) = 4
+DP = 128 / ($8 \times 4$) = 4
 
 # 内存（每 GPU）:
-参数: 70B / (8 × 4) = 2.19B 参数
+参数: 70B / ($8 \times 4$) = 2.19B 参数
   bf16: 4.4 GB
   fp32 主参数: 8.8 GB
 梯度: 8.8 GB
@@ -325,13 +325,13 @@ DP = 128 / (8 × 4) = 4
 总计: ~50 GB ← 放得下！
 
 # 吞吐量:
-MFU ≈ 0.5
-每 GPU: 989 × 0.5 = 495 TFLOP/s
+MFU $≈$ 0.5
+每 GPU: 98$9 \times 0$.5 = 495 TFLOP/s
 128 GPU: 63.4 PFLOP/s
-训练 15T tokens: 6 × 70B × 15T / 63.4P ≈ 99 小时 ≈ 4 天</code></pre>
+训练 15T tokens: $6 \times 7$0B $\times$ 15T / 63.4P $≈$ 99 小时 $≈$ 4 天</code></pre>
 
     <h3>Scaling Efficiency</h3>
-    <pre><code class="language-python"># 理想: N 个 GPU → N× 加速
+    <pre><code class="language-python"># 理想: N 个 GPU → N$\times$ 加速
 # 实际: 通信开销导致亚线性加速
 
 # 弱 scaling (固定每 GPU batch size):
@@ -373,8 +373,8 @@ MFU ≈ 0.5
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！HYBRID_SHARD 在节点内分片（利用 NVLink），节点间复制（减少跨节点通信）。" data-incorrect="HYBRID_SHARD 节点内 FULL_SHARD，节点间 DDP 复制。">
-      <p><strong>问题 3：</strong>FSDP 的 HYBRID_SHARD 策略是指？</p>
+    <div class="quiz" data-quiz="3" data-correct="正确！HYBRI$D_{SHARD}$ 在节点内分片（利用 NVLink），节点间复制（减少跨节点通信）。" data-incorrect="HYBRI$D_{SHARD}$ 节点内 FUL$L_{SHARD}$，节点间 DDP 复制。">
+      <p><strong>问题 3：</strong>FSDP 的 HYBRI$D_{SHARD}$ 策略是指？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">只分片参数不分片梯度</button>
         <button data-choice="b" aria-pressed="false">节点内分片，节点间复制</button>
@@ -384,13 +384,13 @@ MFU ≈ 0.5
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！Ring All-Reduce 的通信量 ≈ 2 × data_size，与 GPU 数 N 无关。" data-incorrect="Ring All-Reduce 的通信量与 N 无关，约等于 2 × data_size。">
+    <div class="quiz" data-quiz="4" data-correct="正确！Ring All-Reduce 的通信量 $≈$ 2 $\times$ dat$a_{size}$，与 GPU 数 N 无关。" data-incorrect="Ring All-Reduce 的通信量与 N 无关，约等于 2 $\times$ dat$a_{size}$。">
       <p><strong>问题 4：</strong>Ring All-Reduce 的通信量与 GPU 数 N 的关系是？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">$\\(O(\1)\\)</button>
-        <button data-choice="b" aria-pressed="false">$\\(O(\1)\\)（与 N 无关）</button>
-        <button data-choice="c" aria-pressed="false">$\\(O(\1)\\)</button>
-        <button data-choice="d" aria-pressed="false">$\\(O(\1)\\)</button>
+        <button data-choice="a" aria-pressed="false">$\\($O(\1)$\\)</button>
+        <button data-choice="b" aria-pressed="false">$\\($O(\1)$\\)（与 N 无关）</button>
+        <button data-choice="c" aria-pressed="false">$\\($O(\1)$\\)</button>
+        <button data-choice="d" aria-pressed="false">$\\($O(\1)$\\)</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
@@ -421,7 +421,7 @@ MFU ≈ 0.5
       </article>
       <article>
         <h3>Ring All-Reduce</h3>
-        <p>通信量与 N 无关，≈ 2× data</p>
+        <p>通信量与 N 无关，$≈$ 2$\times$ data</p>
       </article>
       <article>
         <h3>混合并行</h3>

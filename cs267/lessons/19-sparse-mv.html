@@ -52,7 +52,7 @@
     <p>以图像分割为例：我们希望识别图像中不同物体的边界。为此构造一个<strong>亲和矩阵</strong>（affinity matrix）$A$，其中 $A_{ij}$ 表示像素 $i$ 与像素 $j$ 属于同一物体的"亲和力"。由于只有相邻且颜色相近的像素才有关联，这个矩阵极其稀疏。最终通过求解 $Ax = \lambda x$ 的特征问题来找到分割边界。</p>
 
     <div class="card warning">
-      <h3>稀疏 ≠ 简单</h3>
+      <h3>稀疏 $≠$ 简单</h3>
       <p>稀疏矩阵的非零模式（nonzero pattern）千变万化：对角、三对角、块对角、带状、完全不规则……没有一种存储格式能在所有场景下都最优。SpMV 的性能通常受限于<strong>内存带宽</strong>而非计算能力——这正是稀疏矩阵与稠密矩阵的根本区别。</p>
     </div>
 
@@ -81,7 +81,7 @@
         <tr><td>COO</td><td>Coordinate Format</td><td>(row, col, val) 三元组列表</td><td>构建/修改矩阵，GPU 友好</td></tr>
         <tr><td>DIAG</td><td>Diagonal</td><td>按对角线存储，带偏移量</td><td>差分方程（有限差分/有限元）</td></tr>
         <tr><td>Symmetric</td><td>对称存储</td><td>只存上/下三角，索引复杂</td><td>对称矩阵（省一半空间）</td></tr>
-        <tr><td>Blocked</td><td>分块格式</td><td>每个 r×c 块连续存储</td><td>矩阵具有天然块结构</td></tr>
+        <tr><td>Blocked</td><td>分块格式</td><td>每个 r$\times$c 块连续存储</td><td>矩阵具有天然块结构</td></tr>
       </tbody>
     </table>
 
@@ -95,7 +95,7 @@
     <h2 id="serial-spmv">串行 SpMV</h2>
     <p>SpMV（Sparse Matrix-Vector Multiplication）是稀疏线性代数中最核心的 kernel：$y \leftarrow y + Ax$。CSR 格式下的串行实现非常简洁：</p>
 
-    <pre><code class="language-python">def spmv_csr(ptr, ind, val, x, y, m):
+    <pre><code class="language-python">def spm$v_{csr}$(ptr, ind, val, x, y, m):
     """y = y + A*x，A 以 CSR 格式存储，m 行"""
     for i in range(m):              # 遍历每一行
         for k in range(ptr[i], ptr[i+1]):  # 遍历该行所有非零元
@@ -123,7 +123,7 @@
     <h3>OpenMP 并行</h3>
     <p>在 CSR 的串行 SpMV 上直接加 OpenMP <code>#pragma omp for</code> 是最自然的并行方式：</p>
 
-    <pre><code class="language-c">#pragma omp parallel num_threads(thread_num)
+    <pre><code class="language-c">#pragma omp parallel nu$m_{threads}$(threa$d_{num}$)
 {
 #pragma omp for private(j, i, tmp) schedule(static)
    for (int i=0; i&lt;m; i++)  {
@@ -143,24 +143,24 @@
     <h3>SIMD 向量化（AVX2 Gather）</h3>
     <p>现代 CPU 提供 gather 指令（如 AVX2 的 <code>vpgatherdd</code>），可以从不规则地址加载向量。一个 8-wide 的 AVX2 SpMV 实现：</p>
 
-    <pre><code class="language-c">void avx2_csr_spmv(float *A, int32_t *nIdx, int32_t **indices,
+    <pre><code class="language-c">void avx2_cs$r_{spmv}$(float *A, int32_t *nIdx, int32_t **indices,
                    float *x, int32_t m, float *y) {
-  int32_t A_offset = 0;
+  int32_t $A_{offset}$ = 0;
   for(int32_t i = 0; i &lt; m; i++) {
     int32_t nElem = nIdx[i]; float t = 0.0f;
-    __m256 vT = _mm256_setzero_ps();
+    __m256 vT = _mm256_setzer$o_{ps}$();
     int32_t smLen = nElem - (nElem & 7);  // 8 的倍数
     for(int32_t j = 0; j &lt; smLen; j+=8) {
-      __m256i vIdx = _mm256_loadu_si256((__m256i*)&amp;(indices[i][j]));
-      __m256 vX = _mm256_i32gather_ps((float const*)x, vIdx, 4);  // gather x
-      __m256 vA = _mm256_loadu_ps(&amp;A[A_offset + j]);              // 连续加载 A
-      vT = _mm256_add_ps(vT, _mm256_mul_ps(vX, vA));              // FMA
+      __m256i vIdx = _mm256_load$u_{si256}$((__m256i*)&amp;(indices[i][j]));
+      __m256 vX = _mm256_i32gathe$r_{ps}$((float const*)x, vIdx, 4);  // gather x
+      __m256 vA = _mm256_load$u_{ps}$(&amp;A[$A_{offset}$ + j]);              // 连续加载 A
+      vT = _mm256_ad$d_{ps}$(vT, _mm256_mu$l_{ps}$(vX, vA));              // FMA
     }
     t += sum8(vT);  // 水平归约
     for(int32_t j = smLen; j &lt; nElem; j++)  // 尾部标量处理
-      t += x[indices[i][j]] * A[A_offset + j];
+      t += x[indices[i][j]] * A[$A_{offset}$ + j];
     y[i] = t;
-    A_offset += nElem;
+    $A_{offset}$ += nElem;
   }
 }</code></pre>
 
@@ -192,7 +192,7 @@ __global__ void spmv(int *ptr, int *ind, float *val,
     <ol>
       <li><strong>FLAG</strong>：在 ptr 标记的行起始位置为 1，其余为 0</li>
       <li><strong>PROD = VAL * X(IND)</strong>：逐元素乘（gather x）</li>
-      <li><strong>SUMS = SUM_SCAN(PROD, segment=FLAG)</strong>：分段前缀和，FLAG=1 处重置</li>
+      <li><strong>SUMS = SU$M_{SCAN}$(PROD, segment=FLAG)</strong>：分段前缀和，FLAG=1 处重置</li>
       <li><strong>Y = SUMS(PTR)</strong>：在 ptr 位置取值即为每行结果</li>
     </ol>
 
@@ -216,7 +216,7 @@ __global__ void spmv(int *ptr, int *ind, float *val,
     <p>当矩阵大到单机内存放不下时，必须跨节点分布。SpMV 的分布式并行策略与稠密矩阵既有相似之处，也有本质差异。</p>
 
     <h3>行并行（1D Row Blocking）</h3>
-    <p>将矩阵 $A$ 和结果 $y$ 按行划分给各处理器。每个处理器 $p$ 持有 $A_p$ 和 $y_p$，计算 $y_p \leftarrow A_p x$。<strong>关键问题</strong>：$A_p$ 中某些列索引可能指向 $x$ 中由其他处理器持有的分量，因此需要通信获取这些 $x$ 的元素。</p>
+    <p>将矩阵 $A$ 和结果 $y$ 按行划分给各处理器。每个处理器 $p$ 持有 $A_p$ 和 $y_p$，计算 $y_p \leftarrow $A_{p}$ x$。<strong>关键问题</strong>：$A_p$ 中某些列索引可能指向 $x$ 中由其他处理器持有的分量，因此需要通信获取这些 $x$ 的元素。</p>
 
     <ul>
       <li><strong>简单方案</strong>：完全复制 $x$ 到所有处理器（当 $x$ 不太大时可行）</li>
@@ -224,7 +224,7 @@ __global__ void spmv(int *ptr, int *ind, float *val,
     </ul>
 
     <h3>列并行（1D Column Blocking）</h3>
-    <p>将矩阵 $A$ 和向量 $x$ 按列划分。每个处理器计算一个局部的 $temp_y \leftarrow A_j x_j$，然后通过稀疏归约（sparse sum-reduce）将所有 $temp_y$ 累加到最终的 $y$ 上。</p>
+    <p>将矩阵 $A$ 和向量 $x$ 按列划分。每个处理器计算一个局部的 $tem$p_{y}$ \leftarrow $A_{j}$ x_j$，然后通过稀疏归约（sparse sum-reduce）将所有 $temp_y$ 累加到最终的 $y$ 上。</p>
 
     <h3>2D 并行</h3>
     <p>将处理器组织成 $p_1 \times p_2$ 的网格。矩阵 $A$ 也按 2D 块划分，每个处理器只与同行/同列的处理器通信。这是 NAS CG benchmark 采用的策略，在 $p$ 很大且非零元分布均匀时效果最好。</p>
@@ -259,11 +259,11 @@ __global__ void spmv(int *ptr, int *ind, float *val,
     <h2 id="register-blocking">Register Blocking 与自动调优</h2>
     <p>SpMV 的瓶颈是从内存中取矩阵数据。每个非零元只产生 2 个 flop，却需要加载列索引（4 字节）和值（4 字节）——共 8 字节。如果能减少每个非零元的索引开销，就能提升有效带宽利用率。</p>
 
-    <h3>r×c 分块 SpMV</h3>
+    <h3>r$\times$c 分块 SpMV</h3>
     <p>核心思想：不要为每个非零元存储一个列索引，而是把矩阵分成 $r \times c$ 的小块，每个块只存<strong>一个</strong>列索引。块内的 $r \times c$ 个元素被当作稠密小矩阵处理（无需索引）。</p>
 
     <ul>
-      <li>当 $r \times c$ 增大时，存储量下降（最多减少 ~2×，假设所有数据都是 32 位）</li>
+      <li>当 $r \times c$ 增大时，存储量下降（最多减少 ~2$\times$，假设所有数据都是 32 位）</li>
       <li>从内存取矩阵的时间减少 → 性能提升</li>
       <li>需要同时修改数据结构和算法</li>
     </ul>
@@ -272,7 +272,7 @@ __global__ void spmv(int *ptr, int *ind, float *val,
 
     <div class="card idea">
       <h3>最优块大小需要搜索！</h3>
-      <p>在 Itanium 2 处理器上，$r \times c = 4 \times 2$ 的块大小达到了最佳性能（31% 峰值）。更大的块（如 8×8）虽然减少了存储，但引入了大量显式零填充（fill overhead），浪费了计算和带宽。最优块大小取决于架构特性与矩阵非零模式，必须通过搜索确定。</p>
+      <p>在 Itanium 2 处理器上，$r \times c = 4 \times 2$ 的块大小达到了最佳性能（31% 峰值）。更大的块（如 $8 \times 8$）虽然减少了存储，但引入了大量显式零填充（fill overhead），浪费了计算和带宽。最优块大小取决于架构特性与矩阵非零模式，必须通过搜索确定。</p>
     </div>
 
     <p>不同架构的最优块大小差异巨大：</p>
@@ -283,7 +283,7 @@ __global__ void spmv(int *ptr, int *ind, float *val,
       <tbody>
         <tr><td>Power3</td><td>—</td><td>13%</td></tr>
         <tr><td>Power4</td><td>—</td><td>14%</td></tr>
-        <tr><td>Itanium 2</td><td>4×2</td><td>31%</td></tr>
+        <tr><td>Itanium 2</td><td>$4 \times 2$</td><td>31%</td></tr>
         <tr><td>Itanium 1</td><td>—</td><td>7%</td></tr>
         <tr><td>Ultra 2i</td><td>—</td><td>9%</td></tr>
         <tr><td>Pentium III</td><td>—</td><td>19%</td></tr>
@@ -291,24 +291,24 @@ __global__ void spmv(int *ptr, int *ind, float *val,
     </table>
 
     <h3>Fill Estimation（填充估计）</h3>
-    <p>大多数矩阵没有整齐的块结构。以 FEM 流体力学矩阵（N=16614, NNZ=1.1M）为例：3×3 的块看起来很自然，但许多块并不完整——为了形成完整的 r×c 块，需要填充显式零（explicit zeros）。</p>
+    <p>大多数矩阵没有整齐的块结构。以 FEM 流体力学矩阵（N=16614, NNZ=1.1M）为例：$3 \times 3$ 的块看起来很自然，但许多块并不完整——为了形成完整的 r$\times$c 块，需要填充显式零（explicit zeros）。</p>
 
     <p>填充的代价：</p>
     <ul>
-      <li>增加存储量（1.5× 的"填充开销"很常见）</li>
+      <li>增加存储量（1.5$\times$ 的"填充开销"很常见）</li>
       <li>增加无效计算（对零做乘法）</li>
       <li>但循环可以展开，向量化更高效</li>
     </ul>
 
-    <p>在 Pentium III 上，1.5× 填充开销的 3×3 分块反而比无填充的实现快 1.5×——因为向量化收益超过了填充代价。这种 trade-off 强烈依赖于架构。</p>
+    <p>在 Pentium III 上，1.5$\times$ 填充开销的 $3 \times 3$ 分块反而比无填充的实现快 1.5$\times$——因为向量化收益超过了填充代价。这种 trade-off 强烈依赖于架构。</p>
 
     <h3>OSKI：Optimized Sparse Kernel Interface</h3>
     <p>OSKI（以及其多核版本 pOSKI）是 Berkeley 的 BeBOP 小组开发的自动调优稀疏 kernel 库。它的核心思想是：<strong>将矩阵格式的选择与优化延迟到运行时，通过搜索找到最佳配置</strong>。</p>
 
     <h3>自动选择块大小的三步流程</h3>
     <ol>
-      <li><strong>离线基准测试（Offline Benchmark）</strong>：对每种 r×c 块大小，用稠密矩阵模拟稀疏格式跑 SpMV，测得 Mflops(r,c)。只需在每台机器上做一次。</li>
-      <li><strong>运行时搜索（Run-time Search）</strong>：对真实矩阵采样，估计每种 r×c 的 Fill(r,c)。通过控制采样比例 $s \in [0,1]$ 控制开销。</li>
+      <li><strong>离线基准测试（Offline Benchmark）</strong>：对每种 r$\times$c 块大小，用稠密矩阵模拟稀疏格式跑 SpMV，测得 Mflops(r,c)。只需在每台机器上做一次。</li>
+      <li><strong>运行时搜索（Run-time Search）</strong>：对真实矩阵采样，估计每种 r$\times$c 的 Fill(r,c)。通过控制采样比例 $s \in [0,1]$ 控制开销。</li>
       <li><strong>启发式模型（Heuristic Model）</strong>：选择使 $\text{time} \sim \text{Fill}(r,c) / \text{Mflops}(r,c)$ 最小的 r, c。</li>
     </ol>
 
@@ -338,9 +338,9 @@ __global__ void spmv(int *ptr, int *ind, float *val,
 
     <p>Cache blocking 对"短宽"矩阵（行数少、列数多）有效。以 LSI（潜在语义索引）矩阵为例：</p>
     <ul>
-      <li>矩阵大小：10k × 255k，3.7M 非零元</li>
+      <li>矩阵大小：10k $\times$ 255k，3.7M 非零元</li>
       <li>基线性能（无 cache blocking）：44 Mflop/s</li>
-      <li>最佳分块（16k × 16k）：210 Mflop/s（约 4.8× 加速）</li>
+      <li>最佳分块（16k $\times$ 16k）：210 Mflop/s（约 4.8$\times$ 加速）</li>
     </ul>
 
     <div class="card warning">
@@ -366,7 +366,7 @@ __global__ void spmv(int *ptr, int *ind, float *val,
       </tbody>
     </table>
 
-    <p>Register blocking 是 SpMV 上最有效的单优化：它同时改善了计算强度（减少索引开销）、ILP（块内循环展开）、DLP（向量化）和 FP 占比（减少整数地址计算）。实测中 register blocking 可带来最高 4× 的加速。</p>
+    <p>Register blocking 是 SpMV 上最有效的单优化：它同时改善了计算强度（减少索引开销）、ILP（块内循环展开）、DLP（向量化）和 FP 占比（减少整数地址计算）。实测中 register blocking 可带来最高 4$\times$ 的加速。</p>
 
     <p>其他串行优化技术的典型收益：</p>
     <table>
@@ -374,13 +374,13 @@ __global__ void spmv(int *ptr, int *ind, float *val,
         <tr><th>优化技术</th><th>最高加速比</th></tr>
       </thead>
       <tbody>
-        <tr><td>Register blocking</td><td>4× over CSR</td></tr>
-        <tr><td>Variable block splitting</td><td>2.1× over CSR, 1.8× over RB</td></tr>
-        <tr><td>Diagonals</td><td>2× over CSR</td></tr>
-        <tr><td>Reordering + splitting</td><td>2× over CSR</td></tr>
-        <tr><td>Symmetry</td><td>2.8× over CSR, 2.6× over RB</td></tr>
-        <tr><td>Cache blocking</td><td>2.8× over CSR</td></tr>
-        <tr><td>Multiple vectors (SpMM)</td><td>7× over CSR</td></tr>
+        <tr><td>Register blocking</td><td>4$\times$ over CSR</td></tr>
+        <tr><td>Variable block splitting</td><td>2.1$\times$ over CSR, 1.8$\times$ over RB</td></tr>
+        <tr><td>Diagonals</td><td>2$\times$ over CSR</td></tr>
+        <tr><td>Reordering + splitting</td><td>2$\times$ over CSR</td></tr>
+        <tr><td>Symmetry</td><td>2.8$\times$ over CSR, 2.6$\times$ over RB</td></tr>
+        <tr><td>Cache blocking</td><td>2.8$\times$ over CSR</td></tr>
+        <tr><td>Multiple vectors (SpMM)</td><td>7$\times$ over CSR</td></tr>
       </tbody>
     </table>
 
@@ -418,8 +418,8 @@ __global__ void spmv(int *ptr, int *ind, float *val,
     <p>传统 Krylov 方法每次迭代做一次 SpMV，共需 $k$ 次通信。Matrix Powers Kernel 一次性计算 $x, Ax, A^2x, \ldots, A^k x$ 这一整组向量，通过<strong>冗余计算</strong>换取<strong>通信减少</strong>：</p>
 
     <ul>
-      <li><strong>串行场景</strong>：传统方法需 $$\\(O(\1)\\)$ 次数据从慢内存移到快内存；Matrix Powers Kernel 只需 $$\\(O(\1)\\)$ 次——<strong>渐近最优</strong></li>
-      <li><strong>并行场景</strong>：传统方法需 $$\\(O(\1)\\)$ 条消息；Matrix Powers Kernel 只需 $$\\(O(\1)\\)$ 条——<strong>渐近最优</strong></li>
+      <li><strong>串行场景</strong>：传统方法需 $$\\($O(\1)$\\)$ 次数据从慢内存移到快内存；Matrix Powers Kernel 只需 $$\\($O(\1)$\\)$ 次——<strong>渐近最优</strong></li>
+      <li><strong>并行场景</strong>：传统方法需 $$\\($O(\1)$\\)$ 条消息；Matrix Powers Kernel 只需 $$\\($O(\1)$\\)$ 条——<strong>渐近最优</strong></li>
     </ul>
 
     <p>关键洞察：如果矩阵"良划分"（well-partitioned，即 surface-to-volume 比小），每个处理器可以持有足够多的" ghost zone "（halo），使得连续 $k$ 次 SpMV 中的前若干次不需要通信。</p>
@@ -427,8 +427,8 @@ __global__ void spmv(int *ptr, int *ind, float *val,
     <h3>CA-GMRES：避免通信的 GMRES</h3>
     <p>标准 GMRES 的通信成本：</p>
     <ul>
-      <li>Sequential：$$\\(O(\1)\\)$ 来自 SpMV + $$\\(O(\1)\\)$ 来自 MGS</li>
-      <li>Parallel：$$\\(O(\1)\\)$ 条消息来自 SpMV + $$\\(O(\1)\\)$ 来自 MGS</li>
+      <li>Sequential：$$\\($O(\1)$\\)$ 来自 SpMV + $$\\($O(\1)$\\)$ 来自 MGS</li>
+      <li>Parallel：$$\\($O(\1)$\\)$ 条消息来自 SpMV + $$\\($O(\1)$\\)$ 来自 MGS</li>
     </ul>
 
     <p>CA-GMRES 用 Matrix Powers Kernel + TSQR（Tall Skinny QR）重构算法：</p>
@@ -440,8 +440,8 @@ for i in range(k):
     update v[i], H
 
 # CA-GMRES（k 步）
-W = [v, Av, A^2v, ..., A^kv]   # Matrix Powers Kernel → $\\(O(\1)\\) 通信
-[Q, R] = TSQR(W)               # Tall Skinny QR → $\\(O(\1)\\) 通信
+W = [v, Av, A^2v, ..., A^kv]   # Matrix Powers Kernel → $\\($O(\1)$\\) 通信
+[Q, R] = TSQR(W)               # Tall Skinny QR → $\\($O(\1)$\\) 通信
 Build H from R, solve LSQ</code></pre>
 
     <p>通信成本对比：</p>
@@ -450,8 +450,8 @@ Build H from R, solve LSQ</code></pre>
         <tr><th>实现</th><th>串行数据移动</th><th>并行消息数</th></tr>
       </thead>
       <tbody>
-        <tr><td>标准 GMRES</td><td>$$\\(O(\1)\\) + $\\(O(\1)\\)$</td><td>$$\\(O(\1)\\) + $\\(O(\1)\\)$</td></tr>
-        <tr><td>CA-GMRES</td><td>$$\\(O(\1)\\) + $\\(O(\1)\\)$</td><td>$$\\(O(\1)\\) + $\\(O(\1)\\)$</td></tr>
+        <tr><td>标准 GMRES</td><td>$$\\($O(\1)$\\) + $\\($O(\1)$\\)$</td><td>$$\\($O(\1)$\\) + $\\($O(\1)$\\)$</td></tr>
+        <tr><td>CA-GMRES</td><td>$$\\($O(\1)$\\) + $\\($O(\1)$\\)$</td><td>$$\\($O(\1)$\\) + $\\($O(\1)$\\)$</td></tr>
       </tbody>
     </table>
 
@@ -518,7 +518,7 @@ Build H from R, solve LSQ</code></pre>
     <div class="quiz" data-quiz="3" data-correct="a" data-incorrect="b,c,d">
       <p><strong>Q3：</strong>为什么 register blocking 能提升 SpMV 性能？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">r×c 块共享一个列索引，减少索引存储和内存流量</button>
+        <button data-choice="a" aria-pressed="false">r$\times$c 块共享一个列索引，减少索引存储和内存流量</button>
         <button data-choice="b" aria-pressed="false">它将 SpMV 从 BLAS2 变成 BLAS3</button>
         <button data-choice="c" aria-pressed="false">它消除了对 x 向量的间接寻址</button>
         <button data-choice="d" aria-pressed="false">它将矩阵转置为稠密格式</button>
@@ -532,7 +532,7 @@ Build H from R, solve LSQ</code></pre>
         <button data-choice="a" aria-pressed="false">它总是收敛更快（需要更少的迭代步数）</button>
         <button data-choice="b" aria-pressed="false">它不需要任何正交化步骤</button>
         <button data-choice="c" aria-pressed="false">它在浮点运算中数值稳定性严格更好</button>
-        <button data-choice="d" aria-pressed="false">它通过 Matrix Powers Kernel + TSQR 将通信量从 $\\(O(\1)\\) 降到 $\\(O(\1)\\)</button>
+        <button data-choice="d" aria-pressed="false">它通过 Matrix Powers Kernel + TSQR 将通信量从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\)</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
@@ -558,7 +558,7 @@ Build H from R, solve LSQ</code></pre>
       </article>
       <article>
         <h3>Register blocking 收益最大</h3>
-        <p>r×c 分块可减少索引开销，最高 4× 加速。最优块大小需要通过搜索确定，依赖架构与矩阵结构。</p>
+        <p>r$\times$c 分块可减少索引开销，最高 4$\times$ 加速。最优块大小需要通过搜索确定，依赖架构与矩阵结构。</p>
       </article>
       <article>
         <h3>分布式场景重排序至关重要</h3>
@@ -566,7 +566,7 @@ Build H from R, solve LSQ</code></pre>
       </article>
       <article>
         <h3>高层算法优化突破带宽墙</h3>
-        <p>CA-GMRES 等通信避免算法通过冗余计算换通信减少，将 k 次 SpMV 的通信从 $\\(O(\1)\\) 降到 $\\(O(\1)\\)——渐近最优。</p>
+        <p>CA-GMRES 等通信避免算法通过冗余计算换通信减少，将 k 次 SpMV 的通信从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\)——渐近最优。</p>
       </article>
     </div>
 
