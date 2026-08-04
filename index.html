@@ -2,10 +2,289 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=cs336/">
-  <title>Redirecting...</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PointBreaker</title>
+  <style>
+    :root {
+      --bg: #0a0f0d;
+      --fg: #e7f8ea;
+      --muted: #7a9e84;
+      --accent: #22c55e;
+      --accent-glow: rgba(34, 197, 94, 0.3);
+      --card: rgba(255, 255, 255, 0.03);
+      --border: rgba(255, 255, 255, 0.08);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      background: var(--bg);
+      color: var(--fg);
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Animated background grid */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(34, 197, 94, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(34, 197, 94, 0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: grid-move 20s linear infinite;
+      pointer-events: none;
+    }
+
+    @keyframes grid-move {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(60px, 60px); }
+    }
+
+    /* Floating orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      pointer-events: none;
+      animation: float 8s ease-in-out infinite;
+    }
+
+    .orb-1 {
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(34, 197, 94, 0.15), transparent);
+      top: 10%;
+      left: 10%;
+      animation-delay: 0s;
+    }
+
+    .orb-2 {
+      width: 200px;
+      height: 200px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.1), transparent);
+      bottom: 20%;
+      right: 15%;
+      animation-delay: -3s;
+    }
+
+    .orb-3 {
+      width: 150px;
+      height: 150px;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.08), transparent);
+      top: 50%;
+      right: 30%;
+      animation-delay: -5s;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(20px, -30px) scale(1.05); }
+      66% { transform: translate(-15px, 20px) scale(0.95); }
+    }
+
+    /* Main content */
+    .container {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    /* Glitch title */
+    .title {
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      margin-bottom: 1rem;
+      position: relative;
+      animation: fade-in-up 1s ease-out;
+    }
+
+    .title .char {
+      display: inline-block;
+      animation: char-glow 4s ease-in-out infinite;
+    }
+
+    .title .char:nth-child(1) { animation-delay: 0s; }
+    .title .char:nth-child(2) { animation-delay: 0.1s; }
+    .title .char:nth-child(3) { animation-delay: 0.2s; }
+    .title .char:nth-child(4) { animation-delay: 0.3s; }
+    .title .char:nth-child(5) { animation-delay: 0.4s; }
+    .title .char:nth-child(6) { animation-delay: 0.5s; }
+    .title .char:nth-child(7) { animation-delay: 0.6s; }
+    .title .char:nth-child(8) { animation-delay: 0.7s; }
+    .title .char:nth-child(9) { animation-delay: 0.8s; }
+    .title .char:nth-child(10) { animation-delay: 0.9s; }
+    .title .char:nth-child(11) { animation-delay: 1.0s; }
+
+    @keyframes char-glow {
+      0%, 100% { color: var(--fg); text-shadow: none; }
+      50% { color: var(--accent); text-shadow: 0 0 20px var(--accent-glow); }
+    }
+
+    @keyframes fade-in-up {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Typing subtitle */
+    .subtitle {
+      font-size: clamp(0.9rem, 2vw, 1.1rem);
+      color: var(--muted);
+      margin-bottom: 3rem;
+      overflow: hidden;
+      white-space: nowrap;
+      border-right: 2px solid var(--accent);
+      animation:
+        typing 3s steps(40) 1s forwards,
+        blink 0.8s step-end infinite;
+      width: 0;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    @keyframes typing {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+
+    @keyframes blink {
+      50% { border-color: transparent; }
+    }
+
+    /* Status card */
+    .status-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem 2rem;
+      backdrop-filter: blur(10px);
+      animation: fade-in-up 1s ease-out 0.5s both;
+    }
+
+    .status-line {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0;
+      font-size: 0.85rem;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .status-key {
+      color: var(--muted);
+      min-width: 80px;
+    }
+
+    .status-value {
+      color: var(--fg);
+    }
+
+    /* Terminal cursor at bottom */
+    .prompt {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.8rem;
+      color: var(--muted);
+      animation: fade-in-up 1s ease-out 1.5s both;
+    }
+
+    .prompt .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 16px;
+      background: var(--accent);
+      vertical-align: middle;
+      margin-left: 4px;
+      animation: cursor-blink 1s step-end infinite;
+    }
+
+    @keyframes cursor-blink {
+      50% { opacity: 0; }
+    }
+
+    /* Scanline effect */
+    .scanline {
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.03) 2px,
+        rgba(0, 0, 0, 0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .status-card { padding: 1rem 1.5rem; }
+      .subtitle { font-size: 0.8rem; }
+    }
+  </style>
 </head>
 <body>
-  <p>Redirecting to <a href="cs336/">CS336 Course</a>...</p>
+  <!-- Background effects -->
+  <div class="bg-grid"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="scanline"></div>
+
+  <!-- Main content -->
+  <div class="container">
+    <h1 class="title">
+      <span class="char">P</span><span class="char">o</span><span class="char">i</span><span class="char">n</span><span class="char">t</span><span class="char">B</span><span class="char">r</span><span class="char">e</span><span class="char">a</span><span class="char">k</span><span class="char">e</span><span class="char">r</span>
+    </h1>
+
+    <p class="subtitle">building things that matter_</p>
+
+    <div class="status-card">
+      <div class="status-line">
+        <span class="status-dot"></span>
+        <span class="status-key">status</span>
+        <span class="status-value">online</span>
+      </div>
+      <div class="status-line">
+        <span class="status-dot" style="animation-delay: 0.3s"></span>
+        <span class="status-key">focus</span>
+        <span class="status-value">systems & ml</span>
+      </div>
+      <div class="status-line">
+        <span class="status-dot" style="animation-delay: 0.6s"></span>
+        <span class="status-key">location</span>
+        <span class="status-value">earth</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal prompt -->
+  <div class="prompt">
+    └── <span class="cursor"></span>
+  </div>
 </body>
 </html>
