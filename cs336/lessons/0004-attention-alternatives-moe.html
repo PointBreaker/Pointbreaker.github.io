@@ -6,12 +6,16 @@
   <title>第 4 课：注意力替代方案与混合专家 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
 </head>
 <body>
   <div class="page">
     <p class="eyebrow">CS336 · 第 4 课</p>
     <h1>注意力替代方案与混合专家</h1>
-    <p class="lede">标准 attention 的 O(n²) 复杂度是 Transformer 的致命瓶颈。这一课探索两条突围路径：(1) 设计更高效但近似的注意力机制；(2) 用稀疏激活的 MoE 让模型容量随参数增长而计算量亚线性增长。</p>
+    <p class="lede">标准 attention 的 $\\(O(\1)\\) 复杂度是 Transformer 的致命瓶颈。这一课探索两条突围路径：(1) 设计更高效但近似的注意力机制；(2) 用稀疏激活的 MoE 让模型容量随参数增长而计算量亚线性增长。</p>
 
     <div class="meta">
       <span>授课：Tatsu Hashimoto</span>
@@ -24,11 +28,11 @@
     <!-- ============================================================ -->
     <h2 id="attention-bottleneck">标准 Attention 的瓶颈</h2>
 
-    <h3>O(n²) 问题</h3>
+    <h3>$\\(O(\1)\\) 问题</h3>
     <p>标准 self-attention 对长度为 n 的序列：</p>
-    <pre><code class="language-python">scores = Q @ K^T    # (n, d) @ (d, n) → (n, n)  ← O(n²d) FLOPs
+    <pre><code class="language-python">scores = Q @ K^T    # (n, d) @ (d, n) → (n, n)  ← $\\(O(\1)\\) FLOPs
 attn = softmax(scores)
-output = attn @ V   # (n, n) @ (n, d) → (n, d)  ← O(n²d) FLOPs
+output = attn @ V   # (n, n) @ (n, d) → (n, d)  ← $\\(O(\1)\\) FLOPs
 
 内存: 需要存储 (n, n) 的 attention matrix</code></pre>
 
@@ -48,15 +52,15 @@ output = attn @ V   # (n, n) @ (n, d) → (n, d)  ← O(n²d) FLOPs
 
     <h3>1. Linear Attention</h3>
     <p>核心思想：把 softmax 去掉，用核函数近似：</p>
-    <pre><code class="language-python"># 标准 attention: O(n²)
+    <pre><code class="language-python"># 标准 attention: $\\(O(\1)\\)
 attn = softmax(Q @ K^T / √d) @ V
 
-# Linear attention: O(n)
+# Linear attention: $\\(O(\1)\\)
 # 利用 (Q @ K^T) @ V = Q @ (K^T @ V) 的结合律
 # 先算 K^T @ V（d × d），再算 Q @ (K^T @ V)
 output = φ(Q) @ (φ(K)^T @ V)  # φ 是核函数（如 ReLU, elu+1）
 
-# 复杂度: O(nd²) —— 当 n >> d 时远优于 O(n²d)</code></pre>
+# 复杂度: $\\(O(\1)\\) —— 当 n >> d 时远优于 $\\(O(\1)\\)</code></pre>
 
     <div class="card idea">
       <p><strong>关键洞察：</strong>矩阵乘法满足结合律。标准 attention 先算 (Q @ K^T) 得到 n×n 矩阵，再乘 V。Linear attention 先算 (K^T @ V) 得到 d×d 矩阵，再被 Q 乘。当 n >> d 时，后者快得多。</p>
@@ -72,7 +76,7 @@ for i in range(n):
     attn[i] = softmax(scores[i])
     output[i] = attn[i] @ V[max(0,i-w):i+w]
 
-# 复杂度: O(nwd) —— 线性于 n</code></pre>
+# 复杂度: $\\(O(\1)\\) —— 线性于 n</code></pre>
 
     <p><strong>直觉：</strong>大多数语言建模任务中，附近的 token 比远处的更重要。</p>
 
@@ -91,7 +95,7 @@ h(t) = A × h(t-1) + B × x(t)
 y(t) = C × h(t)
 
 # 训练时: 展开为卷积（并行）
-# 推理时: 递推（O(1) 内存）
+# 推理时: 递推（$\\(O(\1)\\) 内存）
 
 # Mamba 的改进: A, B, C 是输入相关的（选择性 SSM）
 # 让模型学会"忘记"不相关的信息</code></pre>
@@ -103,11 +107,11 @@ y(t) = C × h(t)
     <h3>方案对比</h3>
     <table>
       <tr><th>方法</th><th>训练复杂度</th><th>推理内存</th><th>长程依赖</th></tr>
-      <tr><td>Full Attention</td><td>O(n²d)</td><td>O(n²)</td><td>完美</td></tr>
-      <tr><td>Linear Attention</td><td>O(nd²)</td><td>O(nd)</td><td>差</td></tr>
-      <tr><td>Sliding Window</td><td>O(nwd)</td><td>O(nw)</td><td>局部好</td></tr>
-      <tr><td>Hybrid (Sparse)</td><td>O(nwd + n²/L)</td><td>O(nw + n²/L)</td><td>好</td></tr>
-      <tr><td>SSM/Mamba</td><td>O(nd²)</td><td>O(d²)</td><td>中等</td></tr>
+      <tr><td>Full Attention</td><td>$\\(O(\1)\\)</td><td>$\\(O(\1)\\)</td><td>完美</td></tr>
+      <tr><td>Linear Attention</td><td>$\\(O(\1)\\)</td><td>$\\(O(\1)\\)</td><td>差</td></tr>
+      <tr><td>Sliding Window</td><td>$\\(O(\1)\\)</td><td>$\\(O(\1)\\)</td><td>局部好</td></tr>
+      <tr><td>Hybrid (Sparse)</td><td>$\\(O(\1)\\)</td><td>$\\(O(\1)\\)</td><td>好</td></tr>
+      <tr><td>SSM/Mamba</td><td>$\\(O(\1)\\)</td><td>$\\(O(\1)\\)</td><td>中等</td></tr>
     </table>
 
     <hr class="rule">
@@ -381,7 +385,7 @@ def load_balancing_loss(gate_scores, num_experts):
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！Linear attention 用结合律先算 K^T @ V（d×d），再被 Q 乘，复杂度 O(nd²)。" data-incorrect="Linear attention 利用矩阵乘法结合律，先算 K^T @ V 得到 d×d 矩阵，再被 Q 乘。">
+    <div class="quiz" data-quiz="4" data-correct="正确！Linear attention 用结合律先算 K^T @ V（d×d），再被 Q 乘，复杂度 $\\(O(\1)\\)。" data-incorrect="Linear attention 利用矩阵乘法结合律，先算 K^T @ V 得到 d×d 矩阵，再被 Q 乘。">
       <p><strong>问题 4：</strong>Linear attention 为什么比标准 attention 快？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它跳过了 softmax</button>
@@ -414,7 +418,7 @@ def load_balancing_loss(gate_scores, num_experts):
       </article>
       <article>
         <h3>Linear Attention</h3>
-        <p>结合律 + 核近似，O(nd²) 替代 O(n²d)</p>
+        <p>结合律 + 核近似，$\\(O(\1)\\) 替代 $\\(O(\1)\\)</p>
       </article>
       <article>
         <h3>MoE</h3>

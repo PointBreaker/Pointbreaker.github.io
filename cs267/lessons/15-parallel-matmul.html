@@ -6,6 +6,10 @@
   <title>并行矩阵乘法 — CS267</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
 </head>
 <body>
   <div class="page">
@@ -26,9 +30,9 @@
       <h3>DLA 软件时间线</h3>
       <ul>
         <li><strong>1970–77</strong>：LINPACK / EISPACK（标量、无 BLAS）</li>
-        <li><strong>1979</strong>：BLAS Level 1（AXPY 等，O(n) 操作）</li>
-        <li><strong>1984–88</strong>：BLAS Level 2（GEMV，O(n²) 操作）</li>
-        <li><strong>1987–90</strong>：BLAS Level 3（GEMM，O(n³) 操作）</li>
+        <li><strong>1979</strong>：BLAS Level 1（AXPY 等，$\\(O(\1)\\) 操作）</li>
+        <li><strong>1984–88</strong>：BLAS Level 2（GEMV，$\\(O(\1)\\) 操作）</li>
+        <li><strong>1987–90</strong>：BLAS Level 3（GEMM，$\\(O(\1)\\) 操作）</li>
         <li><strong>1992</strong>：LAPACK（共享内存、cache-aware）</li>
         <li><strong>1995</strong>：ScaLAPACK（分布式内存）</li>
         <li><strong>2017+</strong>：SLATE（GPU/异构，取代 ScaLAPACK）</li>
@@ -40,22 +44,22 @@
     <hr class="rule">
 
     <h2 id="blas">BLAS 层次结构</h2>
-    <p>基本线性代数子程序（BLAS）按数据重用能力分为三个层次。核心思想：<strong>Level k 的算法将 O(n^k) 操作作用于 O(n^k) 数据</strong>，从而在 cache 中实现高效重用。</p>
+    <p>基本线性代数子程序（BLAS）按数据重用能力分为三个层次。核心思想：<strong>Level k 的算法将 $\\(O(\1)\\) 操作作用于 $\\(O(\1)\\) 数据</strong>，从而在 cache 中实现高效重用。</p>
 
     <table>
       <thead>
         <tr><th>Level</th><th>操作</th><th>例子</th><th>数据/操作比</th><th>Cache 友好性</th></tr>
       </thead>
       <tbody>
-        <tr><td>1</td><td>O(n)</td><td>AXPY, DOT, SCAL</td><td>O(1)</td><td>差（流式）</td></tr>
-        <tr><td>2</td><td>O(n²)</td><td>GEMV, GER</td><td>O(n)</td><td>一般</td></tr>
-        <tr><td>3</td><td>O(n³)</td><td>GEMM, SYMM, TRSM</td><td>O(n²)</td><td>好（可分块）</td></tr>
+        <tr><td>1</td><td>$\\(O(\1)\\)</td><td>AXPY, DOT, SCAL</td><td>$\\(O(\1)\\)</td><td>差（流式）</td></tr>
+        <tr><td>2</td><td>$\\(O(\1)\\)</td><td>GEMV, GER</td><td>$\\(O(\1)\\)</td><td>一般</td></tr>
+        <tr><td>3</td><td>$\\(O(\1)\\)</td><td>GEMM, SYMM, TRSM</td><td>$\\(O(\1)\\)</td><td>好（可分块）</td></tr>
       </tbody>
     </table>
 
     <div class="card warning">
       <h3>为什么 Level 3 如此重要？</h3>
-      <p>现代处理器中 flop 速率远高于内存带宽。Level 3 的 O(n²) 数据重用意味着一旦数据进入 cache，就可以被 O(n) 次 flop 反复使用。因此<strong>尽可能将计算表达为 BLAS3 操作</strong>是性能优化的首要原则。</p>
+      <p>现代处理器中 flop 速率远高于内存带宽。Level 3 的 $\\(O(\1)\\) 数据重用意味着一旦数据进入 cache，就可以被 $\\(O(\1)\\) 次 flop 反复使用。因此<strong>尽可能将计算表达为 BLAS3 操作</strong>是性能优化的首要原则。</p>
     </div>
 
     <hr class="rule">
@@ -120,7 +124,7 @@ for (ii = 0; ii < m; ii += b)
       <h3>Hong-Kung 下界（I/O 复杂度）</h3>
       <p>对于在大小为 M 的快速内存中计算 n×n 矩阵乘法，必须至少有：</p>
       <pre><code>#words moved ≥ Ω(n³ / √M)</code></pre>
-      <p>这由矩阵乘法的算术复杂度（2n³ flops）与每个 word 最多贡献 O(√M) 次 flop 的事实导出。</p>
+      <p>这由矩阵乘法的算术复杂度（2n³ flops）与每个 word 最多贡献 $\\(O(\1)\\) 次 flop 的事实导出。</p>
     </div>
 
     <div class="card idea">
@@ -146,10 +150,10 @@ for (ii = 0; ii < m; ii += b)
         <tr><th>算法</th><th>#words</th><th>#messages</th><th>达到下界？</th></tr>
       </thead>
       <tbody>
-        <tr><td>经典分块 GEMM</td><td>O(n³/√M)</td><td>O(1)</td><td>words ✓, messages ✗ (串行)</td></tr>
-        <tr><td>2D SUMMA</td><td>O(n³/(P√M))</td><td>O(n²/√M·log P)</td><td>接近（log P 因子）</td></tr>
-        <tr><td>2.5D 算法</td><td>O(n³/(P√M))</td><td>O(n³/(c·M^(3/2)))</td><td>参数可调</td></tr>
-        <tr><td>Strassen</td><td>O(n^log₂7 / √M)</td><td>Ω(…)</td><td>减少 flop，降低下界</td></tr>
+        <tr><td>经典分块 GEMM</td><td>$\\(O(\1)\\)</td><td>$\\(O(\1)\\)</td><td>words ✓, messages ✗ (串行)</td></tr>
+        <tr><td>2D SUMMA</td><td>$\\(O(\1)\\))</td><td>$\\(O(\1)\\)</td><td>接近（log P 因子）</td></tr>
+        <tr><td>2.5D 算法</td><td>$\\(O(\1)\\))</td><td>$\\(O(\1)\\)))</td><td>参数可调</td></tr>
+        <tr><td>Strassen</td><td>$\\(O(\1)\\)</td><td>Ω(…)</td><td>减少 flop，降低下界</td></tr>
       </tbody>
     </table>
 
@@ -173,10 +177,10 @@ for (ii = 0; ii < m; ii += b)
         <tr><th>布局</th><th>通信量</th><th>负载均衡</th><th>实现复杂度</th></tr>
       </thead>
       <tbody>
-        <tr><td>1D Blocked</td><td>O(n²)</td><td>一般</td><td>简单</td></tr>
-        <tr><td>1D Cyclic</td><td>O(n²)</td><td>好</td><td>中等</td></tr>
-        <tr><td>2D Blocked</td><td>O(n²/√P)</td><td>好</td><td>中等</td></tr>
-        <tr><td>2D Block-Cyclic</td><td>O(n²/√P)</td><td>最好</td><td>复杂</td></tr>
+        <tr><td>1D Blocked</td><td>$\\(O(\1)\\)</td><td>一般</td><td>简单</td></tr>
+        <tr><td>1D Cyclic</td><td>$\\(O(\1)\\)</td><td>好</td><td>中等</td></tr>
+        <tr><td>2D Blocked</td><td>$\\(O(\1)\\)</td><td>好</td><td>中等</td></tr>
+        <tr><td>2D Block-Cyclic</td><td>$\\(O(\1)\\)</td><td>最好</td><td>复杂</td></tr>
       </tbody>
     </table>
 
@@ -191,7 +195,7 @@ for (ii = 0; ii < m; ii += b)
     </ol>
     <div class="card warning">
       <h3>BLAS2 的局限</h3>
-      <p>GEMV 是 O(n²) 操作对 O(n²) 数据，数据重用仅 O(1)。因此在 cache 和分布式系统中都难以高效。这也是为什么迭代方法常需要<strong>矩阵-矩阵乘积</strong>（如 s-step CG、block Krylov）来提升效率。</p>
+      <p>GEMV 是 $\\(O(\1)\\) 操作对 $\\(O(\1)\\) 数据，数据重用仅 $\\(O(\1)\\)。因此在 cache 和分布式系统中都难以高效。这也是为什么迭代方法常需要<strong>矩阵-矩阵乘积</strong>（如 s-step CG、block Krylov）来提升效率。</p>
     </div>
 
     <hr class="rule">
@@ -216,7 +220,7 @@ for step = 0 to P-1:
 
     <div class="card tip">
       <h3>Ring 算法的优势</h3>
-      <p>在环形中，每个链路仅传输 O(n²/P) 数据，且可以流水线化（overlap 通信与计算）。SUMMA 算法正是基于这种 outer-product 思想。</p>
+      <p>在环形中，每个链路仅传输 $\\(O(\1)\\) 数据，且可以流水线化（overlap 通信与计算）。SUMMA 算法正是基于这种 outer-product 思想。</p>
     </div>
 
     <hr class="rule">
@@ -238,8 +242,8 @@ for (p = 0; p < k; p++) {
     <div class="card idea">
       <h3>SUMMA 的通信成本</h3>
       <ul>
-        <li>Words: O(n²/√P · log P) —— 在对数因子内达到下界</li>
-        <li>Messages: O(n²/M · log P) —— 接近下界</li>
+        <li>Words: $\\(O(\1)\\) —— 在对数因子内达到下界</li>
+        <li>Messages: $\\(O(\1)\\) —— 接近下界</li>
       </ul>
       <p>SUMMA 的优势：<strong>简单、通用、易于实现</strong>，是 ScaLAPACK PDGEMM 的基础。</p>
     </div>
@@ -260,8 +264,8 @@ Reduce(C_0, C_1, ..., C_{c-1}) -> C;</code></pre>
     <div class="card idea">
       <h3>2.5D 的 scaling 特性</h3>
       <p>当 c = P^(1/3) 时，2.5D 算法实现<strong>完美强扩展（perfect strong scaling）</strong>：在 P 个处理器上使用 c 份副本，通信量与 P=1 时相同！代价是使用 c 倍内存。</p>
-      <pre><code>#words = O(n³ / (P·√M)) · (c^(1/2))
-#messages = O(n³ / M^(3/2)) · (1/c)</code></pre>
+      <pre><code>#words = $\\(O(\1)\\)) · (c^(1/2))
+#messages = $\\(O(\1)\\)) · (1/c)</code></pre>
     </div>
 
     <hr class="rule">
@@ -288,13 +292,13 @@ C22 = M1 - M2 + M3 + M6</code></pre>
     <div class="card idea">
       <h3>复杂度分析</h3>
       <p>递归应用 Strassen：</p>
-      <pre><code>T(n) = 7·T(n/2) + O(n²) ⇒ T(n) = O(n^log₂7) ≈ O(n^2.81)</code></pre>
-      <p>比经典 O(n³) 算法减少约 13% 的 flop 数（当 n 大时）。</p>
+      <pre><code>T(n) = 7·T(n/2) + $\\(O(\1)\\) ⇒ T(n) = $\\(O(\1)\\) ≈ $\\(O(\1)\\)</code></pre>
+      <p>比经典 $\\(O(\1)\\) 算法减少约 13% 的 flop 数（当 n 大时）。</p>
     </div>
 
     <div class="card warning">
       <h3>Strassen 的数值稳定性</h3>
-      <p>Strassen 算法使用减法组合中间结果，导致误差界从经典 O(ε·n) 变为 O(ε·n^0.81·log n)。对于大多数问题是安全的，但在 LAPACK 中仅作为可选优化（xGEQRF 等）。</p>
+      <p>Strassen 算法使用减法组合中间结果，导致误差界从经典 $\\(O(\1)\\) 变为 $\\(O(\1)\\)。对于大多数问题是安全的，但在 LAPACK 中仅作为可选优化（xGEQRF 等）。</p>
     </div>
 
     <h3>并行 Strassen 性能</h3>
@@ -375,8 +379,8 @@ pdgemm_("N", "N", &m, &n, &k, &alpha,
     <div class="quiz" data-quiz="4" data-correct="d" data-incorrect="a,b,c">
       <p><strong>问题 4：</strong>2.5D 矩阵乘法算法中，当副本数 c = P^(1/3) 时，可以实现什么性质？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">A. 总通信量减少到 O(1)</button>
-        <button data-choice="b" aria-pressed="false">B. flop 数减少为 O(n²)</button>
+        <button data-choice="a" aria-pressed="false">A. 总通信量减少到 $\\(O(\1)\\)</button>
+        <button data-choice="b" aria-pressed="false">B. flop 数减少为 $\\(O(\1)\\)</button>
         <button data-choice="c" aria-pressed="false">C. 每个处理器的内存使用减少 c 倍</button>
         <button data-choice="d" aria-pressed="false">D. 完美强扩展（perfect strong scaling），通信量与串行相同</button>
       </div>
@@ -386,10 +390,10 @@ pdgemm_("N", "N", &m, &n, &k, &alpha,
     <div class="quiz" data-quiz="5" data-correct="c" data-incorrect="a,b,d">
       <p><strong>问题 5：</strong>Strassen 算法的渐近复杂度（flop 数）是多少？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">A. O(n³)</button>
-        <button data-choice="b" aria-pressed="false">B. O(n²)</button>
-        <button data-choice="c" aria-pressed="false">C. O(n^log₂7) ≈ O(n^2.81)</button>
-        <button data-choice="d" aria-pressed="false">D. O(n^2.376)（Coppersmith-Winograd）</button>
+        <button data-choice="a" aria-pressed="false">A. $\\(O(\1)\\)</button>
+        <button data-choice="b" aria-pressed="false">B. $\\(O(\1)\\)</button>
+        <button data-choice="c" aria-pressed="false">C. $\\(O(\1)\\) ≈ $\\(O(\1)\\)</button>
+        <button data-choice="d" aria-pressed="false">D. $\\(O(\1)\\)（Coppersmith-Winograd）</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
