@@ -81,7 +81,7 @@ for (k = 0; k < n; k++) {
 
     <div class="card warning">
       <h3>仍然是 BLAS2！</h3>
-      <p>第 5 步的 GER 是 rank-1 更新，属于 BLAS2。这意味着数据重用仅 $\\($O(\1)$\\)，无法充分利用 cache。</p>
+      <p>第 5 步的 GER 是 rank-1 更新，属于 BLAS2。这意味着数据重用仅 $O(n^2)$，无法充分利用 cache。</p>
     </div>
 
     <hr class="rule">
@@ -103,7 +103,7 @@ for (k = 0; k < n; k++) {
     }
 }</code></pre>
 
-    <p>GEPP 产生 PA = LU 分解，其中 P 是置换矩阵。数值稳定性：增长因子通常 $\\($O(\1)$\\)，最坏情况 $\\($O(\1)$\\))（极罕见）。</p>
+    <p>GEPP 产生 PA = LU 分解，其中 P 是置换矩阵。数值稳定性：增长因子通常 $O(n^2)$，最坏情况 $O(n^2)$)（极罕见）。</p>
 
     <hr class="rule">
 
@@ -138,9 +138,9 @@ for (k = 0; k < n; k += b) {
         <tr><th>阶段</th><th>计算</th><th>BLAS 级别</th><th>占比</th></tr>
       </thead>
       <tbody>
-        <tr><td>Panel factorization</td><td>$\\($O(\1)$\\)</td><td>BLAS2</td><td>$\\($O(\1)$\\)</td></tr>
-        <tr><td>Trailing update</td><td>$\\($O(\1)$\\)</td><td>BLAS3</td><td>$≈$ 1 - $\\($O(\1)$\\)</td></tr>
-        <tr><td>Total</td><td>2/3 n³ + $\\($O(\1)$\\)</td><td>-</td><td>-</td></tr>
+        <tr><td>Panel factorization</td><td>$O(n^2)$</td><td>BLAS2</td><td>$O(n^2)$</td></tr>
+        <tr><td>Trailing update</td><td>$O(n^2)$</td><td>BLAS3</td><td>$≈$ 1 - $O(n^2)$</td></tr>
+        <tr><td>Total</td><td>2/3 n³ + $O(n^2)$</td><td>-</td><td>-</td></tr>
       </tbody>
     </table>
 
@@ -252,16 +252,16 @@ void recursiv$e_{lu}$(double *A, int n) {
 
     <pre><code>// ScaLAPACK PDGETRF 的通信模式
 for (k = 0; k < n; k += NB) {
-    // Panel factorization: $\\($O(\1)$\\) messages
+    // Panel factorization: $O(n^2)$ messages
     // Broadcast pivot/column to all processors in column
     // Trailing update: GEMM on local blocks
-    // 但每次迭代都需要 $\\($O(\1)$\\) 次独立通信
+    // 但每次迭代都需要 $O(n^2)$ 次独立通信
 }</code></pre>
 
     <div class="card warning">
       <h3>ScaLAPACK 的瓶颈</h3>
       <p>ScaLAPACK 每次 panel 更新都需要独立的通信，导致总消息数：</p>
-      <pre><code>#messages = $\\($O(\1)$\\) 或 $\\($O(\1)$\\)</code></pre>
+      <pre><code>#messages = $O(n^2)$ 或 $O(n^2)$</code></pre>
       <p>而通信下界要求 #messages = $Ω$(n² / P^(1/2))。当 n >> P^(1/2) 时，ScaLAPACK 的消息数远超下界。</p>
     </div>
 
@@ -286,7 +286,7 @@ for (round = 0; round < log P; round++) {
     <div class="card idea">
       <h3>CALU 的优势</h3>
       <ul>
-        <li>消息数从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\))) —— 达到下界</li>
+        <li>消息数从 $O(n^2)$ 降到 $O(n^2)$)) —— 达到下界</li>
         <li>使用 tournament pivoting 保证数值稳定性（与 GEPP 等价）</li>
         <li>适合 tall-skinny 矩阵（m >> n）</li>
       </ul>
@@ -303,17 +303,17 @@ for (round = 0; round < log P; round++) {
 // 3. 将所有 $R_{i}$ 堆叠，做 tournament pivoting
 // 4. 一次通信选出全局 pivot，更新 trailing
 
-// 通信量：$\\($O(\1)$\\) words, $\\($O(\1)$\\) messages
-// 远低于标准 LU 的 $\\($O(\1)$\\)</code></pre>
+// 通信量：$O(n^2)$ words, $O(n^2)$ messages
+// 远低于标准 LU 的 $O(n^2)$</code></pre>
 
     <table>
       <thead>
         <tr><th>算法</th><th>#words</th><th>#messages</th><th>适用场景</th></tr>
       </thead>
       <tbody>
-        <tr><td>Standard LU</td><td>$\\($O(\1)$\\)</td><td>$\\($O(\1)$\\)</td><td>一般矩阵</td></tr>
-        <tr><td>TSLU</td><td>$\\($O(\1)$\\)</td><td>$\\($O(\1)$\\)</td><td>m >> n</td></tr>
-        <tr><td>CALU</td><td>$\\($O(\1)$\\)</td><td>$\\($O(\1)$\\))</td><td>一般矩阵，大规模</td></tr>
+        <tr><td>Standard LU</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>一般矩阵</td></tr>
+        <tr><td>TSLU</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>m >> n</td></tr>
+        <tr><td>CALU</td><td>$O(n^2)$</td><td>$O(n^2)$)</td><td>一般矩阵，大规模</td></tr>
       </tbody>
     </table>
 
@@ -335,8 +335,8 @@ for (round = 0; round < log P; round++) {
     <div class="card idea">
       <h3>TSQR 的成本</h3>
       <ul>
-        <li>Local work：$\\($O(\1)$\\) per processor</li>
-        <li>Communication：$\\($O(\1)$\\) words, $\\($O(\1)$\\) messages</li>
+        <li>Local work：$O(n^2)$ per processor</li>
+        <li>Communication：$O(n^2)$ words, $O(n^2)$ messages</li>
         <li>达到 QR 的通信下界</li>
       </ul>
     </div>
@@ -465,7 +465,7 @@ POTRF(1,1)
     <div class="loop">
       <article><h3>5 步优化</h3><p>高斯消元通过 5 步优化（提取除法、跳过零、存储乘子、拆分循环、BLAS 表述）演变为 BLAS3 LU 分解。</p></article>
       <article><h3>分块是关键</h3><p>Delayed updates 将 BLAS2 的 rank-1 更新累积为 BLAS3 的 rank-b 更新，大幅减少通信。</p></article>
-      <article><h3>ScaLAPACK 次优</h3><p>标准分布式 GEPP 的消息数 $\\($O(\1)$\\) 远超下界 $Ω$(n/P^(1/2))。</p></article>
+      <article><h3>ScaLAPACK 次优</h3><p>标准分布式 GEPP 的消息数 $O(n^2)$ 远超下界 $Ω$(n/P^(1/2))。</p></article>
       <article><h3>CALU/TSLU/TSQR</h3><p>通信避免算法通过批量化选主元和树形 reduction 达到通信下界，实现 2–8$\times$ 加速。</p></article>
       <article><h3>GPU 与 DAG</h3><p>Volkov 的 register-heavy coding 和 look-ahead overlap 是 GPU LA 的典范；DAG 调度是多核时代的主流。</p></article>
     </div>
@@ -490,7 +490,7 @@ POTRF(1,1)
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">A. 使用了过多的 words 通信</button>
         <button data-choice="b" aria-pressed="false">B. 没有使用 BLAS3</button>
-        <button data-choice="c" aria-pressed="false">C. 消息数 $\\($O(\1)$\\) 远超下界 $Ω$(n/P^(1/2))</button>
+        <button data-choice="c" aria-pressed="false">C. 消息数 $O(n^2)$ 远超下界 $Ω$(n/P^(1/2))</button>
         <button data-choice="d" aria-pressed="false">D. 不支持 partial pivoting</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>

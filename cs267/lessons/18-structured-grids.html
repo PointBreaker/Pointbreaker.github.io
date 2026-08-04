@@ -15,7 +15,7 @@
   <div class="page">
     <p class="eyebrow">CS267 · 第 18 课</p>
     <h1>结构化网格</h1>
-    <p class="lede">泊松方程是科学计算的"hello world"。本课系统比较求解结构化网格上线性方程组的经典算法——从 Jacobi、Gauss-Seidel、SOR、共轭梯度到多重网格——理解为何 Multigrid 能突破 $\\($O(\1)$\\) 的壁垒，达到 $\\($O(\1)$\\) 的最优复杂度。</p>
+    <p class="lede">泊松方程是科学计算的"hello world"。本课系统比较求解结构化网格上线性方程组的经典算法——从 Jacobi、Gauss-Seidel、SOR、共轭梯度到多重网格——理解为何 Multigrid 能突破 $O(n^2)$ 的壁垒，达到 $O(n^2)$ 的最优复杂度。</p>
 
     <div class="meta">
       <p><strong>授课：</strong>James Demmel</p>
@@ -34,7 +34,7 @@
       <li>通信避免的 Jacobi：Matrix Powers Kernel</li>
       <li>Gauss-Seidel 与红黑 SOR</li>
       <li>共轭梯度法 (Conjugate Gradient)</li>
-      <li>多重网格 (Multigrid)：V-Cycle 与 $\\($O(\1)$\\) 复杂度</li>
+      <li>多重网格 (Multigrid)：V-Cycle 与 $O(n^2)$ 复杂度</li>
       <li>并行多重网格与性能模型</li>
       <li>非结构化网格上的挑战</li>
     </ul>
@@ -116,10 +116,10 @@
 
     <div class="card warning">
       <h3>PRAM 是理想化模型</h3>
-      <p><strong>PRAM</strong>（Parallel Random Access Machine）假设通信零成本、处理器间无竞争。实际机器的通信延迟和带宽使得 PRAM 复杂度只是一个下界。但 Multigrid 即使在考虑通信后，仍是最优选择——它的串行复杂度 $\\($O(\1)$\\) 已达下界。</p>
+      <p><strong>PRAM</strong>（Parallel Random Access Machine）假设通信零成本、处理器间无竞争。实际机器的通信延迟和带宽使得 PRAM 复杂度只是一个下界。但 Multigrid 即使在考虑通信后，仍是最优选择——它的串行复杂度 $O(n^2)$ 已达下界。</p>
     </div>
 
-    <p>上表中括号内为 3D 结果。可以看出，<strong>Multigrid 在串行复杂度上达到理论下界 $\\($O(\1)$\\)</strong>，PRAM 复杂度 log² N 也接近下界 log N。FFT 串行复杂度为 $\\($O(\1)$\\)，稍逊于 Multigrid，但 FFT 要求规则网格和均匀步长。</p>
+    <p>上表中括号内为 3D 结果。可以看出，<strong>Multigrid 在串行复杂度上达到理论下界 $O(n^2)$</strong>，PRAM 复杂度 log² N 也接近下界 log N。FFT 串行复杂度为 $O(n^2)$，稍逊于 Multigrid，但 FFT 要求规则网格和均匀步长。</p>
 
     <div class="rule"></div>
 
@@ -137,11 +137,11 @@
     <p>即 u(i,j,m+1) 是其四个邻居和右端项 b(i,j) 的加权平均。<strong>动机</strong>：u(i,j,m+1) 的选取使得方程在 (i,j) 点被精确满足。</p>
 
     <h3>收敛性分析</h3>
-    <p>Jacobi 方法是最近邻计算：每步迭代中，信息只能传播一个网格点。要在 n$\times$n 网格上传播信息到对角，至少需要 $\\($O(\1)$\\) = $\\($O(\1)$\\) 步。因此：</p>
+    <p>Jacobi 方法是最近邻计算：每步迭代中，信息只能传播一个网格点。要在 n$\times$n 网格上传播信息到对角，至少需要 $O(n^2)$ = $O(n^2)$ 步。因此：</p>
     <ul>
-      <li><strong>迭代步数</strong>：$\\($O(\1)$\\) = $\\($O(\1)$\\)（2D），$\\($O(\1)$\\) = $\\($O(\1)$\\)（3D）</li>
-      <li><strong>每步计算量</strong>：$\\($O(\1)$\\)（每个点一次 stencil 计算）</li>
-      <li><strong>串行总复杂度</strong>：$\\($O(\1)$\\) = $\\($O(\1)$\\)（2D），$\\($O(\1)$\\)（3D）</li>
+      <li><strong>迭代步数</strong>：$O(n^2)$ = $O(n^2)$（2D），$O(n^2)$ = $O(n^2)$（3D）</li>
+      <li><strong>每步计算量</strong>：$O(n^2)$（每个点一次 stencil 计算）</li>
+      <li><strong>串行总复杂度</strong>：$O(n^2)$ = $O(n^2)$（2D），$O(n^2)$（3D）</li>
     </ul>
 
     <div class="card idea">
@@ -166,18 +166,18 @@
 
     <pre><code class="language-plaintext">串行算法（假设 1/4 数据可放入缓存）：
   将数据分块，逐块流水线计算 Ax, A²x, A³x
-  只需在块边界移动 $\\($O(\1)$\\) 字，而非 $\\($O(\1)$\\) 字
+  只需在块边界移动 $O(n^2)$ 字，而非 $O(n^2)$ 字
 
 并行算法（允许少量冗余计算）：
   Proc 1  |  Proc 2  |  Proc 3  |  Proc 4
   --------+----------+----------+--------
   每个处理器多算一些重叠区域（三角形区域）
-  只需发送 $\\($O(\1)$\\) 条消息，而非 $\\($O(\1)$\\) 条
+  只需发送 $O(n^2)$ 条消息，而非 $O(n^2)$ 条
 </code></pre>
 
     <div class="card idea">
       <h3>冗余计算换取通信减少</h3>
-      <p>通信避免 Jacobi 的核心权衡是<strong>用少量冗余计算换取通信次数从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\)</strong>。这在通信代价远高于计算代价的现代并行机上尤其有效。同样的思想（Matrix Powers Kernel）也适用于 CG 等 Krylov 子空间方法。</p>
+      <p>通信避免 Jacobi 的核心权衡是<strong>用少量冗余计算换取通信次数从 $O(n^2)$ 降到 $O(n^2)$</strong>。这在通信代价远高于计算代价的现代并行机上尤其有效。同样的思想（Matrix Powers Kernel）也适用于 CG 等 Krylov 子空间方法。</p>
     </div>
 
     <p>对于 2D Laplacian，计算 [x, Ax, A²x, A³x] 时每个网格点依赖的区域随幂次扩大。并行实现中，处理器在重叠区域（图中三角形）进行冗余计算，但只需一次消息交换。</p>
@@ -223,7 +223,7 @@ forall 红点 u(i,j):
     <p>这称为<strong>逐次超松弛 (SOR, Successive OverRelaxation)</strong>。对于泊松方程，最优松弛因子为：</p>
     <pre><code class="language-plaintext">$w_{opt}$ = 2 / (1 + sin($π$/(n+1)))</code></pre>
 
-    <p>红黑 SOR 的收敛速度是 Jacobi 的两倍（步数从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\)），但由于每步有两轮（红+黑），<strong>并行复杂度仍为 $\\($O(\1)$\\)</strong>。串行复杂度为 $\\($O(\1)$\\) = $\\($O(\1)$\\)（2D），比 Jacobi 的 $\\($O(\1)$\\) 有明显改善。</p>
+    <p>红黑 SOR 的收敛速度是 Jacobi 的两倍（步数从 $O(n^2)$ 降到 $O(n^2)$），但由于每步有两轮（红+黑），<strong>并行复杂度仍为 $O(n^2)$</strong>。串行复杂度为 $O(n^2)$ = $O(n^2)$（2D），比 Jacobi 的 $O(n^2)$ 有明显改善。</p>
 
     <div class="rule"></div>
 
@@ -252,8 +252,8 @@ while rho > tolerance:
 
     <h3>收敛性</h3>
     <ul>
-      <li><strong>收敛步数</strong>：$\\($O(\1)$\\) = $\\($O(\1)$\\)（2D），与 SOR 相当</li>
-      <li><strong>串行复杂度</strong>：$\\($O(\1)$\\)（2D），$\\($O(\1)$\\)（3D）</li>
+      <li><strong>收敛步数</strong>：$O(n^2)$ = $O(n^2)$（2D），与 SOR 相当</li>
+      <li><strong>串行复杂度</strong>：$O(n^2)$（2D），$O(n^2)$（3D）</li>
       <li><strong>每步代价</strong>：1 次 SpMV + 若干 dot product + saxpy</li>
     </ul>
 
@@ -267,15 +267,15 @@ while rho > tolerance:
     <h2>7. 多重网格 (Multigrid)</h2>
 
     <h3>核心动机</h3>
-    <p>回顾 Jacobi、SOR、CG 的共同局限：它们都基于 SpMV，信息每步只能传播一个网格点。要在 n$\times$n 网格上传播信息至少需要 $\\($O(\1)$\\) 步。<strong>Multigrid 的核心突破</strong>：粗网格上"远处问题看起来更简单"，信息可以更快传播。</p>
+    <p>回顾 Jacobi、SOR、CG 的共同局限：它们都基于 SpMV，信息每步只能传播一个网格点。要在 n$\times$n 网格上传播信息至少需要 $O(n^2)$ 步。<strong>Multigrid 的核心突破</strong>：粗网格上"远处问题看起来更简单"，信息可以更快传播。</p>
 
     <div class="card idea">
       <h3>统一主题：远处问题看起来更简单</h3>
       <p>这一思想贯穿多个领域：</p>
       <ul>
-        <li><strong>Multigrid</strong>：用粗网格近似求解 PDE，$\\($O(\1)$\\) 时间</li>
+        <li><strong>Multigrid</strong>：用粗网格近似求解 PDE，$O(n^2)$ 时间</li>
         <li><strong>图划分</strong>：用粗图近似原图以并行化 SpMV</li>
-        <li><strong>快速多极子方法 / Barnes-Hut</strong>：远距离粒子群近似为质心，$\\($O(\1)$\\) 计算引力</li>
+        <li><strong>快速多极子方法 / Barnes-Hut</strong>：远距离粒子群近似为质心，$O(n^2)$ 计算引力</li>
       </ul>
     </div>
 
@@ -309,9 +309,9 @@ def MGV(b, i, x):
     <p>之所以称为"V-Cycle"，是因为调用图呈 V 形：从最细网格逐层下降到最粗，再逐层上升回最细。</p>
 
     <h3>复杂度分析</h3>
-    <p><strong>串行复杂度</strong>：第 i 层有 $\\($O(\1)$\\) 个未知量（2D）。V-Cycle 总代价：</p>
-    <pre><code class="language-plaintext">Total = $Σ$(i=1 to m) $\\($O(\1)$\\) = $\\($O(\1)$\\) = $\\($O(\1)$\\) = $\\($O(\1)$\\)</code></pre>
-    <p><strong>PRAM 复杂度</strong>：每层常数时间（处理器数与未知量数匹配），共 m 层，总时间为 $\\($O(\1)$\\) = $\\($O(\1)$\\)。</p>
+    <p><strong>串行复杂度</strong>：第 i 层有 $O(n^2)$ 个未知量（2D）。V-Cycle 总代价：</p>
+    <pre><code class="language-plaintext">Total = $Σ$(i=1 to m) $O(n^2)$ = $O(n^2)$ = $O(n^2)$ = $O(n^2)$</code></pre>
+    <p><strong>PRAM 复杂度</strong>：每层常数时间（处理器数与未知量数匹配），共 m 层，总时间为 $O(n^2)$ = $O(n^2)$。</p>
 
     <h3>收敛定理</h3>
     <div class="card idea">
@@ -357,8 +357,8 @@ def MGV(b, i, x):
         <tr><th>层级 j</th><th>计算 (Flops)</th><th>消息数 (latency)</th><th>通信量 (bandwidth)</th></tr>
       </thead>
       <tbody>
-        <tr><td>j $≥$ k</td><td>$\\($O(\1)$\\)</td><td>$\\($O(\1)$\\)·$α$</td><td>$\\($O(\1)$\\)·$β$</td></tr>
-        <tr><td>j < k</td><td>$\\($O(\1)$\\)</td><td>$\\($O(\1)$\\)·$α$</td><td>$\\($O(\1)$\\)·$β$</td></tr>
+        <tr><td>j $≥$ k</td><td>$O(n^2)$</td><td>$O(n^2)$·$α$</td><td>$O(n^2)$·$β$</td></tr>
+        <tr><td>j < k</td><td>$O(n^2)$</td><td>$O(n^2)$·$α$</td><td>$O(n^2)$·$β$</td></tr>
       </tbody>
     </table>
 
@@ -442,12 +442,12 @@ def MGV(b, i, x):
     <h2>测验</h2>
 
     <div class="quiz" data-q="1">
-      <p><strong>Q1：</strong>Jacobi 方法在 2D n$\times$n 网格上的串行复杂度为何是 $\\($O(\1)$\\)？</p>
+      <p><strong>Q1：</strong>Jacobi 方法在 2D n$\times$n 网格上的串行复杂度为何是 $O(n^2)$？</p>
       <div class="quiz-options">
-        <button data-answer="wrong" data-incorrect="每步是 $\\($O(\1)$\\)，但步数是 $\\($O(\1)$\\) = $\\($O(\1)$\\)，总复杂度 $\\($O(\1)$\\) = $\\($O(\1)$\\)。">A. 因为每步需要 $\\($O(\1)$\\) 次运算</button>
-        <button data-answer="correct" data-correct="正确！Jacobi 需要 $\\($O(\1)$\\) = $\\($O(\1)$\\) 步传播信息，每步 $\\($O(\1)$\\)，总复杂度 $\\($O(\1)$\\) = $\\($O(\1)$\\)。">B. 因为需要 $\\($O(\1)$\\) 步收敛，每步 $\\($O(\1)$\\) 计算量</button>
-        <button data-answer="wrong" data-incorrect="Jacobi 的复杂度与条件数无直接关系。">C. 因为矩阵条件数是 $\\($O(\1)$\\)</button>
-        <button data-answer="wrong" data-incorrect="Jacobi 的通信量是 $\\($O(\1)$\\) 而非 $\\($O(\1)$\\)。">D. 因为每步需要 $\\($O(\1)$\\) 通信量</button>
+        <button data-answer="wrong" data-incorrect="每步是 $O(n^2)$，但步数是 $O(n^2)$ = $O(n^2)$，总复杂度 $O(n^2)$ = $O(n^2)$。">A. 因为每步需要 $O(n^2)$ 次运算</button>
+        <button data-answer="correct" data-correct="正确！Jacobi 需要 $O(n^2)$ = $O(n^2)$ 步传播信息，每步 $O(n^2)$，总复杂度 $O(n^2)$ = $O(n^2)$。">B. 因为需要 $O(n^2)$ 步收敛，每步 $O(n^2)$ 计算量</button>
+        <button data-answer="wrong" data-incorrect="Jacobi 的复杂度与条件数无直接关系。">C. 因为矩阵条件数是 $O(n^2)$</button>
+        <button data-answer="wrong" data-incorrect="Jacobi 的通信量是 $O(n^2)$ 而非 $O(n^2)$。">D. 因为每步需要 $O(n^2)$ 通信量</button>
       </div>
     </div>
 
@@ -456,7 +456,7 @@ def MGV(b, i, x):
       <div class="quiz-options">
         <button data-answer="wrong" data-incorrect="它不减少计算量，而是用冗余计算换通信。">A. 减少总计算量</button>
         <button data-answer="wrong" data-incorrect="它不减少内存使用。">B. 减少内存使用</button>
-        <button data-answer="correct" data-correct="正确！通过计算 [Ax, A²x, ..., Aᵏx]，用少量冗余计算将 k 次通信降为 1 次。">C. 用冗余计算换取通信次数从 $\\($O(\1)$\\) 降到 $\\($O(\1)$\\)</button>
+        <button data-answer="correct" data-correct="正确！通过计算 [Ax, A²x, ..., Aᵏx]，用少量冗余计算将 k 次通信降为 1 次。">C. 用冗余计算换取通信次数从 $O(n^2)$ 降到 $O(n^2)$</button>
         <button data-answer="wrong" data-incorrect="它不提高精度。">D. 提高数值精度</button>
       </div>
     </div>
@@ -464,7 +464,7 @@ def MGV(b, i, x):
     <div class="quiz" data-q="3">
       <p><strong>Q3：</strong>为什么 Multigrid 的收敛速度与网格大小无关？</p>
       <div class="quiz-options">
-        <button data-answer="wrong" data-incorrect="Multigrid 的每步计算量是 $\\($O(\1)$\\)，不是 $\\($O(\1)$\\)。">A. 因为每步计算量是 $\\($O(\1)$\\)</button>
+        <button data-answer="wrong" data-incorrect="Multigrid 的每步计算量是 $O(n^2)$，不是 $O(n^2)$。">A. 因为每步计算量是 $O(n^2)$</button>
         <button data-answer="correct" data-correct="正确！粗网格上信息传播更快，每轮 V-Cycle 误差至少减半，与网格大小无关。">B. 因为粗网格上信息传播更快，每轮 V-Cycle 误差至少减半</button>
         <button data-answer="wrong" data-incorrect="Multigrid 不直接求逆。">C. 因为直接求逆矩阵</button>
         <button data-answer="wrong" data-incorrect="Multigrid 不依赖预处理。">D. 因为使用预处理技术</button>
@@ -497,7 +497,7 @@ def MGV(b, i, x):
     <div class="loop">
       <article>
         <h3>信息传播速度决定收敛速度</h3>
-        <p>Jacobi/SOR/CG 的瓶颈在于信息每步只能传播一个网格点。Multigrid 通过粗网格打破这一限制，实现 $\\($O(\1)$\\) 最优复杂度。</p>
+        <p>Jacobi/SOR/CG 的瓶颈在于信息每步只能传播一个网格点。Multigrid 通过粗网格打破这一限制，实现 $O(n^2)$ 最优复杂度。</p>
       </article>
       <article>
         <h3>频率分解是 Multigrid 的核心</h3>
