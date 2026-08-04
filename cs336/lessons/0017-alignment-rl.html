@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 17 课：Alignment — RL 深入 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -39,7 +40,7 @@
     </div>
 
     <h3>目标函数</h3>
-    <pre><code># 目标: 最大化期望奖励
+    <pre><code class="language-python"># 目标: 最大化期望奖励
 # J(θ) = E[R(s, a)]
 #       = ∫ p(s) π(a|s) R(s, a) ds da
 
@@ -58,7 +59,7 @@
 
     <h3>推导</h3>
     <p>目标函数 J(θ) = E[R(s, a)]，我们需要计算梯度：</p>
-    <pre><code># ∇_θ J(θ) = ∇_θ E[R(s, a)]
+    <pre><code class="language-python"># ∇_θ J(θ) = ∇_θ E[R(s, a)]
 #           = ∇_θ ∫ p(s) π(a|s) R(s, a) ds da
 #           = ∫ p(s) ∇_θ π(a|s) R(s, a) ds da
 
@@ -73,7 +74,7 @@
 # ∇_θ J(θ) = E[∇_θ log π(a|s) × R(s, a)]</code></pre>
 
     <h3>直觉解释</h3>
-    <pre><code># ∇_θ log π(a|s) × R(s, a) 的含义:
+    <pre><code class="language-python"># ∇_θ log π(a|s) × R(s, a) 的含义:
 #
 # - ∇_θ log π(a|s): 让 action a 概率增加的方向
 # - R(s, a): 这个 action 有多好
@@ -84,7 +85,7 @@
 
     <h3>朴素 Policy Gradient 的问题</h3>
     <p>当 R ∈ {0, 1}（正确/错误）时：</p>
-    <pre><code># 只有 R=1 的样本产生梯度
+    <pre><code class="language-python"># 只有 R=1 的样本产生梯度
 # R=0 的样本: gradient = 0 → 不更新
 
 # 这类似于 SFT，但:
@@ -107,7 +108,7 @@
 
     <h3>核心思想</h3>
     <p>从 reward 中减去一个 baseline b(s)：</p>
-    <pre><code># 原始: ∇J = E[∇log π(a|s) × R(s, a)]
+    <pre><code class="language-python"># 原始: ∇J = E[∇log π(a|s) × R(s, a)]
 # Baseline: ∇J = E[∇log π(a|s) × (R(s, a) - b(s))]
 
 # 为什么可以减去 baseline?
@@ -118,7 +119,7 @@
 
     <h3>选择 Baseline</h3>
     <p>最优 baseline 的推导（最小化方差）：</p>
-    <pre><code># 最优 baseline:
+    <pre><code class="language-python"># 最优 baseline:
 # b*(s) = E[(∇π(a|s))^2 × R | s] / E[(∇π(a|s))^2 | s]
 
 # 对于单参数模型，这可以简化为:
@@ -127,7 +128,7 @@
 # 直觉: baseline = 这个 state 下的平均 reward</code></pre>
 
     <h3>Advantage Function</h3>
-    <pre><code># 当 baseline = V(s) = E[R|s] 时:
+    <pre><code class="language-python"># 当 baseline = V(s) = E[R|s] 时:
 # A(s, a) = R(s, a) - V(s) = Q(s, a) - V(s)
 
 # Advantage 的含义:
@@ -138,7 +139,7 @@
 # A = 0: action a 就是平均水平 → 不更新</code></pre>
 
     <h3>降低方差的效果</h3>
-    <pre><code># 例: 两个 states
+    <pre><code class="language-python"># 例: 两个 states
 # s1: a1 → reward 11, a2 → reward 9
 # s2: a1 → reward 0, a2 → reward 2
 
@@ -161,7 +162,7 @@
     <p>Policy gradient 更新后，旧的采样数据不能用。PPO 解决这个问题：</p>
 
     <h3>Importance Sampling Ratio</h3>
-    <pre><code># 更新后，想用旧数据继续训练
+    <pre><code class="language-python"># 更新后，想用旧数据继续训练
 # 需要 importance sampling 修正:
 
 # ratio = π_new(a|s) / π_old(a|s)
@@ -171,7 +172,7 @@
 # 如果 ratio << 1: 新 policy 比旧 policy 更不倾向于 a</code></pre>
 
     <h3>Clipped Objective</h3>
-    <pre><code># PPO 的核心创新: clip ratio 防止过大更新
+    <pre><code class="language-python"># PPO 的核心创新: clip ratio 防止过大更新
 
 # Unclipped loss:
 # L_unclipped = ratio × Advantage
@@ -191,7 +192,7 @@
 #   - 但 ratio < 1-ε 时，loss 不再增大</code></pre>
 
     <h3>PPO 完整算法</h3>
-    <pre><code># PPO 训练循环:
+    <pre><code class="language-python"># PPO 训练循环:
 
 for iteration in range(num_iterations):
     # 1. 用当前 policy 收集数据
@@ -223,7 +224,7 @@ for iteration in range(num_iterations):
         optimizer.step()</code></pre>
 
     <h3>GAE：Generalized Advantage Estimation</h3>
-    <pre><code># GAE 是 advantage 估计的一种方法
+    <pre><code class="language-python"># GAE 是 advantage 估计的一种方法
 # 平衡偏差和方差
 
 # TD residual: δ_t = r_t + γV(s_{t+1}) - V(s_t)
@@ -252,7 +253,7 @@ for iteration in range(num_iterations):
     <p>PPO 很复杂——需要同时维护 4 个 model（policy、reference、reward、value）。DPO 提出一个更简单的方法：<strong>直接从偏好数据优化 policy，不需要 reward model</strong>。</p>
 
     <h3>推导</h3>
-    <pre><code># 起点: PPO 的最优 policy 有闭式解:
+    <pre><code class="language-python"># 起点: PPO 的最优 policy 有闭式解:
 # π*(a|s) ∝ π_ref(a|s) × exp(R(s,a) / β)
 
 # 反解 reward:
@@ -271,7 +272,7 @@ for iteration in range(num_iterations):
 #                 - β × log(π_θ(a_l|s)/π_ref(a_l|s)))]</code></pre>
 
     <h3>DPO 的直觉</h3>
-    <pre><code># DPO loss 的含义:
+    <pre><code class="language-python"># DPO loss 的含义:
 #
 # 如果 π_θ(a_w|s)/π_ref(a_w|s) > π_θ(a_l|s)/π_ref(a_l|s):
 #   → 模型相比 ref 更偏好 chosen
@@ -311,7 +312,7 @@ for iteration in range(num_iterations):
 
     <h3>GRPO 的推导</h3>
     <p>GRPO 是 PPO 在语言模型设置下的简化：</p>
-    <pre><code># PPO 的 advantage: A(s, a) = R(s, a) - V(s)
+    <pre><code class="language-python"># PPO 的 advantage: A(s, a) = R(s, a) - V(s)
 # 其中 V(s) 需要单独训练 value model
 
 # GRPO 的 insight:
@@ -326,7 +327,7 @@ for iteration in range(num_iterations):
 # G 个样本的均值是 V(s) 的无偏估计</code></pre>
 
     <h3>GRPO 的 Loss</h3>
-    <pre><code># GRPO 的完整 loss:
+    <pre><code class="language-python"># GRPO 的完整 loss:
 
 # 对每个 prompt q:
 # 1. 生成 G 个 responses: {o_1, ..., o_G}
@@ -340,7 +341,7 @@ for iteration in range(num_iterations):
 #    L_total = L + β × KL(π_θ || π_ref)</code></pre>
 
     <h3>GRPO 中的 KL 估计</h3>
-    <pre><code># GRPO 使用的 KL 估计器（非负）:
+    <pre><code class="language-python"># GRPO 使用的 KL 估计器（非负）:
 
 # KL(p || q) = E_p[log(p/q)]
 #            = E_p[q/p - log(q/p) - 1]  （因为 E_p[q/p] = 1）
@@ -355,7 +356,7 @@ def kl_penalty(log_probs, ref_log_probs):
 # 这个估计器保证 KL ≥ 0（由 Jensen 不等式）</code></pre>
 
     <h3>冻结参数的重要性</h3>
-    <pre><code># 在计算 ratio = π_θ / π_old 时
+    <pre><code class="language-python"># 在计算 ratio = π_θ / π_old 时
 # 必须对 π_old 使用 torch.no_grad() 或 detach()
 
 # 错误做法:
@@ -496,6 +497,9 @@ ratio.backward()
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课深入 RL 算法机制</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

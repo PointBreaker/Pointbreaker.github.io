@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 11 课：Scaling Laws 深入 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -35,7 +36,7 @@
     </div>
 
     <h3>回顾：幂律形式</h3>
-    <pre><code># 参数 vs 损失（固定数据量）
+    <pre><code class="language-python"># 参数 vs 损失（固定数据量）
 L(N) = (N_c / N)^α_N
 
 # 数据 vs 损失（固定参数量）
@@ -52,7 +53,7 @@ L(N, D) = E + (N_c / N)^α + (D_c / D)^β
 
     <h3>方法 1：对数线性回归（简单但不稳健）</h3>
     <p>对幂律 L = (N_c / N)^α 取对数，得到：</p>
-    <pre><code>log L = α log N_c − α log N
+    <pre><code class="language-python">log L = α log N_c − α log N
       = a − α × log N     （关于 log N 的线性函数）
 
 # 算法：
@@ -67,7 +68,7 @@ L(N, D) = E + (N_c / N)^α + (D_c / D)^β
 
     <h3>方法 2：非线性最小二乘（NLLS）</h3>
     <p>直接拟合原始幂律形式，避免 log 变换的偏差：</p>
-    <pre><code>import numpy as np
+    <pre><code class="language-python">import numpy as np
 from scipy.optimize import curve_fit
 
 def scaling_law(N, N_c, alpha, L_inf):
@@ -90,7 +91,7 @@ print(f"L_∞ = {L_inf:.3f}")</code></pre>
 
     <h3>方法 3：考虑数据量的联合拟合（Chinchilla 方法）</h3>
     <p>Chinchilla 论文使用的是同时变化 N 和 D 的联合拟合：</p>
-    <pre><code>def chinchilla_law(N, D, E, alpha, beta, N_c, D_c):
+    <pre><code class="language-python">def chinchilla_law(N, D, E, alpha, beta, N_c, D_c):
     """
     Chinchilla 论文的参数化形式
     L(N, D) = E + A/N^α + B/D^β
@@ -113,7 +114,7 @@ print(f"L_∞ = {L_inf:.3f}")</code></pre>
       <li>拟合 N_opt(C) 和 D_opt(C) 与 C 的关系</li>
     </ol>
 
-    <pre><code># Chinchilla 论文的三种拟合策略对比：
+    <pre><code class="language-python"># Chinchilla 论文的三种拟合策略对比：
 
 # 策略 1: 固定 D，变化 N → L(N)
 # 策略 2: 固定 N，变化 D → L(D)
@@ -153,7 +154,7 @@ print(f"L_∞ = {L_inf:.3f}")</code></pre>
       <li><strong>采样噪声</strong>：batch 采样的随机性</li>
     </ul>
 
-    <pre><code># 估计噪声水平的实验：
+    <pre><code class="language-python"># 估计噪声水平的实验：
 # 固定 N=1B, D=20B，训练 5 次
 
 seeds = [42, 123, 456, 789, 1024]
@@ -168,7 +169,7 @@ for seed in seeds:
 
     <h3>Bootstrap 置信区间</h3>
     <p>给定拟合结果，如何量化不确定性？</p>
-    <pre><code>from scipy.optimize import curve_fit
+    <pre><code class="language-python">from scipy.optimize import curve_fit
 import numpy as np
 
 def bootstrap_ci(N_data, loss_data, n_bootstrap=1000, alpha=0.05):
@@ -218,7 +219,7 @@ def bootstrap_ci(N_data, loss_data, n_bootstrap=1000, alpha=0.05):
       <li><strong>大模型区域</strong>（> 100B）：可能看到"饱和"效应——额外参数收益递减</li>
     </ul>
 
-    <pre><code># 检测幂律弯曲的方法：
+    <pre><code class="language-python"># 检测幂律弯曲的方法：
 # 1. 拟合后看残差（residuals）
 # 2. 如果残差有系统性模式 → 幂律不完全成立
 
@@ -253,7 +254,7 @@ residuals = losses - predicted
     <h3>降低外推风险的策略</h3>
 
     <h4>策略 1：覆盖足够宽的尺度范围</h4>
-    <pre><code># 好的实验设计：
+    <pre><code class="language-python"># 好的实验设计：
 # - 训练 10+ 个模型
 # - 覆盖至少 2 个数量级的 N（如 1M 到 1B）
 # - 每个 N 尝试多个 D
@@ -266,7 +267,7 @@ residuals = losses - predicted
 
     <h4>策略 2：保守预测 + 区间估计</h4>
     <p>不要只给一个点估计，给出置信区间：</p>
-    <pre><code># 例：预测 70B 模型的最优 D
+    <pre><code class="language-python"># 例：预测 70B 模型的最优 D
 # 点估计: D_opt = 1.4T tokens
 # 95% 置信区间: [1.0T, 2.0T]
 
@@ -276,7 +277,7 @@ residuals = losses - predicted
 
     <h4>策略 3：中间验证</h4>
     <p>在拟合范围和外推目标之间，训练一个中等规模模型验证：</p>
-    <pre><code># 拟合范围: 1M - 1B 参数
+    <pre><code class="language-python"># 拟合范围: 1M - 1B 参数
 # 外推目标: 70B 参数
 # 中间验证: 训练一个 7B 模型，检查预测是否准确
 
@@ -290,7 +291,7 @@ residuals = losses - predicted
 
     <h3>场景 1：固定算力预算，最大化模型性能</h3>
     <p>这是 Chinchilla 论文解决的问题：</p>
-    <pre><code># 已知: 总 FLOPs = C = 6ND
+    <pre><code class="language-python"># 已知: 总 FLOPs = C = 6ND
 # 目标: 最小化 L(N, D)
 # 方法: 用拟合的 L(N, D) 代入约束，求最优
 
@@ -311,7 +312,7 @@ residuals = losses - predicted
 
     <h3>场景 2：考虑推理成本</h3>
     <p>Chinchilla 只优化了训练 loss，但实际部署时推理成本也很重要：</p>
-    <pre><code># 推理成本 ∝ N（每个 token 的计算量）
+    <pre><code class="language-python"># 推理成本 ∝ N（每个 token 的计算量）
 # 总成本 = 训练成本 + 推理成本 × 推理次数
 
 # 训练成本 ∝ 6ND
@@ -336,7 +337,7 @@ residuals = losses - predicted
 
     <h3>场景 3：固定时间，选择模型大小</h3>
     <p>实际约束往往是时间 + 硬件，而非 FLOPs：</p>
-    <pre><code># 已知约束:
+    <pre><code class="language-python"># 已知约束:
 # - T 天时间
 # - K 张 GPU（每张峰值算力 P FLOP/s）
 # - MFU（模型算力利用率，通常 0.3-0.5）
@@ -355,7 +356,7 @@ residuals = losses - predicted
 
     <h3>场景 4：多目标权衡</h3>
     <p>实际决策需要同时考虑多个目标：</p>
-    <pre><code># 目标函数可以扩展为:
+    <pre><code class="language-python"># 目标函数可以扩展为:
 # min L(N, D) + λ × inference_cost(N)
 
 # 或者更复杂的形式:
@@ -388,7 +389,7 @@ residuals = losses - predicted
 
     <h3>数据质量的影响</h3>
     <p>DCLM (DataComp-LM) 等研究表明，经过严格质量过滤的数据上训练，可以<strong>用更少的 token 达到相同 loss</strong>：</p>
-    <pre><code># 例：在原始 Common Crawl 上
+    <pre><code class="language-python"># 例：在原始 Common Crawl 上
 # 7B 模型 + 140B tokens → loss = 2.5
 
 # 在 DCLM（高质量过滤）上
@@ -420,7 +421,7 @@ residuals = losses - predicted
     </ul>
 
     <h3>实际的数据策略</h3>
-    <pre><code># 现代 LLM 训练的数据策略（综合 Chinchilla 和后续研究）:
+    <pre><code class="language-python"># 现代 LLM 训练的数据策略（综合 Chinchilla 和后续研究）:
 
 # 1. 预训练阶段
 #    - 使用 D ≈ 20-30N tokens
@@ -442,7 +443,7 @@ residuals = losses - predicted
     <h2 id="fitting-practice">拟合实战：完整流程</h2>
 
     <h3>Step 1：实验设计</h3>
-    <pre><code># 确定要变化的范围
+    <pre><code class="language-python"># 确定要变化的范围
 # - N: 至少 10 个值，覆盖 2-3 个数量级
 # - D: 每个 N 至少 3 个值（不同训练步数）
 # - 其他超参：全部固定
@@ -459,7 +460,7 @@ tokens_per_size = {
 # 这比训练一个 70B 模型便宜得多</code></pre>
 
     <h3>Step 2：训练与记录</h3>
-    <pre><code>import json
+    <pre><code class="language-python">import json
 
 results = []
 for N in model_sizes:
@@ -481,7 +482,7 @@ with open("scaling_results.json", "w") as f:
     json.dump(results, f, indent=2)</code></pre>
 
     <h3>Step 3：拟合与验证</h3>
-    <pre><code># 加载数据
+    <pre><code class="language-python"># 加载数据
 results = json.load(open("scaling_results.json"))
 N_data = np.array([r["N"] for r in results])
 D_data = np.array([r["D"] for r in results])
@@ -504,7 +505,7 @@ r_squared = 1 - np.sum((loss_data - predicted)**2) / np.sum((loss_data - loss_da
 print(f"R² = {r_squared:.4f}")  # 希望 > 0.99</code></pre>
 
     <h3>Step 4：预测最优配置</h3>
-    <pre><code>from scipy.optimize import minimize
+    <pre><code class="language-python">from scipy.optimize import minimize
 
 C_target = 6 * 70e9 * 1.4e12  # 目标: 70B 模型, Chinchilla 推荐 1.4T tokens
 
@@ -646,6 +647,9 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课基于 Lecture 11 内容深入展开</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 3 课：Transformer 架构与超参数 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -51,7 +52,7 @@
 
     <h3>原版架构（Vaswani et al., 2017）</h3>
     <p>每个 Transformer block 包含：</p>
-    <pre><code>Input: x  (batch, seq_len, d_model)
+    <pre><code class="language-python">Input: x  (batch, seq_len, d_model)
 
 # 1. Multi-Head Self-Attention
 attention_output = MultiHeadAttention(x, x, x)  # Q=K=V=x
@@ -83,12 +84,12 @@ output = Linear(x)  # d_model → vocab_size</code></pre>
     <h2 id="pre-post-norm">Pre-Norm vs Post-Norm</h2>
 
     <h3>原版：Post-Norm</h3>
-    <pre><code># Post-norm (Vaswani 2017)
+    <pre><code class="language-python"># Post-norm (Vaswani 2017)
 x = LayerNorm(x + MultiHeadAttention(x))
 x = LayerNorm(x + FFN(x))</code></pre>
 
     <h3>现代：Pre-Norm</h3>
-    <pre><code># Pre-norm (GPT-2 及以后主流)
+    <pre><code class="language-python"># Pre-norm (GPT-2 及以后主流)
 x = x + MultiHeadAttention(LayerNorm(x))
 x = x + FFN(LayerNorm(x))</code></pre>
 
@@ -106,7 +107,7 @@ x = x + FFN(LayerNorm(x))</code></pre>
 
     <h3>Sandwich Norm（DeepNet 的改进）</h3>
     <p>DeepSeek-V3 使用了 sandwich norm——在残差连接内部再加一个 LayerNorm：</p>
-    <pre><code># Sandwich norm: 兼顾稳定性和表示能力
+    <pre><code class="language-python"># Sandwich norm: 兼顾稳定性和表示能力
 x = x + LayerNorm(MultiHeadAttention(LayerNorm(x)))</code></pre>
 
     <hr class="rule">
@@ -116,7 +117,7 @@ x = x + LayerNorm(MultiHeadAttention(LayerNorm(x)))</code></pre>
 
     <h3>ReLU → GELU</h3>
     <p>原版 Transformer 用 ReLU。GPT-2 开始用 GELU：</p>
-    <pre><code>ReLU(x) = max(0, x)
+    <pre><code class="language-python">ReLU(x) = max(0, x)
 
 GELU(x) = x × Φ(x)   （Φ 是标准正态的 CDF）
         ≈ 0.5 × x × (1 + tanh(√(2/π) × (x + 0.044715 × x³)))</code></pre>
@@ -125,7 +126,7 @@ GELU(x) = x × Φ(x)   （Φ 是标准正态的 CDF）
 
     <h3>SwiGLU：现代 LLM 的标准</h3>
     <p>Llama 系列和 Mistral 使用 SwiGLU：</p>
-    <pre><code># 标准 FFN
+    <pre><code class="language-python"># 标准 FFN
 FFN(x) = W₂ × ReLU(W₁ × x)
 
 # SwiGLU FFN（Noam Shazer 2020 提出）
@@ -157,14 +158,14 @@ FFN(x) = W_down × (Swish(W_gate × x) ⊙ (W_up × x))
     <h2 id="positional">位置编码的演化</h2>
 
     <h3>Sinusoidal（原版 Transformer）</h3>
-    <pre><code>PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))
+    <pre><code class="language-python">PE(pos, 2i)   = sin(pos / 10000^(2i/d_model))
 PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))</code></pre>
 
     <p><strong>优势：</strong>可以外推到更长序列（理论上）。</p>
     <p><strong>劣势：</strong>实际表现不如可学习嵌入和 RoPE；推理时需要预先计算。</p>
 
     <h3>Learned Embedding</h3>
-    <pre><code># GPT-2 风格
+    <pre><code class="language-python"># GPT-2 风格
 position_embedding = nn.Embedding(max_seq_len, d_model)</code></pre>
 
     <p><strong>优势：</strong>简单，可学习。</p>
@@ -178,7 +179,7 @@ position_embedding = nn.Embedding(max_seq_len, d_model)</code></pre>
       <p>把 query 和 key 的每一对维度旋转一个与位置相关的角度。两个位置 p₁ 和 p₂ 的 attention score 只依赖 (p₁ - p₂)——即<strong>相对位置</strong>。</p>
     </div>
 
-    <pre><code># RoPE 数学
+    <pre><code class="language-python"># RoPE 数学
 对于维度 i (0, 2, 4, ...):
 θ_i = 1 / (10000^(2i/d))
 
@@ -200,7 +201,7 @@ k_rotated = R(n) @ k
     </ul>
 
     <h3>ALiBi（Attention with Linear Biases）</h3>
-    <pre><code># 不加位置编码，直接在 attention score 上加偏置
+    <pre><code class="language-python"># 不加位置编码，直接在 attention score 上加偏置
 scores = Q @ K^T / √d
 scores[i, j] -= |i - j| × slope_head_i  # 距离越远，惩罚越大</code></pre>
 
@@ -220,7 +221,7 @@ scores[i, j] -= |i - j| × slope_head_i  # 距离越远，惩罚越大</code></p
     <h2 id="normalization">归一化：LayerNorm → RMSNorm</h2>
 
     <h3>LayerNorm</h3>
-    <pre><code># 原版 LayerNorm
+    <pre><code class="language-python"># 原版 LayerNorm
 mean = x.mean(dim=-1, keepdim=True)
 var = x.var(dim=-1, keepdim=True, unbiased=False)
 x_norm = (x - mean) / sqrt(var + ε)
@@ -230,7 +231,7 @@ output = γ × x_norm + β</code></pre>
 
     <h3>RMSNorm</h3>
     <p>Llama 系列使用 RMSNorm——去掉 mean centering：</p>
-    <pre><code># RMSNorm
+    <pre><code class="language-python"># RMSNorm
 rms = sqrt(mean(x²) + ε)
 x_norm = x / rms
 output = γ × x_norm  # 没有 β！</code></pre>
@@ -246,7 +247,7 @@ output = γ × x_norm  # 没有 β！</code></pre>
     </div>
 
     <h3>归一化的位置</h3>
-    <pre><code># 现代标准: Pre-RMSNorm
+    <pre><code class="language-python"># 现代标准: Pre-RMSNorm
 x = x + Attention(RMSNorm(x))
 x = x + FFN(RMSNorm(x))
 
@@ -259,11 +260,11 @@ x = x + FFN(RMSNorm(x))
     <h2 id="ffn-architecture">FFN 架构选择</h2>
 
     <h3>标准 FFN</h3>
-    <pre><code>FFN(x) = W₂ × activation(W₁ × x)
+    <pre><code class="language-python">FFN(x) = W₂ × activation(W₁ × x)
 d_ff = 4 × d_model  （标准比例）</code></pre>
 
     <h3>门控 FFN（Gated Linear Unit, GLU）</h3>
-    <pre><code># 标准 GLU
+    <pre><code class="language-python"># 标准 GLU
 GLU(x) = σ(W_gate × x) ⊙ (W_up × x)   # ⊙ 是逐元素乘
 FFN(x) = W_down × GLU(x)
 
@@ -290,7 +291,7 @@ GeGLU(x) = GELU(W_gate × x) ⊙ (W_up × x)</code></pre>
     <h2 id="attention-details">注意力机制的细节</h2>
 
     <h3>Multi-Head Attention（MHA）</h3>
-    <pre><code># 输入: Q, K, V  (batch, seq, d_model)
+    <pre><code class="language-python"># 输入: Q, K, V  (batch, seq, d_model)
 # 拆分成 h 个头
 Q = rearrange(Q, 'b s (h d) -> b h s d', h=num_heads)
 K = rearrange(K, 'b s (h d) -> b h s d', h=num_heads)
@@ -307,7 +308,7 @@ output = rearrange(output, 'b h s d -> b s (h d)')</code></pre>
 
     <h3>Grouped-Query Attention（GQA）</h3>
     <p>下一课会详细讲，这里先预览：</p>
-    <pre><code># MHA: num_heads 个 Q 头, num_heads 个 K 头, num_heads 个 V 头
+    <pre><code class="language-python"># MHA: num_heads 个 Q 头, num_heads 个 K 头, num_heads 个 V 头
 # MQA: num_heads 个 Q 头, 1 个 K 头, 1 个 V 头
 # GQA: num_heads 个 Q 头, num_kv_heads 个 K 头, num_kv_heads 个 V 头
 
@@ -347,7 +348,7 @@ output = rearrange(output, 'b h s d -> b s (h d)')</code></pre>
     </ul>
 
     <h3>参数量估算</h3>
-    <pre><code># Transformer 参数量（忽略 embedding 和 final head）
+    <pre><code class="language-python"># Transformer 参数量（忽略 embedding 和 final head）
 # Attention: 4 × d_model²  (W_q, W_k, W_v, W_o 各 d_model × d_model)
 # FFN (SwiGLU): 3 × d_model × d_ff  (W_gate, W_up, W_down)
 # RMSNorm: 2 × d_model  (每层两个 norm)
@@ -358,7 +359,7 @@ total_params ≈ n_layers × 12 × d_model²</code></pre>
 
     <h3>Chinchilla 比例</h3>
     <p>根据 Hoffmann et al. (2022) 的 scaling law，compute-optimal 的模型满足：</p>
-    <pre><code>D ≈ 20 × N
+    <pre><code class="language-python">D ≈ 20 × N
 
 其中:
 D = 训练 token 数
@@ -395,7 +396,7 @@ N = 模型参数量
     <h2 id="initialization">参数初始化策略</h2>
 
     <h3>Xavier/Glorot 初始化</h3>
-    <pre><code># 目标: 让输出的方差 ≈ 输入的方差
+    <pre><code class="language-python"># 目标: 让输出的方差 ≈ 输入的方差
 # 对于 (input_dim, output_dim) 的权重矩阵:
 std = sqrt(2 / (input_dim + output_dim))  # Xavier uniform
 std = sqrt(1 / input_dim)                  # 简化版本（前向）
@@ -404,7 +405,7 @@ w = torch.randn(input_dim, output_dim) * std</code></pre>
 
     <h3>Transformer 特定的初始化</h3>
     <p>很多现代模型对残差分支做特殊初始化：</p>
-    <pre><code># GPT-2 风格
+    <pre><code class="language-python"># GPT-2 风格
 # 残差投影初始化为 0.02（很小），让训练初期接近 identity
 w = torch.randn(d_model, d_model) * 0.02
 
@@ -526,6 +527,9 @@ w = torch.randn(d_model, d_model) * 0.02
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 3 内容</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

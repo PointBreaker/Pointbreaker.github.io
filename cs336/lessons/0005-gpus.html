@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 5 课：GPU 架构与性能 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -33,7 +34,7 @@
     </table>
 
     <h3>A100 GPU 架构</h3>
-    <pre><code>A100 SM (Streaming Multiprocessor) 结构:
+    <pre><code class="language-python">A100 SM (Streaming Multiprocessor) 结构:
 ├── 108 个 SM
 ├── 每个 SM 包含:
 │   ├── 64 FP32 CUDA cores (INT32 也可)
@@ -46,7 +47,7 @@
     带宽: 2 TB/s</code></pre>
 
     <h3>H100 GPU 架构（新一代）</h3>
-    <pre><code>H100 SM (Streaming Multiprocessor) 结构:
+    <pre><code class="language-python">H100 SM (Streaming Multiprocessor) 结构:
 ├── 132 个 SM (SXM5) / 144 个 SM (NVSwitch)
 ├── 每个 SM 包含:
 │   ├── 128 FP32 CUDA cores
@@ -81,7 +82,7 @@
     </div>
 
     <h3>内存带宽 vs 计算速度</h3>
-    <pre><code>H100 (SXM5) 关键数字:
+    <pre><code class="language-python">H100 (SXM5) 关键数字:
   计算峰值 (bf16): 989 TFLOP/s
   内存带宽:       3.35 TB/s
   Ridge point:    989e12 / 3.35e12 ≈ 295 FLOP/byte
@@ -95,7 +96,7 @@
     <h2 id="execution-model">GPU 执行模型</h2>
 
     <h3>Thread, Block, Grid</h3>
-    <pre><code># GPU 编程的基本抽象
+    <pre><code class="language-python"># GPU 编程的基本抽象
 Grid
  └── Thread Block (CTA)  ← 在单个 SM 上执行
       └── Warp (32 threads)  ← 以 SIMD 方式执行
@@ -107,7 +108,7 @@ Grid
 
     <h3>SIMT 执行模型</h3>
     <p><strong>SIMT = Single Instruction, Multiple Thread</strong></p>
-    <pre><code># Warp 中的 32 个线程同时执行同一条指令
+    <pre><code class="language-python"># Warp 中的 32 个线程同时执行同一条指令
 # 但操作不同的数据
 
 # 例如: 向量加法
@@ -119,7 +120,7 @@ Grid
 
     <div class="card warning">
       <p><strong>分支发散（Branch Divergence）：</strong>如果 warp 中的一些线程走 if 分支，一些走 else 分支，GPU 会串行执行两个分支。这会导致性能下降。</p>
-      <pre><code># 坏: 分支发散
+      <pre><code class="language-python"># 坏: 分支发散
 if threadIdx.x % 2 == 0:
     do_A()  # 16 个线程执行
 else:
@@ -134,7 +135,7 @@ else:
     <p><strong>Occupancy = 活跃 warp 数 / 最大支持 warp 数</strong></p>
     <p>高 occupancy 意味着 SM 有更多的 warp 可以调度——当一个 warp 等待内存时，SM 可以切换到另一个 warp。</p>
 
-    <pre><code># 影响 occupancy 的因素:
+    <pre><code class="language-python"># 影响 occupancy 的因素:
 # 1. 每个 thread 使用的寄存器数
 # 2. 每个 block 使用的 shared memory
 # 3. block 大小
@@ -151,7 +152,7 @@ else:
 
     <h3>概念</h3>
     <p>Roofline model 直观地展示一个操作的性能上限：</p>
-    <pre><code>性能 (FLOP/s)
+    <pre><code class="language-python">性能 (FLOP/s)
     ↑
     │        ┌──────── 计算上限 (compute ceiling)
     │       /
@@ -200,7 +201,7 @@ else:
 
     <h3>什么是 Tensor Core？</h3>
     <p>Tensor Core 是 GPU 上的专用硬件单元，专门做矩阵乘法：</p>
-    <pre><code># 一个 Tensor Core 每个时钟周期执行:
+    <pre><code class="language-python"># 一个 Tensor Core 每个时钟周期执行:
 # D = A × B + C
 # 其中 A, B, C, D 是小矩阵 (如 16×16)
 
@@ -217,7 +218,7 @@ else:
     </ul>
 
     <h3>TF32：两全其美</h3>
-    <pre><code># TF32 (TensorFloat-32): A100 引入
+    <pre><code class="language-python"># TF32 (TensorFloat-32): A100 引入
 # 1 位符号 + 8 位指数 + 10 位尾数 = 19 bits
 # 范围和 FP32 一样（8 位指数），精度稍低（10 vs 23 尾数）
 # 但用 Tensor Core 加速！
@@ -232,7 +233,7 @@ else:
 
     <h3>Coalesced Access（合并访问）</h3>
     <p>GPU 内存访问以 32/128 字节的 "sector" 为单位。如果 warp 中的线程访问连续地址，可以合并为一个内存事务：</p>
-    <pre><code># Good: Coalesced (连续访问)
+    <pre><code class="language-python"># Good: Coalesced (连续访问)
 # Thread 0 → address 0
 # Thread 1 → address 4
 # Thread 2 → address 8
@@ -246,7 +247,7 @@ else:
 
     <h3>Shared Memory Bank Conflicts</h3>
     <p>Shared memory 被分为 32 个 bank，每个 bank 宽 4 字节：</p>
-    <pre><code># 如果 warp 中多个线程访问同一 bank 的不同地址
+    <pre><code class="language-python"># 如果 warp 中多个线程访问同一 bank 的不同地址
 # 会发生 bank conflict，串行化访问
 
 # Good: 无 conflict
@@ -279,7 +280,7 @@ else:
     </table>
 
     <h3>训练性能对比</h3>
-    <pre><code># GPT-3 175B 训练 (3.14e24 FLOPs):
+    <pre><code class="language-python"># GPT-3 175B 训练 (3.14e24 FLOPs):
 # A100 (312 TFLOP/s bf16, MFU=0.5):
 #   单卡实际: 156 TFLOP/s
 #   1024 卡: 1.6e17 FLOP/s
@@ -298,7 +299,7 @@ else:
     <h2 id="multi-gpu">多 GPU 互联</h2>
 
     <h3>节点内互联</h3>
-    <pre><code># NVLink (节点内 GPU 间)
+    <pre><code class="language-python"># NVLink (节点内 GPU 间)
 # H100: 18 条 NVLink 4.0, 每条 50 GB/s
 # 总带宽: 900 GB/s (双向)
 
@@ -307,7 +308,7 @@ else:
 # 任意两 GPU 间 900 GB/s</code></pre>
 
     <h3>节点间互联</h3>
-    <pre><code># InfiniBand / RoCE (节点间)
+    <pre><code class="language-python"># InfiniBand / RoCE (节点间)
 # 典型: 400 Gb/s = 50 GB/s
 # 远慢于 NVLink！
 
@@ -329,7 +330,7 @@ else:
     <h2 id="gpu-programming">GPU 编程范式</h2>
 
     <h3>CUDA C++</h3>
-    <pre><code>// 最底层，最灵活，最复杂
+    <pre><code class="language-python">// 最底层，最灵活，最复杂
 __global__ void vector_add(float *a, float *b, float *c, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n) {
@@ -341,7 +342,7 @@ __global__ void vector_add(float *a, float *b, float *c, int n) {
 vector_add&lt;&lt;&lt;num_blocks, block_size&gt;&gt;&gt;(d_a, d_b, d_b, n);</code></pre>
 
     <h3>Triton</h3>
-    <pre><code># Python 语法，自动优化
+    <pre><code class="language-python"># Python 语法，自动优化
 @triton.jit
 def vector_add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK: tl.constexpr):
     pid = tl.program_id(0)
@@ -352,7 +353,7 @@ def vector_add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK: tl.constexpr):
     tl.store(out_ptr + offsets, x + y, mask=mask)</code></pre>
 
     <h3>torch.compile</h3>
-    <pre><code># 不写 kernel，让编译器自动优化
+    <pre><code class="language-python"># 不写 kernel，让编译器自动优化
 @torch.compile
 def fused_operation(x, w):
     return gelu(x @ w)  # 自动融合 matmul + gelu</code></pre>
@@ -470,6 +471,9 @@ def fused_operation(x, w):
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 5 内容</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

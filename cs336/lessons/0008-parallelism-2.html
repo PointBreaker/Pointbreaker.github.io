@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 8 课：ZeRO 与 FSDP — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -26,7 +27,7 @@
     <h3>DDP 的冗余</h3>
     <p>在标准 Data Parallelism 中，每个 GPU 都存了完整副本：</p>
 
-    <pre><code># 每个 GPU 存储（70B 模型, fp32 + AdamW）:
+    <pre><code class="language-python"># 每个 GPU 存储（70B 模型, fp32 + AdamW）:
 参数:     4 × 70B = 280 GB
 梯度:     4 × 70B = 280 GB
 优化器 m: 4 × 70B = 280 GB
@@ -57,7 +58,7 @@
     </table>
 
     <h3>ZeRO Stage 1：分片优化器状态</h3>
-    <pre><code># 标准 DDP:
+    <pre><code class="language-python"># 标准 DDP:
 # 每个 GPU 存完整的 m 和 v（各 4P bytes）
 
 # ZeRO Stage 1:
@@ -73,7 +74,7 @@
 # 8 GPU: 8P + P = 9P（vs 标准 16P）→ 节省 44%</code></pre>
 
     <h3>ZeRO Stage 2：+ 分片梯度</h3>
-    <pre><code># ZeRO Stage 2:
+    <pre><code class="language-python"># ZeRO Stage 2:
 # 梯度也分片——每个 GPU 只存自己负责的那部分参数的梯度
 
 # 关键: All-Reduce → Reduce-Scatter
@@ -88,7 +89,7 @@
 # 8 GPU: 4P + 1.5P = 5.5P → 节省 66%</code></pre>
 
     <h3>ZeRO Stage 3：+ 分片参数</h3>
-    <pre><code># ZeRO Stage 3:
+    <pre><code class="language-python"># ZeRO Stage 3:
 # 参数也分片——每个 GPU 只存 1/N 的参数
 
 # 前向/反向计算时:
@@ -110,7 +111,7 @@
     </div>
 
     <h3>ZeRO 内存总结</h3>
-    <pre><code># 70B 模型, 8 GPU, fp32 + AdamW
+    <pre><code class="language-python"># 70B 模型, 8 GPU, fp32 + AdamW
 
 标准 DDP:     16P = 1120 GB/GPU  ← 放不下
 ZeRO Stage 1: 9P  = 630 GB/GPU   ← 还是放不下
@@ -135,7 +136,7 @@ ZeRO Stage 3: 2P  = 140 GB/GPU   ← 还是放不下（但接近了！）
     <h3>什么是 FSDP？</h3>
     <p>FSDP (Fully Sharded Data Parallel) 是 PyTorch 1.11+ 内置的 ZeRO Stage 3 实现。</p>
 
-    <pre><code>from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+    <pre><code class="language-python">from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 # 包装模型
 model = FSDP(
@@ -146,7 +147,7 @@ model = FSDP(
 )</code></pre>
 
     <h3>FSDP 的工作流程</h3>
-    <pre><code># FSDP 的前向传播（以一层为例）:
+    <pre><code class="language-python"># FSDP 的前向传播（以一层为例）:
 
 # 1. All-Gather: 从所有 GPU 收集完整参数
 #    GPU 0 有 W[0:N/4], GPU 1 有 W[N/4:N/2], ...
@@ -165,7 +166,7 @@ model = FSDP(
 #    - 更新本地参数分片</code></pre>
 
     <h3>FSDP 的通信量</h3>
-    <pre><code># 每层前向: All-Gather 参数 = 4P bytes
+    <pre><code class="language-python"># 每层前向: All-Gather 参数 = 4P bytes
 # 每层反向: All-Gather 参数 + Reduce-Scatter 梯度 = 8P bytes
 # 总计: 12P bytes per layer per step
 
@@ -199,7 +200,7 @@ model = FSDP(
     <h2 id="mixed-precision-dp">混合精度 + 并行</h2>
 
     <h3>混合精度下的内存</h3>
-    <pre><code># 混合精度训练 (bf16 前向 + fp32 主参数):
+    <pre><code class="language-python"># 混合精度训练 (bf16 前向 + fp32 主参数):
 
 # 参数:
 #   bf16 参数: 2P（用于前向/反向计算）
@@ -213,7 +214,7 @@ model = FSDP(
 # 总计: 18P bytes（vs fp32 的 16P，稍多但激活值省一半）</code></pre>
 
     <h3>混合精度 + FSDP</h3>
-    <pre><code># FSDP + 混合精度:
+    <pre><code class="language-python"># FSDP + 混合精度:
 # 每个 GPU 只存 1/N 的上述所有内容
 
 # 8 GPU, 70B 模型:
@@ -225,7 +226,7 @@ model = FSDP(
 
     <h3>Gradient Checkpointing</h3>
     <p>用计算换内存——不保存中间激活，反向时重算：</p>
-    <pre><code>from torch.utils.checkpoint import checkpoint
+    <pre><code class="language-python">from torch.utils.checkpoint import checkpoint
 
 # 不 checkpoint: 保存所有激活 → 内存 O(L)
 # Checkpoint: 只保存 checkpoint 点 → O(√L) 或 O(1)
@@ -243,7 +244,7 @@ model = FSDP(
     <h2 id="communication">通信原语实现</h2>
 
     <h3>Ring All-Reduce</h3>
-    <pre><code># Ring All-Reduce 的两个阶段:
+    <pre><code class="language-python"># Ring All-Reduce 的两个阶段:
 
 # Phase 1: Reduce-Scatter
 # 每个 GPU 把数据分成 N 份
@@ -258,7 +259,7 @@ model = FSDP(
 # 与 N 无关！这是 ring algorithm 的美妙之处</code></pre>
 
     <h3>NCCL：NVIDIA 的通信库</h3>
-    <pre><code># NCCL 自动选择最优算法:
+    <pre><code class="language-python"># NCCL 自动选择最优算法:
 # - 小数据: Ring all-reduce
 # - 大数据: Tree all-reduce（两步：reduce + broadcast）
 # - 节点内: 利用 NVLink
@@ -277,7 +278,7 @@ dist.reduce_scatter_tensor(output, input, op=dist.ReduceOp.SUM)
 dist.all_gather_into_tensor(output_tensor, input_tensor)</code></pre>
 
     <h3>带宽测量</h3>
-    <pre><code># 实测 NCCL 带宽:
+    <pre><code class="language-python"># 实测 NCCL 带宽:
 # 创建大 tensor
 tensor = torch.randn(100 * 1024**2, device='cuda')  # 400 MB
 
@@ -302,7 +303,7 @@ bandwidth = 2 * (world_size - 1) / world_size * size_bytes / duration
     <h2 id="practical">实际训练配置</h2>
 
     <h3>70B 模型训练配置</h3>
-    <pre><code># 硬件: 16 节点 × 8 H100 = 128 GPU
+    <pre><code class="language-python"># 硬件: 16 节点 × 8 H100 = 128 GPU
 
 # 并行策略:
 TP = 8 (节点内)
@@ -326,7 +327,7 @@ MFU ≈ 0.5
 训练 15T tokens: 6 × 70B × 15T / 63.4P ≈ 99 小时 ≈ 4 天</code></pre>
 
     <h3>Scaling Efficiency</h3>
-    <pre><code># 理想: N 个 GPU → N× 加速
+    <pre><code class="language-python"># 理想: N 个 GPU → N× 加速
 # 实际: 通信开销导致亚线性加速
 
 # 弱 scaling (固定每 GPU batch size):
@@ -445,6 +446,9 @@ MFU ≈ 0.5
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 8 内容</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

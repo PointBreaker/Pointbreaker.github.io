@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 6 课：Kernels 与 Triton — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -31,7 +32,7 @@
     </div>
 
     <h3>Benchmark 的正确姿势</h3>
-    <pre><code>import time
+    <pre><code class="language-python">import time
 
 def benchmark(func, num_warmups=1, num_trials=5):
     """正确的 benchmark 方法。"""
@@ -56,7 +57,7 @@ def benchmark(func, num_warmups=1, num_trials=5):
     </div>
 
     <h3>Profiling：看时间花在哪</h3>
-    <pre><code>from torch.profiler import ProfilerActivity
+    <pre><code class="language-python">from torch.profiler import ProfilerActivity
 
 with torch.profiler.profile(
     activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
@@ -84,7 +85,7 @@ prof.export_stacks("stacks.txt", "self_cuda_time_total")</code></pre>
     <h2 id="kernel-fusion">Kernel Fusion</h2>
 
     <h3>问题：每个操作都读/写 HBM</h3>
-    <pre><code># 假设计算 GeLU(A @ B)
+    <pre><code class="language-python"># 假设计算 GeLU(A @ B)
 # 不 fused 的版本:
 
 # Kernel 1: matmul
@@ -96,7 +97,7 @@ output = gelu(tmp)   # 读 tmp from HBM; 写 output to HBM
 # 问题: tmp 被写入 HBM，然后立即读回——浪费！</code></pre>
 
     <h3>解决：融合成一个 kernel</h3>
-    <pre><code># Fused 版本: 一个 kernel 完成
+    <pre><code class="language-python"># Fused 版本: 一个 kernel 完成
 # 读 A, B from HBM
 # 计算 A @ B，直接在寄存器中做 GeLU
 # 写 output to HBM
@@ -110,14 +111,14 @@ output = gelu(tmp)   # 读 tmp from HBM; 写 output to HBM
     </div>
 
     <h3>Benchmark 对比</h3>
-    <pre><code># GeLU 的 benchmark 结果（dim=16384, bf16）:
+    <pre><code class="language-python"># GeLU 的 benchmark 结果（dim=16384, bf16）:
 # manual_gelu (不 fused):  ~2.5 ms  ← 多次 HBM 读写
 # pytorch_gelu (fused):    ~0.8 ms  ← 一次 HBM 读写
 
 # Fused 版本快 3×！</code></pre>
 
     <h3>PyTorch 自动 fusion</h3>
-    <pre><code># torch.compile 可以自动融合
+    <pre><code class="language-python"># torch.compile 可以自动融合
 @torch.compile
 def fused_operation(x, w):
     return gelu(x @ w)  # 自动融合 matmul + gelu
@@ -133,7 +134,7 @@ def fused_operation(x, w):
     <h2 id="cuda-basics">CUDA Kernel 入门</h2>
 
     <h3>CUDA 执行模型</h3>
-    <pre><code># Grid: 所有 thread blocks 的集合
+    <pre><code class="language-python"># Grid: 所有 thread blocks 的集合
 # Thread Block: 一组共享 shared memory 的 threads
 # Thread: 基本执行单位
 
@@ -145,7 +146,7 @@ kernel_name&lt;&lt;&lt;num_blocks, block_size&gt;&gt;&gt;(args)
 # → 4 个 block, 每个 256 个 thread</code></pre>
 
     <h3>第一个 CUDA Kernel：GeLU</h3>
-    <pre><code>// gelu.cu
+    <pre><code class="language-python">// gelu.cu
 #include &lt;cuda_fp16.h&gt;
 
 __global__ void gelu_kernel(
@@ -168,7 +169,7 @@ __global__ void gelu_kernel(
 }</code></pre>
 
     <h3>在 Python 中加载</h3>
-    <pre><code>from torch.utils.cpp_extension import load_inline
+    <pre><code class="language-python">from torch.utils.cpp_extension import load_inline
 
 cuda_source = open("gelu.cu").read()
 cpp_source = "torch::Tensor gelu(torch::Tensor x);"
@@ -206,7 +207,7 @@ y = module.gelu(x)</code></pre>
     </table>
 
     <h3>Triton 编程模型</h3>
-    <pre><code>import triton
+    <pre><code class="language-python">import triton
 import triton.language as tl
 
 @triton.jit
@@ -257,7 +258,7 @@ def triton_gelu(x):
     <h2 id="triton-softmax">Triton 实战：Fused Softmax</h2>
 
     <h3>Naive Softmax 的问题</h3>
-    <pre><code># Naive 实现: 5 次遍历数据
+    <pre><code class="language-python"># Naive 实现: 5 次遍历数据
 def manual_softmax(x):
     x_max = x.max(dim=1)[0]      # 遍历 1: 求 max
     x = x - x_max[:, None]        # 遍历 2: 减 max
@@ -270,7 +271,7 @@ def manual_softmax(x):
 # 理论上只需要 MN 读 + MN 写（4× 差距！）</code></pre>
 
     <h3>Fused Softmax Kernel</h3>
-    <pre><code>@triton.jit
+    <pre><code class="language-python">@triton.jit
 def softmax_kernel(
     x_ptr, y_ptr,
     x_row_stride, y_row_stride,
@@ -305,7 +306,7 @@ def softmax_kernel(
     </div>
 
     <h3>性能对比</h3>
-    <pre><code># dim=16384, bf16, H100
+    <pre><code class="language-python"># dim=16384, bf16, H100
 # manual_softmax:  ~2.5 ms
 # pytorch_softmax: ~0.7 ms  ← PyTorch 已实现 fused
 # triton_softmax:  ~0.7 ms  ← 接近 PyTorch
@@ -318,7 +319,7 @@ def softmax_kernel(
 
     <h3>为什么需要 Tiling？</h3>
     <p>矩阵乘法 <code>C = A × B</code>，朴素实现每个元素独立计算：</p>
-    <pre><code># 朴素 matmul: 每个 C[i,j] 独立读 A 的一行和 B 的一列
+    <pre><code class="language-python"># 朴素 matmul: 每个 C[i,j] 独立读 A 的一行和 B 的一列
 # C 有 MN 个元素，每个需要读 K 个元素
 # 总读取: 2 × M × N × K 次 HBM 访问
 
@@ -326,7 +327,7 @@ def softmax_kernel(
 #       B 的同一列被读了 M 次（每行一次）</code></pre>
 
     <h3>Tiled Matmul</h3>
-    <pre><code># 关键思想: 分块加载到 shared memory
+    <pre><code class="language-python"># 关键思想: 分块加载到 shared memory
 # 每个 block 计算 C 的一个 TILE_SIZE × TILE_SIZE 子矩阵
 
 # 步骤:
@@ -338,7 +339,7 @@ def softmax_kernel(
 # 效果: A 的每个元素只从 HBM 读一次（被多个 C 元素复用）</code></pre>
 
     <h3>Triton 的自动 Tiling</h3>
-    <pre><code># Triton 的 matmul kernel 自动处理 tiling:
+    <pre><code class="language-python"># Triton 的 matmul kernel 自动处理 tiling:
 @triton.jit
 def matmul_kernel(A, B, C, M, N, K, BLOCK_M: tl.constexpr, ...):
     # Triton 自动:
@@ -351,7 +352,7 @@ def matmul_kernel(A, B, C, M, N, K, BLOCK_M: tl.constexpr, ...):
 
     <h3>L2 Cache 优化</h3>
     <p>不同 tile 处理顺序对 L2 cache 命中率影响巨大：</p>
-    <pre><code># 行优先处理: 每个 tile 需要加载新的 A 和 B 块
+    <pre><code class="language-python"># 行优先处理: 每个 tile 需要加载新的 A 和 B 块
 # → 9 个 A 块 + 81 个 B 块 = 90 次加载
 
 # 分组处理（swizzled）: 多个 tile 复用同一 A 块
@@ -367,7 +368,7 @@ def matmul_kernel(A, B, C, M, N, K, BLOCK_M: tl.constexpr, ...):
     <h3>什么是 PTX？</h3>
     <p>PTX (Parallel Thread Execution) 是 NVIDIA GPU 的底层指令集——类似于 CPU 的汇编。</p>
 
-    <pre><code># Triton 生成的 PTX 示例（GeLU kernel）:
+    <pre><code class="language-python"># Triton 生成的 PTX 示例（GeLU kernel）:
 ld.global.v4.f32  {%f0, %f1, %f2, %f3}, [%rd0];  # 读 4 个 float
 fma.rn.f32        %f4, %f0, %f5, %f6;            # 融合乘加
 ex2.approx.f32    %f7, %f8;                      # 近似 exp
@@ -512,6 +513,9 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 6 内容</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

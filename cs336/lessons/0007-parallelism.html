@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 7 课：分布式训练并行 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -24,7 +25,7 @@
     <h2 id="why">为什么需要分布式训练</h2>
 
     <h3>规模的力量</h3>
-    <pre><code># 单张 H100 (80GB) 能训多大的模型？
+    <pre><code class="language-python"># 单张 H100 (80GB) 能训多大的模型？
 # 参数: 80GB / 20 bytes ≈ 4B 参数
 # 但 70B, 405B, 1T+ 模型需要多 GPU
 
@@ -57,14 +58,14 @@
     </table>
 
     <h3>关键等式</h3>
-    <pre><code>All-Reduce = Reduce-Scatter + All-Gather
+    <pre><code class="language-python">All-Reduce = Reduce-Scatter + All-Gather
 
 # 直觉:
 # Reduce-Scatter: 每个 GPU 得到最终结果的 1/N
 # All-Gather: 把所有片拼起来，每个 GPU 都有完整结果</code></pre>
 
     <h3>带宽分析</h3>
-    <pre><code># All-Reduce 的通信量（ring algorithm）:
+    <pre><code class="language-python"># All-Reduce 的通信量（ring algorithm）:
 # 每个 GPU 发送: 2 × (N-1)/N × data_size
 # 近似: 2 × data_size（与 N 无关！）
 
@@ -84,7 +85,7 @@
     <h3>核心思想</h3>
     <p>每个 GPU 持有完整模型，处理不同的数据片。梯度通过 all-reduce 同步。</p>
 
-    <pre><code># Data Parallelism 流程
+    <pre><code class="language-python"># Data Parallelism 流程
 for each GPU in parallel:
     # 1. 获取不同的数据片
     x_local = data[rank * batch_size : (rank+1) * batch_size]
@@ -102,7 +103,7 @@ for each GPU in parallel:
     optimizer.step()</code></pre>
 
     <h3>通信开销</h3>
-    <pre><code># 每步通信: All-Reduce 梯度
+    <pre><code class="language-python"># 每步通信: All-Reduce 梯度
 # 数据量: 参数量 P × 4 bytes (fp32) 或 P × 2 bytes (bf16)
 # 70B 模型: 70×10⁹ × 4 = 280 GB（fp32 梯度）
 
@@ -114,7 +115,7 @@ for each GPU in parallel:
 
     <h3>Gradient Accumulation</h3>
     <p>当 batch size 太大，单 GPU 放不下时：</p>
-    <pre><code># 把一个大 batch 拆成多个 micro-batch
+    <pre><code class="language-python"># 把一个大 batch 拆成多个 micro-batch
 optimizer.zero_grad()
 for micro_batch in micro_batches:
     loss = model(micro_batch)
@@ -148,7 +149,7 @@ optimizer.step()</code></pre>
     <h3>核心思想</h3>
     <p>把模型的<strong>宽度</strong>切分到多个 GPU——每个 GPU 只持有参数的一部分。</p>
 
-    <pre><code># 标准 Linear 层: Y = X @ W
+    <pre><code class="language-python"># 标准 Linear 层: Y = X @ W
 # W: (D_in, D_out)
 
 # Tensor Parallel: 把 W 按列切分
@@ -160,7 +161,7 @@ optimizer.step()</code></pre>
     <h3>Megatron-LM 的切分策略</h3>
     <p>对于 Transformer 的 FFN 和 Attention，有特定的切分方式：</p>
 
-    <pre><code># FFN 的列切分 (Column Parallel):
+    <pre><code class="language-python"># FFN 的列切分 (Column Parallel):
 # Y = X @ W_gate  → 切分 W_gate → All-Gather
 # Y = X @ W_up    → 切分 W_up → All-Gather
 # 然后 element-wise: Y = Swish(Y_gate) * Y_up
@@ -171,7 +172,7 @@ optimizer.step()</code></pre>
 # W_o 行切分 → All-Reduce</code></pre>
 
     <h3>通信模式</h3>
-    <pre><code># Transformer block 的 TP 通信:
+    <pre><code class="language-python"># Transformer block 的 TP 通信:
 # 1. Attention:
 #    - Q, K, V 计算: 无需通信（head 独立）
 #    - W_o: All-Reduce
@@ -188,7 +189,7 @@ optimizer.step()</code></pre>
     </div>
 
     <h3>切分示例（4 GPU）</h3>
-    <pre><code># 假设 d_model = 4096, num_heads = 32
+    <pre><code class="language-python"># 假设 d_model = 4096, num_heads = 32
 # 每 GPU: 8 个 head, d_model_per_gpu = 1024
 
 # W_q: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
@@ -204,7 +205,7 @@ optimizer.step()</code></pre>
     <h3>核心思想</h3>
     <p>把模型的<strong>深度</strong>切分到多个 GPU——每个 GPU 持有连续的几层。</p>
 
-    <pre><code># Pipeline Parallel: 4 GPU, 16 层
+    <pre><code class="language-python"># Pipeline Parallel: 4 GPU, 16 层
 # GPU 0: layers 0-3
 # GPU 1: layers 4-7
 # GPU 2: layers 8-11
@@ -216,7 +217,7 @@ optimizer.step()</code></pre>
     <h3>Pipeline Bubble</h3>
     <p>朴素的 pipeline 有大量空闲时间——"bubble"：</p>
 
-    <pre><code># 朴素 pipeline (4 stages, 1 batch):
+    <pre><code class="language-python"># 朴素 pipeline (4 stages, 1 batch):
 # Time →
 # GPU 0: [====L0-3====]  idle   idle   idle
 # GPU 1:  idle  [====L4-7====]  idle   idle
@@ -230,7 +231,7 @@ optimizer.step()</code></pre>
     <h3>1F1B Schedule（One Forward One Backward）</h3>
     <p>减少 bubble 的关键技术：</p>
 
-    <pre><code># 1F1B: 每个 stage 交替做 forward 和 backward
+    <pre><code class="language-python"># 1F1B: 每个 stage 交替做 forward 和 backward
 # 而不是等所有 forward 做完再做 backward
 
 # 4 stages, 8 micro-batches:
@@ -241,7 +242,7 @@ optimizer.step()</code></pre>
 # Bubble 从 75% 降到 ~25%！</code></pre>
 
     <h3>通信量</h3>
-    <pre><code># Pipeline Parallel 的通信:
+    <pre><code class="language-python"># Pipeline Parallel 的通信:
 # 每对相邻 GPU 之间只传 activations
 # 数据量: batch_size × seq_len × d_model × 2 (bf16)
 
@@ -268,7 +269,7 @@ optimizer.step()</code></pre>
     <p>当序列极长时（128K+），即使 TP 也无法放下所有激活。</p>
 
     <h3>核心思想</h3>
-    <pre><code># 标准 TP 只切分宽度维度
+    <pre><code class="language-python"># 标准 TP 只切分宽度维度
 # Sequence Parallel 额外切分序列维度
 
 # 具体做法:
@@ -287,7 +288,7 @@ optimizer.step()</code></pre>
     <h3>3D / 4D 并行</h3>
     <p>实际训练大规模模型时，所有并行策略组合使用：</p>
 
-    <pre><code># Llama 3 405B 训练配置:
+    <pre><code class="language-python"># Llama 3 405B 训练配置:
 # - 数据并行 (DP): 跨节点
 # - 张量并行 (TP): 节点内 (8 GPU)
 # - 流水线并行 (PP): 跨节点组
@@ -305,7 +306,7 @@ optimizer.step()</code></pre>
     </table>
 
     <h3>实际配置示例</h3>
-    <pre><code># 训练 70B 模型，16 节点 (128 GPU):
+    <pre><code class="language-python"># 训练 70B 模型，16 节点 (128 GPU):
 # TP = 8 (节点内)
 # PP = 4 (4 个 stages)
 # DP = 128 / (8 × 4) = 4 (数据并行)
@@ -445,6 +446,9 @@ optimizer.step()</code></pre>
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 7 内容</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

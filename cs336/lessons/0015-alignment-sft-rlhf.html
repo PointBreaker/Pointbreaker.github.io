@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 15 课：Alignment — SFT/RLHF — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -45,7 +46,7 @@
     </table>
 
     <h3>训练流程概览</h3>
-    <pre><code>Base Model (预训练完成)
+    <pre><code class="language-python">Base Model (预训练完成)
     ↓ SFT (Supervised Fine-Tuning)
 SFT Model (能遵循指令)
     ↓ RLHF (Reinforcement Learning from Human Feedback)
@@ -59,7 +60,7 @@ RLHF Model (符合人类偏好)</code></pre>
     <h3>核心思想</h3>
     <p>SFT 是最直接的 alignment 方法：收集高质量的 (instruction, response) 对，用标准的监督学习微调模型。</p>
 
-    <pre><code># SFT 的数据格式
+    <pre><code class="language-python"># SFT 的数据格式
 {
     "instruction": "解释什么是机器学习",
     "output": "机器学习是人工智能的一个分支，它允许计算机从数据中学习...",
@@ -93,7 +94,7 @@ RLHF Model (符合人类偏好)</code></pre>
     </table>
 
     <h3>SFT 训练细节</h3>
-    <pre><code># SFT 的损失函数（与预训练相同，但只在 response 上计算）
+    <pre><code class="language-python"># SFT 的损失函数（与预训练相同，但只在 response 上计算）
 
 # 对于每个样本 (instruction, response):
 # 1. 拼接为: [instruction_tokens, response_tokens]
@@ -142,7 +143,7 @@ def sft_loss(model, instruction, response):
     </ul>
 
     <h3>RLHF 的三步流程</h3>
-    <pre><code>Step 1: SFT
+    <pre><code class="language-python">Step 1: SFT
 Base Model → SFT Model (初始化 policy)
 
 Step 2: Reward Model
@@ -153,7 +154,7 @@ Step 3: PPO 优化
 
     <h3>Reward Model</h3>
     <p>Reward Model 学会预测"人类更喜欢哪个回答"：</p>
-    <pre><code># 偏好数据收集
+    <pre><code class="language-python"># 偏好数据收集
 # 给定同一个 prompt，模型生成多个回答
 # 人类标注者排序: A > B > C
 
@@ -181,7 +182,7 @@ class RewardModel(nn.Module):
         return reward.squeeze(-1)</code></pre>
 
     <h3>PPO 优化</h3>
-    <pre><code># PPO (Proximal Policy Optimization) 的核心思想:
+    <pre><code class="language-python"># PPO (Proximal Policy Optimization) 的核心思想:
 # 用 Reward Model 的输出作为奖励
 # 通过 policy gradient 优化语言模型
 # 同时用 KL 惩罚防止模型偏离太远
@@ -198,7 +199,7 @@ class RewardModel(nn.Module):
 # 其中 ratio = π_new(a|s) / π_old(a|s)</code></pre>
 
     <h3>PPO 的完整流程</h3>
-    <pre><code># RLHF/PPO 训练循环:
+    <pre><code class="language-python"># RLHF/PPO 训练循环:
 
 for batch in prompts:
     # 1. 生成 responses
@@ -231,7 +232,7 @@ for batch in prompts:
     <h2 id="preference-data">偏好数据收集</h2>
 
     <h3>如何收集偏好？</h3>
-    <pre><code># 方法 1: 直接比较
+    <pre><code class="language-python"># 方法 1: 直接比较
 # 给定 prompt，生成 4 个 responses
 # 人类标注者排序: A > C > B > D
 # 生成偏好对: (A, C), (A, B), (A, D), (C, B), (C, D), (B, D)
@@ -262,7 +263,7 @@ for batch in prompts:
 
     <h3>Reward Hacking</h3>
     <p>模型学会"欺骗" reward model，而非真正提高质量：</p>
-    <pre><code># Reward hacking 的表现:
+    <pre><code class="language-python"># Reward hacking 的表现:
 # 1. 生成 reward model 喜欢但人类不喜欢的回答
 # 2. 利用 reward model 的盲点
 # 3. 生成"安全但无用"的回答（reward model 不给负分）
@@ -277,7 +278,7 @@ for batch in prompts:
 # 3. 人类在环评估</code></pre>
 
     <h3>KL 散度的作用</h3>
-    <pre><code># KL 惩罚: KL(π_RLHF || π_SFT)
+    <pre><code class="language-python"># KL 惩罚: KL(π_RLHF || π_SFT)
 # 防止模型偏离 SFT 分布太远
 
 # 为什么需要 KL?
@@ -440,6 +441,9 @@ for batch in prompts:
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课深入 SFT/RLHF 机制</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>

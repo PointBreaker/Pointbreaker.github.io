@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 10 课：推理优化 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
 </head>
 <body>
   <div class="page">
@@ -24,7 +25,7 @@
     <h2 id="landscape">推理的重要性</h2>
 
     <h3>为什么推理比训练更关键？</h3>
-    <pre><code># 训练: 一次性成本
+    <pre><code class="language-python"># 训练: 一次性成本
 # GPT-4 训练: ~$100M（一次）
 
 # 推理: 重复成本
@@ -55,7 +56,7 @@
     <h2 id="arithmetic-intensity-inference">推理的算术强度分析</h2>
 
     <h3>Prefill vs Generation</h3>
-    <pre><code># 推理的两个阶段:
+    <pre><code class="language-python"># 推理的两个阶段:
 
 # 1. Prefill: 处理整个 prompt
 #    - 并行处理所有 token（像训练时的 matmul）
@@ -68,7 +69,7 @@
 #    - 永远 memory-bound！</code></pre>
 
     <h3>MLP 层的算术强度</h3>
-    <pre><code># MLP 前向传播（SwiGLU）:
+    <pre><code class="language-python"># MLP 前向传播（SwiGLU）:
 # 读 X (B×T×D), W_gate (D×F), W_up (D×F), W_down (F×D)
 # 计算: U = X @ W_gate, G = X @ W_up, Y = Swish(G)*U @ W_down
 # 写 Y (B×T×D)
@@ -86,7 +87,7 @@ Bytes = 4BTD + 6DF + 4BTD + 4BTD + 4BTF + 4BTD
 #   B=100: 强度 = 100 → 接近 compute-bound</code></pre>
 
     <h3>Attention 层的算术强度</h3>
-    <pre><code># Attention（FlashAttention 优化后）:
+    <pre><code class="language-python"># Attention（FlashAttention 优化后）:
 # 读 Q (B×T×D), K (B×S×D), V (B×S×D)
 # 计算: Q @ K^T, softmax, @ V
 # 写 Y (B×T×D)
@@ -112,7 +113,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
     </div>
 
     <h3>实际延迟和吞吐量</h3>
-    <pre><code># Llama 2 13B 在 H100 上的理论性能:
+    <pre><code class="language-python"># Llama 2 13B 在 H100 上的理论性能:
 
 # Batch size = 1:
 # 内存: 参数 26GB (bf16) + KV cache ~0.5GB
@@ -133,7 +134,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
     <h2 id="kv-cache-compress">KV Cache 压缩</h2>
 
     <h3>为什么 KV cache 是瓶颈？</h3>
-    <pre><code># KV cache 大小（每 token 每 layer）:
+    <pre><code class="language-python"># KV cache 大小（每 token 每 layer）:
 # MHA: n_heads × d_head × 2 (K+V) × 2 (bf16)
 #     = 64 × 128 × 2 × 2 = 32 KB/token/layer
 
@@ -143,11 +144,11 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # 大 batch 时 KV cache 远超模型参数大小</code></pre>
 
     <h3>GQA（复习）</h3>
-    <pre><code># GQA 把 KV cache 缩小 n_heads / n_kv_heads 倍
+    <pre><code class="language-python"># GQA 把 KV cache 缩小 n_heads / n_kv_heads 倍
 # Llama 2 70B: 64 Q heads, 8 KV heads → 8× 缩小</code></pre>
 
     <h3>Multi-head Latent Attention (MLA)</h3>
-    <pre><code># DeepSeek-V2 的 MLA:
+    <pre><code class="language-python"># DeepSeek-V2 的 MLA:
 # 不存完整的 K, V 向量
 # 存一个低秩压缩的 latent 向量 c (C=512 维)
 # 需要时通过上投影恢复
@@ -157,7 +158,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # 压缩比: 28×！</code></pre>
 
     <h3>Cross-layer Attention (CLA)</h3>
-    <pre><code># 跨层共享 KV:
+    <pre><code class="language-python"># 跨层共享 KV:
 # GQA 是共享 KV across heads
 # CLA 是共享 KV across layers
 
@@ -165,7 +166,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # KV cache 缩小 4×</code></pre>
 
     <h3>Local Attention</h3>
-    <pre><code># 部分层用 local attention（只关注附近 token）
+    <pre><code class="language-python"># 部分层用 local attention（只关注附近 token）
 # KV cache 不依赖序列长度！
 
 # 混合策略（character.ai）:
@@ -179,7 +180,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
     <h2 id="quantization">量化</h2>
 
     <h3>为什么量化对推理有效？</h3>
-    <pre><code># 推理是 memory-bound 的
+    <pre><code class="language-python"># 推理是 memory-bound 的
 # 减少权重大小 → 减少内存搬运 → 更快
 
 # 量化级别:
@@ -189,7 +190,7 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
 # 理论上 8× 加速（如果 memory-bound）</code></pre>
 
     <h3>Post-training Quantization (PTQ)</h3>
-    <pre><code># 训练后量化: 不需要重新训练
+    <pre><code class="language-python"># 训练后量化: 不需要重新训练
 
 # 简单量化（per-tensor）:
 scale = max(abs(x)) / 127  # int8
@@ -199,7 +200,7 @@ x_quantized = round(x / scale)
 # LLM 中有 ~0.1% 的 outlier（值特别大的元素）</code></pre>
 
     <h3>LLM.int8()</h3>
-    <pre><code># Dettmers et al. (2022):
+    <pre><code class="language-python"># Dettmers et al. (2022):
 # 1. 对大多数元素做 int8 量化
 # 2. 对 outlier 保持 fp16
 # 3. 矩阵乘法: outlier 用 fp16, 其余用 int8
@@ -207,7 +208,7 @@ x_quantized = round(x / scale)
 # 效果: 几乎无损，但 15-23% 更慢（因为混合精度）</code></pre>
 
     <h3>AWQ (Activation-aware Weight Quantization)</h3>
-    <pre><code># Lin et al. (2023):
+    <pre><code class="language-python"># Lin et al. (2023):
 # 关键洞察: 不是所有权重都同等重要
 # 对应大 activation 的权重更重要
 
@@ -231,7 +232,7 @@ x_quantized = round(x / scale)
     </div>
 
     <h3>算法</h3>
-    <pre><code># 投机解码 (Leviathan et al., 2023; Chen et al., 2023)
+    <pre><code class="language-python"># 投机解码 (Leviathan et al., 2023; Chen et al., 2023)
 
 # 1. Draft 模型（小）生成 γ 个 token: d₁, d₂, ..., dᵧ
 # 2. Target 模型（大）一次性评估: p(x|prefix + d₁ + ... + dᵧ)
@@ -244,7 +245,7 @@ x_quantized = round(x / scale)
 # 关键: 生成的分布和直接采样完全一样！（数学保证）</code></pre>
 
     <h3>为什么能加速？</h3>
-    <pre><code># 不使用投机解码:
+    <pre><code class="language-python"># 不使用投机解码:
 # 生成 γ 个 token → γ 次大模型前向 → γ × T_large
 
 # 使用投机解码:
@@ -268,7 +269,7 @@ x_quantized = round(x / scale)
     <h2 id="dynamic-batching">动态批处理</h2>
 
     <h3>问题：推理的 batch 是动态的</h3>
-    <pre><code># 训练: 固定 batch, 固定长度
+    <pre><code class="language-python"># 训练: 固定 batch, 固定长度
 # batch_size × sequence_length × hidden_dim
 
 # 推理: 请求动态到达，长度不一
@@ -280,7 +281,7 @@ x_quantized = round(x / scale)
 # → 先到的请求被后到的拖慢</code></pre>
 
     <h3>Continuous Batching（迭代级调度）</h3>
-    <pre><code># Yu et al. (2022) - Orca
+    <pre><code class="language-python"># Yu et al. (2022) - Orca
 # 不是等整个 batch 完成，而是每步都可以加入/移除请求
 
 # 每个 decode step:
@@ -291,7 +292,7 @@ x_quantized = round(x / scale)
 # 效果: 吞吐量 10-20× 提升</code></pre>
 
     <h3>Selective Batching</h3>
-    <pre><code># 问题: 不同请求长度不同，不能组成规则 tensor
+    <pre><code class="language-python"># 问题: 不同请求长度不同，不能组成规则 tensor
 
 # 解决方案:
 # - Attention: 每个序列单独处理（或 padding）
@@ -305,7 +306,7 @@ x_quantized = round(x / scale)
     <h2 id="paged-attention">PagedAttention</h2>
 
     <h3>问题：KV cache 内存碎片</h3>
-    <pre><code># 朴素 KV cache 分配:
+    <pre><code class="language-python"># 朴素 KV cache 分配:
 # 每个请求预留 max_seq_len 的空间
 
 # 问题 1: 内部碎片
@@ -317,7 +318,7 @@ x_quantized = round(x / scale)
 # 内存中出现不连续的空洞</code></pre>
 
     <h3>PagedAttention（操作系统启发）</h3>
-    <pre><code># Kwon et al. (2023) - vLLM
+    <pre><code class="language-python"># Kwon et al. (2023) - vLLM
 
 # 核心思想: 像操作系统管理内存页一样管理 KV cache
 
@@ -331,7 +332,7 @@ x_quantized = round(x / scale)
 # - 支持共享前缀（system prompt）</code></pre>
 
     <h3>Copy-on-Write</h3>
-    <pre><code># 多个请求共享 system prompt 的 KV cache
+    <pre><code class="language-python"># 多个请求共享 system prompt 的 KV cache
 # 当某个请求需要修改时，才复制
 
 # 类似操作系统的 fork()</code></pre>
@@ -342,7 +343,7 @@ x_quantized = round(x / scale)
     <h2 id="alternatives">超越 Transformer</h2>
 
     <h3>State Space Models</h3>
-    <pre><code># Mamba, Jamba, etc.
+    <pre><code class="language-python"># Mamba, Jamba, etc.
 # 用 O(1) 状态替代 O(n) KV cache
 # 推理时不需要存储整个 KV cache
 
@@ -350,7 +351,7 @@ x_quantized = round(x / scale)
 # 混合架构（Transformer + SSM）是当前趋势</code></pre>
 
     <h3>Diffusion Models for Text</h3>
-    <pre><code># 非自回归生成
+    <pre><code class="language-python"># 非自回归生成
 # 所有 token 同时生成，多步 refinement
 
 # 优势: 并行生成，速度快
@@ -486,6 +487,9 @@ x_quantized = round(x / scale)
       <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 10 内容</p>
     </footer>
   </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
 </body>
 </html>
