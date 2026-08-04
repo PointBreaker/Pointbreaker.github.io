@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -30,8 +30,8 @@
 
     <p>第 9 课的核心结论：</p>
     <ul>
-      <li><strong>总 FLOPs $≈$ $6ND$</strong>（前向 2ND + 反向 4ND）</li>
-      <li><strong>Chinchilla 最优比例</strong>：D $≈$ 20 $\times$ N</li>
+      <li><strong>总 FLOPs ≈ 6ND</strong>（前向 2ND + 反向 4ND）</li>
+      <li><strong>Chinchilla 最优比例</strong>：D ≈ 20 × N</li>
       <li><strong>Isoflop 曲线</strong>：固定算力下，存在最优的 (N, D) 组合</li>
     </ul>
 
@@ -41,13 +41,13 @@
 
     <h3>回顾：幂律形式</h3>
     <pre><code class="language-python"># 参数 vs 损失（固定数据量）
-L(N) = ($N_{c}$ / N)^α_N
+L(N) = (N_c / N)^α_N
 
 # 数据 vs 损失（固定参数量）
-L(D) = ($D_{c}$ / D)^α_D
+L(D) = (D_c / D)^α_D
 
 # 联合形式（Chinchilla 论文）
-L(N, D) = E + ($N_{c}$ / N)^$α$ + ($D_{c}$ / D)^$β$
+L(N, D) = E + (N_c / N)^α + (D_c / D)^β
 # 其中 E 是不可约损失（irreducible loss）</code></pre>
 
     <hr class="rule">
@@ -56,15 +56,15 @@ L(N, D) = E + ($N_{c}$ / N)^$α$ + ($D_{c}$ / D)^$β$
     <h2 id="fitting">如何拟合 Scaling Law</h2>
 
     <h3>方法 1：对数线性回归（简单但不稳健）</h3>
-    <p>对幂律 L = ($N_{c}$ / N)^$α$ 取对数，得到：</p>
-    <pre><code class="language-python">log L = $α$ log $N_{c}$ − $α$ log N
-      = a − $α$ $\times$ log N     （关于 log N 的线性函数）
+    <p>对幂律 L = (N_c / N)^α 取对数，得到：</p>
+    <pre><code class="language-python">log L = α log N_c − α log N
+      = a − α × log N     （关于 log N 的线性函数）
 
 # 算法：
 # 1. 训练多个不同大小的模型（固定其他超参）
 # 2. 记录 (log N, log L)
 # 3. 做线性回归
-# 4. 斜率 = −$α$，截距 = $α$ log $N_{c}$</code></pre>
+# 4. 斜率 = −α，截距 = α log N_c</code></pre>
 
     <div class="card warning">
       <p><strong>问题</strong>：在 log-log 图上，小模型的 loss 变化更剧烈，大模型变化平缓。简单线性回归对所有点等权对待，会被小模型区域主导。而且 log 变换会让小 loss 区域的噪声被放大。</p>
@@ -73,35 +73,35 @@ L(N, D) = E + ($N_{c}$ / N)^$α$ + ($D_{c}$ / D)^$β$
     <h3>方法 2：非线性最小二乘（NLLS）</h3>
     <p>直接拟合原始幂律形式，避免 log 变换的偏差：</p>
     <pre><code class="language-python">import numpy as np
-from scipy.optimize import curv$e_{fit}$
+from scipy.optimize import curve_fit
 
-def scalin$g_{law}$(N, $N_{c}$, alpha, $L_{inf}$):
+def scaling_law(N, N_c, alpha, L_inf):
     """带不可约损失的幂律"""
-    return ($N_{c}$ / N) ** alpha + $L_{inf}$
+    return (N_c / N) ** alpha + L_inf
 
 # 数据：多个模型的参数量和验证 loss
-$N_{values}$ = np.array([1e6, 3e6, 1e7, 3e7, 1e8, 3e8, 1e9])
+N_values = np.array([1e6, 3e6, 1e7, 3e7, 1e8, 3e8, 1e9])
 losses = np.array([4.2, 3.8, 3.5, 3.2, 2.9, 2.7, 2.5])
 
 # 拟合
-popt, pcov = curv$e_{fit}$(scalin$g_{law}$, $N_{values}$, losses,
+popt, pcov = curve_fit(scaling_law, N_values, losses,
                        p0=[1e5, 0.1, 2.0],
                        bounds=([0, 0, 0], [np.inf, 1, np.inf]))
-$N_{c}$, alpha, $L_{inf}$ = popt
+N_c, alpha, L_inf = popt
 
-print(f"$α$ = {alpha:.3f}")
-print(f"$N_{c}$ = {$N_{c}$:.2e}")
-print(f"L_$∞$ = {$L_{inf}$:.3f}")</code></pre>
+print(f"α = {alpha:.3f}")
+print(f"N_c = {N_c:.2e}")
+print(f"L_∞ = {L_inf:.3f}")</code></pre>
 
     <h3>方法 3：考虑数据量的联合拟合（Chinchilla 方法）</h3>
     <p>Chinchilla 论文使用的是同时变化 N 和 D 的联合拟合：</p>
-    <pre><code class="language-python">def chinchill$a_{law}$(N, D, E, alpha, beta, $N_{c}$, $D_{c}$):
+    <pre><code class="language-python">def chinchilla_law(N, D, E, alpha, beta, N_c, D_c):
     """
     Chinchilla 论文的参数化形式
-    L(N, D) = E + A/N^$α$ + B/D^$β$
-    其中 A = $N_{c}$^$α$, B = $D_{c}$^$β$
+    L(N, D) = E + A/N^α + B/D^β
+    其中 A = N_c^α, B = D_c^β
     """
-    return E + ($N_{c}$ / N) ** alpha + ($D_{c}$ / D) ** beta
+    return E + (N_c / N) ** alpha + (D_c / D) ** beta
 
 # 实验设计：
 # - 变化 N: 70M, 160M, 400M, 1B, 14B 等
@@ -112,10 +112,10 @@ print(f"L_$∞$ = {$L_{inf}$:.3f}")</code></pre>
     <p>Chinchilla 论文采用的更精细策略：</p>
     <ol>
       <li>选择几个固定的算力预算 C（如 1e18, 1e19, 1e20 FLOPs）</li>
-      <li>对每个 C，训练多个 (N, D) 组合（满足 $6ND$ = C）</li>
+      <li>对每个 C，训练多个 (N, D) 组合（满足 6ND = C）</li>
       <li>画出 Isoflop 曲线：x 轴 = N，y 轴 = L</li>
-      <li>找到每条曲线的最优点 $N_{opt}$(C)</li>
-      <li>拟合 $N_{opt}$(C) 和 $D_{opt}$(C) 与 C 的关系</li>
+      <li>找到每条曲线的最优点 N_opt(C)</li>
+      <li>拟合 N_opt(C) 和 D_opt(C) 与 C 的关系</li>
     </ol>
 
     <pre><code class="language-python"># Chinchilla 论文的三种拟合策略对比：
@@ -127,7 +127,7 @@ print(f"L_$∞$ = {$L_{inf}$:.3f}")</code></pre>
 # 策略 3 最可靠，因为：
 # - 直接在目标算力约束下优化
 # - 避免了外推到未探索区域
-# - $N_{opt}$(C) 和 $D_{opt}$(C) 可以直接读出</code></pre>
+# - N_opt(C) 和 D_opt(C) 可以直接读出</code></pre>
 
     <h3>超参数的影响</h3>
     <p>Scaling law 的拟合结果依赖于训练超参数：</p>
@@ -136,12 +136,12 @@ print(f"L_$∞$ = {$L_{inf}$:.3f}")</code></pre>
       <tr><td>Learning rate</td><td>太小→收敛慢，太大→噪声大</td><td>对每个 N 做 lr sweep</td></tr>
       <tr><td>Batch size</td><td>影响梯度噪声</td><td>随 N 增大而增大</td></tr>
       <tr><td>Training tokens</td><td>太少→欠拟合</td><td>确保每个模型都收敛</td></tr>
-      <tr><td>Architecture</td><td>影响 $α$ 和 $N_{c}$</td><td>固定架构（只变宽度）</td></tr>
+      <tr><td>Architecture</td><td>影响 α 和 N_c</td><td>固定架构（只变宽度）</td></tr>
       <tr><td>Warmup/cooldown</td><td>影响训练稳定性</td><td>固定 schedule 形式</td></tr>
     </table>
 
     <div class="card">
-      <p><strong>关键洞察</strong>：Scaling law 不是物理定律，而是在特定超参选择下的<strong>经验拟合</strong>。改变 optimizer 或 architecture，幂律指数 $α$ 会变化。所以拟合时除了变 N 和 D，其他一切都要固定。</p>
+      <p><strong>关键洞察</strong>：Scaling law 不是物理定律，而是在特定超参选择下的<strong>经验拟合</strong>。改变 optimizer 或 architecture，幂律指数 α 会变化。所以拟合时除了变 N 和 D，其他一切都要固定。</p>
     </div>
 
     <hr class="rule">
@@ -165,7 +165,7 @@ seeds = [42, 123, 456, 789, 1024]
 losses = []
 for seed in seeds:
     model = train(N=1e9, D=20e9, seed=seed)
-    losses.append(evaluate(model, va$l_{set}$))
+    losses.append(evaluate(model, val_set))
 
 # 例: losses = [2.81, 2.79, 2.83, 2.80, 2.82]
 # 均值 = 2.81, 标准差 = 0.015
@@ -173,31 +173,31 @@ for seed in seeds:
 
     <h3>Bootstrap 置信区间</h3>
     <p>给定拟合结果，如何量化不确定性？</p>
-    <pre><code class="language-python">from scipy.optimize import curv$e_{fit}$
+    <pre><code class="language-python">from scipy.optimize import curve_fit
 import numpy as np
 
-def bootstra$p_{ci}$($N_{data}$, los$s_{data}$, $n_{bootstrap}$=1000, alpha=0.05):
+def bootstrap_ci(N_data, loss_data, n_bootstrap=1000, alpha=0.05):
     """用 bootstrap 估计拟合参数的置信区间"""
-    param$s_{list}$ = []
-    n = len($N_{data}$)
+    params_list = []
+    n = len(N_data)
 
-    for _ in range($n_{bootstrap}$):
+    for _ in range(n_bootstrap):
         # 有放回抽样
         indices = np.random.choice(n, size=n, replace=True)
-        $N_{boot}$ = $N_{data}$[indices]
-        los$s_{boot}$ = los$s_{data}$[indices]
+        N_boot = N_data[indices]
+        loss_boot = loss_data[indices]
 
         try:
-            popt, _ = curv$e_{fit}$(scalin$g_{law}$, $N_{boot}$, los$s_{boot}$,
+            popt, _ = curve_fit(scaling_law, N_boot, loss_boot,
                                 p0=[1e5, 0.1, 2.0])
-            param$s_{list}$.append(popt)
+            params_list.append(popt)
         except RuntimeError:
             continue  # 拟合失败则跳过
 
-    param$s_{array}$ = np.array(param$s_{list}$)
+    params_array = np.array(params_list)
     # 计算每个参数的置信区间
-    lower = np.percentile(param$s_{array}$, 100 * alpha/2, axis=0)
-    upper = np.percentile(param$s_{array}$, 100 * (1 - alpha/2), axis=0)
+    lower = np.percentile(params_array, 100 * alpha/2, axis=0)
+    upper = np.percentile(params_array, 100 * (1 - alpha/2), axis=0)
 
     return lower, upper</code></pre>
 
@@ -216,7 +216,7 @@ def bootstra$p_{ci}$($N_{data}$, los$s_{data}$, $n_{bootstrap}$=1000, alpha=0.05
     </div>
 
     <h3>幂律弯曲（Bend in the power law）</h3>
-    <p>幂律假设 L ∝ N^{-$α$} 在所有尺度成立。但实际上：</p>
+    <p>幂律假设 L ∝ N^{-α} 在所有尺度成立。但实际上：</p>
     <ul>
       <li><strong>小模型区域</strong>（< 1M）：模型太小，无法有效学习，loss 可能偏离幂律</li>
       <li><strong>中等模型</strong>（1M - 10B）：幂律通常在此区域成立</li>
@@ -227,11 +227,11 @@ def bootstra$p_{ci}$($N_{data}$, los$s_{data}$, $n_{bootstrap}$=1000, alpha=0.05
 # 1. 拟合后看残差（residuals）
 # 2. 如果残差有系统性模式 → 幂律不完全成立
 
-predicted = scalin$g_{law}$($N_{values}$, *popt)
+predicted = scaling_law(N_values, *popt)
 residuals = losses - predicted
 
 # 如果残差在某个 N 范围内系统性为正或负
-# 说明该区域的实际 $α$ 与拟合值不同</code></pre>
+# 说明该区域的实际 α 与拟合值不同</code></pre>
 
     <hr class="rule">
 
@@ -249,8 +249,8 @@ residuals = losses - predicted
     <h3>外推的风险</h3>
     <table>
       <tr><th>风险</th><th>原因</th><th>后果</th></tr>
-      <tr><td>幂律弯曲</td><td>大尺度时 $α$ 变化</td><td>预测的配置不是真正的最优</td></tr>
-      <tr><td>架构差异</td><td>小模型最优架构 $≠$ 大模型最优</td><td>拟合的 $N_{c}$ 不适用于大模型</td></tr>
+      <tr><td>幂律弯曲</td><td>大尺度时 α 变化</td><td>预测的配置不是真正的最优</td></tr>
+      <tr><td>架构差异</td><td>小模型最优架构 ≠ 大模型最优</td><td>拟合的 N_c 不适用于大模型</td></tr>
       <tr><td>优化困难</td><td>大模型训练更不稳定</td><td>实际 loss 高于预测</td></tr>
       <tr><td>数据质量</td><td>大数据集质量可能下降</td><td>预测的 D 不够</td></tr>
     </table>
@@ -272,7 +272,7 @@ residuals = losses - predicted
     <h4>策略 2：保守预测 + 区间估计</h4>
     <p>不要只给一个点估计，给出置信区间：</p>
     <pre><code class="language-python"># 例：预测 70B 模型的最优 D
-# 点估计: $D_{opt}$ = 1.4T tokens
+# 点估计: D_opt = 1.4T tokens
 # 95% 置信区间: [1.0T, 2.0T]
 
 # 实际决策：选择区间的保守端
@@ -295,42 +295,42 @@ residuals = losses - predicted
 
     <h3>场景 1：固定算力预算，最大化模型性能</h3>
     <p>这是 Chinchilla 论文解决的问题：</p>
-    <pre><code class="language-python"># 已知: 总 FLOPs = C = $6ND$
+    <pre><code class="language-python"># 已知: 总 FLOPs = C = 6ND
 # 目标: 最小化 L(N, D)
 # 方法: 用拟合的 L(N, D) 代入约束，求最优
 
-# 如果 L(N) = ($N_{c}$/N)^α_N, L(D) = ($D_{c}$/D)^α_D
-# 且 C = $6ND$ → D = C/(6N)
-# 代入: L(N) = ($N_{c}$/N)^α_N + (6N $D_{c}$/C)^α_D
+# 如果 L(N) = (N_c/N)^α_N, L(D) = (D_c/D)^α_D
+# 且 C = 6ND → D = C/(6N)
+# 代入: L(N) = (N_c/N)^α_N + (6N D_c/C)^α_D
 
 # 对 N 求导 = 0，得最优条件:
-# α_N $\times$ $N_{c}$^α_N $\times$ N^(-α_N-1) = α_D $\times$ ($D_{c}$ $\times$ 6 / C)^α_D $\times$ α_D $\times$ N
+# α_N × N_c^α_N × N^(-α_N-1) = α_D × (D_c × 6 / C)^α_D × α_D × N
 
-# 化简: $N_{opt}$ ∝ C^(α_N / (α_N + α_D))
-#       $D_{opt}$ ∝ C^(α_D / (α_N + α_D))
+# 化简: N_opt ∝ C^(α_N / (α_N + α_D))
+#       D_opt ∝ C^(α_D / (α_N + α_D))
 
 # Chinchilla 的拟合结果:
-# α_N $≈$ 0.46, α_D $≈$ 0.54 (近似)
-# 所以 $N_{opt}$ ∝ C^0.46, $D_{opt}$ ∝ C^0.54
-# 比例: $D_{opt}$ / $N_{opt}$ $≈$ 20</code></pre>
+# α_N ≈ 0.46, α_D ≈ 0.54 (近似)
+# 所以 N_opt ∝ C^0.46, D_opt ∝ C^0.54
+# 比例: D_opt / N_opt ≈ 20</code></pre>
 
     <h3>场景 2：考虑推理成本</h3>
     <p>Chinchilla 只优化了训练 loss，但实际部署时推理成本也很重要：</p>
     <pre><code class="language-python"># 推理成本 ∝ N（每个 token 的计算量）
-# 总成本 = 训练成本 + 推理成本 $\times$ 推理次数
+# 总成本 = 训练成本 + 推理成本 × 推理次数
 
-# 训练成本 ∝ $6ND$
-# 推理成本 ∝ N $\times$ nu$m_{inferences}$
+# 训练成本 ∝ 6ND
+# 推理成本 ∝ N × num_inferences
 
 # 关键洞察:
 # 如果推理次数 >> 训练次数 → 推理成本主导
 # → 应该用更小的 N（推理更便宜），用更多的 D 补偿
 
 # Llama 2 的实际选择:
-# - 训练成本 $≈$ 数百万美元
-# - 推理次数 $≈$ 数十亿次
+# - 训练成本 ≈ 数百万美元
+# - 推理次数 ≈ 数十亿次
 # → 推理成本 >> 训练成本
-# → 选择 D $≈$ 27.5N（而非 Chinchilla 的 20N）</code></pre>
+# → 选择 D ≈ 27.5N（而非 Chinchilla 的 20N）</code></pre>
 
     <table>
       <tr><th>场景</th><th>最优 D/N</th><th>原因</th></tr>
@@ -347,32 +347,32 @@ residuals = losses - predicted
 # - MFU（模型算力利用率，通常 0.3-0.5）
 # - 每张 GPU 内存 M GB
 
-# 总 FLOPs = K $\times$ P $\times$ MFU $\times$ T $\times$ 86400
-# 所以: $6ND$ = K $\times$ P $\times$ MFU $\times$ T $\times$ 86400
+# 总 FLOPs = K × P × MFU × T × 86400
+# 所以: 6ND = K × P × MFU × T × 86400
 
-# 内存约束: 模型大小 + optimizer states $≤$ K $\times$ M
-# 对于 AdamW: 内存 $≈$ 12N bytes (fp32 param + m + v)
-# 所以: N $≤$ K $\times$ M / 12
+# 内存约束: 模型大小 + optimizer states ≤ K × M
+# 对于 AdamW: 内存 ≈ 12N bytes (fp32 param + m + v)
+# 所以: N ≤ K × M / 12
 
 # 求解满足两个约束的 (N, D):
-# 先由内存约束确定 $N_{max}$
-# 然后 D = C / (6 $\times$ $N_{max}$)</code></pre>
+# 先由内存约束确定 N_max
+# 然后 D = C / (6 × N_max)</code></pre>
 
     <h3>场景 4：多目标权衡</h3>
     <p>实际决策需要同时考虑多个目标：</p>
     <pre><code class="language-python"># 目标函数可以扩展为:
-# min L(N, D) + $λ$ $\times$ inferenc$e_{cost}$(N)
+# min L(N, D) + λ × inference_cost(N)
 
 # 或者更复杂的形式:
-# min $α$ $\times$ trainin$g_{cost}$(N, D) + $β$ $\times$ inferenc$e_{cost}$(N) + $γ$ $\times$ L(N, D)
+# min α × training_cost(N, D) + β × inference_cost(N) + γ × L(N, D)
 
-# 其中 $α$, $β$, $γ$ 是根据业务需求设定的权重
+# 其中 α, β, γ 是根据业务需求设定的权重
 
 # 例：一个 API 服务
-# - 训练成本: USD 1M（一次性）
-# - 推理成本: USD 0.002/1K tokens
-# - 日活: 10M 用户 $\times$ 1000 tokens = 10B tokens/天
-# - 推理日成本: USD 20,000/天
+# - 训练成本: $1M（一次性）
+# - 推理成本: $0.002/1K tokens
+# - 日活: 10M 用户 × 1000 tokens = 10B tokens/天
+# - 推理日成本: $20,000/天
 # → 推理成本在 ~50 天内超过训练成本
 # → 应该选择更小 N + 更多 D</code></pre>
 
@@ -408,7 +408,7 @@ residuals = losses - predicted
       <li><strong>更好的指令跟随</strong>：模型见过更多模式，泛化更好</li>
       <li><strong>更稳定的 RLHF</strong>：overtrained 模型对 reward model 更"听话"</li>
       <li><strong>记忆与泛化的平衡</strong>：某些任务（如代码）需要记忆 API</li>
-      <li><strong>DeepSeek-V3</strong>：使用了适度的 overtraining，D/N $≈$ 25-30</li>
+      <li><strong>DeepSeek-V3</strong>：使用了适度的 overtraining，D/N ≈ 25-30</li>
     </ul>
 
     <div class="card idea">
@@ -428,7 +428,7 @@ residuals = losses - predicted
     <pre><code class="language-python"># 现代 LLM 训练的数据策略（综合 Chinchilla 和后续研究）:
 
 # 1. 预训练阶段
-#    - 使用 D $≈$ 20-30N tokens
+#    - 使用 D ≈ 20-30N tokens
 #    - 优先使用高质量数据
 #    - 后期混入更多低质量数据（课程学习）
 
@@ -452,78 +452,78 @@ residuals = losses - predicted
 # - D: 每个 N 至少 3 个值（不同训练步数）
 # - 其他超参：全部固定
 
-mode$l_{sizes}$ = [1e6, 3e6, 1e7, 3e7, 1e8, 3e8, 1e9, 3e9]
-token$s_{per}$_size = {
+model_sizes = [1e6, 3e6, 1e7, 3e7, 1e8, 3e8, 1e9, 3e9]
+tokens_per_size = {
     1e6: [2e7, 5e7, 1e8],
     1e7: [2e8, 5e8, 1e9],
     # ... 每个 N 对应多个 D
 }
 
-# 总实验数: $8 \times 3$ = 24 个模型
-# 如果每个模型训练成本 USD 100 → 总成本 USD 2400
+# 总实验数: 8 × 3 = 24 个模型
+# 如果每个模型训练成本 $100 → 总成本 $2400
 # 这比训练一个 70B 模型便宜得多</code></pre>
 
     <h3>Step 2：训练与记录</h3>
     <pre><code class="language-python">import json
 
 results = []
-for N in mode$l_{sizes}$:
-    for D in token$s_{per}$_size[N]:
+for N in model_sizes:
+    for D in tokens_per_size[N]:
         # 训练模型
-        model = trai$n_{model}$(N=N, D=D, seed=42)
+        model = train_model(N=N, D=D, seed=42)
 
         # 记录结果
         results.append({
             "N": N,
             "D": D,
-            "va$l_{loss}$": evaluate(model, va$l_{set}$),
-            "trai$n_{loss}$": evaluate(model, trai$n_{set}$),
-            "trainin$g_{time}$": ge$t_{training}$_time(),
+            "val_loss": evaluate(model, val_set),
+            "train_loss": evaluate(model, train_set),
+            "training_time": get_training_time(),
         })
 
 # 保存结果
-with open("scalin$g_{results}$.json", "w") as f:
+with open("scaling_results.json", "w") as f:
     json.dump(results, f, indent=2)</code></pre>
 
     <h3>Step 3：拟合与验证</h3>
     <pre><code class="language-python"># 加载数据
-results = json.load(open("scalin$g_{results}$.json"))
-$N_{data}$ = np.array([r["N"] for r in results])
-$D_{data}$ = np.array([r["D"] for r in results])
-los$s_{data}$ = np.array([r["va$l_{loss}$"] for r in results])
+results = json.load(open("scaling_results.json"))
+N_data = np.array([r["N"] for r in results])
+D_data = np.array([r["D"] for r in results])
+loss_data = np.array([r["val_loss"] for r in results])
 
 # 拟合联合模型
-def join$t_{law}$(N, D, E, alpha, beta, A, B):
+def joint_law(N, D, E, alpha, beta, A, B):
     return E + A * N ** (-alpha) + B * D ** (-beta)
 
-popt, pcov = curv$e_{fit}$(
-    lambda x, E, alpha, beta, A, B: join$t_{law}$(x[0], x[1], E, alpha, beta, A, B),
-    ($N_{data}$, $D_{data}$),
-    los$s_{data}$,
+popt, pcov = curve_fit(
+    lambda x, E, alpha, beta, A, B: joint_law(x[0], x[1], E, alpha, beta, A, B),
+    (N_data, D_data),
+    loss_data,
     p0=[2.0, 0.1, 0.1, 10.0, 10.0]
 )
 
 # 检查拟合质量
-predicted = join$t_{law}$($N_{data}$, $D_{data}$, *popt)
-$r_{squared}$ = 1 - np.sum((los$s_{data}$ - predicted)**2) / np.sum((los$s_{data}$ - los$s_{data}$.mean())**2)
-print(f"R² = {$r_{squared}$:.4f}")  # 希望 > 0.99</code></pre>
+predicted = joint_law(N_data, D_data, *popt)
+r_squared = 1 - np.sum((loss_data - predicted)**2) / np.sum((loss_data - loss_data.mean())**2)
+print(f"R² = {r_squared:.4f}")  # 希望 > 0.99</code></pre>
 
     <h3>Step 4：预测最优配置</h3>
     <pre><code class="language-python">from scipy.optimize import minimize
 
-$C_{target}$ = 6 * 70e9 * 1.4e12  # 目标: 70B 模型, Chinchilla 推荐 1.4T tokens
+C_target = 6 * 70e9 * 1.4e12  # 目标: 70B 模型, Chinchilla 推荐 1.4T tokens
 
-def los$s_{at}$_optima$l_{D}$(N):
+def loss_at_optimal_D(N):
     """给定 N，计算最优 D 和对应 loss"""
-    $D_{opt}$ = $C_{target}$ / (6 * N)  # 满足算力约束
-    return join$t_{law}$(N, $D_{opt}$, *popt)
+    D_opt = C_target / (6 * N)  # 满足算力约束
+    return joint_law(N, D_opt, *popt)
 
 # 在合理范围内搜索最优 N
-result = minimize(los$s_{at}$_optima$l_{D}$, x0=[70e9], bounds=[(1e9, 200e9)])
-$N_{optimal}$ = result.x[0]
-$D_{optimal}$ = $C_{target}$ / (6 * $N_{optimal}$)
+result = minimize(loss_at_optimal_D, x0=[70e9], bounds=[(1e9, 200e9)])
+N_optimal = result.x[0]
+D_optimal = C_target / (6 * N_optimal)
 
-print(f"最优配置: N = {$N_{optimal}$:.2e}, D = {$D_{optimal}$:.2e}")
+print(f"最优配置: N = {N_optimal:.2e}, D = {D_optimal:.2e}")
 print(f"预测 loss: {result.fun:.4f}")</code></pre>
 
     <hr class="rule">
@@ -535,7 +535,7 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
     <p>验证 loss 是连续、平滑的，但下游能力可能是"涌现"的——在某个尺度突然变得可用。Scaling law 无法预测这种相变。</p>
 
     <h3>2. 假设架构不变</h3>
-    <p>拟合的 $α$ 和 $N_{c}$ 是针对特定架构的。如果改变 attention 类型（如 GQA）、使用 MoE、或改变激活函数，整个 scaling law 会变化。</p>
+    <p>拟合的 α 和 N_c 是针对特定架构的。如果改变 attention 类型（如 GQA）、使用 MoE、或改变激活函数，整个 scaling law 会变化。</p>
 
     <h3>3. 忽略推理效率</h3>
     <p>Chinchilla 的 70B 模型训练成本低于 GPT-3 175B，但推理成本更高（更多 tokens 需要处理）。对于推理密集型应用，Chinchilla 配置可能不是最优。</p>
@@ -551,13 +551,13 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！幂律取对数后变成线性关系 log L = a − $α$ $\times$ log N，可以用线性回归拟合。这是最简单的方法，但在 log-log 空间对小 loss 区域的噪声敏感。" data-incorrect="幂律取对数后变为线性关系，这是对数线性回归的基础。">
-      <p><strong>问题 1：</strong>对幂律 L = ($N_{c}$ / N)^$α$ 取对数后得到什么形式？</p>
+    <div class="quiz" data-quiz="1" data-correct="正确！幂律取对数后变成线性关系 log L = a − α × log N，可以用线性回归拟合。这是最简单的方法，但在 log-log 空间对小 loss 区域的噪声敏感。" data-incorrect="幂律取对数后变为线性关系，这是对数线性回归的基础。">
+      <p><strong>问题 1：</strong>对幂律 L = (N_c / N)^α 取对数后得到什么形式？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">log L = a − $α$ $\times$ log N（线性）</button>
-        <button data-choice="b" aria-pressed="false">log L = a + $α$ $\times$ N（非线性）</button>
-        <button data-choice="c" aria-pressed="false">L = a − $α$ $\times$ N（线性）</button>
-        <button data-choice="d" aria-pressed="false">log L = N^$α$（幂函数）</button>
+        <button data-choice="a" aria-pressed="false">log L = a − α × log N（线性）</button>
+        <button data-choice="b" aria-pressed="false">log L = a + α × N（非线性）</button>
+        <button data-choice="c" aria-pressed="false">L = a − α × N（线性）</button>
+        <button data-choice="d" aria-pressed="false">log L = N^α（幂函数）</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>

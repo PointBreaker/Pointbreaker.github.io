@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 14 课：线程同步与协调 — 6.828 / 6.1810</title>
+  <title>第 14 课：线程同步与协调 — MIT 6.1810</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
-    <p class="eyebrow">6.828 / 6.1810 · 第 14 课 · rtm</p>
+    <p class="eyebrow">6.1810 / 6.1810 · 第 14 课 · rtm</p>
     <h1>线程同步与协调</h1>
     <p class="leded">线程经常需要等待特定事件：磁盘读完成、管道有数据、子进程退出。xv6 使用 sleep/wakeup 原语实现协调，但必须小心避免"丢失唤醒"（lost wakeup）问题。</p>
 
@@ -84,14 +84,14 @@ while (buffer is empty) {
     <h3>基本交互</h3>
     <pre><code>uartwrite(buf):
   for each char c:
-    while t$x_{busy}$:
-      sleep(&t$x_{chan}$, &t$x_{lock}$)
+    while tx_busy:
+      sleep(&tx_chan, &tx_lock)
     send c
-    t$x_{busy}$ = 1
+    tx_busy = 1
 
 uartintr():
-  t$x_{busy}$ = 0
-  wakeup(&t$x_{chan}$)</code></pre>
+  tx_busy = 0
+  wakeup(&tx_chan)</code></pre>
 
     <h3>sleep/wakeup 术语</h3>
     <table>
@@ -99,10 +99,10 @@ uartintr():
         <tr><th>概念</th><th>说明</th></tr>
       </thead>
       <tbody>
-        <tr><td><code>sleep(wai$t_{chan}$, lock)</code></td><td>让出 CPU，等待某事件</td></tr>
-        <tr><td><code>wakeup(wai$t_{chan}$)</code></td><td>唤醒所有在 sleep() 中等待同一 wai$t_{chan}$ 的进程</td></tr>
-        <tr><td>wai$t_{chan}$</td><td>"等待通道"——只是一个数字，链接 sleep 和 wakeup</td></tr>
-        <tr><td>condition</td><td>程序员知道的条件（如 t$x_{busy}$ == 0），sleep/wakeup 不知道</td></tr>
+        <tr><td><code>sleep(wait_chan, lock)</code></td><td>让出 CPU，等待某事件</td></tr>
+        <tr><td><code>wakeup(wait_chan)</code></td><td>唤醒所有在 sleep() 中等待同一 wait_chan 的进程</td></tr>
+        <tr><td>wait_chan</td><td>"等待通道"——只是一个数字，链接 sleep 和 wakeup</td></tr>
+        <tr><td>condition</td><td>程序员知道的条件（如 tx_busy == 0），sleep/wakeup 不知道</td></tr>
       </tbody>
     </table>
 
@@ -111,7 +111,7 @@ uartintr():
     <h2>Lost Wakeup 问题</h2>
     <h3>错误的 sleep/wakeup 实现</h3>
     <pre><code>// 有 bug 的 sleep/wakeup
-broke$n_{sleep}$(chan)
+broken_sleep(chan)
   acquire(&p->lock)
   p->state = SLEEPING;
   p->chan = chan;
@@ -126,18 +126,18 @@ wakeup(chan)
     <h3>UART 代码如何使用这个（有 bug 的）sleep/wakeup？</h3>
     <pre><code>uartwrite(buf):
   for each char c:
-    while t$x_{busy}$:
-      release(&t$x_{lock}$);       // 释放锁
-      broke$n_{sleep}$(&t$x_{chan}$);  // 然后睡眠
-      acquire(&t$x_{lock}$);       // 重新获取</code></pre>
+    while tx_busy:
+      release(&tx_lock);       // 释放锁
+      broken_sleep(&tx_chan);  // 然后睡眠
+      acquire(&tx_lock);       // 重新获取</code></pre>
 
     <h3>会发生什么？</h3>
     <ol>
-      <li>uartwrite 看到 t$x_{busy}$ = 1（UART 未完成前一字符）</li>
-      <li>释放 t$x_{lock}$——这<strong>使能了中断</strong></li>
-      <li>中断！uartintr 设置 t$x_{busy}$ = 0，调用 wakeup()——但<strong>没有进程需要唤醒！</strong></li>
+      <li>uartwrite 看到 tx_busy = 1（UART 未完成前一字符）</li>
+      <li>释放 tx_lock——这<strong>使能了中断</strong></li>
+      <li>中断！uartintr 设置 tx_busy = 0，调用 wakeup()——但<strong>没有进程需要唤醒！</strong></li>
       <li>uartwrite 调用 sleep()</li>
-      <li>uartwrite 进入睡眠，尽管 UART TX 已完成、t$x_{busy}$ 为零</li>
+      <li>uartwrite 进入睡眠，尽管 UART TX 已完成、tx_busy 为零</li>
       <li>没有其他东西会唤醒 uartwrite → <strong>永远睡眠</strong>（直到 UART 输入中断）</li>
     </ol>
 
@@ -184,18 +184,18 @@ sleep(chan, lk):
     <h3>时间线</h3>
     <pre><code>uartwrite()         uartintr()
 -----------         ----------
-acq t$x_{lock}$         acq t$x_{lock}$
-check t$x_{busy}$       t$x_{busy}$ = 0
+acq tx_lock         acq tx_lock
+check tx_busy       tx_busy = 0
 sleep()             wakeup()
   acq p->lock         acq p->lock（等待）
-  rel t$x_{lock}$         ...
+  rel tx_lock         ...
   SLEEPING            check SLEEPING / chan
   swtch()             rel p->lock
-    rel p->lock       rel t$x_{lock}$</code></pre>
+    rel p->lock       rel tx_lock</code></pre>
 
     <h3>为什么 uartwrite 在循环中包裹 sleep？</h3>
     <ul>
-      <li>可能有多个等待者，另一个线程可能设置了 t$x_{busy}$</li>
+      <li>可能有多个等待者，另一个线程可能设置了 tx_busy</li>
       <li><code>kill()</code> 即使条件不为真也会唤醒进程</li>
       <li>所有 sleep 调用都在循环中，重新检查条件</li>
     </ul>
@@ -206,7 +206,7 @@ sleep()             wakeup()
     <p>条件：有数据可读（<code>nread != nwrite</code>）。条件锁：管道的 <code>pi->lock</code>。</p>
     <div class="card warning">
       <h3>注意：lost wakeup 不只是中断问题！</h3>
-      <p>如果 piperead 使用 broke$n_{sleep}$（先释放锁再 sleep），多个读进程之间也会发生 lost wakeup。</p>
+      <p>如果 piperead 使用 broken_sleep（先释放锁再 sleep），多个读进程之间也会发生 lost wakeup。</p>
     </div>
 
     <hr class="rule">
@@ -237,9 +237,9 @@ sleep()             wakeup()
     <h3>如何避免 exit() → wait() 的 lost wakeup？</h3>
     <ul>
       <li>条件：某个子进程是 ZOMBIE</li>
-      <li>条件锁：全局的 <code>wai$t_{lock}$</code>（不是每个子进程的 p->lock，因为父进程不知道在等哪个子进程）</li>
-      <li>wait() 持有 wai$t_{lock}$ 扫描 proc[]，传给 sleep()</li>
-      <li>exit() 持有 wai$t_{lock}$ 设置 ZOMBIE 状态和 wakeup(p->parent)</li>
+      <li>条件锁：全局的 <code>wait_lock</code>（不是每个子进程的 p->lock，因为父进程不知道在等哪个子进程）</li>
+      <li>wait() 持有 wait_lock 扫描 proc[]，传给 sleep()</li>
+      <li>exit() 持有 wait_lock 设置 ZOMBIE 状态和 wakeup(p->parent)</li>
     </ul>
 
     <h3>kill() 的困境</h3>
@@ -258,7 +258,7 @@ sleep()             wakeup()
     </ol>
 
     <h3>如果 kill() 的目标正在 SLEEPING？</h3>
-    <p><code>kill()</code> 将 SLEEPING 改为 RUNNABLE（像 wakeup）。sleep 循环可能检查 <code>p->killed</code>（如 piperead、consoleread），有些不检查（如 virti$o_{disk}$.c——因为可能在文件系统更新中间，不能直接退出）。</p>
+    <p><code>kill()</code> 将 SLEEPING 改为 RUNNABLE（像 wakeup）。sleep 循环可能检查 <code>p->killed</code>（如 piperead、consoleread），有些不检查（如 virtio_disk.c——因为可能在文件系统更新中间，不能直接退出）。</p>
 
     <div class="card idea">
       <h3>xv6 kill 规范</h3>
@@ -362,7 +362,7 @@ sleep()             wakeup()
       <a href="15-networking.html">第 15 课 →</a>
     </div>
     <footer>
-      <p>6.828 / 6.1810: Operating System Engineering · MIT</p>
+      <p>6.1810 / 6.1810: Operating System Engineering · MIT</p>
     </footer>
   </div>
   <script src="../assets/quiz.js"></script>

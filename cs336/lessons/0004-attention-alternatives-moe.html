@@ -8,14 +8,14 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
     <p class="eyebrow">CS336 · 第 4 课</p>
     <h1>注意力替代方案与混合专家</h1>
-    <p class="lede">标准 attention 的 $O(n^2)$ 复杂度是 Transformer 的致命瓶颈。这一课探索两条突围路径：(1) 设计更高效但近似的注意力机制；(2) 用稀疏激活的 MoE 让模型容量随参数增长而计算量亚线性增长。</p>
+    <p class="lede">标准 attention 的 O(n²) 复杂度是 Transformer 的致命瓶颈。这一课探索两条突围路径：(1) 设计更高效但近似的注意力机制；(2) 用稀疏激活的 MoE 让模型容量随参数增长而计算量亚线性增长。</p>
 
     <div class="meta">
       <span>授课：Tatsu Hashimoto</span>
@@ -28,11 +28,11 @@
     <!-- ============================================================ -->
     <h2 id="attention-bottleneck">标准 Attention 的瓶颈</h2>
 
-    <h3>$O(n^2)$ 问题</h3>
+    <h3>O(n²) 问题</h3>
     <p>标准 self-attention 对长度为 n 的序列：</p>
-    <pre><code class="language-python">scores = Q @ K^T    # (n, d) @ (d, n) → (n, n)  ← $O(n^2)$ FLOPs
+    <pre><code class="language-python">scores = Q @ K^T    # (n, d) @ (d, n) → (n, n)  ← O(n²d) FLOPs
 attn = softmax(scores)
-output = attn @ V   # (n, n) @ (n, d) → (n, d)  ← $O(n^2)$ FLOPs
+output = attn @ V   # (n, n) @ (n, d) → (n, d)  ← O(n²d) FLOPs
 
 内存: 需要存储 (n, n) 的 attention matrix</code></pre>
 
@@ -52,18 +52,18 @@ output = attn @ V   # (n, n) @ (n, d) → (n, d)  ← $O(n^2)$ FLOPs
 
     <h3>1. Linear Attention</h3>
     <p>核心思想：把 softmax 去掉，用核函数近似：</p>
-    <pre><code class="language-python"># 标准 attention: $O(n^2)$
-attn = softmax(Q @ K^T / $√$d) @ V
+    <pre><code class="language-python"># 标准 attention: O(n²)
+attn = softmax(Q @ K^T / √d) @ V
 
-# Linear attention: $O(n^2)$
+# Linear attention: O(n)
 # 利用 (Q @ K^T) @ V = Q @ (K^T @ V) 的结合律
-# 先算 K^T @ V（d $\times$ d），再算 Q @ (K^T @ V)
-output = $φ$(Q) @ ($φ$(K)^T @ V)  # $φ$ 是核函数（如 ReLU, elu+1）
+# 先算 K^T @ V（d × d），再算 Q @ (K^T @ V)
+output = φ(Q) @ (φ(K)^T @ V)  # φ 是核函数（如 ReLU, elu+1）
 
-# 复杂度: $O(n^2)$ —— 当 n >> d 时远优于 $O(n^2)$</code></pre>
+# 复杂度: O(nd²) —— 当 n >> d 时远优于 O(n²d)</code></pre>
 
     <div class="card idea">
-      <p><strong>关键洞察：</strong>矩阵乘法满足结合律。标准 attention 先算 (Q @ K^T) 得到 n$\times$n 矩阵，再乘 V。Linear attention 先算 (K^T @ V) 得到 d$\times$d 矩阵，再被 Q 乘。当 n >> d 时，后者快得多。</p>
+      <p><strong>关键洞察：</strong>矩阵乘法满足结合律。标准 attention 先算 (Q @ K^T) 得到 n×n 矩阵，再乘 V。Linear attention 先算 (K^T @ V) 得到 d×d 矩阵，再被 Q 乘。当 n >> d 时，后者快得多。</p>
     </div>
 
     <p><strong>代价：</strong>失去了 softmax 的"聚焦"能力——所有 token 被平等对待，无法动态关注最相关的 token。</p>
@@ -76,7 +76,7 @@ for i in range(n):
     attn[i] = softmax(scores[i])
     output[i] = attn[i] @ V[max(0,i-w):i+w]
 
-# 复杂度: $O(n^2)$ —— 线性于 n</code></pre>
+# 复杂度: O(nwd) —— 线性于 n</code></pre>
 
     <p><strong>直觉：</strong>大多数语言建模任务中，附近的 token 比远处的更重要。</p>
 
@@ -85,17 +85,17 @@ for i in range(n):
 # 少数层用 full attention（"全局层"）
 # 例如: 每 6 层有 1 层全局 attention
 
-# 有效上下文 = windo$w_{size}$ $\times$ nu$m_{layers}$
+# 有效上下文 = window_size × num_layers
 # 例如: w=4096, L=32 → 有效上下文 ~128K</code></pre>
 
     <h3>4. State Space Models（Mamba）</h3>
     <p>完全抛弃 attention，用经典控制论的状态空间模型：</p>
     <pre><code class="language-python"># SSM: 递推形式
-h(t) = A $\times$ h(t-1) + B $\times$ x(t)
-y(t) = C $\times$ h(t)
+h(t) = A × h(t-1) + B × x(t)
+y(t) = C × h(t)
 
 # 训练时: 展开为卷积（并行）
-# 推理时: 递推（$O(n^2)$ 内存）
+# 推理时: 递推（O(1) 内存）
 
 # Mamba 的改进: A, B, C 是输入相关的（选择性 SSM）
 # 让模型学会"忘记"不相关的信息</code></pre>
@@ -107,11 +107,11 @@ y(t) = C $\times$ h(t)
     <h3>方案对比</h3>
     <table>
       <tr><th>方法</th><th>训练复杂度</th><th>推理内存</th><th>长程依赖</th></tr>
-      <tr><td>Full Attention</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>完美</td></tr>
-      <tr><td>Linear Attention</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>差</td></tr>
-      <tr><td>Sliding Window</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>局部好</td></tr>
-      <tr><td>Hybrid (Sparse)</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>好</td></tr>
-      <tr><td>SSM/Mamba</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>中等</td></tr>
+      <tr><td>Full Attention</td><td>O(n²d)</td><td>O(n²)</td><td>完美</td></tr>
+      <tr><td>Linear Attention</td><td>O(nd²)</td><td>O(nd)</td><td>差</td></tr>
+      <tr><td>Sliding Window</td><td>O(nwd)</td><td>O(nw)</td><td>局部好</td></tr>
+      <tr><td>Hybrid (Sparse)</td><td>O(nwd + n²/L)</td><td>O(nw + n²/L)</td><td>好</td></tr>
+      <tr><td>SSM/Mamba</td><td>O(nd²)</td><td>O(d²)</td><td>中等</td></tr>
     </table>
 
     <hr class="rule">
@@ -122,17 +122,17 @@ y(t) = C $\times$ h(t)
     <h3>从 MHA 到 MQA 到 GQA</h3>
     <pre><code class="language-python"># Multi-Head Attention (MHA)
 # N 个 Q 头, N 个 K 头, N 个 V 头
-# KV cache: N $\times$ $d_{head}$ $\times$ 2 (K+V) per token per layer
+# KV cache: N × d_head × 2 (K+V) per token per layer
 
 # Multi-Query Attention (MQA)
 # N 个 Q 头, 1 个 K 头, 1 个 V 头
-# KV cache: 1 $\times$ $d_{head}$ $\times$ 2 per token per layer
+# KV cache: 1 × d_head × 2 per token per layer
 # 问题: 质量损失大（所有 Q 头被迫共享同一个 K/V）
 
 # Grouped-Query Attention (GQA)
 # N 个 Q 头, K 个 KV 头 (1 < K < N)
 # 每 N/K 个 Q 头共享 1 个 KV 头
-# KV cache: K $\times$ $d_{head}$ $\times$ 2 per token per layer</code></pre>
+# KV cache: K × d_head × 2 per token per layer</code></pre>
 
     <h3>为什么 GQA 有效？</h3>
     <div class="card idea">
@@ -142,13 +142,13 @@ y(t) = C $\times$ h(t)
 
     <h3>实际效果</h3>
     <pre><code class="language-python"># Llama 2 70B 配置:
-# $n_{heads}$ = 64, $n_{kv}$_heads = 8
+# n_heads = 64, n_kv_heads = 8
 # GQA ratio = 8:1
 # KV cache 缩小 8 倍！
 
 # 质量影响: 几乎无损
 # Ainslie et al. (2023) 论文显示:
-# GQA $≈$ MHA 的质量，但快得多
+# GQA ≈ MHA 的质量，但快得多
 # MQA 质量明显下降</code></pre>
 
     <h3>Multi-head Latent Attention (MLA)</h3>
@@ -157,7 +157,7 @@ y(t) = C $\times$ h(t)
 # 存储一个低秩压缩的 "latent" 向量 c (C 维)
 # 需要时通过上投影恢复 K, V
 
-# KV cache 存储: C 维 (而不是 N $\times$ $d_{head}$ = 16384 维)
+# KV cache 存储: C 维 (而不是 N × d_head = 16384 维)
 # DeepSeek-V2: C = 512 (压缩 32 倍！)
 
 # 注意: MLA 和 RoPE 不兼容
@@ -166,10 +166,10 @@ y(t) = C $\times$ h(t)
 
     <table>
       <tr><th>方法</th><th>KV cache / token / layer</th><th>相对大小</th></tr>
-      <tr><td>MHA (Llama 70B)</td><td>6$4 \times 1$2$8 \times 2$ = 16,384</td><td>1$\times$</td></tr>
-      <tr><td>GQA (Llama 70B)</td><td>$8 \times 1$2$8 \times 2$ = 2,048</td><td>0.125$\times$</td></tr>
-      <tr><td>MQA</td><td>$1 \times 1$2$8 \times 2$ = 256</td><td>0.016$\times$</td></tr>
-      <tr><td>MLA (DeepSeek V2)</td><td>576</td><td>0.035$\times$</td></tr>
+      <tr><td>MHA (Llama 70B)</td><td>64 × 128 × 2 = 16,384</td><td>1×</td></tr>
+      <tr><td>GQA (Llama 70B)</td><td>8 × 128 × 2 = 2,048</td><td>0.125×</td></tr>
+      <tr><td>MQA</td><td>1 × 128 × 2 = 256</td><td>0.016×</td></tr>
+      <tr><td>MLA (DeepSeek V2)</td><td>576</td><td>0.035×</td></tr>
     </table>
 
     <hr class="rule">
@@ -182,33 +182,33 @@ y(t) = C $\times$ h(t)
       <p><strong>MoE 的直觉：</strong>把一个大 FFN 替换为多个小 FFN（"专家"），每次只激活其中几个。</p>
       <p>模型总参数 = 所有专家参数之和</p>
       <p>每次计算量 = 被激活的专家参数之和</p>
-      <p><strong>效果：</strong>用 1/8 的计算量，获得 8$\times$ 的参数量！</p>
+      <p><strong>效果：</strong>用 1/8 的计算量，获得 8× 的参数量！</p>
     </div>
 
     <h3>MoE 层结构</h3>
     <pre><code class="language-python">class MoELayer(nn.Module):
-    def __init__(self, $d_{model}$, $d_{ff}$, nu$m_{experts}$, to$p_{k}$):
-        self.gate = nn.Linear($d_{model}$, nu$m_{experts}$)  # 路由器
+    def __init__(self, d_model, d_ff, num_experts, top_k):
+        self.gate = nn.Linear(d_model, num_experts)  # 路由器
         self.experts = nn.ModuleList([
-            FFN($d_{model}$, $d_{ff}$) for _ in range(nu$m_{experts}$)
+            FFN(d_model, d_ff) for _ in range(num_experts)
         ])
-        self.to$p_{k}$ = to$p_{k}$  # 通常 2-4
+        self.top_k = top_k  # 通常 2-4
 
     def forward(self, x):
-        # 1. 路由: 每个 token 选择 to$p_{k}$ 个专家
-        gat$e_{scores}$ = self.gate(x)  # (batch*seq, nu$m_{experts}$)
-        to$p_{k}$_scores, to$p_{k}$_indices = gat$e_{scores}$.topk(self.to$p_{k}$)
+        # 1. 路由: 每个 token 选择 top_k 个专家
+        gate_scores = self.gate(x)  # (batch*seq, num_experts)
+        top_k_scores, top_k_indices = gate_scores.topk(self.top_k)
 
         # 2. 分发: 把 token 送到对应的专家
-        output = torch.zero$s_{like}$(x)
-        for k in range(self.to$p_{k}$):
-            exper$t_{idx}$ = to$p_{k}$_indices[:, k]
-            exper$t_{mask}$ = (exper$t_{idx}$.unsqueeze(1) == torch.arange(nu$m_{experts}$))
+        output = torch.zeros_like(x)
+        for k in range(self.top_k):
+            expert_idx = top_k_indices[:, k]
+            expert_mask = (expert_idx.unsqueeze(1) == torch.arange(num_experts))
             # 把属于该专家的 token 送入计算
             for i, expert in enumerate(self.experts):
-                toke$n_{mask}$ = exper$t_{mask}$[:, i]
-                if toke$n_{mask}$.any():
-                    output[toke$n_{mask}$] += expert(x[toke$n_{mask}$]) * to$p_{k}$_scores[...]
+                token_mask = expert_mask[:, i]
+                if token_mask.any():
+                    output[token_mask] += expert(x[token_mask]) * top_k_scores[...]
 
         return output</code></pre>
 
@@ -237,18 +237,18 @@ y(t) = C $\times$ h(t)
     <pre><code class="language-python"># Shazeer et al. (2017) 提出的辅助损失
 # 鼓励均匀路由
 
-def loa$d_{balancing}$_loss(gat$e_{scores}$, nu$m_{experts}$):
-    # gat$e_{scores}$: (num_tokens, nu$m_{experts}$)
+def load_balancing_loss(gate_scores, num_experts):
+    # gate_scores: (num_tokens, num_experts)
     # 每个专家被选中的比例
-    exper$t_{fraction}$ = gat$e_{scores}$.mean(dim=0)  # (nu$m_{experts}$,)
+    expert_fraction = gate_scores.mean(dim=0)  # (num_experts,)
     # 每个专家的平均路由概率
-    pro$b_{fraction}$ = gat$e_{scores}$.sum(dim=0) / gat$e_{scores}$.sum()
+    prob_fraction = gate_scores.sum(dim=0) / gate_scores.sum()
     # 负载均衡损失: 鼓励均匀分布
-    loa$d_{loss}$ = nu$m_{experts}$ * (exper$t_{fraction}$ * pro$b_{fraction}$).sum()
-    return loa$d_{loss}$
+    load_loss = num_experts * (expert_fraction * prob_fraction).sum()
+    return load_loss
 
-# 总损失 = 主损失 + $α$ $\times$ 辅助损失
-# $α$ 通常 0.01-0.1</code></pre>
+# 总损失 = 主损失 + α × 辅助损失
+# α 通常 0.01-0.1</code></pre>
 
     <h3>MoE 的通信挑战</h3>
     <p>在多 GPU 上，不同专家分布在不同 GPU 上：</p>
@@ -258,7 +258,7 @@ def loa$d_{balancing}$_loss(gat$e_{scores}$, nu$m_{experts}$):
 # 例如: 8 GPU, 64 experts (每 GPU 8 experts)
 # 每个 token 选 2 个专家
 # → 平均每个 token 需要发送到 ~2 个远程 GPU
-# → 通信量 $≈$ 2 $\times$ toke$n_{hidden}$_size $\times$ 2 (bf16)</code></pre>
+# → 通信量 ≈ 2 × token_hidden_size × 2 (bf16)</code></pre>
 
     <h3>并行策略</h3>
     <table>
@@ -271,14 +271,14 @@ def loa$d_{balancing}$_loss(gat$e_{scores}$, nu$m_{experts}$):
     <h3>现代 MoE 模型</h3>
     <table>
       <tr><th>模型</th><th>总参数</th><th>激活参数</th><th>Experts</th><th>Top-K</th></tr>
-      <tr><td>Mixtral $8 \times 7$B</td><td>47B</td><td>13B</td><td>8</td><td>2</td></tr>
+      <tr><td>Mixtral 8×7B</td><td>47B</td><td>13B</td><td>8</td><td>2</td></tr>
       <tr><td>DeepSeek-V2</td><td>236B</td><td>21B</td><td>160</td><td>6</td></tr>
       <tr><td>DeepSeek-V3</td><td>671B</td><td>37B</td><td>256</td><td>8</td></tr>
       <tr><td>Qwen 3 235B</td><td>235B</td><td>22B</td><td>128</td><td>8</td></tr>
     </table>
 
     <div class="card idea">
-      <p><strong>MoE 的 scaling 优势：</strong>参数量可以随专家数线性增长，而计算量只随 to$p_{k}$ 增长。这意味着你可以用固定计算预算训练更大的模型——只需增加专家数，保持 to$p_{k}$ 不变。</p>
+      <p><strong>MoE 的 scaling 优势：</strong>参数量可以随专家数线性增长，而计算量只随 top_k 增长。这意味着你可以用固定计算预算训练更大的模型——只需增加专家数，保持 top_k 不变。</p>
     </div>
 
     <hr class="rule">
@@ -363,8 +363,8 @@ def loa$d_{balancing}$_loss(gat$e_{scores}$, nu$m_{experts}$):
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！MoE 每次只激活 to$p_{k}$ 个专家，所以计算量 $≈$ to$p_{k}$/nu$m_{experts}$ $\times$ 总参数。" data-incorrect="MoE 每次只激活 to$p_{k}$ 个专家，计算量远小于总参数量。">
-      <p><strong>问题 2：</strong>一个有 64 个专家的 MoE 层，to$p_{k}$=2，激活参数量约为总参数的多少？</p>
+    <div class="quiz" data-quiz="2" data-correct="正确！MoE 每次只激活 top_k 个专家，所以计算量 ≈ top_k/num_experts × 总参数。" data-incorrect="MoE 每次只激活 top_k 个专家，计算量远小于总参数量。">
+      <p><strong>问题 2：</strong>一个有 64 个专家的 MoE 层，top_k=2，激活参数量约为总参数的多少？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">100%</button>
         <button data-choice="b" aria-pressed="false">~50%</button>
@@ -385,7 +385,7 @@ def loa$d_{balancing}$_loss(gat$e_{scores}$, nu$m_{experts}$):
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！Linear attention 用结合律先算 K^T @ V（d$\times$d），再被 Q 乘，复杂度 $O(n^2)$。" data-incorrect="Linear attention 利用矩阵乘法结合律，先算 K^T @ V 得到 d$\times$d 矩阵，再被 Q 乘。">
+    <div class="quiz" data-quiz="4" data-correct="正确！Linear attention 用结合律先算 K^T @ V（d×d），再被 Q 乘，复杂度 O(nd²)。" data-incorrect="Linear attention 利用矩阵乘法结合律，先算 K^T @ V 得到 d×d 矩阵，再被 Q 乘。">
       <p><strong>问题 4：</strong>Linear attention 为什么比标准 attention 快？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它跳过了 softmax</button>
@@ -418,7 +418,7 @@ def loa$d_{balancing}$_loss(gat$e_{scores}$, nu$m_{experts}$):
       </article>
       <article>
         <h3>Linear Attention</h3>
-        <p>结合律 + 核近似，$O(n^2)$ 替代 $O(n^2)$</p>
+        <p>结合律 + 核近似，O(nd²) 替代 O(n²d)</p>
       </article>
       <article>
         <h3>MoE</h3>

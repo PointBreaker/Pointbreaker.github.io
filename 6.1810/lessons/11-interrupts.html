@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 11 课：设备驱动与中断 — 6.828 / 6.1810</title>
+  <title>第 11 课：设备驱动与中断 — MIT 6.1810</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
-    <p class="eyebrow">6.828 / 6.1810 · 第 11 课 · rtm</p>
+    <p class="eyebrow">6.1810 / 6.1810 · 第 11 课 · rtm</p>
     <h1>设备驱动与中断</h1>
     <p class="lede">CPU 需要外设：存储、通信、显示。操作系统设备驱动程序控制这些设备，而中断是硬件通知软件"我需要关注"的核心机制。本节课通过 UART 驱动详解中断、DMA、轮询等概念。</p>
 
@@ -113,11 +113,11 @@ return RHR;</code></pre>
     <h2>GDB 实战：跟踪 UART 中断</h2>
     <p>以 shell 从控制台读取输入为例：</p>
     <ol>
-      <li><code>sy$s_{read}$()</code> → <code>fileread()</code> → <code>consoleread()</code></li>
+      <li><code>sys_read()</code> → <code>fileread()</code> → <code>consoleread()</code></li>
       <li><code>consoleread()</code> 看到缓冲区为空，调用 <code>sleep()</code></li>
       <li>UART → PLIC → <code>stvec</code> → <code>kernelvec</code>（内核中，使用调度器栈）</li>
       <li><code>kerneltrap()</code> → <code>devintr()</code></li>
-      <li><code>pli$c_{claim}$()</code> 获取 IRQ = 10</li>
+      <li><code>plic_claim()</code> 获取 IRQ = 10</li>
       <li><code>uartintr()</code> → <code>uartgetc()</code> → 读 LSR → 读 RHR</li>
       <li><code>consoleintr()</code> 处理字符 → <code>wakeup()</code></li>
       <li>调度器恢复 shell 的 <code>read()</code></li>
@@ -149,7 +149,7 @@ return RHR;</code></pre>
 
     <h2>并发与同步问题</h2>
     <h3>多设备同时中断</h3>
-    <p>PLIC 将中断分配到不同核心，不同中断可并行处理。每个中断由第一个调用 <code>pli$c_{claim}$()</code> 的核心认领。每个设备最多只有一个中断在进行中（通过 <code>pli$c_{complete}$()</code> 通知完成）。</p>
+    <p>PLIC 将中断分配到不同核心，不同中断可并行处理。每个中断由第一个调用 <code>plic_claim()</code> 的核心认领。每个设备最多只有一个中断在进行中（通过 <code>plic_complete()</code> 通知完成）。</p>
 
     <h3>中断可能在任意两条指令之间发生</h3>
     <pre><code>// bottom half:     n = n + 1
@@ -161,15 +161,15 @@ sw a4, n</code></pre>
     <p>如果中断发生在 <code>lw</code> 和 <code>add</code> 之间，两个 <code>n = n + 1</code> 可能只增加一次！</p>
 
     <h3>解决方案：暂时禁用中断</h3>
-    <pre><code>int$r_{off}$();
+    <pre><code>intr_off();
 n = n + 1;
-int$r_{on}$();</pre></pre>
+intr_on();</pre></pre>
     <div class="card warning">
       <h3>禁用中断不够！</h3>
       <p>中断可能在另一个 CPU 上发生。完整解决方案需要锁——下一讲的主题。</p>
     </div>
 
-    <h3>SSTATU$S_{SIE}$ = 0 时中断去哪了？</h3>
+    <h3>SSTATUS_SIE = 0 时中断去哪了？</h3>
     <p>PLIC/CPU 记住未决中断，在内核重新使能中断时投递。</p>
 
     <hr class="rule">
@@ -265,7 +265,7 @@ int$r_{on}$();</pre></pre>
     </div>
 
     <div class="quiz" data-quiz="5" data-correct="b" data-incorrect="a,c,d">
-      <p><strong>Q5：</strong>仅禁用中断（int$r_{off}$）为什么不足以保护并发？</p>
+      <p><strong>Q5：</strong>仅禁用中断（intr_off）为什么不足以保护并发？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">A. 中断无法被禁用</button>
         <button data-choice="b" aria-pressed="false">B. 中断可能在另一个 CPU 上发生</button>
@@ -311,7 +311,7 @@ int$r_{on}$();</pre></pre>
       <a href="12-locking.html">第 12 课 →</a>
     </div>
     <footer>
-      <p>6.828 / 6.1810: Operating System Engineering · MIT</p>
+      <p>6.1810 / 6.1810: Operating System Engineering · MIT</p>
     </footer>
   </div>
   <script src="../assets/quiz.js"></script>

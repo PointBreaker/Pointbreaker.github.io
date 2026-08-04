@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -30,7 +30,7 @@
 
     <h3>规模的力量</h3>
     <pre><code class="language-python"># 单张 H100 (80GB) 能训多大的模型？
-# 参数: 80GB / 20 bytes $≈$ 4B 参数
+# 参数: 80GB / 20 bytes ≈ 4B 参数
 # 但 70B, 405B, 1T+ 模型需要多 GPU
 
 # 训练时间 vs GPU 数:
@@ -70,16 +70,16 @@
 
     <h3>带宽分析</h3>
     <pre><code class="language-python"># All-Reduce 的通信量（ring algorithm）:
-# 每个 GPU 发送: 2 $\times$ (N-1)/N $\times$ dat$a_{size}$
-# 近似: 2 $\times$ dat$a_{size}$（与 N 无关！）
+# 每个 GPU 发送: 2 × (N-1)/N × data_size
+# 近似: 2 × data_size（与 N 无关！）
 
 # Reduce-Scatter:
-# 每个 GPU 发送: (N-1)/N $\times$ dat$a_{size}$
-# 近似: dat$a_{size}$
+# 每个 GPU 发送: (N-1)/N × data_size
+# 近似: data_size
 
 # All-Gather:
-# 每个 GPU 发送: (N-1)/N $\times$ dat$a_{size}$
-# 近似: dat$a_{size}$</code></pre>
+# 每个 GPU 发送: (N-1)/N × data_size
+# 近似: data_size</code></pre>
 
     <hr class="rule">
 
@@ -92,41 +92,41 @@
     <pre><code class="language-python"># Data Parallelism 流程
 for each GPU in parallel:
     # 1. 获取不同的数据片
-    $x_{local}$ = data[rank * batc$h_{size}$ : (rank+1) * batc$h_{size}$]
+    x_local = data[rank * batch_size : (rank+1) * batch_size]
 
     # 2. 前向传播（本地计算）
-    loss = model($x_{local}$)
+    loss = model(x_local)
 
     # 3. 反向传播（计算本地梯度）
     loss.backward()
 
     # 4. 同步梯度（通信！）
-    al$l_{reduce}$(gradients)  # 所有 GPU 得到平均梯度
+    all_reduce(gradients)  # 所有 GPU 得到平均梯度
 
     # 5. 更新参数（所有 GPU 同步更新）
     optimizer.step()</code></pre>
 
     <h3>通信开销</h3>
     <pre><code class="language-python"># 每步通信: All-Reduce 梯度
-# 数据量: 参数量 P $\times$ 4 bytes (fp32) 或 P $\times$ 2 bytes (bf16)
-# 70B 模型: 7$0 \times 1$0⁹ $\times$ 4 = 280 GB（fp32 梯度）
+# 数据量: 参数量 P × 4 bytes (fp32) 或 P × 2 bytes (bf16)
+# 70B 模型: 70×10⁹ × 4 = 280 GB（fp32 梯度）
 
 # 在 NVLink (900 GB/s):
-# 时间 $≈$ 280 / 900 $≈$ 0.31 秒
+# 时间 ≈ 280 / 900 ≈ 0.31 秒
 
 # 在 InfiniBand (50 GB/s):
-# 时间 $≈$ 280 / 50 $≈$ 5.6 秒 ← 慢 18$\times$！</code></pre>
+# 时间 ≈ 280 / 50 ≈ 5.6 秒 ← 慢 18×！</code></pre>
 
     <h3>Gradient Accumulation</h3>
     <p>当 batch size 太大，单 GPU 放不下时：</p>
     <pre><code class="language-python"># 把一个大 batch 拆成多个 micro-batch
-optimizer.zer$o_{grad}$()
-for micr$o_{batch}$ in micr$o_{batches}$:
-    loss = model(micr$o_{batch}$)
+optimizer.zero_grad()
+for micro_batch in micro_batches:
+    loss = model(micro_batch)
     loss.backward()  # 梯度累积
 
 # 只在最后一个 micro-batch 后通信
-al$l_{reduce}$(gradients)
+all_reduce(gradients)
 optimizer.step()</code></pre>
 
     <div class="card idea">
@@ -154,36 +154,36 @@ optimizer.step()</code></pre>
     <p>把模型的<strong>宽度</strong>切分到多个 GPU——每个 GPU 只持有参数的一部分。</p>
 
     <pre><code class="language-python"># 标准 Linear 层: Y = X @ W
-# W: ($D_{in}$, $D_{out}$)
+# W: (D_in, D_out)
 
 # Tensor Parallel: 把 W 按列切分
-# GPU 0: $W_{0}$: ($D_{in}$, $D_{out}$/2)  → $Y_{0}$ = X @ $W_{0}$
-# GPU 1: $W_{1}$: ($D_{in}$, $D_{out}$/2)  → $Y_{1}$ = X @ $W_{1}$
+# GPU 0: W_0: (D_in, D_out/2)  → Y_0 = X @ W_0
+# GPU 1: W_1: (D_in, D_out/2)  → Y_1 = X @ W_1
 
-# 需要 All-Gather 把 $Y_{0}$ 和 $Y_{1}$ 拼起来: Y = [$Y_{0}$, $Y_{1}$]</code></pre>
+# 需要 All-Gather 把 Y_0 和 Y_1 拼起来: Y = [Y_0, Y_1]</code></pre>
 
     <h3>Megatron-LM 的切分策略</h3>
     <p>对于 Transformer 的 FFN 和 Attention，有特定的切分方式：</p>
 
     <pre><code class="language-python"># FFN 的列切分 (Column Parallel):
-# Y = X @ $W_{gate}$  → 切分 $W_{gate}$ → All-Gather
-# Y = X @ $W_{up}$    → 切分 $W_{up}$ → All-Gather
-# 然后 element-wise: Y = Swish($Y_{gate}$) * $Y_{up}$
-# 最后 $W_{down}$ 行切分 → Reduce-Scatter
+# Y = X @ W_gate  → 切分 W_gate → All-Gather
+# Y = X @ W_up    → 切分 W_up → All-Gather
+# 然后 element-wise: Y = Swish(Y_gate) * Y_up
+# 最后 W_down 行切分 → Reduce-Scatter
 
 # Attention 的切分:
-# $W_{q}$, $W_{k}$, $W_{v}$ 按 head 切分（每个 GPU 负责部分 head）
-# $W_{o}$ 行切分 → All-Reduce</code></pre>
+# W_q, W_k, W_v 按 head 切分（每个 GPU 负责部分 head）
+# W_o 行切分 → All-Reduce</code></pre>
 
     <h3>通信模式</h3>
     <pre><code class="language-python"># Transformer block 的 TP 通信:
 # 1. Attention:
 #    - Q, K, V 计算: 无需通信（head 独立）
-#    - $W_{o}$: All-Reduce
+#    - W_o: All-Reduce
 
 # 2. FFN:
-#    - $W_{gate}$, $W_{up}$: All-Gather
-#    - $W_{down}$: Reduce-Scatter
+#    - W_gate, W_up: All-Gather
+#    - W_down: Reduce-Scatter
 
 # 总计: 每个 block 2 次 All-Reduce</code></pre>
 
@@ -193,13 +193,13 @@ optimizer.step()</code></pre>
     </div>
 
     <h3>切分示例（4 GPU）</h3>
-    <pre><code class="language-python"># 假设 $d_{model}$ = 4096, nu$m_{heads}$ = 32
-# 每 GPU: 8 个 head, $d_{model}$_pe$r_{gpu}$ = 1024
+    <pre><code class="language-python"># 假设 d_model = 4096, num_heads = 32
+# 每 GPU: 8 个 head, d_model_per_gpu = 1024
 
-# $W_{q}$: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
-# $W_{k}$: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
-# $W_{v}$: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
-# $W_{o}$: (4096, 4096) → 切成 4 份: 每 GPU (1024, 4096)</code></pre>
+# W_q: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
+# W_k: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
+# W_v: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
+# W_o: (4096, 4096) → 切成 4 份: 每 GPU (1024, 4096)</code></pre>
 
     <hr class="rule">
 
@@ -248,10 +248,10 @@ optimizer.step()</code></pre>
     <h3>通信量</h3>
     <pre><code class="language-python"># Pipeline Parallel 的通信:
 # 每对相邻 GPU 之间只传 activations
-# 数据量: batc$h_{size}$ $\times$ se$q_{len}$ $\times$ $d_{model}$ $\times$ 2 (bf16)
+# 数据量: batch_size × seq_len × d_model × 2 (bf16)
 
 # 例如: B=4, S=4096, D=8192
-# = $4 \times 4$09$6 \times 8$19$2 \times 2$ = 256 MB（很小！）
+# = 4 × 4096 × 8192 × 2 = 256 MB（很小！）
 
 # 但这是 P2P 通信，不能 overlap</code></pre>
 
@@ -298,7 +298,7 @@ optimizer.step()</code></pre>
 # - 流水线并行 (PP): 跨节点组
 # - 序列并行 (SP): 长上下文
 
-# 总 GPU 数 = D$P_{degree}$ $\times$ T$P_{degree}$ $\times$ P$P_{degree}$</code></pre>
+# 总 GPU 数 = DP_degree × TP_degree × PP_degree</code></pre>
 
     <h3>并行策略选择</h3>
     <table>
@@ -313,15 +313,15 @@ optimizer.step()</code></pre>
     <pre><code class="language-python"># 训练 70B 模型，16 节点 (128 GPU):
 # TP = 8 (节点内)
 # PP = 4 (4 个 stages)
-# DP = 128 / ($8 \times 4$) = 4 (数据并行)
-# 总计: $8 \times 4$ $\times$ 4 = 128 GPU
+# DP = 128 / (8 × 4) = 4 (数据并行)
+# 总计: 8 × 4 × 4 = 128 GPU
 
 # 每个 GPU 内存:
-# 参数: 70B / ($8 \times 4$) = ~2.2B 参数
+# 参数: 70B / (8 × 4) = ~2.2B 参数
 # 激活: 取决于 micro-batch size
 # 梯度: 同参数
-# 优化器: 2 $\times$ 参数 (AdamW)
-# 总计: ~2.2B $\times$ 16 bytes = ~35 GB（放得下！）</code></pre>
+# 优化器: 2 × 参数 (AdamW)
+# 总计: ~2.2B × 16 bytes = ~35 GB（放得下！）</code></pre>
 
     <hr class="rule">
 
@@ -331,8 +331,8 @@ optimizer.step()</code></pre>
     <table>
       <tr><th>并行策略</th><th>通信类型</th><th>每步通信量</th><th>频率</th></tr>
       <tr><td>Data Parallel</td><td>All-Reduce</td><td>2P（梯度）</td><td>每步</td></tr>
-      <tr><td>Tensor Parallel</td><td>All-Reduce $\times$ 2</td><td>2 $\times$ B$\times$S$\times$D $\times$ 2</td><td>每层</td></tr>
-      <tr><td>Pipeline Parallel</td><td>P2P send/recv</td><td>B$\times$S$\times$D $\times$ 2</td><td>stage 边界</td></tr>
+      <tr><td>Tensor Parallel</td><td>All-Reduce × 2</td><td>2 × B×S×D × 2</td><td>每层</td></tr>
+      <tr><td>Pipeline Parallel</td><td>P2P send/recv</td><td>B×S×D × 2</td><td>stage 边界</td></tr>
       <tr><td>FSDP (ZeRO-3)</td><td> All-Gather + Reduce-Scatter</td><td>P（参数）</td><td>每层</td></tr>
     </table>
 
@@ -351,12 +351,12 @@ optimizer.step()</code></pre>
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！Data Parallelism 每步需要对梯度做 All-Reduce，通信量 = 2 $\times$ 参数量。" data-incorrect="DP 的通信来自梯度同步——每步需要 All-Reduce 所有梯度。">
+    <div class="quiz" data-quiz="1" data-correct="正确！Data Parallelism 每步需要对梯度做 All-Reduce，通信量 = 2 × 参数量。" data-incorrect="DP 的通信来自梯度同步——每步需要 All-Reduce 所有梯度。">
       <p><strong>问题 1：</strong>Data Parallelism 每步的通信量是？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">$O(n^2)$</button>
-        <button data-choice="b" aria-pressed="false">$O(n^2)$</button>
-        <button data-choice="c" aria-pressed="false">$O(n^2)$</button>
+        <button data-choice="a" aria-pressed="false">O(batch_size)</button>
+        <button data-choice="b" aria-pressed="false">O(参数数量)</button>
+        <button data-choice="c" aria-pressed="false">O(序列长度)</button>
         <button data-choice="d" aria-pressed="false">无通信</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>

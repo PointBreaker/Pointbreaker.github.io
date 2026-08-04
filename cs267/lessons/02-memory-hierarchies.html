@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -42,16 +42,16 @@
     <h3>更真实的模型</h3>
     <p>实际上，内存访问有两个成本：</p>
     <ul>
-      <li><strong>延迟 (Latency, $α$)：</strong>加载/存储 1 个字的时间</li>
-      <li><strong>带宽 (Bandwidth, $β$)：</strong>加载/存储大块的速率（时间/字节）</li>
+      <li><strong>延迟 (Latency, α)：</strong>加载/存储 1 个字的时间</li>
+      <li><strong>带宽 (Bandwidth, β)：</strong>加载/存储大块的速率（时间/字节）</li>
     </ul>
-    <p>移动 $n$ 个连续字的时间：$\alpha + n\beta$</p>
+    <p>移动 \(n\) 个连续字的时间：\(\alpha + n\beta\)</p>
 
     <div class="card idea">
       <p><strong>关键数值：</strong></p>
       <pre><code>处理器频率: 1 GHz → 1 周期 = 1 ns
 内存延迟:    ~100 ns（加载/存储 1 个字）
-Load/Store $≈$ 100x 算术操作的开销</code></pre>
+Load/Store ≈ 100x 算术操作的开销</code></pre>
     </div>
 
     <h3>编译器的角色</h3>
@@ -101,7 +101,7 @@ Load/Store $≈$ 100x 算术操作的开销</code></pre>
 
     <div class="card idea">
       <h3>Little 定律与并行</h3>
-      <p>来自排队论：$\text{concurrency} = \text{latency} \times \text{bandwidth}$</p>
+      <p>来自排队论：\(\text{concurrency} = \text{latency} \times \text{bandwidth}\)</p>
       <p><strong>示例：</strong>延迟 = 10 ns，带宽 = 2 GB/s → 需要 20 字节在途才能达到带宽速度</p>
       <p>这意味着需要找到 20 个独立操作来隐藏延迟。</p>
     </div>
@@ -116,8 +116,8 @@ Load/Store $≈$ 100x 算术操作的开销</code></pre>
   总延迟: 90 min
 
 4 批衣服:
-  串行: $4 \times 9$0 = 360 min
-  流水线: 30 + $4 \times 4$0 + 20 = 210 min  ($≈$ 1.7x 加速)
+  串行: 4 × 90 = 360 min
+  流水线: 30 + 4×40 + 20 = 210 min  (≈ 1.7x 加速)
   峰值带宽: 1/40 min = 1.5 loads/hour</code></pre>
 
     <h3>SIMD 单元</h3>
@@ -146,10 +146,10 @@ Load/Store $≈$ 100x 算术操作的开销</code></pre>
     </ul>
 
     <h3>FMA：融合乘加</h3>
-    <p>乘加操作 $x = y + c \times z$ 极其常见。FMA 指令：</p>
+    <p>乘加操作 \(x = y + c \times z\) 极其常见。FMA 指令：</p>
     <ul>
       <li>以与 + 或 * 相同的吞吐率执行</li>
-      <li>只进行一次舍入：$x = \text{round}(c \times z + y)$</li>
+      <li>只进行一次舍入：\(x = \text{round}(c \times z + y)\)</li>
       <li>提高精度和性能</li>
     </ul>
 
@@ -170,8 +170,8 @@ f = 算术操作数
 tf = 每次算术操作时间 (<< tm)
 CI = f / m = 计算强度 (Computational Intensity)
 
-最小时间 = f $\times$ tf（所有数据在快内存）
-实际时间 = f $\times$ tf + m $\times$ tm = f $\times$ tf $\times$ (1 + tm/tf $\times$ 1/CI)
+最小时间 = f × tf（所有数据在快内存）
+实际时间 = f × tf + m × tm = f × tf × (1 + tm/tf × 1/CI)
 </code></pre>
 
     <p><strong>Machine Balance</strong> = Peak FLOPS / Peak Bandwidth → 典型值 5-10 Flops/Byte</p>
@@ -183,9 +183,9 @@ for i = 1:n
     y(i) = y(i) + A(i,j)*x(j)</code></pre>
     <p>分析：</p>
     <ul>
-      <li>$f = 2n^2$ 次算术操作</li>
-      <li>$m = 3n + n^2 \approx n^2$ 次慢内存访问</li>
-      <li>$CI = f/m \approx 2$（低计算强度）</li>
+      <li>\(f = 2n^2\) 次算术操作</li>
+      <li>\(m = 3n + n^2 \approx n^2\) 次慢内存访问</li>
+      <li>\(CI = f/m \approx 2\)（低计算强度）</li>
       <li><strong>结论：</strong>受限于内存带宽，无法通过优化改善</li>
     </ul>
 
@@ -197,14 +197,14 @@ for i = 1 to n
       C(i,j) = C(i,j) + A(i,k) * B(k,j)</code></pre>
     <p>分析：</p>
     <ul>
-      <li>$f = 2n^3$ 次算术操作</li>
-      <li>$m = $n^3$ + 3n^2$ 次慢内存访问（B 的列被读取 n 次）</li>
-      <li>$CI = 2n^3 / (n^3 + 3n^2) \approx 2$（大 n 时）</li>
+      <li>\(f = 2n^3\) 次算术操作</li>
+      <li>\(m = n^3 + 3n^2\) 次慢内存访问（B 的列被读取 n 次）</li>
+      <li>\(CI = 2n^3 / (n^3 + 3n^2) \approx 2\)（大 n 时）</li>
       <li><strong>结论：</strong>与矩阵-向量乘法一样受限于带宽！</li>
     </ul>
 
     <h3>分块 (Tiled) 矩阵乘法</h3>
-    <p>将 A, B, C 视为 N$\times$N 个 b$\times$b 子块的矩阵，块大小 $b = n/N$：</p>
+    <p>将 A, B, C 视为 N×N 个 b×b 子块的矩阵，块大小 \(b = n/N\)：</p>
     <pre><code>for i = 1 to N
   for j = 1 to N
     {将 C(i,j) 读入快内存}
@@ -214,15 +214,15 @@ for i = 1 to n
       C(i,j) = C(i,j) + A(i,k) * B(k,j)  {块矩阵乘法}
     {将 C(i,j) 写回慢内存}</code></pre>
 
-    <p>分析（假设 3 个 b$\times$b 块能放入快内存）：</p>
+    <p>分析（假设 3 个 b×b 块能放入快内存）：</p>
     <ul>
-      <li>$f = 2n^3$（不变）</li>
-      <li>$m = 2$n^2$ \text{ (C)} + N \cdot $n^2$ \text{ (A)} + N \cdot $n^2$ \text{ (B)} = (2N + 2) \cdot n^2$</li>
-      <li>$CI = f/m = 2n^3 / ((2N+2) \cdot n^2) \approx n/N = b$</li>
+      <li>\(f = 2n^3\)（不变）</li>
+      <li>\(m = 2n^2 \text{ (C)} + N \cdot n^2 \text{ (A)} + N \cdot n^2 \text{ (B)} = (2N + 2) \cdot n^2\)</li>
+      <li>\(CI = f/m = 2n^3 / ((2N+2) \cdot n^2) \approx n/N = b\)</li>
     </ul>
 
     <div class="card idea">
-      <p><strong>关键洞察：</strong>CI 从 $O(n^2)$ 提升到 $O(n^2)$。若 $b$ 足够大，CI 可以接近 Machine Balance，使计算受限而非带宽受限。</p>
+      <p><strong>关键洞察：</strong>CI 从 O(2) 提升到 O(b)。若 \(b\) 足够大，CI 可以接近 Machine Balance，使计算受限而非带宽受限。</p>
     </div>
 
     <h3>Cache-Oblivious 矩阵乘法</h3>
@@ -236,9 +236,9 @@ for i = 1 to n
     C11 = RMM(A11, B01, n/2) + RMM(A11, B11, n/2)</code></pre>
 
     <p>内存移动分析：</p>
-    <p>$$W(n) = 8 \cdot W(n/2) + 4 \cdot 3(n/2)^2 \text{ if } 3n^2 > M_{\text{fast}}$$</p>
-    <p>$$W(n) = O(n^{\log_2 7})$$</p>
-    <p><strong>优点：</strong>不需要知道 $M_{\text{fast}}$ 即可工作，自动适应任意深度的内存层次。</p>
+    <p>\[W(n) = 8 \cdot W(n/2) + 4 \cdot 3(n/2)^2 \text{ if } 3n^2 > M_{\text{fast}}\]</p>
+    <p>\[W(n) = O(n^3 / M_{\text{fast}}^{1/2} + n^2)\]</p>
+    <p><strong>优点：</strong>不需要知道 \(M_{\text{fast}}\) 即可工作，自动适应任意深度的内存层次。</p>
 
     <h2>实践中的优化</h2>
     <h3>自动调优 (Autotuning)</h3>
@@ -263,13 +263,13 @@ for i = 1 to n
       <tbody>
         <tr><td>BLAS1 (1970s)</td><td>向量-向量 (dot, saxpy)</td><td>~1</td></tr>
         <tr><td>BLAS2 (1980s)</td><td>矩阵-向量 (matvec)</td><td>~2</td></tr>
-        <tr><td>BLAS3 (1980s)</td><td>矩阵-矩阵 (matmul)</td><td>$O(n^2)$</td></tr>
+        <tr><td>BLAS3 (1980s)</td><td>矩阵-矩阵 (matmul)</td><td>O(n)</td></tr>
       </tbody>
     </table>
     <p><strong>结论：</strong>尽可能使用 BLAS3 操作以获得最佳性能。</p>
 
     <h3>Strassen 算法</h3>
-    <p>传统算法：$$O(n^2)$ 次乘法。Strassen：$$O(n^2)$ \approx $O(n^2)$$。</p>
+    <p>传统算法：\(O(n^3)\) 次乘法。Strassen：\(O(n^{\log_2 7}) \approx O(n^{2.81})\)。</p>
     <pre><code>2x2 矩阵乘法:
   传统: 8 次乘法 + 4 次加法
   Strassen: 7 次乘法 + 18 次加法
@@ -294,8 +294,8 @@ m22 = p2 - p3 + p5 - p7</code></pre>
     <div class="quiz" data-q="1">
       <p><strong>Q1：</strong>朴素矩阵乘法的计算强度（CI）约为多少？</p>
       <div class="quiz-options">
-        <button data-answer="wrong" data-incorrect="CI = f/m，不是 f。">A. USD 2n^3$</button>
-        <button data-answer="correct" data-correct="正确！CI = 2n³/(n³+3n²) $≈$ 2。">B. ~2</button>
+        <button data-answer="wrong" data-incorrect="CI = f/m，不是 f。">A. \(2n^3\)</button>
+        <button data-answer="correct" data-correct="正确！CI = 2n³/(n³+3n²) ≈ 2。">B. ~2</button>
         <button data-answer="wrong" data-incorrect="这是矩阵-向量乘法的 CI。">C. ~n</button>
         <button data-answer="wrong" data-incorrect="CI 不可能无限。">D. 无限</button>
       </div>
@@ -305,7 +305,7 @@ m22 = p2 - p3 + p5 - p7</code></pre>
       <p><strong>Q2：</strong>分块矩阵乘法中，若快内存大小为 M，最优块大小 b 是多少？</p>
       <div class="quiz-options">
         <button data-answer="wrong" data-incorrect="b 应该是平方根关系。">A. b = M</button>
-        <button data-answer="correct" data-correct="正确！需要 3 个 b$\times$b 块放入 M，所以 b² = M/3，b = $√$(M/3)。">B. $b = \sqrt{M/3}$</button>
+        <button data-answer="correct" data-correct="正确！需要 3 个 b×b 块放入 M，所以 b² = M/3，b = √(M/3)。">B. \(b = \sqrt{M/3}\)</button>
         <button data-answer="wrong" data-incorrect="这太大了。">C. b = M/3</button>
         <button data-answer="wrong" data-incorrect="b 不能为 1。">D. b = 1</button>
       </div>
@@ -324,10 +324,10 @@ m22 = p2 - p3 + p5 - p7</code></pre>
     <div class="quiz" data-q="4">
       <p><strong>Q4：</strong>根据 Little 定律，若内存延迟为 100ns，带宽为 100 GB/s，需要多少数据在途才能充分利用带宽？</p>
       <div class="quiz-options">
-        <button data-answer="wrong" data-incorrect="需要乘法：latency $\times$ bandwidth。">A. 100 bytes</button>
-        <button data-answer="wrong" data-incorrect="需要乘法：latency $\times$ bandwidth = 100ns $\times$ 100 GB/s = 10 KB。">B. 1 KB</button>
-        <button data-answer="correct" data-correct="正确！concurrency = latency $\times$ bandwidth = 100ns $\times$ 100 GB/s = 10⁻⁷ $\times$ 10¹¹ = 10 KB。">C. 10 KB</button>
-        <button data-answer="wrong" data-incorrect="需要乘法：100ns $\times$ 100 GB/s = 10 KB。">D. 100 KB</button>
+        <button data-answer="wrong" data-incorrect="需要乘法：latency × bandwidth。">A. 100 bytes</button>
+        <button data-answer="wrong" data-incorrect="需要乘法：latency × bandwidth = 100ns × 100 GB/s = 10 KB。">B. 1 KB</button>
+        <button data-answer="correct" data-correct="正确！concurrency = latency × bandwidth = 100ns × 100 GB/s = 10⁻⁷ × 10¹¹ = 10 KB。">C. 10 KB</button>
+        <button data-answer="wrong" data-incorrect="需要乘法：100ns × 100 GB/s = 10 KB。">D. 100 KB</button>
       </div>
     </div>
 
@@ -335,7 +335,7 @@ m22 = p2 - p3 + p5 - p7</code></pre>
       <p><strong>Q5：</strong>为什么 BLAS3 比 BLAS2 更快？</p>
       <div class="quiz-options">
         <button data-answer="wrong" data-incorrect="BLAS3 操作更多（matmul vs matvec）。">A. 因为操作更少</button>
-        <button data-answer="correct" data-incorrect="BLAS3 (matmul) 的 CI 可达 $O(n^2)$，而 BLAS2 (matvec) 的 CI 只有 $O(n^2)$。">B. 因为计算强度更高</button>
+        <button data-answer="correct" data-incorrect="BLAS3 (matmul) 的 CI 可达 O(n)，而 BLAS2 (matvec) 的 CI 只有 O(2)。">B. 因为计算强度更高</button>
         <button data-answer="wrong" data-incorrect="BLAS3 使用更多内存。">C. 因为内存使用更少</button>
         <button data-answer="wrong" data-incorrect="BLAS3 不一定更准确。">D. 因为精度更高</button>
       </div>
@@ -355,7 +355,7 @@ m22 = p2 - p3 + p5 - p7</code></pre>
       </article>
       <article>
         <h3>分块提升 CI</h3>
-        <p>矩阵乘法的 CI 从 $O(n^2)$ 提升到 $O(n^2)$，通过分块使 CI 接近 Machine Balance。</p>
+        <p>矩阵乘法的 CI 从 O(2) 提升到 O(b)，通过分块使 CI 接近 Machine Balance。</p>
       </article>
       <article>
         <h3>使用库！</h3>

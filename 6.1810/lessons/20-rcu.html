@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -58,10 +58,10 @@ struct elem {
 
     <h3>读写锁 (Read-Write Lock)</h3>
     <pre><code>// API
-void rwloc$k_{r}$_acquire(l);   // 读锁获取
-void rwloc$k_{r}$_release(l);   // 读锁释放
-void rwloc$k_{w}$_lock(l);      // 写锁获取
-void rwloc$k_{w}$_unlock(l);    // 写锁释放
+void rwlock_r_acquire(l);   // 读锁获取
+void rwlock_r_release(l);   // 读锁释放
+void rwlock_w_lock(l);      // 写锁获取
+void rwlock_w_unlock(l);    // 写锁释放
 
 // 语义：要么一个写者（无读者），要么多个读者（无写者）</code></pre>
 
@@ -74,27 +74,27 @@ void rwloc$k_{w}$_unlock(l);    // 写锁释放
     <h3>性能数据</h3>
     <pre><code>// 4 核，rwlock
 ncore 4 ltype rwlock
-  10000000 lis$t_{search}$ took 2.86s
-  10000000 lis$t_{search}$ took 2.89s
-  10000000 lis$t_{search}$ took 3.35s
-  10000000 lis$t_{search}$ took 3.36s
+  10000000 list_search took 2.86s
+  10000000 list_search took 2.89s
+  10000000 list_search took 3.35s
+  10000000 list_search took 3.36s
 
 // 4 核，spinlock
 ncore 4 ltype spinlock
-  10000000 lis$t_{search}$ took 1.02s
-  10000000 lis$t_{search}$ took 3.22s
-  10000000 lis$t_{search}$ took 3.27s
-  10000000 lis$t_{search}$ took 3.29s
+  10000000 list_search took 1.02s
+  10000000 list_search took 3.22s
+  10000000 list_search took 3.27s
+  10000000 list_search took 3.29s
 
 // 即使没有写者，rwlock 也更慢！</code></pre>
 
     <h3>时间花在哪里？</h3>
     <pre><code>$ perf record -g ./clist 4 1
 $ perf report
-   59.26%  rwloc$k_{r}$_acquire
-   33.48%  rwloc$k_{r}$_release
-    5.40%  ru$n_{core}$
-    3.01%  lis$t_{search}$</code></pre>
+   59.26%  rwlock_r_acquire
+   33.48%  rwlock_r_release
+    5.40%  run_core
+    3.01%  list_search</code></pre>
 
     <h3>两个效应</h3>
     <div class="card warning">
@@ -102,28 +102,28 @@ $ perf report
       <p>核心在 L2 缓存中未命中，必须获取缓存行——数十个周期。</p>
 
       <h3>效应 2：可扩展性差</h3>
-      <pre><code>N 个核心调用 $r_{acquire}$(l)，没有写者
+      <pre><code>N 个核心调用 r_acquire(l)，没有写者
 所有 N 个核心获取 rwlk->n，看到 rwlk->n == 0
-执行 atomi$c_{compare}$_exchange
+执行 atomic_compare_exchange
 只有一个 CAS 成功，其余失败并重试
-atomic compar$e_{exchange}$ 一次执行一个——不并行
-因此一个 CPU 获取读锁需要 $O(n^2)$ 时间
-所有 N 个核心的总时间 = $O(n^2)$</code></pre>
+atomic compare_exchange 一次执行一个——不并行
+因此一个 CPU 获取读锁需要 O(N) 时间
+所有 N 个核心的总时间 = O(N²)</code></pre>
     </div>
 
     <h3>核心问题</h3>
     <div class="card idea">
-      <p>$r_{acquire}$()/$r_{release}$ 的问题：它们做昂贵的<strong>写入</strong>。</p>
+      <p>r_acquire()/r_release 的问题：它们做昂贵的<strong>写入</strong>。</p>
       <p><strong>核心洞察：</strong>能否有纯只读的共享读写数据读取？即避免甚至锁定所需的写入？</p>
     </div>
 
     <h2>Read-Copy Update (RCU)</h2>
     <h3>性能预览</h3>
     <pre><code>ncore 4 ltype rcu
-  10000000 lis$t_{search}$ took 0.09s
-  10000000 lis$t_{search}$ took 0.09s
-  10000000 lis$t_{search}$ took 0.09s
-  10000000 lis$t_{search}$ took 0.10s</code></pre>
+  10000000 list_search took 0.09s
+  10000000 list_search took 0.09s
+  10000000 list_search took 0.09s
+  10000000 list_search took 0.10s</code></pre>
     <p>比 rwlock 快 30 倍以上！</p>
 
     <h3>RCU 是一组规则和模式</h3>
@@ -166,7 +166,7 @@ atomic compar$e_{exchange}$ 一次执行一个——不并行
     <h3>RCU 思想 2：读者和写者必须使用内存屏障</h3>
     <pre><code>// 写者必须在步骤 6 之前有屏障
 // 读者可能需要在 Rx = E1->next 和 Rx 的解引用之间有屏障
-// rc$u_{dereference}$() 确保这一点</code></pre>
+// rcu_dereference() 确保这一点</code></pre>
 
     <h3>RCU 思想 3：宽限期 (Grace Period)</h3>
     <div class="card warning">
@@ -187,32 +187,32 @@ atomic compar$e_{exchange}$ 一次执行一个——不并行
 
     <h2>Linux RCU 接口</h2>
     <h3>读者接口</h3>
-    <pre><code>rc$u_{read}$_lock()
-rc$u_{read}$_unlock()
-rc$u_{dereference}$(p)</code></pre>
+    <pre><code>rcu_read_lock()
+rcu_read_unlock()
+rcu_dereference(p)</code></pre>
 
     <h3>写者接口</h3>
-    <pre><code>synchroniz$e_{rcu}$()          // 等待宽限期
-cal$l_{rcu}$(fn, x)             // 延迟执行 fn(x)
-rc$u_{assign}$_pointer(pa, p)   // 带屏障的指针赋值</code></pre>
+    <pre><code>synchronize_rcu()          // 等待宽限期
+call_rcu(fn, x)             // 延迟执行 fn(x)
+rcu_assign_pointer(pa, p)   // 带屏障的指针赋值</code></pre>
 
     <h3>使用 RCU 的链表读者</h3>
-    <pre><code>rc$u_{read}$_lock()
-e = rc$u_{dereference}$(head)
+    <pre><code>rcu_read_lock()
+e = rcu_dereference(head)
 while(e){
     查看 e->n, e->refcnt, ...
-    e = rc$u_{dereference}$(e->next)
+    e = rcu_dereference(e->next)
 }
-rc$u_{read}$_unlock()</code></pre>
+rcu_read_unlock()</code></pre>
 
     <div class="card idea">
-      <h3>rc$u_{read}$_lock/unlock 几乎不做任何事</h3>
+      <h3>rcu_read_lock/unlock 几乎不做任何事</h3>
       <p>尽管它们的名字叫"锁"，但它们不加锁：</p>
       <ul>
         <li>禁用定时器中断以防止抢占</li>
         <li>作为文档使用</li>
       </ul>
-      <p><strong>注意：</strong>代码只能在 rc$u_{read}$_lock/unlock 内使用 e！不能返回 e，不能上下文切换。</p>
+      <p><strong>注意：</strong>代码只能在 rcu_read_lock/unlock 内使用 e！不能返回 e，不能上下文切换。</p>
     </div>
 
     <h3>写者替换第一个链表元素</h3>
@@ -221,10 +221,10 @@ e = alloc()
 e->n = ...
 e->next = head->next
 old = head
-rc$u_{assign}$_pointer(&head, e)  // 提交写入
+rcu_assign_pointer(&head, e)  // 提交写入
 release(lock)
 
-synchroniz$e_{rcu}$()             // 等待宽限期
+synchronize_rcu()             // 等待宽限期
 free(old)                     // 现在可以安全释放</code></pre>
 
     <h3>各函数的作用</h3>
@@ -233,10 +233,10 @@ free(old)                     // 现在可以安全释放</code></pre>
         <tr><th>函数</th><th>作用</th></tr>
       </thead>
       <tbody>
-        <tr><td>rc$u_{dereference}$(e)</td><td>告诉编译器精确计算指针一次，然后加屏障确保 CPU 看到写入</td></tr>
-        <tr><td>synchroniz$e_{rcu}$()</td><td>实现宽限期：延迟直到所有 CPU 都已上下文切换。可能花很长时间。</td></tr>
-        <tr><td>cal$l_{rcu}$(free, old)</td><td>将 &lt;free, old&gt; 添加到列表，立即返回</td></tr>
-        <tr><td>rc$u_{assign}$_pointer(p, val)</td><td>内存屏障 + *p = val</td></tr>
+        <tr><td>rcu_dereference(e)</td><td>告诉编译器精确计算指针一次，然后加屏障确保 CPU 看到写入</td></tr>
+        <tr><td>synchronize_rcu()</td><td>实现宽限期：延迟直到所有 CPU 都已上下文切换。可能花很长时间。</td></tr>
+        <tr><td>call_rcu(free, old)</td><td>将 &lt;free, old&gt; 添加到列表，立即返回</td></tr>
+        <tr><td>rcu_assign_pointer(p, val)</td><td>内存屏障 + *p = val</td></tr>
       </tbody>
     </table>
 
@@ -253,7 +253,7 @@ free(old)                     // 现在可以安全释放</code></pre>
         </tr>
         <tr>
           <td>写者开销</td>
-          <td>可能很长（synchroniz$e_{rcu}$）</td>
+          <td>可能很长（synchronize_rcu）</td>
           <td>中等</td>
         </tr>
         <tr>
@@ -274,18 +274,18 @@ free(old)                     // 现在可以安全释放</code></pre>
     <h3>示例 1：移除 NMI 处理程序</h3>
     <div class="card idea">
       <p>NMI（不可屏蔽中断）用于 CPU 分析、关键硬件错误、看门狗定时器。</p>
-      <p><strong>问题：</strong>如果某个核心在 NMI 代码中时调用 unregiste$r_{nmi}$_handler()？</p>
+      <p><strong>问题：</strong>如果某个核心在 NMI 代码中时调用 unregister_nmi_handler()？</p>
       <p><strong>解决方案：</strong></p>
       <ol>
         <li>删除 NMI 处理程序链表项</li>
-        <li>synchroniz$e_{rcu}$() 等待所有当前中断完成</li>
+        <li>synchronize_rcu() 等待所有当前中断完成</li>
         <li>释放 NMI 处理程序代码的内存</li>
       </ol>
       <p><strong>亮点：</strong>NMI 不能禁用，所以 spinlock 不能阻止 NMI。RCU 在这里不仅更快，而且<strong>在锁无法工作的地方也能工作</strong>。</p>
     </div>
 
     <h3>示例 2：IP 选项</h3>
-    <p>IP 数据包头部可以包含选项。发送代码（ud$p_{sendmsg}$()）不加锁地复制套接字选项。选项读取远多于写入 → 好的 RCU 候选。</p>
+    <p>IP 数据包头部可以包含选项。发送代码（udp_sendmsg()）不加锁地复制套接字选项。选项读取远多于写入 → 好的 RCU 候选。</p>
 
     <h2>RCU 的局限性</h2>
     <ul>
@@ -339,7 +339,7 @@ free(old)                     // 现在可以安全释放</code></pre>
       <p><strong>Q1：</strong>为什么读写锁在多核上性能差？</p>
       <div class="quiz-options">
         <button data-answer="wrong" data-incorrect="读取操作本身很快。">A. 因为读取操作太慢</button>
-        <button data-answer="correct" data-correct="正确！读写锁需要原子更新计数器，导致缓存行在核心间弹跳，$O(n^2)$ 时间。">B. 因为读写锁需要原子更新计数器，导致缓存竞争</button>
+        <button data-answer="correct" data-correct="正确！读写锁需要原子更新计数器，导致缓存行在核心间弹跳，O(N²) 时间。">B. 因为读写锁需要原子更新计数器，导致缓存竞争</button>
         <button data-answer="wrong" data-incorrect="读写锁不支持写者并发是设计如此，不是性能问题。">C. 因为读写锁不支持写者并发</button>
         <button data-answer="wrong" data-incorrect="读写锁可以防止死锁。">D. 因为读写锁导致死锁</button>
       </div>
@@ -381,7 +381,7 @@ free(old)                     // 现在可以安全释放</code></pre>
       <a href="21-isolation.html">第 21 课 →</a>
     </div>
     <footer>
-      <p>MIT 6.1810: Operating System Engineering · 2025 秋季</p>
+      <p>MIT 6.1810 (6.1810): Operating System Engineering · 2025 秋季</p>
     </footer>
   </div>
   <script src="../assets/quiz.js"></script>

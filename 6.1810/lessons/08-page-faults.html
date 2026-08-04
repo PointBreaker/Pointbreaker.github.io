@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 8 课：页错误处理 — MIT 6.828</title>
+  <title>第 8 课：页错误处理 — MIT 6.1810</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -36,7 +36,7 @@
     <h3>已有的"酷事情"</h3>
     <ul>
       <li>共享 Trampoline 页（用户/内核切换）</li>
-      <li>Guard page（无 PT$E_{U}$，检测栈溢出）</li>
+      <li>Guard page（无 PTE_U，检测栈溢出）</li>
       <li>Super pages（减少 TLB miss）</li>
     </ul>
 
@@ -109,11 +109,11 @@ int main() {
     <pre><code>// kernel/trap.c
 void vmfault(uint64 va, struct proc *p) {
     // 1. 检查 va 是否在 p->sz 范围内
-    if (va >= p->sz || va < p->stac$k_{bottom}$)
+    if (va >= p->sz || va < p->stack_bottom)
         panic("vmfault: invalid va");
 
     // 2. 查找对应的 PTE
-    pt$e_{t}$ *pte = walk(p->pagetable, va, 0);
+    pte_t *pte = walk(p->pagetable, va, 0);
 
     // 3. 分配物理页
     char *mem = kalloc();
@@ -121,7 +121,7 @@ void vmfault(uint64 va, struct proc *p) {
 
     // 4. 安装 PTE
     mappages(p->pagetable, PGROUNDDOWN(va), PGSIZE,
-             (uint64)mem, PT$E_{W}$ | PT$E_{R}$ | PT$E_{U}$);
+             (uint64)mem, PTE_W | PTE_R | PTE_U);
 }</code></pre>
 
     <h3>copyin/copyout 的复杂性</h3>
@@ -142,7 +142,7 @@ void vmfault(uint64 va, struct proc *p) {
     <h3>解决方案：共享零页</h3>
     <pre><code>计划：
   1. memset 一个物理页为零
-  2. 需要零页时，把零页映射为只读（无 PT$E_{W}$）
+  2. 需要零页时，把零页映射为只读（无 PTE_W）
   3. 应用尝试写入 → page fault
   4. 分配新页、清零、映射为 R/W
 
@@ -152,16 +152,16 @@ void vmfault(uint64 va, struct proc *p) {
 
     <h3>Demo：vmfault0</h3>
     <pre><code>void vmfault0(uint64 va, struct proc *p) {
-    pt$e_{t}$ *pte = walk(p->pagetable, va, 0);
+    pte_t *pte = walk(p->pagetable, va, 0);
 
     if (是写错误 && 当前是零页) {
         // 分配新页、清零、映射为 R/W
         char *mem = kalloc();
         memset(mem, 0, PGSIZE);
-        mappages(p->pagetable, ..., mem, PT$E_{W}$ | PT$E_{R}$ | PT$E_{U}$);
+        mappages(p->pagetable, ..., mem, PTE_W | PTE_R | PTE_U);
     } else {
         // 第一次 fault：映射零页为只读
-        mappages(p->pagetable, ..., zer$o_{page}$, PT$E_{R}$ | PT$E_{U}$);
+        mappages(p->pagetable, ..., zero_page, PTE_R | PTE_U);
     }
 }</code></pre>
 
@@ -241,13 +241,13 @@ PTE 格式（RSW 位）：
 
     <h3>思想：用 load/store 访问文件</h3>
     <pre><code>// mmap 系统调用
-void *mmap(void *addr, siz$e_{t}$ length, int prot,
-           int flags, int fd, of$f_{t}$ offset);
+void *mmap(void *addr, size_t length, int prot,
+           int flags, int fd, off_t offset);
 
 // 使用
-int fd = open("bigfile", $O_{RDWR}$);
-char *p = mmap(NULL, filesize, PRO$T_{READ}$ | PRO$T_{WRITE}$,
-                MA$P_{SHARED}$, fd, 0);
+int fd = open("bigfile", O_RDWR);
+char *p = mmap(NULL, filesize, PROT_READ | PROT_WRITE,
+                MAP_SHARED, fd, 0);
 // 现在可以用 p[i] 直接访问文件内容！
 p[0] = 'x';  // 直接写入文件</code></pre>
 

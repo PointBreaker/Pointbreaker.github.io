@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 3 课：操作系统设计 — MIT 6.828</title>
+  <title>第 3 课：操作系统设计 — MIT 6.1810</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -80,7 +80,7 @@
     <p>应用程序运行在用户模式，但系统调用需要超级模式。RISC-V 提供 <code>ecall</code> 指令：</p>
     <pre><code>// 用户代码
 open():
-    ecall SY$S_{open}$   // 触发系统调用
+    ecall SYS_open   // 触发系统调用
     // ecall 会：
     //   1. 切换到超级模式
     //   2. 跳转到内核已知的入口点
@@ -129,7 +129,7 @@ open():
     <pre><code>// 简化模型
 uint64 reg[32];
 for (;;) {
-    instruction = rea$d_{mem}$(pc);
+    instruction = read_mem(pc);
     decode(instruction);
     execute(instruction);  // e.g., add, ld, ecall
 }</code></pre>
@@ -171,18 +171,18 @@ $ make qemu          # QEMU 仿真运行</code></pre>
     <h3>系统调用实现示例：exec</h3>
     <pre><code>// user/usys.S 中的 exec
 exec:
-  li a7, SY$S_{exec}$   # 系统调用号
+  li a7, SYS_exec   # 系统调用号
   ecall             # 进入内核
   ret
 
 // kernel/syscall.c
 void syscall(void) {
     num = p->trapframe->a7;
-    syscalls[num]();  // → sy$s_{exec}$()
+    syscalls[num]();  // → sys_exec()
 }
 
 // kernel/sysfile.c
-uint64 sy$s_{exec}$(void) {
+uint64 sys_exec(void) {
     // 获取参数（pathname, argv）
     return kexec();   // → kernel/exec.c
 }

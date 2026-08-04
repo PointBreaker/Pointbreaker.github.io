@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -18,7 +18,7 @@
     <p class="lede">从 GPU 架构的演进出发，理解 CUDA 编程模型的核心抽象——线程、块、网格与内存层次，并掌握写出高效 GPU 代码的关键技术。</p>
     <div class="meta">
       <span>授课：Aydin Buluc</span>
-      <span>视频：<a href="https://youtu.be/$j_{tkXQQjZeWo}$">YouTube</a></span>
+      <span>视频：<a href="https://youtu.be/j_tkXQQjZeWo">YouTube</a></span>
       <span>预计用时：90 分钟</span>
     </div>
     <hr class="rule">
@@ -63,7 +63,7 @@
     <div class="card tip">
       <h3>A100 速览</h3>
       <ul>
-        <li>6912 FP32 CUDA cores（108 SM $\times$ 64）</li>
+        <li>6912 FP32 CUDA cores（108 SM × 64）</li>
         <li>432 Tensor Cores</li>
         <li>108 MB L2 cache</li>
         <li>40/80 GB HBM2e，带宽 ~2 TB/s</li>
@@ -92,7 +92,7 @@
     <pre><code class="language-c">int n = 1&lt;&lt;20;
 int threads = 256;
 int blocks = (n + threads - 1) / threads;
-vecAdd&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;($d_{a}$, $d_{b}$, $d_{c}$, n);</code></pre>
+vecAdd&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;(d_a, d_b, d_c, n);</code></pre>
 
     <div class="card idea">
       <h3>执行配置语法 <code>&lt;&lt;&lt;blocks, threads&gt;&gt;&gt;</code></h3>
@@ -140,7 +140,7 @@ __constant__ float c[64];  // 常量内存（只读，有 cache）</code></pre>
       <li><strong>每个线程加载多个输入</strong>：减少 halo 专用线程的开销。</li>
     </ul>
 
-    <pre><code class="language-c">__global__ void stenci$l_{1d}$(float *in, float *out, int n) {
+    <pre><code class="language-c">__global__ void stencil_1d(float *in, float *out, int n) {
   extern __shared__ float s[];
   int gid = threadIdx.x + blockIdx.x * blockDim.x;
   int lid = threadIdx.x + 1;  // 留出 halo 位置
@@ -168,7 +168,7 @@ __constant__ float c[64];  // 常量内存（只读，有 cache）</code></pre>
     <h2 id="sync">同步与通信</h2>
     <p>GPU 上的同步层次：</p>
     <ul>
-      <li><strong>Block 内</strong>：<code>__syncthreads()</code>、<code>__threadfenc$e_{block}$()</code>。</li>
+      <li><strong>Block 内</strong>：<code>__syncthreads()</code>、<code>__threadfence_block()</code>。</li>
       <li><strong>Grid 内</strong>：传统上需要启动多个 kernel；Pascal+ 支持 <code>cooperative groups</code> 的 grid 级同步。</li>
       <li><strong>Device 与 Host 之间</strong>：<code>cudaMemcpy</code> 隐式同步；<code>cudaDeviceSynchronize()</code> 显式同步。</li>
     </ul>

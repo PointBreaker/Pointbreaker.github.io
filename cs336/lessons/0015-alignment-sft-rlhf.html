@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -101,19 +101,19 @@ RLHF Model (符合人类偏好)</code></pre>
     <pre><code class="language-python"># SFT 的损失函数（与预训练相同，但只在 response 上计算）
 
 # 对于每个样本 (instruction, response):
-# 1. 拼接为: [instructio$n_{tokens}$, respons$e_{tokens}$]
+# 1. 拼接为: [instruction_tokens, response_tokens]
 # 2. 计算 loss 时，instruction 部分 mask 掉
 # 3. 只在 response token 上计算 cross-entropy loss
 
-def sf$t_{loss}$(model, instruction, response):
+def sft_loss(model, instruction, response):
     # 拼接输入
-    inpu$t_{ids}$ = tokenize(instruction + response)
+    input_ids = tokenize(instruction + response)
     # 创建 mask：只对 response 部分计算 loss
     mask = [0] * len(tokenize(instruction)) + [1] * len(tokenize(response))
     # 前向传播
-    logits = model(inpu$t_{ids}$)
+    logits = model(input_ids)
     # 计算 loss（只对 response 部分）
-    loss = cros$s_{entropy}$(logits[mask], inpu$t_{ids}$[mask])
+    loss = cross_entropy(logits[mask], input_ids[mask])
     return loss
 
 # 训练参数:
@@ -167,22 +167,22 @@ Step 3: PPO 优化
 # 输出: 标量 reward
 
 # 损失函数 (Bradley-Terry 模型):
-# L = -E[log($σ$(R(prompt, chosen) - R(prompt, rejected)))]
+# L = -E[log(σ(R(prompt, chosen) - R(prompt, rejected)))]
 
 # 即: 让 chosen 的 reward 高于 rejected
 
 class RewardModel(nn.Module):
-    def __init__(self, bas$e_{model}$):
+    def __init__(self, base_model):
         super().__init__()
-        self.transformer = bas$e_{model}$
+        self.transformer = base_model
         # 替换 classification head 为标量输出
-        self.rewar$d_{head}$ = nn.Linear(hidde$n_{dim}$, 1)
+        self.reward_head = nn.Linear(hidden_dim, 1)
 
-    def forward(self, inpu$t_{ids}$, attentio$n_{mask}$):
-        outputs = self.transformer(inpu$t_{ids}$, attentio$n_{mask}$)
+    def forward(self, input_ids, attention_mask):
+        outputs = self.transformer(input_ids, attention_mask)
         # 取最后一个 token 的隐藏状态
-        las$t_{hidden}$ = outputs.las$t_{hidden}$_state[:, -1, :]
-        reward = self.rewar$d_{head}$(las$t_{hidden}$)
+        last_hidden = outputs.last_hidden_state[:, -1, :]
+        reward = self.reward_head(last_hidden)
         return reward.squeeze(-1)</code></pre>
 
     <h3>PPO 优化</h3>
@@ -192,14 +192,14 @@ class RewardModel(nn.Module):
 # 同时用 KL 惩罚防止模型偏离太远
 
 # 对每个 prompt:
-# 1. 用当前 policy $π$ 生成 response
+# 1. 用当前 policy π 生成 response
 # 2. 用 Reward Model 计算 reward R(prompt, response)
-# 3. 计算 KL 惩罚: KL($π$ || π_SFT)
-# 4. 总奖励 = R - $β$ $\times$ KL
+# 3. 计算 KL 惩罚: KL(π || π_SFT)
+# 4. 总奖励 = R - β × KL
 # 5. 用 PPO 更新 policy
 
 # PPO 的 loss:
-# L = -E[min(ratio $\times$ advantage, clip(ratio, 1-$ε$, 1+$ε$) $\times$ advantage)]
+# L = -E[min(ratio × advantage, clip(ratio, 1-ε, 1+ε) × advantage)]
 # 其中 ratio = π_new(a|s) / π_old(a|s)</code></pre>
 
     <h3>PPO 的完整流程</h3>
@@ -210,21 +210,21 @@ for batch in prompts:
     responses = policy.generate(batch.prompt)
 
     # 2. 计算 rewards
-    rewards = rewar$d_{model}$(batch.prompt, responses)
+    rewards = reward_model(batch.prompt, responses)
 
     # 3. 计算 KL 惩罚
-    k$l_{penalty}$ = comput$e_{kl}$(policy, sf$t_{model}$, batch.prompt, responses)
+    kl_penalty = compute_kl(policy, sft_model, batch.prompt, responses)
 
     # 4. 总奖励
-    tota$l_{reward}$ = rewards - beta * k$l_{penalty}$
+    total_reward = rewards - beta * kl_penalty
 
     # 5. 计算 advantage (使用 GAE)
-    advantages = comput$e_{gae}$(tota$l_{reward}$, values)
+    advantages = compute_gae(total_reward, values)
 
     # 6. PPO 更新
-    for _ in range(pp$o_{epochs}$):
-        ne$w_{log}$_probs = policy.lo$g_{prob}$(batch.prompt, responses)
-        ratio = exp(ne$w_{log}$_probs - ol$d_{log}$_probs)
+    for _ in range(ppo_epochs):
+        new_log_probs = policy.log_prob(batch.prompt, responses)
+        ratio = exp(new_log_probs - old_log_probs)
         loss = -min(ratio * advantages,
                     clip(ratio, 1-eps, 1+eps) * advantages)
         loss.backward()
@@ -289,10 +289,10 @@ for batch in prompts:
 # - 没有 KL: 模型可能找到 reward model 的漏洞
 # - 有 KL: 模型必须在"提高 reward"和"保持接近 SFT"之间权衡
 
-# KL 惩罚的大小 ($β$):
-# - $β$ 太小: 几乎无约束，reward hacking 风险高
-# - $β$ 太大: 模型几乎不更新，RLHF 无效
-# - 最优 $β$: 需要实验确定</code></pre>
+# KL 惩罚的大小 (β):
+# - β 太小: 几乎无约束，reward hacking 风险高
+# - β 太大: 模型几乎不更新，RLHF 无效
+# - 最优 β: 需要实验确定</code></pre>
 
     <h3>其他挑战</h3>
     <table>

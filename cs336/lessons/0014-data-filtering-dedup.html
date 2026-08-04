@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -114,9 +114,9 @@ text = trafilatura.extract(html)
 # 2. 根据 score(x) 保留 R 中的样本
 
 # 三种实例化:
-# - KenLM: score(x) = $p_{T}$(x)（生成模型）
+# - KenLM: score(x) = p_T(x)（生成模型）
 # - fastText: score(x) = p(T|x)（判别分类器）
-# - DSIR: score(x) = $p_{T}$(x) / $p_{R}$(x)（重要性采样）</code></pre>
+# - DSIR: score(x) = p_T(x) / p_R(x)（重要性采样）</code></pre>
 
     <h3>KenLM：N-gram 语言模型</h3>
     <p>KenLM 是数据过滤中最常用的工具之一：</p>
@@ -139,7 +139,7 @@ text = trafilatura.extract(html)
 # 在目标数据（如 Wikipedia）上训练 KenLM
 model = kenlm.Model("wikipedia.arpa.bin")
 
-def comput$e_{perplexity}$(text):
+def compute_perplexity(text):
     """计算文本在模型下的 perplexity"""
     score = model.score(text)
     num_tokens = len(text.split())
@@ -147,12 +147,12 @@ def comput$e_{perplexity}$(text):
     return perplexity
 
 # 高质量文本 → 低 perplexity
-print(comput$e_{perplexity}$("Stanford University was founded in 1885."))
-# → perplexity $≈$ 50
+print(compute_perplexity("Stanford University was founded in 1885."))
+# → perplexity ≈ 50
 
 # 低质量文本 → 高 perplexity
-print(comput$e_{perplexity}$("asdf asdf asdf asdf asdf"))
-# → perplexity $≈$ 5000
+print(compute_perplexity("asdf asdf asdf asdf asdf"))
+# → perplexity ≈ 5000
 
 # CCNet 策略: 按 perplexity 排序，保留 top 1/3</code></pre>
 
@@ -171,8 +171,8 @@ print(comput$e_{perplexity}$("asdf asdf asdf asdf asdf"))
 # embed = mean(W[x] for x in tokens)  (平均词嵌入)
 # y = softmax(U @ embed)  (分类)
 
-# 参数: W (V $\times$ H) + U (H $\times$ K) = H(V + K)
-# 对比 bag-of-words: V $\times$ K 参数
+# 参数: W (V × H) + U (H × K) = H(V + K)
+# 对比 bag-of-words: V × K 参数
 
 # 对于质量过滤（K=2 类）:
 # 参数 = H(V + 2)，即线性分类器</code></pre>
@@ -183,13 +183,13 @@ print(comput$e_{perplexity}$("asdf asdf asdf asdf asdf"))
 
 import mmh3
 
-nu$m_{bins}$ = 10_000_000  # 10M 哈希桶
+num_bins = 10_000_000  # 10M 哈希桶
 
-def has$h_{ngrams}$(text, n=2):
+def hash_ngrams(text, n=2):
     """将文本的 n-gram 哈希到固定数量的桶"""
     tokens = text.split()
     ngrams = [tokens[i:i+n] for i in range(len(tokens)-n+1)]
-    hashed = [mmh3.hash(" ".join(ngram)) % nu$m_{bins}$ for ngram in ngrams]
+    hashed = [mmh3.hash(" ".join(ngram)) % num_bins for ngram in ngrams]
     return hashed
 
 # 这样无论有多少唯一 n-gram，都映射到 10M 个桶</code></pre>
@@ -210,9 +210,9 @@ def has$h_{ngrams}$(text, n=2):
     <h3>三种过滤方法对比</h3>
     <table>
       <tr><th>方法</th><th>评分函数</th><th>优点</th><th>缺点</th></tr>
-      <tr><td>KenLM</td><td>$p_{T}$(x)</td><td>极快，简单</td><td>只看局部，模型容量低</td></tr>
+      <tr><td>KenLM</td><td>p_T(x)</td><td>极快，简单</td><td>只看局部，模型容量低</td></tr>
       <tr><td>fastText</td><td>p(T|x)</td><td>快速，可泛化</td><td>需要标注数据</td></tr>
-      <tr><td>DSIR</td><td>$p_{T}$(x)/$p_{R}$(x)</td><td>理论优雅</td><td>实现复杂</td></tr>
+      <tr><td>DSIR</td><td>p_T(x)/p_R(x)</td><td>理论优雅</td><td>实现复杂</td></tr>
     </table>
 
     <hr class="rule">
@@ -228,7 +228,7 @@ def has$h_{ngrams}$(text, n=2):
 
 import fasttext
 
-model = fasttext.loa$d_{model}$("lid.176.bin")
+model = fasttext.load_model("lid.176.bin")
 
 # 预测
 print(model.predict("The quick brown fox."))
@@ -258,7 +258,7 @@ print(model.predict("The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac
 
     <pre><code class="language-python"># GPT-3 的质量过滤方法:
 # 1. 训练分类器区分 {Wikipedia, WebText, Books} vs Common Crawl
-# 2. 对每个文档得到质量分数 s $∈$ [0, 1]
+# 2. 对每个文档得到质量分数 s ∈ [0, 1]
 # 3. 按 Pareto 分布随机保留:
 #    keep if np.random.pareto(9) > 1 - score
 
@@ -321,7 +321,7 @@ print(model.predict("The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac
     <pre><code class="language-python"># 简单方法: 哈希 + 去重
 import mmh3
 
-def exac$t_{dedup}$(documents):
+def exact_dedup(documents):
     """精确去重"""
     seen = set()
     unique = []
@@ -364,19 +364,19 @@ from bitarray import bitarray
 import mmh3
 
 class BloomFilter:
-    def __init__(self, size, nu$m_{hashes}$):
+    def __init__(self, size, num_hashes):
         self.size = size
-        self.nu$m_{hashes}$ = nu$m_{hashes}$
+        self.num_hashes = num_hashes
         self.table = bitarray(size)
         self.table.setall(0)
 
     def add(self, item):
-        for seed in range(self.nu$m_{hashes}$):
+        for seed in range(self.num_hashes):
             h = mmh3.hash(item, seed) % self.size
             self.table[h] = 1
 
-    def migh$t_{contain}$(self, item):
-        for seed in range(self.nu$m_{hashes}$):
+    def might_contain(self, item):
+        for seed in range(self.num_hashes):
             h = mmh3.hash(item, seed) % self.size
             if not self.table[h]:
                 return False
@@ -390,7 +390,7 @@ class BloomFilter:
 
 # False positive rate:
 # f = (1 - (1 - 1/m)^(k*n))^k
-# 近似: f $≈$ (1 - e^(-kn/m))^k
+# 近似: f ≈ (1 - e^(-kn/m))^k
 
 # 最优 k（给定 m/n）:
 # k = ln(2) * m / n
@@ -401,38 +401,38 @@ class BloomFilter:
     <h3>MinHash 与 Jaccard 相似度</h3>
     <p>检测近似重复：</p>
     <pre><code class="language-python"># Jaccard 相似度:
-# J(A, B) = |A $∩$ B| / |A $∪$ B|
+# J(A, B) = |A ∩ B| / |A ∪ B|
 # 范围: [0, 1]
 
 # 例:
 # A = {"the", "cat", "in", "the", "hat"}
 # B = {"the", "cat", "on", "the", "mat"}
-# J(A, B) = 3 / 7 $≈$ 0.43
+# J(A, B) = 3 / 7 ≈ 0.43
 
 # MinHash 的核心思想:
 # - 对集合 A，计算其 minhash 签名
 # - 两个集合的 minhash 签名相同的概率 = Jaccard 相似度
 # - 这样可以用固定大小的签名近似 Jaccard 相似度
 
-def minhas$h_{signature}$(shingles, nu$m_{hashes}$=128):
+def minhash_signature(shingles, num_hashes=128):
     """计算集合的 minhash 签名"""
     signature = []
-    for i in range(nu$m_{hashes}$):
-        mi$n_{hash}$ = float('inf')
+    for i in range(num_hashes):
+        min_hash = float('inf')
         for s in shingles:
             h = mmh3.hash(s, seed=i)
-            mi$n_{hash}$ = min(mi$n_{hash}$, h)
-        signature.append(mi$n_{hash}$)
+            min_hash = min(min_hash, h)
+        signature.append(min_hash)
     return signature
 
 # 两个集合的 Jaccard 估计:
-# J $≈$ (signature1 == signature2) 的比例</code></pre>
+# J ≈ (signature1 == signature2) 的比例</code></pre>
 
     <h3>Locality-Sensitive Hashing (LSH)</h3>
     <p>MinHash 签名仍然需要两两比较。LSH 将相似签名分到同一个桶：</p>
     <pre><code class="language-python"># LSH 的核心思想:
 # - 将 minhash 签名分成 b 个 band
-# - 每个 band 有 r 行（b $\times$ r = nu$m_{hashes}$）
+# - 每个 band 有 r 行（b × r = num_hashes）
 # - 如果两个签名在某个 band 完全相同 → 进入同一个候选桶
 # - 只在候选桶内做精确比较
 
@@ -441,11 +441,11 @@ def minhas$h_{signature}$(shingles, nu$m_{hashes}$=128):
 # - 相似度为 s 的文档成为候选的概率:
 #   P = 1 - (1 - s^r)^b
 
-# 例: nu$m_{hashes}$=128, b=16, r=8
-# s=0.5: P $≈$ 0.004（不太可能被选中）
-# s=0.8: P $≈$ 0.99（几乎一定被选中）
+# 例: num_hashes=128, b=16, r=8
+# s=0.5: P ≈ 0.004（不太可能被选中）
+# s=0.8: P ≈ 0.99（几乎一定被选中）
 
-# 这样可以在 $O(n^2)$ 时间内找到所有相似度 > 阈值的文档对</code></pre>
+# 这样可以在 O(n) 时间内找到所有相似度 > 阈值的文档对</code></pre>
 
     <h3>SemDedup</h3>
     <p>语义层面的去重（更先进的方法）：</p>
@@ -528,7 +528,7 @@ def minhas$h_{signature}$(shingles, nu$m_{hashes}$=128):
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！Bloom filter 保证"不在"一定正确，但"在"可能有 false positive。" data-incorrect="Bloom filter 保证"不在"一定正确，但"在"可能有 false positive。">
+    <div class="quiz" data-quiz="2" data-correct="正确！Bloom filter 保证“不在”一定正确，但“在”可能有 false positive。" data-incorrect="Bloom filter 保证“不在”一定正确，但“在”可能有 false positive。">
       <p><strong>问题 2：</strong>Bloom filter 的 false positive 和 false negative 特性是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">没有 false positive，也没有 false negative</button>

@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -80,19 +80,19 @@
         <tr>
           <td><strong>Level 1 BLAS</strong></td>
           <td>向量-向量</td>
-          <td>$O(n^2)$</td>
+          <td>O(n)</td>
           <td>点积、向量加法</td>
         </tr>
         <tr>
           <td><strong>Level 2 BLAS</strong></td>
           <td>矩阵-向量</td>
-          <td>$O(n^2)$</td>
+          <td>O(n²)</td>
           <td>GEMV（矩阵乘向量）</td>
         </tr>
         <tr>
           <td><strong>Level 3 BLAS</strong></td>
           <td>矩阵-矩阵</td>
-          <td>$O(n^2)$</td>
+          <td>O(n³)</td>
           <td>GEMM（矩阵乘法）</td>
         </tr>
       </tbody>
@@ -140,18 +140,18 @@
     </ul>
 
     <pre><code class="language-python"># 简化的 SGD 训练循环
-for epoch in range(nu$m_{epochs}$):
-    for batch in dat$a_{loader}$:  # mini-batch
+for epoch in range(num_epochs):
+    for batch in data_loader:  # mini-batch
         # 前向传播
         predictions = model(batch.inputs)
-        loss = los$s_{fn}$(predictions, batch.targets)
+        loss = loss_fn(predictions, batch.targets)
 
         # 反向传播
         gradients = backward(loss, model.parameters())
 
         # 参数更新
         for param, grad in zip(model.parameters(), gradients):
-            param -= learnin$g_{rate}$ * grad</code></pre>
+            param -= learning_rate * grad</code></pre>
 
     <p><strong>Mini-batch SGD</strong> 是实践中的标准做法：每个更新步骤使用一小批样本（而非单个样本或全部样本）计算梯度，兼顾梯度估计质量和计算效率。</p>
 
@@ -204,10 +204,10 @@ for epoch in range(nu$m_{epochs}$):
 
     <pre><code class="language-python"># 数据并行伪代码
 # 每个 rank 执行
-for batch in loca$l_{data}$_split:
-    grad = comput$e_{gradient}$(model, batch)
-    al$l_{gradients}$ = allreduce(grad, op="sum")  # 全局聚合
-    model.update(al$l_{gradients}$ / worl$d_{size}$)</code></pre>
+for batch in local_data_split:
+    grad = compute_gradient(model, batch)
+    all_gradients = allreduce(grad, op="sum")  # 全局聚合
+    model.update(all_gradients / world_size)</code></pre>
 
     <p><strong>批量并行（Batch Parallelism）</strong>将大 batch 拆分到多个设备上。当 batch 很大时（如 GPT-3 使用 1024+ GPUs），全局 batch 可以非常大。</p>
 
@@ -227,11 +227,11 @@ for batch in loca$l_{data}$_split:
     <pre>// 参数服务器工作流程
 // Worker:
 params = server.pull(key)           // 拉取最新参数
-grad = comput$e_{gradient}$(params, data)  // 计算梯度
+grad = compute_gradient(params, data)  // 计算梯度
 server.push(key, grad)              // 推送梯度
 
 // Server:
-grads = collec$t_{from}$_workers(params)
+grads = collect_from_workers(params)
 params -= lr * average(grads)       // 更新参数</pre>
 
     <div class="card warning">
@@ -246,10 +246,10 @@ params -= lr * average(grads)       // 更新参数</pre>
     <pre>Y = XW + b
 
 其中：
-  X: [batc$h_{size}$, inpu$t_{dim}$]  输入矩阵
-  W: [inpu$t_{dim}$, outpu$t_{dim}$]  权重矩阵
-  b: [outpu$t_{dim}$]             偏置向量
-  Y: [batc$h_{size}$, outpu$t_{dim}$] 输出矩阵</pre>
+  X: [batch_size, input_dim]  输入矩阵
+  W: [input_dim, output_dim]  权重矩阵
+  b: [output_dim]             偏置向量
+  Y: [batch_size, output_dim] 输出矩阵</pre>
 
     <p>反向传播也可以写成矩阵形式：</p>
 
@@ -306,15 +306,15 @@ db = sum(dY, axis=0)   # 对偏置的梯度</pre>
     <h2 id="attention">注意力机制</h2>
     <p><strong>自注意力（Self-Attention）</strong>是 Transformer 的核心：</p>
 
-<pre>Attention(Q, K, V) = softmax(QK^T / $√$d_k) · V
+<pre>Attention(Q, K, V) = softmax(QK^T / √d_k) · V
 
 其中：
-  Q: Query 矩阵 [se$q_{len}$, $d_{k}$]
-  K: Key 矩阵 [se$q_{len}$, $d_{k}$]
-  V: Value 矩阵 [se$q_{len}$, $d_{v}$]
-  $d_{k}$: 注意力维度</pre>
+  Q: Query 矩阵 [seq_len, d_k]
+  K: Key 矩阵 [seq_len, d_k]
+  V: Value 矩阵 [seq_len, d_v]
+  d_k: 注意力维度</pre>
 
-    <p>注意力的计算复杂度为 $O(n^2)$，其中 n 是序列长度。这是长序列的主要瓶颈。</p>
+    <p>注意力的计算复杂度为 O(n²d)，其中 n 是序列长度。这是长序列的主要瓶颈。</p>
 
     <hr class="rule">
 
@@ -322,14 +322,14 @@ db = sum(dY, axis=0)   # 对偏置的梯度</pre>
     <p><strong>Ring Attention</strong> 是一种处理超长序列的并行策略。设备排成环状，每个设备持有一部分 KV 和完整的 Q：</p>
 
     <pre>// Ring Attention 工作流程
-// 设备 i 持有 $Q_{i}$, $K_{i}$, $V_{i}$
-// 步骤 1: 设备 i 计算 $Q_{i}$ 与 $K_{i}$ 的本地 attention
-// 步骤 2: 将 $K_{i}$, $V_{i}$ 传递给设备 i+1（环状）
+// 设备 i 持有 Q_i, K_i, V_i
+// 步骤 1: 设备 i 计算 Q_i 与 K_i 的本地 attention
+// 步骤 2: 将 K_i, V_i 传递给设备 i+1（环状）
 // 步骤 3: 收到 K_{i-1}, V_{i-1} 后继续计算
 // 重复直到所有 KV 被处理</pre>
 
     <div class="card idea">
-      <p><strong>Ring Attention 优势：</strong>通过通信与计算重叠，将 attention 的显存需求从 $O(n^2)$ 降低到 $O(n^2)$，其中 p 是设备数。这使得训练百万级序列长度成为可能。</p>
+      <p><strong>Ring Attention 优势：</strong>通过通信与计算重叠，将 attention 的显存需求从 O(n) 降低到 O(n/p)，其中 p 是设备数。这使得训练百万级序列长度成为可能。</p>
     </div>
 
     <hr class="rule">
@@ -410,12 +410,12 @@ db = sum(dY, axis=0)   # 对偏置的梯度</pre>
 
     <h3>线性 SVM</h3>
     <pre>// 原始优化问题
-minimize:  (1/2)||w||^2 + C * $Σ$ ξ_i
-subject to: $y_{i}$(w·$x_{i}$ + b) $≥$ 1 - ξ_i,  ξ_i $≥$ 0
+minimize:  (1/2)||w||^2 + C * Σ ξ_i
+subject to: y_i(w·x_i + b) ≥ 1 - ξ_i,  ξ_i ≥ 0
 
 // 对偶问题（更常用）
-maximize: $Σ$ α_i - (1/2) $Σ$ $Σ$ α_i α_j $y_{i}$ $y_{j}$ K($x_{i}$, $x_{j}$)
-subject to: 0 $≤$ α_i $≤$ C,  $Σ$ α_i $y_{i}$ = 0</pre>
+maximize: Σ α_i - (1/2) Σ Σ α_i α_j y_i y_j K(x_i, x_j)
+subject to: 0 ≤ α_i ≤ C,  Σ α_i y_i = 0</pre>
 
     <h3>核技巧（Kernel Trick）</h3>
     <p>当数据线性不可分时，通过核函数将数据映射到高维空间：</p>
@@ -433,15 +433,15 @@ subject to: 0 $≤$ α_i $≤$ C,  $Σ$ α_i $y_{i}$ = 0</pre>
         </tr>
         <tr>
           <td>多项式核</td>
-          <td>K(x,y) = ($γ$ x·y + r)^d</td>
+          <td>K(x,y) = (γ x·y + r)^d</td>
         </tr>
         <tr>
           <td>RBF（高斯）核</td>
-          <td>K(x,y) = exp(-$γ$||x-y||²)</td>
+          <td>K(x,y) = exp(-γ||x-y||²)</td>
         </tr>
         <tr>
           <td>Sigmoid 核</td>
-          <td>K(x,y) = tanh($γ$ x·y + r)</td>
+          <td>K(x,y) = tanh(γ x·y + r)</td>
         </tr>
       </tbody>
     </table>
@@ -494,9 +494,9 @@ until convergence</pre>
     </table>
 
     <pre>// Cascade SVM 示意
-// Level 1: 数据分为 4 块，分别训练 SV$M_{1}$, SV$M_{2}$, SV$M_{3}$, SV$M_{4}$
-// Level 2: 收集各子 SVM 的支持向量，合并后训练 SV$M_{12}$, SV$M_{34}$
-// Level 3: 合并 SV$M_{12}$ 和 SV$M_{34}$ 的支持向量，训练最终 SVM</pre>
+// Level 1: 数据分为 4 块，分别训练 SVM_1, SVM_2, SVM_3, SVM_4
+// Level 2: 收集各子 SVM 的支持向量，合并后训练 SVM_12, SVM_34
+// Level 3: 合并 SVM_12 和 SVM_34 的支持向量，训练最终 SVM</pre>
 
     <div class="card idea">
       <p><strong>CA-SVM 洞察：</strong>通信避免（Communication-Avoiding）方法通过重复计算来减少通信，在通信昂贵时特别有效。这与本章前面讨论的 PGAS one-sided 通信思想一致。</p>
@@ -536,7 +536,7 @@ until convergence</pre>
 
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确。GEMM（矩阵-矩阵乘法）是 Level 3 BLAS，具有 $O(n^2)$ 计算 / $O(n^2)$ 访存的高算术强度，是现代 ML 的核心运算。" data-incorrect="不对。回顾 BLAS 层次结构，最高级别的运算是矩阵-矩阵乘法。">
+    <div class="quiz" data-quiz="1" data-correct="正确。GEMM（矩阵-矩阵乘法）是 Level 3 BLAS，具有 O(n²) 计算 / O(n) 访存的高算术强度，是现代 ML 的核心运算。" data-incorrect="不对。回顾 BLAS 层次结构，最高级别的运算是矩阵-矩阵乘法。">
       <p><strong>问题 1：</strong>在 BLAS 层次结构中，哪个级别的操作算术强度最高，最适合作为并行优化的目标？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">Level 1 BLAS（向量-向量）</button>
@@ -580,7 +580,7 @@ until convergence</pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="5" data-correct="正确。Ring Attention 将 KV 在环状设备间传递，每个设备计算本地 Q 与所有 KV 的 attention，实现显存需求从 $O(n^2)$ 降到 $O(n^2)$。" data-incorrect="不对。Ring Attention 的核心是环状传递 KV，实现通信与计算重叠。">
+    <div class="quiz" data-quiz="5" data-correct="正确。Ring Attention 将 KV 在环状设备间传递，每个设备计算本地 Q 与所有 KV 的 attention，实现显存需求从 O(n) 降到 O(n/p)。" data-incorrect="不对。Ring Attention 的核心是环状传递 KV，实现通信与计算重叠。">
       <p><strong>问题 5：</strong>Ring Attention 如何支持超长序列训练？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">通过压缩序列长度</button>

@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -95,9 +95,9 @@
     <pre><code>// 解释器循环
 for (int i = 0; i < nins; i++) {
     switch (pc->opcode) {
-        case BP$F_{LD}$: ... break;
-        case BP$F_{JMP}$: ... break;
-        case BP$F_{RET}$: ... break;
+        case BPF_LD: ... break;
+        case BPF_JMP: ... break;
+        case BPF_RET: ... break;
         default: return 0;  // 非法操作码
     }
 }</code></pre>
@@ -123,8 +123,8 @@ for (int i = 0; i < nins; i++) {
     </div>
 
     <h3>性能</h3>
-    <pre><code>$ time ./ru$n_{interp}$ ../seccomp.bpf
-bp$f_{run}$: 0x7fff0000
+    <pre><code>$ time ./run_interp ../seccomp.bpf
+bpf_run: 0x7fff0000
 real    0m2.392s
 user    0m2.384s
 sys     0m0.002s
@@ -135,7 +135,7 @@ sys     0m0.002s
     <h2>方案 2：更快的解释器（避免关键路径上的检查）</h2>
     <div class="card idea">
       <p><strong>关键洞察：</strong>解释器慢的部分原因是执行检查。但这些检查与我们要过滤的数据包无关！</p>
-      <p><strong>解决方案：</strong>预先验证 BPF 程序：bp$f_{prepare}$()</p>
+      <p><strong>解决方案：</strong>预先验证 BPF 程序：bpf_prepare()</p>
     </div>
 
     <h3>验证规则</h3>
@@ -147,8 +147,8 @@ sys     0m0.002s
     </ul>
 
     <h3>性能</h3>
-    <pre><code>$ time ./ru$n_{fast}$_interp ../seccomp.bpf
-bp$f_{run}$: 0x7fff0000
+    <pre><code>$ time ./run_fast_interp ../seccomp.bpf
+bpf_run: 0x7fff0000
 real    0m1.650s
 
 // 每次调用约 16 纳秒（vs 24 纳秒）</code></pre>
@@ -183,8 +183,8 @@ real    0m1.650s
     </ul>
 
     <h3>性能</h3>
-    <pre><code>$ time ./ru$n_{jit}$ ../seccomp.bpf
-bp$f_{run}$: 0x7fff0000
+    <pre><code>$ time ./run_jit ../seccomp.bpf
+bpf_run: 0x7fff0000
 real    0m0.380s
 
 // 每次调用约 3.8 纳秒（vs 16 纳秒解释器）</code></pre>
@@ -221,25 +221,25 @@ real    0m0.380s
     </ul>
 
     <h3>示例：bpftrace</h3>
-    <pre><code># bpftrace -e 'tracepoint:syscalls:sy$s_{enter}$_mkdir {
+    <pre><code># bpftrace -e 'tracepoint:syscalls:sys_enter_mkdir {
     printf("PID %d calling mkdir(%s)\n", pid, str(args.pathname));
 }'</code></pre>
 
     <h3>示例：XDP 丢弃 ICMP</h3>
-    <pre><code>// dro$p_{icmp}$.c
+    <pre><code>// drop_icmp.c
 SEC("xdp")
-int dro$p_{icmp}$(struct xd$p_{md}$ *ctx) {
-    void *dat$a_{end}$ = (void *)(long)ctx->dat$a_{end}$;
+int drop_icmp(struct xdp_md *ctx) {
+    void *data_end = (void *)(long)ctx->data_end;
     void *data = (void *)(long)ctx->data;
     struct ethhdr *eth = data;
-    if (eth + 1 > dat$a_{end}$) return XD$P_{PASS}$;
-    if (eth->$h_{proto}$ == htons(ET$H_{P}$_IP)) {
+    if (eth + 1 > data_end) return XDP_PASS;
+    if (eth->h_proto == htons(ETH_P_IP)) {
         struct iphdr *ip = data + sizeof(*eth);
-        if (ip + 1 > dat$a_{end}$) return XD$P_{PASS}$;
-        if (ip->protocol == IPPROT$O_{ICMP}$)
-            return XD$P_{DROP}$;
+        if (ip + 1 > data_end) return XDP_PASS;
+        if (ip->protocol == IPPROTO_ICMP)
+            return XDP_DROP;
     }
-    return XD$P_{PASS}$;
+    return XDP_PASS;
 }</code></pre>
 
     <h2>eBPF 验证器</h2>
@@ -322,7 +322,7 @@ int dro$p_{icmp}$(struct xd$p_{md}$ *ctx) {
       <a href="23-meltdown.html">第 23 课 →</a>
     </div>
     <footer>
-      <p>MIT 6.1810: Operating System Engineering · 2025 秋季</p>
+      <p>MIT 6.1810 (6.1810): Operating System Engineering · 2025 秋季</p>
     </footer>
   </div>
   <script src="../assets/quiz.js"></script>

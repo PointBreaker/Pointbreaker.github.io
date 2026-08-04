@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -94,10 +94,10 @@ futures = [compute.remote(i) for i in range(10)]
 results = ray.get(futures)
 
 # 5. 将对象存入共享内存 Object Store
-ref = ray.put(larg$e_{object}$)
+ref = ray.put(large_object)
 
 # 6. 等待部分结果（不阻塞全部）
-done, pending = ray.wait(futures, nu$m_{returns}$=3)</code></pre>
+done, pending = ray.wait(futures, num_returns=3)</code></pre>
 
     <table>
       <thead>
@@ -113,7 +113,7 @@ done, pending = ray.wait(futures, nu$m_{returns}$=3)</code></pre>
         <tr><td><code>.remote()</code></td><td>异步调用 remote 函数/方法</td><td>返回 ObjectRef (Future)</td></tr>
         <tr><td><code>ray.get()</code></td><td>阻塞等待并获取结果</td><td>可传入列表批量获取</td></tr>
         <tr><td><code>ray.put()</code></td><td>将对象存入 Object Store</td><td>获得引用，零拷贝共享</td></tr>
-        <tr><td><code>ray.wait()</code></td><td>非阻塞等待部分结果</td><td>支持超时和 nu$m_{returns}$</td></tr>
+        <tr><td><code>ray.wait()</code></td><td>非阻塞等待部分结果</td><td>支持超时和 num_returns</td></tr>
       </tbody>
     </table>
 
@@ -341,7 +341,7 @@ print(ray.get(refs))  # [1, 1, 1, ...]</code></pre>
 
     <div class="card warning">
       <h3>Actor 容错的限制</h3>
-      <p>与 Task 不同，Actor 是有状态的，Ray <strong>不会自动重建</strong>失效的 Actor。开发者需要自行实现 checkpoint 机制（如将状态保存到 S3），或使用 <code>ma$x_{restarts}$</code> 参数让 Ray 尝试重建空壳 Actor。</p>
+      <p>与 Task 不同，Actor 是有状态的，Ray <strong>不会自动重建</strong>失效的 Actor。开发者需要自行实现 checkpoint 机制（如将状态保存到 S3），或使用 <code>max_restarts</code> 参数让 Ray 尝试重建空壳 Actor。</p>
     </div>
 
     <hr class="rule">
@@ -386,21 +386,21 @@ print(ray.get(refs))  # [1, 1, 1, ...]</code></pre>
 
     <pre><code class="language-python">@ray.remote
 class Worker:
-    def __init__(self, para$m_{server}$_handle):
-        self.ps = para$m_{server}$_handle  # 持有参数服务器的引用
+    def __init__(self, param_server_handle):
+        self.ps = param_server_handle  # 持有参数服务器的引用
 
-    def trai$n_{step}$(self, batch):
+    def train_step(self, batch):
         # 通过 handle 远程调用参数服务器
-        weights = ray.get(self.ps.ge$t_{weights}$.remote())
-        grads = comput$e_{gradients}$(weights, batch)
-        self.ps.appl$y_{gradients}$.remote(grads)
+        weights = ray.get(self.ps.get_weights.remote())
+        grads = compute_gradients(weights, batch)
+        self.ps.apply_gradients.remote(grads)
 
 # 创建参数服务器 Actor
-para$m_{server}$ = ParameterServer.remote()
+param_server = ParameterServer.remote()
 
 # 将 handle 传给所有 Worker
-workers = [Worker.remote(para$m_{server}$) for _ in range(8)]
-ray.get([w.trai$n_{step}$.remote(batch) for w, batch in zip(workers, batches)])</code></pre>
+workers = [Worker.remote(param_server) for _ in range(8)]
+ray.get([w.train_step.remote(batch) for w, batch in zip(workers, batches)])</code></pre>
 
     <h2>调度演进：从 Direct Actor Call 到 ESCHER</h2>
     <p>Ray 的调度策略经历了三代演进：</p>
@@ -434,7 +434,7 @@ ray.get([w.trai$n_{step}$.remote(batch) for w, batch in zip(workers, batches)])<
 
     <div class="card idea">
       <h3>ESCHER：临时资源调度</h3>
-      <p>ESCHER（Ephemeral Resources for Scheduling）的核心思想：为每个<strong>任务执行槽</strong>创建临时资源名（如 "slo$t_{12345}$"），调度器将任务绑定到具体槽位，完成后销毁资源。这避免了"资源碎片"问题，实现近似最优的负载均衡，同时保持调度延迟极低。</p>
+      <p>ESCHER（Ephemeral Resources for Scheduling）的核心思想：为每个<strong>任务执行槽</strong>创建临时资源名（如 "slot_12345"），调度器将任务绑定到具体槽位，完成后销毁资源。这避免了"资源碎片"问题，实现近似最优的负载均衡，同时保持调度延迟极低。</p>
     </div>
 
     <hr class="rule">

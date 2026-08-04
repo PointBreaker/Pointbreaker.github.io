@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 12 课：锁与并发 — 6.828 / 6.1810</title>
+  <title>第 12 课：锁与并发 — MIT 6.1810</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
-    <p class="eyebrow">6.828 / 6.1810 · 第 12 课 · nz</p>
+    <p class="eyebrow">6.1810 / 6.1810 · 第 12 课 · nz</p>
     <h1>锁与并发</h1>
     <p class="lede">应用希望利用多核处理器获得并行加速，因此内核必须处理并发的系统调用，以及并发的内核数据访问（缓冲区缓存、进程表等）。锁帮助正确共享数据，但也可能限制并行加速。</p>
 
@@ -118,11 +118,11 @@ release(l);</code></pre>
     <h2>xv6 中的锁实例：UART 输出</h2>
     <table>
       <thead>
-        <tr><th>并发源</th><th>t$x_{lock}$ 保护什么</th></tr>
+        <tr><th>并发源</th><th>tx_lock 保护什么</th></tr>
       </thead>
       <tbody>
-        <tr><td>进程/进程</td><td>不交错输出；原子 write(THR) + t$x_{busy}$=1</td></tr>
-        <tr><td>进程/中断</td><td>不变量 t$x_{busy}$=1 ⇒ 中断会来；原子 read(LSR) + t$x_{busy}$=0</td></tr>
+        <tr><td>进程/进程</td><td>不交错输出；原子 write(THR) + tx_busy=1</td></tr>
+        <tr><td>进程/中断</td><td>不变量 tx_busy=1 ⇒ 中断会来；原子 read(LSR) + tx_busy=0</td></tr>
       </tbody>
     </table>
 
@@ -155,15 +155,15 @@ amoswap.w.aq a5, a5, (s1)
 
     <h3>xv6 spinlock 实现</h3>
     <pre><code>acquire(l) {
-  while (__syn$c_{lock}$_tes$t_{and}$_set(&lk->locked, 1) != 0)
+  while (__sync_lock_test_and_set(&lk->locked, 1) != 0)
     ;
 }</code></pre>
     <ul>
-      <li>如果 <code>lk->locked</code> 已是 1，<code>syn$c_{lock}$_tes$t_{and}$_set</code> 再设为 1，返回 1，循环继续自旋</li>
-      <li>如果是 0，最多一个 tes$t_{and}$_set 会看到 0；它设为 1 并返回 0；其他返回 1</li>
+      <li>如果 <code>lk->locked</code> 已是 1，<code>sync_lock_test_and_set</code> 再设为 1，返回 1，循环继续自旋</li>
+      <li>如果是 0，最多一个 test_and_set 会看到 0；它设为 1 并返回 0；其他返回 1</li>
     </ul>
 
-    <h3>pus$h_{off}$() 的作用</h3>
+    <h3>push_off() 的作用</h3>
     <p>为什么在 acquire 中禁用中断？如果设备中断，中断处理程序需要同一锁（如 UART 代码），会死锁。</p>
 
     <h3>内存读写排序</h3>
@@ -175,7 +175,7 @@ locked = 0   (release)
 locked = 1
 locked = 0      // 编译器把增量移出临界区！
 x = x + 1</code></pre>
-    <p><code>__syn$c_{synchronize}$()</code> 防止重排：编译器不会跨越它移动内存引用，并可能发出"内存屏障"指令告诉 CPU。使用锁时，你无需理解内存排序规则。</p>
+    <p><code>__sync_synchronize()</code> 防止重排：编译器不会跨越它移动内存引用，并可能发出"内存屏障"指令告诉 CPU。使用锁时，你无需理解内存排序规则。</p>
 
     <div class="card idea">
       <h3>为什么用自旋锁？</h3>
@@ -237,7 +237,7 @@ x = x + 1</code></pre>
     </div>
 
     <div class="quiz" data-quiz="4" data-correct="a" data-incorrect="b,c,d">
-      <p><strong>Q4：</strong>__syn$c_{synchronize}$() 的作用是什么？</p>
+      <p><strong>Q4：</strong>__sync_synchronize() 的作用是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">A. 防止编译器和 CPU 重排内存引用跨越该点</button>
         <button data-choice="b" aria-pressed="false">B. 确保所有线程同步执行</button>
@@ -276,7 +276,7 @@ x = x + 1</code></pre>
       </article>
       <article>
         <h3>内存排序</h3>
-        <p>编译器和 CPU 都可能重排内存引用，__syn$c_{synchronize}$ 和内存屏障确保正确顺序。</p>
+        <p>编译器和 CPU 都可能重排内存引用，__sync_synchronize 和内存屏障确保正确顺序。</p>
       </article>
     </div>
 
@@ -294,7 +294,7 @@ x = x + 1</code></pre>
       <a href="13-threads.html">第 13 课 →</a>
     </div>
     <footer>
-      <p>6.828 / 6.1810: Operating System Engineering · MIT</p>
+      <p>6.1810 / 6.1810: Operating System Engineering · MIT</p>
     </footer>
   </div>
   <script src="../assets/quiz.js"></script>

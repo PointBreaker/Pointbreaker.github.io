@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -55,7 +55,7 @@ for (k = 0; k < n; k++)
 // L = tril(A,-1) + I, U = triu(A)</code></pre>
 
     <h3>第 3 步：存储乘子</h3>
-    <pre><code class="language-c">// 乘子 $L_{ik}$ = A[i][k] 存储在 A[i][k] 位置
+    <pre><code class="language-c">// 乘子 L_ik = A[i][k] 存储在 A[i][k] 位置
 // 这样 L 和 U 共用存储空间</code></pre>
 
     <h3>第 4 步：拆分循环</h3>
@@ -81,7 +81,7 @@ for (k = 0; k < n; k++) {
 
     <div class="card warning">
       <h3>仍然是 BLAS2！</h3>
-      <p>第 5 步的 GER 是 rank-1 更新，属于 BLAS2。这意味着数据重用仅 $O(n^2)$，无法充分利用 cache。</p>
+      <p>第 5 步的 GER 是 rank-1 更新，属于 BLAS2。这意味着数据重用仅 O(n)，无法充分利用 cache。</p>
     </div>
 
     <hr class="rule">
@@ -92,7 +92,7 @@ for (k = 0; k < n; k++) {
     <pre><code class="language-c">// GEPP
 for (k = 0; k < n; k++) {
     // 找主元
-    pivot = argmax_{i$≥$k} |A[i][k]|
+    pivot = argmax_{i≥k} |A[i][k]|
     swap rows k and pivot;
     if (A[k][k] == 0) continue; // singular
     // 消元
@@ -103,7 +103,7 @@ for (k = 0; k < n; k++) {
     }
 }</code></pre>
 
-    <p>GEPP 产生 PA = LU 分解，其中 P 是置换矩阵。数值稳定性：增长因子通常 $O(n^2)$，最坏情况 $O(n^2)$)（极罕见）。</p>
+    <p>GEPP 产生 PA = LU 分解，其中 P 是置换矩阵。数值稳定性：增长因子通常 O(1)，最坏情况 O(2^(n-1))（极罕见）。</p>
 
     <hr class="rule">
 
@@ -114,13 +114,13 @@ for (k = 0; k < n; k++) {
 for (k = 0; k < n; k += b) {
     // Panel factorization (BLAS2, 必须立即做，确保稳定性)
     for (kk = k; kk < min(k+b, n); kk++) {
-        pivot = argmax_{i$≥$kk} |A[i][kk]|
+        pivot = argmax_{i≥kk} |A[i][kk]|
         swap rows;
         for (i = kk+1; i < n; i++) A[i][kk] /= A[kk][kk];
     }
-    // 累积乘子为三角矩阵 T (b$\times$b)
+    // 累积乘子为三角矩阵 T (b×b)
     // Trailing matrix update (BLAS3!)
-    A[k+b:n, k+b:n] -= $L_{21}$ * $U_{12}$;  // GEMM
+    A[k+b:n, k+b:n] -= L_21 * U_12;  // GEMM
 }</code></pre>
 
     <div class="card idea">
@@ -138,15 +138,15 @@ for (k = 0; k < n; k += b) {
         <tr><th>阶段</th><th>计算</th><th>BLAS 级别</th><th>占比</th></tr>
       </thead>
       <tbody>
-        <tr><td>Panel factorization</td><td>$O(n^2)$</td><td>BLAS2</td><td>$O(n^2)$</td></tr>
-        <tr><td>Trailing update</td><td>$O(n^2)$</td><td>BLAS3</td><td>$≈$ 1 - $O(n^2)$</td></tr>
-        <tr><td>Total</td><td>2/3 n³ + $O(n^2)$</td><td>-</td><td>-</td></tr>
+        <tr><td>Panel factorization</td><td>O(n²·b)</td><td>BLAS2</td><td>O(b/n)</td></tr>
+        <tr><td>Trailing update</td><td>O(n³)</td><td>BLAS3</td><td>≈ 1 - O(b/n)</td></tr>
+        <tr><td>Total</td><td>2/3 n³ + O(n²b)</td><td>-</td><td>-</td></tr>
       </tbody>
     </table>
 
     <div class="card tip">
       <h3>分块大小 b 的选择</h3>
-      <p>b 应足够大以使 GEMM 主导（通常 b $≥$ 32），但 panel factorization 的 BLAS2 部分不能忽略。实际中 b = 64–256 是常见选择。</p>
+      <p>b 应足够大以使 GEMM 主导（通常 b ≥ 32），但 panel factorization 的 BLAS2 部分不能忽略。实际中 b = 64–256 是常见选择。</p>
     </div>
 
     <hr class="rule">
@@ -154,12 +154,12 @@ for (k = 0; k < n; k += b) {
     <h2 id="comm-lb-ge">高斯消元的通信下界</h2>
     <p>LU 分解（无 pivoting 或全 pivoting）的通信下界与矩阵乘法相同：</p>
 
-    <pre><code>#words = $Ω$(n³ / $√$M)
-#messages = $Ω$(n³ / M^(3/2))</code></pre>
+    <pre><code>#words = Ω(n³ / √M)
+#messages = Ω(n³ / M^(3/2))</code></pre>
 
     <div class="card warning">
       <h3>全 pivoting 的下界更高</h3>
-      <p>Complete pivoting 需要 #messages = $Ω$(n³ / M)，比 partial pivoting 高一个 $√$M 因子。这解释了为什么实际中几乎总使用 partial pivoting。</p>
+      <p>Complete pivoting 需要 #messages = Ω(n³ / M)，比 partial pivoting 高一个 √M 因子。这解释了为什么实际中几乎总使用 partial pivoting。</p>
     </div>
 
     <hr class="rule">
@@ -185,8 +185,8 @@ for (k = 0; k < n; k += b) {
 
     <pre><code class="language-c">// Recursive LU: factor A into L and U
 // A is n x n, split into 2x2 block
-void recursiv$e_{lu}$(double *A, int n) {
-    if (n <= BAS$E_{CASE}$) {
+void recursive_lu(double *A, int n) {
+    if (n <= BASE_CASE) {
         dgetrf_(A, n);  // 调用 LAPACK 基础情况
         return;
     }
@@ -194,11 +194,11 @@ void recursiv$e_{lu}$(double *A, int n) {
     // [A11 A12]   [L11  0 ] [U11 U12]
     // [A21 A22] = [L21 L22] [ 0  U22]
 
-    recursiv$e_{lu}$(A11, n1);           // Factor A11 = L11*U11
+    recursive_lu(A11, n1);           // Factor A11 = L11*U11
     trsm("R", A11, A12);             // Solve L11*U12 = A12
     trsm("L", A11, A21);             // Solve L21*U11 = A21
     gemm(A21, A12, A22, -1, 1);      // A22 -= L21*U12
-    recursiv$e_{lu}$(A22, n2);           // Recurse on Schur complement
+    recursive_lu(A22, n2);           // Recurse on Schur complement
 }</code></pre>
 
     <div class="card idea">
@@ -252,17 +252,17 @@ void recursiv$e_{lu}$(double *A, int n) {
 
     <pre><code>// ScaLAPACK PDGETRF 的通信模式
 for (k = 0; k < n; k += NB) {
-    // Panel factorization: $O(n^2)$ messages
+    // Panel factorization: O(log P) messages
     // Broadcast pivot/column to all processors in column
     // Trailing update: GEMM on local blocks
-    // 但每次迭代都需要 $O(n^2)$ 次独立通信
+    // 但每次迭代都需要 O(n/NB) 次独立通信
 }</code></pre>
 
     <div class="card warning">
       <h3>ScaLAPACK 的瓶颈</h3>
       <p>ScaLAPACK 每次 panel 更新都需要独立的通信，导致总消息数：</p>
-      <pre><code>#messages = $O(n^2)$ 或 $O(n^2)$</code></pre>
-      <p>而通信下界要求 #messages = $Ω$(n² / P^(1/2))。当 n >> P^(1/2) 时，ScaLAPACK 的消息数远超下界。</p>
+      <pre><code>#messages = O(n · log P) 或 O(n²/√P · log P)</code></pre>
+      <p>而通信下界要求 #messages = Ω(n² / P^(1/2))。当 n >> P^(1/2) 时，ScaLAPACK 的消息数远超下界。</p>
     </div>
 
     <hr class="rule">
@@ -286,7 +286,7 @@ for (round = 0; round < log P; round++) {
     <div class="card idea">
       <h3>CALU 的优势</h3>
       <ul>
-        <li>消息数从 $O(n^2)$ 降到 $O(n^2)$)) —— 达到下界</li>
+        <li>消息数从 O(n log P) 降到 O(n / (P^(1/2))) —— 达到下界</li>
         <li>使用 tournament pivoting 保证数值稳定性（与 GEPP 等价）</li>
         <li>适合 tall-skinny 矩阵（m >> n）</li>
       </ul>
@@ -299,21 +299,21 @@ for (round = 0; round < log P; round++) {
 
     <pre><code class="language-c">// TSLU for m x n matrix (m >> n)
 // 1. 将矩阵分为 P 个大小为 (m/P) x n 的块
-// 2. 每处理器本地做 QR（或 LU）得到局部 $R_{i}$
-// 3. 将所有 $R_{i}$ 堆叠，做 tournament pivoting
+// 2. 每处理器本地做 QR（或 LU）得到局部 R_i
+// 3. 将所有 R_i 堆叠，做 tournament pivoting
 // 4. 一次通信选出全局 pivot，更新 trailing
 
-// 通信量：$O(n^2)$ words, $O(n^2)$ messages
-// 远低于标准 LU 的 $O(n^2)$</code></pre>
+// 通信量：O(n² log P) words, O(log² P) messages
+// 远低于标准 LU 的 O(mn²/√M)</code></pre>
 
     <table>
       <thead>
         <tr><th>算法</th><th>#words</th><th>#messages</th><th>适用场景</th></tr>
       </thead>
       <tbody>
-        <tr><td>Standard LU</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>一般矩阵</td></tr>
-        <tr><td>TSLU</td><td>$O(n^2)$</td><td>$O(n^2)$</td><td>m >> n</td></tr>
-        <tr><td>CALU</td><td>$O(n^2)$</td><td>$O(n^2)$)</td><td>一般矩阵，大规模</td></tr>
+        <tr><td>Standard LU</td><td>O(mn)</td><td>O(m)</td><td>一般矩阵</td></tr>
+        <tr><td>TSLU</td><td>O(n² log P)</td><td>O(log² P)</td><td>m >> n</td></tr>
+        <tr><td>CALU</td><td>O(mn²/√M)</td><td>O(n/P^(1/2))</td><td>一般矩阵，大规模</td></tr>
       </tbody>
     </table>
 
@@ -323,20 +323,20 @@ for (round = 0; round < log P; round++) {
     <p>TSQR 是 TSLU 的 QR 版本，通过二叉树 reduction 实现高效并行：</p>
 
     <pre><code class="language-c">// TSQR for m x n matrix (m >> n)
-// 1. 每处理器本地 QR: $A_{i}$ = $Q_{i}$ * $R_{i}$
-// 2. 将 $R_{i}$ 配对，做 QR of stacked [$R_{i}$; $R_{j}$]
+// 1. 每处理器本地 QR: A_i = Q_i * R_i
+// 2. 将 R_i 配对，做 QR of stacked [R_i; R_j]
 // 3. 递归直到只剩一个 R
 
 // 树形 reduction（假设 P=4）：
-// Level 0: 4 local QR → 4 $R_{i}$ (n$\times$n)
+// Level 0: 4 local QR → 4 R_i (n×n)
 // Level 1: 2 QR of [R0;R1], [R2;R3] → 2 R
 // Level 2: 1 QR of [R01; R23] → final R</code></pre>
 
     <div class="card idea">
       <h3>TSQR 的成本</h3>
       <ul>
-        <li>Local work：$O(n^2)$ per processor</li>
-        <li>Communication：$O(n^2)$ words, $O(n^2)$ messages</li>
+        <li>Local work：O(mn²/P) per processor</li>
+        <li>Communication：O(n² log P) words, O(log P) messages</li>
         <li>达到 QR 的通信下界</li>
       </ul>
     </div>
@@ -351,10 +351,10 @@ for (round = 0; round < log P; round++) {
         <tr><th>算法</th><th>平台</th><th>规模</th><th>加速比</th></tr>
       </thead>
       <tbody>
-        <tr><td>CALU vs ScaLAPACK</td><td>Cray XT4, 2048 cores</td><td>4000$0 \times 4$0000</td><td>2–4$\times$</td></tr>
-        <tr><td>TSLU vs ScaLAPACK</td><td>InfiniBand cluster</td><td>10⁶$\times$100</td><td>3–8$\times$</td></tr>
-        <tr><td>TSQR vs Householder</td><td>Cray T3E</td><td>10⁶$\times$50</td><td>4–6$\times$</td></tr>
-        <tr><td>CALU (GPU)</td><td>NVIDIA Fermi</td><td>1638$4 \times 1$6384</td><td>1.5–3$\times$</td></tr>
+        <tr><td>CALU vs ScaLAPACK</td><td>Cray XT4, 2048 cores</td><td>40000×40000</td><td>2–4×</td></tr>
+        <tr><td>TSLU vs ScaLAPACK</td><td>InfiniBand cluster</td><td>10⁶×100</td><td>3–8×</td></tr>
+        <tr><td>TSQR vs Householder</td><td>Cray T3E</td><td>10⁶×50</td><td>4–6×</td></tr>
+        <tr><td>CALU (GPU)</td><td>NVIDIA Fermi</td><td>16384×16384</td><td>1.5–3×</td></tr>
       </tbody>
     </table>
 
@@ -371,11 +371,11 @@ for (round = 0; round < log P; round++) {
         <tr><th>问题</th><th>最优算法</th><th>#words</th><th>#messages</th></tr>
       </thead>
       <tbody>
-        <tr><td>矩阵乘法 C=A*B</td><td>2.5D / SUMMA</td><td>$Ω$(F/$√$M)</td><td>$Ω$(F/M^(3/2))</td></tr>
-        <tr><td>LU 分解</td><td>CALU / TSLU</td><td>$Ω$(n³/$√$M)</td><td>$Ω$(n²/P^(1/2))</td></tr>
-        <tr><td>QR 分解 (tall-skinny)</td><td>TSQR</td><td>$Ω$(n² log P)</td><td>$Ω$(log P)</td></tr>
-        <tr><td>Cholesky</td><td>分块递归</td><td>$Ω$(n³/$√$M)</td><td>$Ω$(n³/M^(3/2))</td></tr>
-        <tr><td>特征值</td><td>Hessenberg + QR</td><td>$Ω$(n³/$√$M)</td><td>-</td></tr>
+        <tr><td>矩阵乘法 C=A*B</td><td>2.5D / SUMMA</td><td>Ω(F/√M)</td><td>Ω(F/M^(3/2))</td></tr>
+        <tr><td>LU 分解</td><td>CALU / TSLU</td><td>Ω(n³/√M)</td><td>Ω(n²/P^(1/2))</td></tr>
+        <tr><td>QR 分解 (tall-skinny)</td><td>TSQR</td><td>Ω(n² log P)</td><td>Ω(log P)</td></tr>
+        <tr><td>Cholesky</td><td>分块递归</td><td>Ω(n³/√M)</td><td>Ω(n³/M^(3/2))</td></tr>
+        <tr><td>特征值</td><td>Hessenberg + QR</td><td>Ω(n³/√M)</td><td>-</td></tr>
       </tbody>
     </table>
 
@@ -395,7 +395,7 @@ for (round = 0; round < log P; round++) {
     </div>
 
     <pre><code class="language-c">// Volkov-style GPU GEMM kernel (simplified)
-__global__ void volko$v_{gemm}$(float *A, float *B, float *C, int N) {
+__global__ void volkov_gemm(float *A, float *B, float *C, int N) {
     // 每个 block 处理 TILE x TILE 的 C 块
     // 每个 thread 使用寄存器累加多个元素
     float reg[REGS]; // 大量寄存器
@@ -409,7 +409,7 @@ __global__ void volko$v_{gemm}$(float *A, float *B, float *C, int N) {
         // 每个线程计算多个 C 元素（寄存器密集）
         #pragma unroll
         for (int i = 0; i < REGS; i++) {
-            reg[i] += As[ty+i][$k_{local}$] * As[tx][$k_{local}$];
+            reg[i] += As[ty+i][k_local] * As[tx][k_local];
         }
         __syncthreads();
     }
@@ -418,7 +418,7 @@ __global__ void volko$v_{gemm}$(float *A, float *B, float *C, int N) {
 
     <div class="card idea">
       <h3>Volkov 的结果</h3>
-      <p>在 NVIDIA GTX280 上，Volkov 的 GEMM 达到 <strong>93% 的峰值 flop/s</strong>，远超当时的 CUBLAS。对于 LU，结合 CPU-GPU 异构调度，相比纯 CPU 实现获得 <strong>4.4$\times$ 加速</strong>。</p>
+      <p>在 NVIDIA GTX280 上，Volkov 的 GEMM 达到 <strong>93% 的峰值 flop/s</strong>，远超当时的 CUBLAS。对于 LU，结合 CPU-GPU 异构调度，相比纯 CPU 实现获得 <strong>4.4× 加速</strong>。</p>
     </div>
 
     <hr class="rule">
@@ -443,7 +443,7 @@ POTRF(1,1)
         <li>静态分析依赖 DAG</li>
         <li>动态调度就绪任务到核心</li>
         <li>Work-stealing 负载均衡</li>
-        <li>相比 ScaLAPACK 在多核上 2–10$\times$ 加速</li>
+        <li>相比 ScaLAPACK 在多核上 2–10× 加速</li>
       </ul>
     </div>
 
@@ -465,8 +465,8 @@ POTRF(1,1)
     <div class="loop">
       <article><h3>5 步优化</h3><p>高斯消元通过 5 步优化（提取除法、跳过零、存储乘子、拆分循环、BLAS 表述）演变为 BLAS3 LU 分解。</p></article>
       <article><h3>分块是关键</h3><p>Delayed updates 将 BLAS2 的 rank-1 更新累积为 BLAS3 的 rank-b 更新，大幅减少通信。</p></article>
-      <article><h3>ScaLAPACK 次优</h3><p>标准分布式 GEPP 的消息数 $O(n^2)$ 远超下界 $Ω$(n/P^(1/2))。</p></article>
-      <article><h3>CALU/TSLU/TSQR</h3><p>通信避免算法通过批量化选主元和树形 reduction 达到通信下界，实现 2–8$\times$ 加速。</p></article>
+      <article><h3>ScaLAPACK 次优</h3><p>标准分布式 GEPP 的消息数 O(n log P) 远超下界 Ω(n/P^(1/2))。</p></article>
+      <article><h3>CALU/TSLU/TSQR</h3><p>通信避免算法通过批量化选主元和树形 reduction 达到通信下界，实现 2–8× 加速。</p></article>
       <article><h3>GPU 与 DAG</h3><p>Volkov 的 register-heavy coding 和 look-ahead overlap 是 GPU LA 的典范；DAG 调度是多核时代的主流。</p></article>
     </div>
 
@@ -490,7 +490,7 @@ POTRF(1,1)
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">A. 使用了过多的 words 通信</button>
         <button data-choice="b" aria-pressed="false">B. 没有使用 BLAS3</button>
-        <button data-choice="c" aria-pressed="false">C. 消息数 $O(n^2)$ 远超下界 $Ω$(n/P^(1/2))</button>
+        <button data-choice="c" aria-pressed="false">C. 消息数 O(n log P) 远超下界 Ω(n/P^(1/2))</button>
         <button data-choice="d" aria-pressed="false">D. 不支持 partial pivoting</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>

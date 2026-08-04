@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 6 课：系统调用入口/出口 — MIT 6.828</title>
+  <title>第 6 课：系统调用入口/出口 — MIT 6.1810</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -73,7 +73,7 @@ usertrap() (trap.c)     usertrapret() (trap.c)
   ↓                       ↑
 syscall() (syscall.c)   --|
   ↓
-sy$s_{write}$() (sysfile.c) --|</code></pre>
+sys_write() (sysfile.c) --|</code></pre>
 
     <h2>GDB 单步跟踪</h2>
 
@@ -172,21 +172,21 @@ uservec:
     <pre><code>// kernel/trap.c
 void usertrap(void) {
     // 检查 trap 原因
-    if (($r_{sstatus}$() & SSTATU$S_{SPP}$) != 0)
+    if ((r_sstatus() & SSTATUS_SPP) != 0)
         panic("usertrap: not from user mode");
 
     // 中断向量 → kernelvec
-    $w_{stvec}$((uint64)kernelvec);
+    w_stvec((uint64)kernelvec);
 
     struct proc *p = myproc();
-    p->trapframe->epc = $r_{sepc}$();  // 保存用户 PC
+    p->trapframe->epc = r_sepc();  // 保存用户 PC
 
-    if ($r_{scause}$() == 8) {
+    if (r_scause() == 8) {
         // 系统调用（Environment call from U-mode）
         if (killed(p))
             exit(-1);
         p->trapframe->epc += 4;  // 跳过 ecall 指令
-        int$r_{on}$();
+        intr_on();
         syscall();  // → syscall.c
     }
     // ...</code></pre>
@@ -217,21 +217,21 @@ void syscall(void) {
 void usertrapret(void) {
     struct proc *p = myproc();
 
-    int$r_{off}$();  // 关闭中断
+    intr_off();  // 关闭中断
 
     // 为下一次 trap 做准备
-    $w_{stvec}$((uint64)kernelvec);  // ← 注意：这里应该是 uservec！
-    p->trapframe->kerne$l_{satp}$ = $r_{satp}$();
-    p->trapframe->kerne$l_{sp}$ = p->kstack + PGSIZE;
-    p->trapframe->kerne$l_{trap}$ = (uint64)usertrap;
-    p->trapframe->kerne$l_{hartid}$ = $r_{tp}$();
+    w_stvec((uint64)kernelvec);  // ← 注意：这里应该是 uservec！
+    p->trapframe->kernel_satp = r_satp();
+    p->trapframe->kernel_sp = p->kstack + PGSIZE;
+    p->trapframe->kernel_trap = (uint64)usertrap;
+    p->trapframe->kernel_hartid = r_tp();
 
     // 设置 sret 需要的寄存器
-    $w_{sepc}$(p->trapframe->epc);  # 用户 PC
-    $w_{sstatus}$($r_{sstatus}$() & ~SSTATU$S_{SPP}$);  # SPP = 0 (user mode)
+    w_sepc(p->trapframe->epc);  # 用户 PC
+    w_sstatus(r_sstatus() & ~SSTATUS_SPP);  # SPP = 0 (user mode)
 
     // 切换到用户页表
-    uint64 satp = MAK$E_{SATP}$(p->pagetable);
+    uint64 satp = MAKE_SATP(p->pagetable);
 
     // 跳转到 userret（在 trampoline.S 中）
     uint64 fn = TRAMPFOLINE + (userret - trampoline);
@@ -341,7 +341,7 @@ userret:
     <ul>
       <li><a href="https://pdos.csail.mit.edu/6.1828/2024/xv6/book-riscv-rev3.pdf" target="_blank" rel="noopener">xv6 教材 — Chapter 4: Traps and system calls</a></li>
       <li>RISC-V Privileged Specification — ecall/sret 硬件规范</li>
-      <li><a href="https://pdos.csail.mit.edu/6.828/2025/readings/riscv-calling.pdf" target="_blank" rel="noopener">RISC-V Calling Convention</a></li>
+      <li><a href="https://pdos.csail.mit.edu/6.1810/2025/readings/riscv-calling.pdf" target="_blank" rel="noopener">RISC-V Calling Convention</a></li>
     </ul>
 
     <hr class="rule">

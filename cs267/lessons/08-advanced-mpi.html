@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
-  <script defer src="../assets/katex-auto-render.min.js"
-    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\]',display:true}]});"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
 </head>
 <body>
   <div class="page">
@@ -64,26 +64,26 @@
       <tbody>
         <tr><td><strong>Reduce</strong></td><td>归约（sum、max 等）到一个进程</td></tr>
         <tr><td><strong>AllReduce</strong></td><td>归约到所有进程</td></tr>
-        <tr><td><strong>Reduc$e_{scatter}$</strong></td><td>归约后分散</td></tr>
+        <tr><td><strong>Reduce_scatter</strong></td><td>归约后分散</td></tr>
         <tr><td><strong>Scan</strong></td><td>前缀和</td></tr>
       </tbody>
     </table>
 
     <h3>MPI 集合例程</h3>
     <p>MPI 提供大量集合例程：</p>
-    <pre><code>MP$I_{Allgather}$, MP$I_{Allgatherv}$, MP$I_{Allreduce}$, MP$I_{Alltoall}$, MP$I_{Alltoallv}$,
-MP$I_{Bcast}$, MP$I_{Gather}$, MP$I_{Gatherv}$, MP$I_{Reduce}$, MP$I_{Reduce}$_scatter,
-MP$I_{Scan}$, MP$I_{Scatter}$, MP$I_{Scatterv}$</code></pre>
+    <pre><code>MPI_Allgather, MPI_Allgatherv, MPI_Allreduce, MPI_Alltoall, MPI_Alltoallv,
+MPI_Bcast, MPI_Gather, MPI_Gatherv, MPI_Reduce, MPI_Reduce_scatter,
+MPI_Scan, MPI_Scatter, MPI_Scatterv</code></pre>
     <ul>
       <li>所有版本将结果交付给所有参与进程</li>
       <li>v 版本允许变长块</li>
-      <li>AllReduce、Reduce、Reduc$e_{scatter}$、Scan 支持用户定义的 combiner 函数</li>
+      <li>AllReduce、Reduce、Reduce_scatter、Scan 支持用户定义的 combiner 函数</li>
     </ul>
 
     <h2>SUMMA 矩阵乘法</h2>
     <h3>算法描述</h3>
     <p>SUMMA (Scalable Universal Matrix Multiply) 是分布式内存矩阵乘法的经典算法：</p>
-    <pre><code>// 假设 pr $\times$ pc 处理器网格
+    <pre><code>// 假设 pr × pc 处理器网格
 for k = 0 to n-1 (或 n/b-1)
   for all I = 1 to pr in parallel
     A(I,k) 的拥有者广播到整行
@@ -92,32 +92,32 @@ for k = 0 to n-1 (或 n/b-1)
   C(myproc, myproc) += Acol * Brow</code></pre>
 
     <h3>MPI 实现</h3>
-    <pre><code>void SUMMA(double *mA, double *mB, double *mC, int $p_{c}$) {
-  int ro$w_{color}$ = rank / $p_{c}$;
-  MP$I_{Comm}$ ro$w_{comm}$;
-  MP$I_{Comm}$_split(MP$I_{COMM}$_WORLD, ro$w_{color}$, rank, &amp;ro$w_{comm}$);
+    <pre><code>void SUMMA(double *mA, double *mB, double *mC, int p_c) {
+  int row_color = rank / p_c;
+  MPI_Comm row_comm;
+  MPI_Comm_split(MPI_COMM_WORLD, row_color, rank, &amp;row_comm);
 
-  int co$l_{color}$ = rank % $p_{c}$;
-  MP$I_{Comm}$ co$l_{comm}$;
-  MP$I_{Comm}$_split(MP$I_{COMM}$_WORLD, co$l_{color}$, rank, &amp;co$l_{comm}$);
+  int col_color = rank % p_c;
+  MPI_Comm col_comm;
+  MPI_Comm_split(MPI_COMM_WORLD, col_color, rank, &amp;col_comm);
 
-  for (int k = 0; k &lt; $p_{c}$; ++k) {
-    if (co$l_{color}$ == k) memcpy(Atemp, mA, size);
-    if (ro$w_{color}$ == k) memcpy(Btemp, mB, size);
-    MP$I_{Bcast}$(Atemp, size, MP$I_{DOUBLE}$, k, ro$w_{comm}$);
-    MP$I_{Bcast}$(Btemp, size, MP$I_{DOUBLE}$, k, co$l_{comm}$);
+  for (int k = 0; k &lt; p_c; ++k) {
+    if (col_color == k) memcpy(Atemp, mA, size);
+    if (row_color == k) memcpy(Btemp, mB, size);
+    MPI_Bcast(Atemp, size, MPI_DOUBLE, k, row_comm);
+    MPI_Bcast(Btemp, size, MPI_DOUBLE, k, col_comm);
     SimpleDGEMM(Atemp, Btemp, mC, N/p, N/p, N/p);
   }
 }</code></pre>
 
     <h3>使用非阻塞通信重叠</h3>
-    <pre><code>for (int k = 0; k &lt; $p_{c}$-1; ++k) {
+    <pre><code>for (int k = 0; k &lt; p_c-1; ++k) {
   // 启动下一次迭代的广播
-  MP$I_{Ibcast}$(Atemp2, ..., &amp;reqs2[0]);
-  MP$I_{Ibcast}$(Btemp2, ..., &amp;reqs2[1]);
+  MPI_Ibcast(Atemp2, ..., &amp;reqs2[0]);
+  MPI_Ibcast(Btemp2, ..., &amp;reqs2[1]);
 
   // 等待当前迭代的广播完成
-  MP$I_{Waitall}$(reqs1, MP$I_{STATUS}$_IGNORE);
+  MPI_Waitall(reqs1, MPI_STATUS_IGNORE);
   // 计算
   SimpleDGEMM(Atemp1, Btemp1, mC, ...);
 
@@ -135,7 +135,7 @@ for k = 0 to n-1 (或 n/b-1)
       <pre><code>时间 t: 将 t-1 时刻收到的数据发给右边，从左边接收新数据
 时间 0: 发送自己的原始数据
 
-Tring = $α$(P-1) + βn(P-1)/P</code></pre>
+Tring = α(P-1) + βn(P-1)/P</code></pre>
       <ul>
         <li>最优带宽，高延迟</li>
         <li>流水线化后效果不错</li>
@@ -147,7 +147,7 @@ Tring = $α$(P-1) + βn(P-1)/P</code></pre>
     <pre><code>时间 t: 进程 i 与进程 i+2^t 交换所有当前数据
 每步交换数据量: n/P, 2n/P, 4n/P, ...
 
-Trec-dbl = $α$ log₂(P) + βn(P-1)/P</code></pre>
+Trec-dbl = α log₂(P) + βn(P-1)/P</code></pre>
     <ul>
       <li>低延迟，高带宽</li>
       <li>非 2 的幂时较复杂</li>
@@ -157,7 +157,7 @@ Trec-dbl = $α$ log₂(P) + βn(P-1)/P</code></pre>
     <pre><code>时间 t: 进程 i 从 i+2^t 接收，向 i-2^t 发送
 ⌊log₂(P)⌋ 步后完成
 
-Tbrock = $α$ ⌈log₂(P)⌉ + βn(P-1)/P</code></pre>
+Tbrock = α ⌈log₂(P)⌉ + βn(P-1)/P</code></pre>
     <ul>
       <li>适用于任意 P</li>
       <li>比 Recursive Doubling 更适合非 2 的幂</li>
@@ -171,12 +171,12 @@ Tbrock = $α$ ⌈log₂(P)⌉ + βn(P-1)/P</code></pre>
 ...
 深度 log₂(P)
 
-Tbcast = $α$ log₂(P) + βn log₂(P)</code></pre>
+Tbcast = α log₂(P) + βn log₂(P)</code></pre>
 
     <h4>Scatter + AllGather</h4>
     <pre><code>// 先用 binomial tree Scatter n 个字
 // 再用 recursive doubling AllGather n/P 个字
-Tbcast = $α$ 2log₂(P) + β2n(P-1)/P  (当 n $≥$ P)</code></pre>
+Tbcast = α 2log₂(P) + β2n(P-1)/P  (当 n ≥ P)</code></pre>
 
     <h3>集合通信复杂度对比</h3>
     <table>
@@ -188,22 +188,22 @@ Tbcast = $α$ 2log₂(P) + β2n(P-1)/P  (当 n $≥$ P)</code></pre>
         </tr>
       </thead>
       <tbody>
-        <tr><td>Broadcast</td><td>Binomial Tree</td><td>$\alpha \log P + \beta n \log P$</td></tr>
-        <tr><td>Broadcast</td><td>Scatter+AllGather</td><td>$\alpha 2\log P + \beta 2n(P-1)/P$</td></tr>
-        <tr><td>Reduce</td><td>Binomial Tree</td><td>$\alpha \log P + \beta n \log P$</td></tr>
-        <tr><td>AllReduce</td><td>Ring</td><td>USD 2\alpha(P-1)/P + 2\beta n(P-1)/P$</td></tr>
-        <tr><td>AllReduce</td><td>Recursive Doubling</td><td>$\alpha \log P + \beta n \log P$</td></tr>
-        <tr><td>AllGather</td><td>Ring</td><td>$\alpha(P-1) + \beta n(P-1)/P$</td></tr>
-        <tr><td>AllGather</td><td>Recursive Doubling</td><td>$\alpha \log P + \beta n(P-1)/P$</td></tr>
-        <tr><td>Alltoall</td><td>Bruck</td><td>$\alpha \log P + \beta n(P-1)/P$</td></tr>
+        <tr><td>Broadcast</td><td>Binomial Tree</td><td>\(\alpha \log P + \beta n \log P\)</td></tr>
+        <tr><td>Broadcast</td><td>Scatter+AllGather</td><td>\(\alpha 2\log P + \beta 2n(P-1)/P\)</td></tr>
+        <tr><td>Reduce</td><td>Binomial Tree</td><td>\(\alpha \log P + \beta n \log P\)</td></tr>
+        <tr><td>AllReduce</td><td>Ring</td><td>\(2\alpha(P-1)/P + 2\beta n(P-1)/P\)</td></tr>
+        <tr><td>AllReduce</td><td>Recursive Doubling</td><td>\(\alpha \log P + \beta n \log P\)</td></tr>
+        <tr><td>AllGather</td><td>Ring</td><td>\(\alpha(P-1) + \beta n(P-1)/P\)</td></tr>
+        <tr><td>AllGather</td><td>Recursive Doubling</td><td>\(\alpha \log P + \beta n(P-1)/P\)</td></tr>
+        <tr><td>Alltoall</td><td>Bruck</td><td>\(\alpha \log P + \beta n(P-1)/P\)</td></tr>
       </tbody>
     </table>
 
     <h2>非阻塞集合通信</h2>
     <div class="card idea">
       <p><strong>MPI 4.0 引入非阻塞集合操作：</strong></p>
-      <pre><code>MP$I_{Ibcast}$(&amp;buf, count, datatype, root, comm, &amp;req);
-MP$I_{Iallreduce}$(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
+      <pre><code>MPI_Ibcast(&amp;buf, count, datatype, root, comm, &amp;req);
+MPI_Iallreduce(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
 // ...</code></pre>
     </div>
 
@@ -248,24 +248,24 @@ MP$I_{Iallreduce}$(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
         </tr>
       </thead>
       <tbody>
-        <tr><td><code>MP$I_{THREAD}$_SINGLE</code></td><td>只有一个线程</td></tr>
-        <tr><td><code>MP$I_{THREAD}$_FUNNELED</code></td><td>多线程，只有主线程调用 MPI</td></tr>
-        <tr><td><code>MP$I_{THREAD}$_SERIALIZED</code></td><td>多线程，但一次只有一个调用 MPI</td></tr>
-        <tr><td><code>MP$I_{THREAD}$_MULTIPLE</code></td><td>多线程，任何线程随时可调用 MPI</td></tr>
+        <tr><td><code>MPI_THREAD_SINGLE</code></td><td>只有一个线程</td></tr>
+        <tr><td><code>MPI_THREAD_FUNNELED</code></td><td>多线程，只有主线程调用 MPI</td></tr>
+        <tr><td><code>MPI_THREAD_SERIALIZED</code></td><td>多线程，但一次只有一个调用 MPI</td></tr>
+        <tr><td><code>MPI_THREAD_MULTIPLE</code></td><td>多线程，任何线程随时可调用 MPI</td></tr>
       </tbody>
     </table>
 
     <div class="card warning">
       <p><strong>注意：</strong></p>
       <ul>
-        <li>所有实现都支持 MP$I_{THREAD}$_SINGLE</li>
-        <li>大多数支持 MP$I_{THREAD}$_FUNNELED</li>
-        <li>许多支持 MP$I_{THREAD}$_MULTIPLE（但实现效率不同）</li>
+        <li>所有实现都支持 MPI_THREAD_SINGLE</li>
+        <li>大多数支持 MPI_THREAD_FUNNELED</li>
+        <li>许多支持 MPI_THREAD_MULTIPLE（但实现效率不同）</li>
         <li>简单的 OpenMP 程序只需 FUNNELED 级别</li>
       </ul>
     </div>
 
-    <h3>MP$I_{THREAD}$_MULTIPLE 的语义</h3>
+    <h3>MPI_THREAD_MULTIPLE 的语义</h3>
     <ul>
       <li><strong>Ordering：</strong>多个线程并发调用 MPI，结果如同顺序执行（任意顺序）</li>
       <li><strong>Blocking：</strong>阻塞调用只阻塞调用线程，不阻止其他线程</li>
@@ -316,12 +316,12 @@ MP$I_{Iallreduce}$(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
         </tr>
       </thead>
       <tbody>
-        <tr><td><code>MP$I_{Win}$_create</code></td><td>创建可远程访问的内存区域（window）</td></tr>
-        <tr><td><code>MP$I_{Put}$</code></td><td>写入远程内存</td></tr>
-        <tr><td><code>MP$I_{Get}$</code></td><td>读取远程内存</td></tr>
-        <tr><td><code>MP$I_{Accumulate}$</code></td><td>原子累加到远程内存</td></tr>
-        <tr><td><code>MP$I_{Win}$_fence</code></td><td>同步（active target）</td></tr>
-        <tr><td><code>MP$I_{Win}$_lock/unlock</code></td><td>同步（passive target）</td></tr>
+        <tr><td><code>MPI_Win_create</code></td><td>创建可远程访问的内存区域（window）</td></tr>
+        <tr><td><code>MPI_Put</code></td><td>写入远程内存</td></tr>
+        <tr><td><code>MPI_Get</code></td><td>读取远程内存</td></tr>
+        <tr><td><code>MPI_Accumulate</code></td><td>原子累加到远程内存</td></tr>
+        <tr><td><code>MPI_Win_fence</code></td><td>同步（active target）</td></tr>
+        <tr><td><code>MPI_Win_lock/unlock</code></td><td>同步（passive target）</td></tr>
       </tbody>
     </table>
 
@@ -334,10 +334,10 @@ MP$I_{Iallreduce}$(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
         </tr>
       </thead>
       <tbody>
-        <tr><td><code>MP$I_{WIN}$_CREATE</code></td><td>已有 buffer，使其可远程访问</td></tr>
-        <tr><td><code>MP$I_{WIN}$_ALLOCATE</code></td><td>创建 buffer 并使其可远程访问</td></tr>
-        <tr><td><code>MP$I_{WIN}$_CREAT$E_{DYNAMIC}$</code></td><td>创建空 window，动态 attach/detach</td></tr>
-        <tr><td><code>MP$I_{WIN}$_ALLOCAT$E_{SHARED}$</code></td><td>节点内多进程共享 buffer</td></tr>
+        <tr><td><code>MPI_WIN_CREATE</code></td><td>已有 buffer，使其可远程访问</td></tr>
+        <tr><td><code>MPI_WIN_ALLOCATE</code></td><td>创建 buffer 并使其可远程访问</td></tr>
+        <tr><td><code>MPI_WIN_CREATE_DYNAMIC</code></td><td>创建空 window，动态 attach/detach</td></tr>
+        <tr><td><code>MPI_WIN_ALLOCATE_SHARED</code></td><td>节点内多进程共享 buffer</td></tr>
       </tbody>
     </table>
 
@@ -373,20 +373,20 @@ MP$I_{Iallreduce}$(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
     <div class="quiz" data-q="2">
       <p><strong>Q2：</strong>AllGather 的 Ring 算法的时间复杂度是多少？</p>
       <div class="quiz-options">
-        <button data-answer="wrong">A. $\alpha \log P + \beta n$</button>
-        <button data-answer="correct" data-incorrect="Ring 算法：$T = \alpha(P-1) + \beta n(P-1)/P$。">B. $\alpha(P-1) + \beta n(P-1)/P$</button>
-        <button data-answer="wrong">C. $\alpha P + \beta nP$</button>
-        <button data-answer="wrong">D. $\alpha \log P + \beta n \log P$</button>
+        <button data-answer="wrong">A. \(\alpha \log P + \beta n\)</button>
+        <button data-answer="correct" data-incorrect="Ring 算法：\(T = \alpha(P-1) + \beta n(P-1)/P\)。">B. \(\alpha(P-1) + \beta n(P-1)/P\)</button>
+        <button data-answer="wrong">C. \(\alpha P + \beta nP\)</button>
+        <button data-answer="wrong">D. \(\alpha \log P + \beta n \log P\)</button>
       </div>
     </div>
 
     <div class="quiz" data-q="3">
-      <p><strong>Q3：</strong>MP$I_{THREAD}$_MULTIPLE 的主要限制是什么？</p>
+      <p><strong>Q3：</strong>MPI_THREAD_MULTIPLE 的主要限制是什么？</p>
       <div class="quiz-options">
-        <button data-answer="wrong" data-incorrect="MP$I_{THREAD}$_MULTIPLE 支持多线程调用。">A. 只能有一个线程</button>
-        <button data-answer="wrong" data-incorrect="MP$I_{THREAD}$_MULTIPLE 支持任何线程调用。">B. 只有主线程可以调用</button>
+        <button data-answer="wrong" data-incorrect="MPI_THREAD_MULTIPLE 支持多线程调用。">A. 只能有一个线程</button>
+        <button data-answer="wrong" data-incorrect="MPI_THREAD_MULTIPLE 支持任何线程调用。">B. 只有主线程可以调用</button>
         <button data-answer="correct" data-incorrect="用户必须确保同一 communicator 上的集合操作正确排序。">C. 用户必须确保集合操作的正确排序</button>
-        <button data-answer="wrong" data-incorrect="MP$I_{THREAD}$_MULTIPLE 支持非阻塞操作。">D. 不能使用非阻塞操作</button>
+        <button data-answer="wrong" data-incorrect="MPI_THREAD_MULTIPLE 支持非阻塞操作。">D. 不能使用非阻塞操作</button>
       </div>
     </div>
 
@@ -403,10 +403,10 @@ MP$I_{Iallreduce}$(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
     <div class="quiz" data-q="5">
       <p><strong>Q5：</strong>Broadcast 的 Binomial Tree 算法的时间复杂度是多少？</p>
       <div class="quiz-options">
-        <button data-answer="correct" data-incorrect="Binomial Tree Broadcast：$T = \alpha \log P + \beta n \log P$。">A. $\alpha \log P + \beta n \log P$</button>
-        <button data-answer="wrong">B. $\alpha P + \beta nP$</button>
-        <button data-answer="wrong">C. $\alpha \log P + \beta n$</button>
-        <button data-answer="wrong">D. $\alpha(P-1) + \beta n(P-1)/P$</button>
+        <button data-answer="correct" data-incorrect="Binomial Tree Broadcast：\(T = \alpha \log P + \beta n \log P\)。">A. \(\alpha \log P + \beta n \log P\)</button>
+        <button data-answer="wrong">B. \(\alpha P + \beta nP\)</button>
+        <button data-answer="wrong">C. \(\alpha \log P + \beta n\)</button>
+        <button data-answer="wrong">D. \(\alpha(P-1) + \beta n(P-1)/P\)</button>
       </div>
     </div>
 
