@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW2-1 导读 — 粒子模拟并行化（OpenMP 共享内存）</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/guide.css">
+</head>
+<body>
+  <div class="page">
+    <div class="guide-banner">
+      <p class="guide-eyebrow">CS267 · Homework 2.1 导读</p>
+      <h1>粒子模拟并行化（OpenMP 共享内存）</h1>
+      <p class="guide-lede">把 O(n²) 玩具粒子模拟改造成 <strong>O(n)</strong> 串行算法，再通过 OpenMP 获得 <strong>T/p</strong> 的并行加速。</p>
+      <div class="guide-meta">
+        <span>📅 截止：2025-02-24</span>
+        <span>📖 Lecture 4-5</span>
+        <span>💻 C++ (OpenMP)</span>
+        <span>🏆 扩展性 + 性能 + 解释</span>
+      </div>
+    </div>
+
+    <!-- 与课程的关系 -->
+    <h2>与课程的关系</h2>
+    <div class="connection-map">
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 4 · OpenMP</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">并行区域、归约、原子操作</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 5 · 局部性</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">空间划分、邻居列表</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture · 同步</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">Locks、Atomics、内存屏障</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture · 性能分析</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">TAU / HPCToolkit</div>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 任务概述 -->
+    <h2>任务概述</h2>
+    <p class="lede">并行化一个玩具粒子模拟：粒子间存在斥力，当距离小于 cutoff 时相互作用。起始代码是 O(n²) 暴力扫描，你需要先优化到 O(n)，再并行化到 T/p。</p>
+
+    <div class="loop">
+      <article>
+        <p><strong>串行目标 O(n)</strong><br>通过空间划分（Cell list / Neighbor list）避免全粒子对扫描</p>
+      </article>
+      <article>
+        <p><strong>并行目标 T/p</strong><br>p 个处理器下理想线性加速，关注负载均衡</p>
+      </article>
+      <article>
+        <p><strong>可修改文件</strong><br>只能修改 <code>serial.cpp</code> 和 <code>openmp.cpp</code></p>
+      </article>
+      <article>
+        <p><strong>报告要求</strong><br>log-log 图、加速比图、时间分解、同步描述</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 组件表 -->
+    <h2>代码组件一览</h2>
+    <table class="component-table">
+      <thead>
+        <tr>
+          <th>文件</th>
+          <th>角色</th>
+          <th>可以修改？</th>
+          <th>课程关联</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="comp-name">serial.cpp</td>
+          <td>串行实现，先优化到 O(n)</td>
+          <td>✅ 是</td>
+          <td class="comp-lec">Lec 5</td>
+        </tr>
+        <tr>
+          <td class="comp-name">openmp.cpp</td>
+          <td>OpenMP 并行实现</td>
+          <td>✅ 是</td>
+          <td class="comp-lec">Lec 4</td>
+        </tr>
+        <tr>
+          <td class="comp-name">common.h / common.cpp</td>
+          <td>数据结构、I/O、验证</td>
+          <td>❌ 否</td>
+          <td class="comp-lec">—</td>
+        </tr>
+        <tr>
+          <td class="comp-name">Makefile</td>
+          <td>编译配置</td>
+          <td>⚠️ 谨慎</td>
+          <td class="comp-lec">工具链</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- 串行优化路线 -->
+    <h2>串行优化路线：O(n²) → O(n)</h2>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>空间划分 (Spatial Decomposition)</h3>
+      <p>把模拟空间划分为边长 ≥ cutoff 的 cell。每个粒子只需与相邻 3×3（2D）或 3×3×3（3D）个 cell 内的粒子交互。</p>
+      <ul class="checklist">
+        <li>Cell 边长 ≥ cutoff，确保只需检查邻居 cell</li>
+        <li>构建 Cell List：每个 cell 维护其中的粒子索引</li>
+        <li>每步模拟前重建 Cell List（粒子位置变化）</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>邻居列表 (Neighbor List / Verlet List)</h3>
+      <p>进一步优化：为每个粒子维护一个"邻居列表"，只在粒子移动超过阈值时重建。</p>
+      <ul class="checklist">
+        <li>Skin distance = cutoff + δ，避免频繁重建</li>
+        <li>跟踪每个粒子的位移，超过 δ/2 时触发重建</li>
+        <li>这是从 O(n²) 到 O(n) 的关键</li>
+      </ul>
+      <div class="pitfall">
+        <strong>⚠️ 常见坑：</strong>Cell List 本身已经是 O(n)，但实现时要注意边界 cell 的处理（周期性边界条件 PBC）。
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 并行化路线 -->
+    <h2>OpenMP 并行化路线</h2>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>并行化力计算</h3>
+      <p>使用 <code>#pragma omp parallel for</code> 并行化外层粒子循环。注意力计算的对称性：f_ij = -f_ji。</p>
+      <ul class="checklist">
+        <li>使用 <code>reduction(+:force)</code> 或原子操作</li>
+        <li>考虑每个线程私有 force 数组再归约</li>
+        <li>注意 false sharing：避免相邻线程写同一 Cache Line</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">4</div>
+      <h3>处理写冲突 (Write Conflicts)</h3>
+      <p>当两个线程同时更新同一粒子的力时，需要同步机制。</p>
+      <ul class="checklist">
+        <li><code>#pragma omp atomic</code> — 简单但慢</li>
+        <li>Coloring（图着色）— 避免冲突，更复杂</li>
+        <li>私有数组 + 归约 — 内存换性能</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">5</div>
+      <h3>负载均衡</h3>
+      <p>粒子分布不均会导致某些线程空闲。使用 <code>schedule(dynamic)</code> 或 <code>schedule(guided)</code>。</p>
+      <ul class="checklist">
+        <li>对比 <code>static</code> vs <code>dynamic</code> vs <code>guided</code></li>
+        <li>chunk size 对性能的影响</li>
+        <li>用 TAU/HPCToolkit 查看负载分布</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 同步与原子操作 -->
+    <h2>OpenMP 同步原语速查</h2>
+    <table class="component-table">
+      <thead>
+        <tr>
+          <th>原语</th>
+          <th>用途</th>
+          <th>开销</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="comp-name">#pragma omp parallel for</td>
+          <td>并行化 for 循环</td>
+          <td class="comp-lec">低（线程池复用）</td>
+        </tr>
+        <tr>
+          <td class="comp-name">#pragma omp atomic</td>
+          <td>原子读-改-写操作</td>
+          <td class="comp-lec">中（硬件级）</td>
+        </tr>
+        <tr>
+          <td class="comp-name">#pragma omp critical</td>
+          <td>互斥代码区</td>
+          <td class="comp-lec">高（软件锁）</td>
+        </tr>
+        <tr>
+          <td class="comp-name">omp_lock_t</td>
+          <td>显式锁</td>
+          <td class="comp-lec">高</td>
+        </tr>
+        <tr>
+          <td class="comp-name">#pragma omp barrier</td>
+          <td>显式同步点</td>
+          <td class="comp-lec">中</td>
+        </tr>
+        <tr>
+          <td class="comp-name">reduction(+:var)</td>
+          <td>并行归约</td>
+          <td class="comp-lec">低（树形归约）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- 学习心态 -->
+    <div class="mindset-banner">
+      <p><strong>先串行优化，再并行化。</strong> 一个 O(n²) 的并行实现永远跑不过 O(n) 的串行实现。先让你的串行代码足够快，再考虑多线程——否则你只是在并行化一个低效算法。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 报告要点 -->
+    <h2>报告应包含什么</h2>
+    <table class="component-table">
+      <thead>
+        <tr>
+          <th>部分</th>
+          <th>关键内容</th>
+          <th>图表要求</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="comp-name">log-log 图</td>
+          <td>串行时间 vs n，验证 O(n) 行为</td>
+          <td class="comp-lec">T vs n, log-log</td>
+        </tr>
+        <tr>
+          <td class="comp-name">加速比图</td>
+          <td>Speedup vs p，理想 vs 实际</td>
+          <td class="comp-lec">S = T₁/Tₚ vs p</td>
+        </tr>
+        <tr>
+          <td class="comp-name">时间分解</td>
+          <td>计算、同步、空闲各占多少</td>
+          <td class="comp-lec">堆叠柱状图</td>
+        </tr>
+        <tr>
+          <td class="comp-name">同步描述</td>
+           <td colspan="2">用了哪些同步原语？为什么？开销如何？</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- Quiz -->
+    <h2>自测 Quiz</h2>
+
+    <div class="quiz" data-answer="a" data-correct="正确！Cell 边长 ≥ cutoff 确保只需检查邻居 cell。" data-incorrect="想想为什么只需要检查相邻 cell。">
+      <p><strong>Q1.</strong> Cell List 算法中，cell 边长应该如何选择？</p>
+      <div class="quiz-options">
+        <button data-choice="a">≥ cutoff，确保只需检查相邻 cell</button>
+        <button data-choice="b">严格等于 cutoff</button>
+        <button data-choice="c">越小越好，减少 cell 内粒子数</button>
+        <button data-choice="d">与 cutoff 无关，任意值均可</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="c" data-correct="正确！atomic 保证读-改-写操作的原子性。" data-incorrect="想想多个线程同时写同一个变量会发生什么。">
+      <p><strong>Q2.</strong> 当两个线程同时更新同一粒子的力时，应该使用什么机制？</p>
+      <div class="quiz-options">
+        <button data-choice="a">什么都不用做，硬件会自动处理</button>
+        <button data-choice="b">#pragma omp critical，保证互斥</button>
+        <button data-choice="c">#pragma omp atomic 或私有数组</button>
+        <button data-choice="d">使用 schedule(static) 避免冲突</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="b" data-correct="正确！False sharing 导致 Cache Line 乒乓。" data-incorrect="想想为什么相邻线程写相邻变量会变慢。">
+      <p><strong>Q3.</strong> 为什么在并行化力计算时需要注意 False Sharing？</p>
+      <div class="quiz-options">
+        <button data-choice="a">False Sharing 会导致数据丢失</button>
+        <button data-choice="b">同一 Cache Line 被多个线程频繁写，导致缓存乒乓</button>
+        <button data-choice="c">False Sharing 会导致死锁</button>
+        <button data-choice="d">False Sharing 是 OpenMP 的 bug</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="d" data-correct="正确！先优化串行算法，再并行化。" data-incorrect="想想 O(n²) 并行 vs O(n) 串行哪个更快。">
+      <p><strong>Q4.</strong> 在并行化之前，为什么应该先优化串行算法到 O(n)？</p>
+      <div class="quiz-options">
+        <button data-choice="a">串行优化能让并行化更容易</button>
+        <button data-choice="b">OpenMP 只能并行化 O(n) 算法</button>
+        <button data-choice="c">串行优化能减少线程数</button>
+        <button data-choice="d">O(n) 串行可能比 O(n²) 并行更快</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="b" data-correct="正确！reduction 使用树形归约，性能最好。" data-incorrect="比较一下各选项的开销。">
+      <p><strong>Q5.</strong> 以下哪种方式实现并行归约性能最好？</p>
+      <div class="quiz-options">
+        <button data-choice="a">#pragma omp critical 保护累加</button>
+        <button data-choice="b">reduction(+:var) 子句</button>
+        <button data-choice="c">#pragma omp atomic 每次累加</button>
+        <button data-choice="d">每个线程写独立数组，主线程串行求和</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <!-- 导航 -->
+    <div class="nav">
+      <a href="hw1-matmul.html">← 上一个 HW</a>
+      <a href="hw2-2-mpi.html">下一个 HW →</a>
+    </div>
+
+    <footer><p>CS267: Applications of Parallel Computers · UC Berkeley</p></footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

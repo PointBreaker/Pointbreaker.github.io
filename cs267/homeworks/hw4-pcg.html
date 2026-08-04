@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW4 导读：分布式预处理共轭梯度求解器 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/guide.css">
+</head>
+<body>
+  <div class="page">
+    <!-- Banner -->
+    <div class="guide-banner">
+      <p class="guide-eyebrow">CS267 · HW4 导读</p>
+      <h1>分布式预处理共轭梯度求解器</h1>
+      <p class="guide-lede">用 MPI 实现分布式 PCG 求解器——求解 1D Poisson 方程，掌握稀疏矩阵格式转换、分布式布局设计、并行线性代数操作与扩展性优化。</p>
+      <div class="guide-meta">
+        <span><span class="meta-icon">📅</span> 截止：2025-05-09</span>
+        <span><span class="meta-icon">🎓</span> 对应：Lecture 7-8, 16</span>
+        <span><span class="meta-icon">💻</span> C++ (MPI)</span>
+        <span><span class="meta-icon">📐</span> 1D Poisson 方程</span>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="what">这个 Homework 要你做什么？</h2>
+
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>实现一个分布式 MPI 预处理共轭梯度（PCG）求解器，求解 1D Poisson 方程 Lx = b。你只能修改 <code>distributed_pcg.cpp</code>，在 1-64 秩上测试扩展性（N = 2²⁰ – 2²⁶）。</p>
+    </div>
+
+    <p>这是课程中<strong>最硬核</strong>的一次作业——综合了分布式内存编程（MPI）、稀疏线性代数、数值方法和性能优化。PCG 是科学计算中最重要的迭代求解器之一，理解它对你未来的 HPC 工作大有裨益。</p>
+
+    <h3>具体任务</h3>
+    <table class="component-table">
+      <thead>
+        <tr><th>任务</th><th>对应课程</th><th>核心概念</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="comp-name">稀疏矩阵格式转换</td><td class="comp-lec">Lecture 16</td><td>map → CSR/CSC 转换</td></tr>
+        <tr><td class="comp-name">分布式布局设计</td><td class="comp-lec">Lecture 7-8</td><td>行划分、halo 区域</td></tr>
+        <tr><td class="comp-name">并行化 PCG 操作</td><td class="comp-lec">Lecture 7-8, 16</td><td>SpMV、内积、向量更新</td></tr>
+        <tr><td class="comp-name">优化</td><td class="comp-lec">Lecture 7-8</td><td>中间值重用、通信优化</td></tr>
+        <tr><td class="comp-name">扩展性研究</td><td class="comp-lec">Lecture 7-8</td><td>1-64 秩强扩展实验</td></tr>
+        <tr><td class="comp-name">报告</td><td class="comp-lec">—</td><td>策略、性能、挑战分析</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="prereq">前置知识清单</h2>
+
+    <h3>课程知识</h3>
+    <ul class="checklist">
+      <li><strong>Lecture 7-8（分布式内存 / MPI）</strong>：点对点通信、集合通信、性能建模</li>
+      <li><strong>Lecture 16（稠密线性代数）</strong>：稀疏矩阵格式（CSR/CSC）、SpMV</li>
+      <li><strong>Lecture 3（Roofline 模型）</strong>：分析求解器的计算强度</li>
+    </ul>
+
+    <h3>数学基础</h3>
+    <ul class="checklist">
+      <li><strong>Poisson 方程</strong>：-∇²u = f，1D 下为 -u'' = f</li>
+      <li><strong>有限差分离散</strong>：三对角矩阵（主对角线 2/h²，次对角线 -1/h²）</li>
+      <li><strong>共轭梯度法（CG）</strong>：Krylov 子空间方法，每步主要操作是 SpMV</li>
+      <li><strong>预处理技术</strong>：Jacobi、ILU、多重网格——改善条件数，加速收敛</li>
+    </ul>
+
+    <h3>MPI 编程基础</h3>
+    <ul class="checklist">
+      <li><code>MPI_Send</code> / <code>MPI_Recv</code> 点对点通信</li>
+      <li><code>MPI_Allreduce</code> 全局归约（内积计算必需）</li>
+      <li><code>MPI_Allgather</code> / <code>MPI_Scatter</code> 数据分发</li>
+      <li>非阻塞通信 <code>MPI_Isend</code> / <code>MPI_Irecv</code>（用于通信隐藏）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="approach">如何开始？</h2>
+
+    <div class="step-card">
+      <div class="step-number">0</div>
+      <h3>理解串行 PCG 算法</h3>
+      <p>先回顾串行 PCG 的伪代码：</p>
+      <pre><code>r = b - A*x          # 残差
+z = M^{-1} * r       # 预处理
+p = z                # 搜索方向
+while not converged:
+  alpha = (r·z) / (p·A*p)
+  x = x + alpha * p
+  r_new = r - alpha * A*p
+  z_new = M^{-1} * r_new
+  beta = (r_new·z_new) / (r·z)
+  p = z_new + beta * p
+  r = r_new; z = z_new</code></pre>
+      <p>每步的主要计算：1 次 SpMV（A*p）、2 次内积（dot）、3 次向量更新（axpy）。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>稀疏矩阵格式转换</h3>
+      <p>输入可能是 map 格式（键值对 (i,j) → value），需要转为 CSR（Compressed Sparse Row）：</p>
+      <ul>
+        <li><strong>values</strong>：非零元素的值</li>
+        <li><strong>col_indices</strong>：非零元素的列索引</li>
+        <li><strong>row_ptr</strong>：每行在 values 中的起始位置</li>
+      </ul>
+      <p>1D Poisson 矩阵是三对角矩阵：每行最多 3 个非零元素。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>设计分布式布局</h3>
+      <p>将 N 个未知数划分到 P 个秩（N 必须是 P 的倍数）：</p>
+      <ul>
+        <li><strong>行划分</strong>：每个秩负责连续的 N/P 行</li>
+        <li><strong>Halo 区域</strong>：边界行需要相邻秩的数据（ghost cells）</li>
+        <li><strong>向量划分</strong>：x 和 b 按相同方式分布</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>并行化核心操作</h3>
+      <ul>
+        <li><strong>SpMV（A*p）</strong>：每个秩计算本地行的乘积，边界行需要 halo 交换</li>
+        <li><strong>内积（dot）</strong>：本地计算后 <code>MPI_Allreduce</code> 求和</li>
+        <li><strong>向量更新（axpy）</strong>：完全并行，无需通信</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">4</div>
+      <h3>优化策略</h3>
+      <ul>
+        <li><strong>重用中间值</strong>：r·z 在迭代开始和结束时都要用，保存它</li>
+        <li><strong>通信隐藏</strong>：用非阻塞 halo 交换与计算重叠</li>
+        <li><strong>重排序</strong>：对矩阵重排序以减少通信量（进阶）</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">5</div>
+      <h3>扩展性实验</h3>
+      <p>设计实验矩阵：</p>
+      <ul>
+        <li><strong>问题规模</strong>：N = 2²⁰, 2²², 2²⁴, 2²⁶</li>
+        <li><strong>秩数</strong>：1, 2, 4, 8, 16, 32, 64</li>
+        <li><strong>每组实验</strong>：记录求解时间、迭代次数、通信时间占比</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="common-pitfalls">常见陷阱</h2>
+
+    <div class="pitfall">
+      <p><strong>N 不是 P 的倍数：</strong> 题目明确要求 N 必须是秩数的倍数。如果不是，行划分会不均匀，导致负载不均衡甚至错误。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>Halo 交换遗漏：</strong> SpMV 时，边界行需要相邻秩的第一个/最后一个元素。忘记 halo 交换会导致错误结果。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>Allreduce 性能瓶颈：</strong> 每次迭代有 2 次全局归约（内积），这是主要的通信开销。用 <code>MPI_Allreduce</code> 而不是手动 send/recv。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>收敛条件错误：</strong> PCG 的收敛判断通常是 ||r|| / ||b|| &lt; tol。注意计算全局范数（需要 Allreduce），而不是用局部残差。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>内存泄漏：</strong> MPI 分配的请求对象（<code>MPI_Request</code>）和 buffer 必须正确释放，尤其在迭代循环中。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="pcg-details">PCG 算法详解</h2>
+
+    <h3>1D Poisson 矩阵</h3>
+    <p>在 [0,1] 区间上用中心差分离散 -u'' = f，步长 h = 1/(N+1)：</p>
+    <pre><code># 三对角矩阵：主对角线 = 2/h²，次对角线 = -1/h²
+A = 1/h² × [ 2  -1   0   0  ...  0 ]
+            [-1   2  -1   0  ...  0 ]
+            [ 0  -1   2  -1  ...  0 ]
+            [ ...                       ]
+            [ 0  ...   0  -1   2  -1 ]
+            [ 0  ...   0   0  -1   2 ]</code></pre>
+
+    <h3>预处理技术</h3>
+    <table>
+      <thead>
+        <tr><th>预处理器</th><th>说明</th><th>代价</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Jacobi (Diagonal)</td><td>M = diag(A)，M⁻¹ = 1/diag(A)</td><td>O(N)，简单但效果一般</td></tr>
+        <tr><td>Block Jacobi</td><td>每个秩的本地块作为预处理器</td><td>本地求解，无通信</td></tr>
+        <tr><td>Incomplete LU (ILU)</td><td>不完全 LU 分解</td><td>效果更好但通信复杂</td></tr>
+        <tr><td>Multigrid</td><td>多尺度方法</td><td>最优 O(N) 但实现复杂</td></tr>
+      </tbody>
+    </table>
+
+    <p>参考：<a href="https://phtournier.pages.math.cnrs.fr/5mm29/blockjacobi/">Block Jacobi 预处理器详解</a></p>
+
+    <h3>分布式 SpMV 的通信模式</h3>
+    <pre><code># 每个秩 i 负责行 [start_i, end_i]
+# 计算 A*p 时：
+# 1. 接收左邻居的 p[start_{i-1}]（如果存在）
+# 2. 接收右邻居的 p[end_{i+1}]（如果存在）
+# 3. 本地计算 SpMV
+# 4. 发送本地 p[start_i] 和 p[end_i] 给邻居</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="perf-analysis">性能分析方法</h2>
+
+    <h3>报告要求</h3>
+    <ul class="checklist">
+      <li><strong>实现策略</strong>：解释你的分布式布局、数据结构和通信方案</li>
+      <li><strong>性能对比</strong>：不同 N 和 P 下的求解时间</li>
+      <li><strong>扩展性结果</strong>：强扩展图（固定 N，增加 P）</li>
+      <li><strong>挑战分析</strong>：通信瓶颈、负载均衡、收敛性问题</li>
+    </ul>
+
+    <h3>关键指标</h3>
+    <ul>
+      <li><strong>每迭代时间</strong>：单次 PCG 迭代的墙钟时间</li>
+      <li><strong>通信时间占比</strong>：halo 交换 + Allreduce 耗时 / 总时间</li>
+      <li><strong>收敛迭代数</strong>：达到收敛所需的 PCG 步数</li>
+      <li><strong>FLOPs 利用率</strong>：实际 FLOPs / 峰值 FLOPs</li>
+    </ul>
+
+    <h3>Roofline 分析</h3>
+    <p>PCG 的主要计算是 SpMV，对于三对角矩阵：</p>
+    <ul>
+      <li><strong>计算量</strong>：每行 ~3 FLOPs（2 次乘加）→ 3N FLOPs/iteration</li>
+      <li><strong>通信量</strong>：halo 交换 2 个值 + Allreduce 2 个值</li>
+      <li><strong>计算强度</strong>：~3N / (halo + allreduce) — 通常<strong>通信受限</strong></li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="connection">与课程的关系</h2>
+
+    <div class="connection-map">
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 7-8 · MPI</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">集合通信 + halo 交换 → PCG 实现</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 16 · Dense LA</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">稀疏矩阵 + SpMV → 核心操作</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 3 · Roofline</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">性能分析 → 通信瓶颈定位</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 18 · Structured Grids</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">1D Poisson → Stencil 并行</div>
+      </div>
+    </div>
+
+    <p>HW4 是课程<strong>并行数值线性代数</strong>的集大成者。相关主题在后续课程中深入：</p>
+    <ul>
+      <li>Lecture 17：Randomized LA（随机化算法加速求解）</li>
+      <li>Lecture 18：Structured Grids（更多 stencil 并行模式）</li>
+      <li>Lecture 19：Sparse MV（更大规模稀疏矩阵的优化）</li>
+      <li>Lecture 20：FFT（另一种重要的直接/迭代求解器）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="mindset">学习心态</h2>
+
+    <div class="mindset-banner">
+      <p><strong>PCG 是科学计算的"hello world"。</strong> 它麻雀虽小五脏俱全：稀疏矩阵、分布式内存、集合通信、收敛分析——几乎涵盖了 HPC 的所有核心问题。</p>
+      <p style="margin-top:10px">不要急于写代码。先花时间<strong>理解串行算法</strong>、<strong>设计数据分布</strong>、<strong>画出通信图</strong>。一个清晰的纸面设计胜过十次盲目调试。</p>
+    </div>
+
+    <p><strong>卡住时的正确顺序：</strong> 复习 Lecture 7-8, 16 → 在纸上画分布式布局 → 用 P=2 调试 → 验证数值正确性 → 再扩展到更多秩 → 分析性能。</p>
+
+    <p><strong>调试黄金法则：</strong> 先保证<strong>正确</strong>（串行和分布式结果一致），再追求<strong>性能</strong>。一个快但错的结果毫无价值。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">自测：你准备好了吗？</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！1D Poisson 矩阵是三对角矩阵，每行最多 3 个非零元素。" data-incorrect="1D Poisson 矩阵经有限差分离散后是三对角矩阵，每行最多 3 个非零元素。">
+      <p><strong>问题 1：</strong>1D Poisson 方程离散后，系数矩阵 A 是什么结构？每行有多少个非零元素？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">稠密矩阵，每行 N 个非零元素</button>
+        <button data-choice="b" aria-pressed="false">三对角矩阵，每行最多 3 个非零元素</button>
+        <button data-choice="c" aria-pressed="false">对角矩阵，每行 1 个非零元素</button>
+        <button data-choice="d" aria-pressed="false">带状矩阵，每行 5 个非零元素</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！SpMV 时边界行需要相邻秩的数据，通过 halo 交换实现。" data-incorrect="分布式 SpMV 时，边界行需要相邻秩的第一个/最后一个元素作为 halo 区域。">
+      <p><strong>问题 2：</strong>分布式 SpMV 时，为什么需要 halo 交换？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">为了增加计算量</button>
+        <button data-choice="b" aria-pressed="false">因为边界行需要相邻秩的矩阵行数据</button>
+        <button data-choice="c" aria-pressed="false">因为 MPI 要求每次通信前同步</button>
+        <button data-choice="d" aria-pressed="false">为了平衡负载</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！内积计算后需要 MPI_Allreduce 将局部结果求和得到全局值。" data-incorrect="内积需要 MPI_Allreduce 将各秩的局部点积结果求和。">
+      <p><strong>问题 3：</strong>PCG 迭代中计算 <code>r·z</code> 时，为什么需要 <code>MPI_Allreduce</code>？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 r 和 z 在不同秩上</button>
+        <button data-choice="b" aria-pressed="false">因为每个秩只持有部分 r 和 z，需要求和得到全局内积</button>
+        <button data-choice="c" aria-pressed="false">因为 MPI_Allreduce 比其他操作快</button>
+        <button data-choice="d" aria-pressed="false">因为 PCG 算法要求全局同步</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！Jacobi 预处理器最简单：M = diag(A)，M⁻¹r = r / diag(A)。" data-incorrect="Jacobi 预处理使用对角线元素：(M⁻¹r)_i = r_i / A_ii，无需通信。">
+      <p><strong>问题 4：</strong>最简单的 Jacobi 预处理器是如何工作的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">M = A 的完全 LU 分解</button>
+        <button data-choice="b" aria-pressed="false">M = diag(A)，M⁻¹r 只需将对角线元素取倒数</button>
+        <button data-choice="c" aria-pressed="false">M = A 的逆矩阵</button>
+        <button data-choice="d" aria-pressed="false">M = A 的转置</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！N 必须是秩数的倍数，否则行划分不均匀，导致负载不均衡。" data-incorrect="题目要求 N 是秩数的倍数，确保均匀行划分和正确性。">
+      <p><strong>问题 5：</strong>为什么 HW4 要求 N 必须是秩数的倍数？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 MPI 只支持均分数据</button>
+        <button data-choice="b" aria-pressed="false">因为需要均匀的行划分，确保负载均衡和正确性</button>
+        <button data-choice="c" aria-pressed="false">因为 N 必须是 2 的幂</button>
+        <button data-choice="d" aria-pressed="false">因为题目强制要求，没有特别原因</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">导读要点</h2>
+    <div class="loop">
+      <article>
+        <h3>目标</h3>
+        <p>分布式 MPI PCG 求解器</p>
+      </article>
+      <article>
+        <h3>核心</h3>
+        <p>稀疏矩阵 + SpMV + 集合通信</p>
+      </article>
+      <article>
+        <h3>优化</h3>
+        <p>重用中间值 + 通信隐藏</p>
+      </article>
+      <article>
+        <h3>产出</h3>
+        <p>扩展图 + 性能分析 + 挑战讨论</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="../lessons/16-dense-la.html">← 回到课程 #16</a>
+      <a href="hw3-genome.html">← HW3 基因组组装</a>
+      <a href="../project.html">期末项目 →</a>
+    </div>
+
+    <footer>
+      <p>CS267: Applications of Parallel Computers · HW4 导读 · 不含任何实现答案</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>
