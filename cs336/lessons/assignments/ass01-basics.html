@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assignment 1 导读：Basics — CS336</title>
+  <link rel="stylesheet" href="/assets/course.css">
+  <link rel="stylesheet" href="/assets/guide.css">
+</head>
+<body>
+  <div class="page">
+    <!-- Banner -->
+    <div class="guide-banner">
+      <p class="guide-eyebrow">CS336 · Assignment 1 导读</p>
+      <h1>Basics：从零实现一个语言模型</h1>
+      <p class="guide-lede">这份导读帮你理解 Assignment 1 要做什么、需要哪些知识、如何开始。它<strong>不包含任何实现答案</strong>——答案是你自己写出来的。</p>
+      <div class="guide-meta">
+        <span><span class="meta-icon">📅</span> 发布：2026-03-30</span>
+        <span><span class="meta-icon">⏰</span> 截止：2026-04-15</span>
+        <span><span class="meta-icon">📖</span> 前置：第 1-4 课</span>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="what">这个 Assignment 要你做什么？</h2>
+
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>从零实现一个完整的 Transformer 语言模型——包括 tokenizer、模型架构、优化器、训练循环——不使用 PyTorch 的高级模块（<code>nn.Linear</code>、<code>nn.Embedding</code>、<code>nn.Transformer</code> 等）。</p>
+    </div>
+
+    <p>Assignment 提供了一个测试框架，所有待实现函数最初都是 <code>raise NotImplementedError</code>。你的目标是让所有测试通过。</p>
+
+    <h3>主要组件</h3>
+    <table class="component-table">
+      <thead>
+        <tr><th>组件</th><th>对应课程</th><th>核心概念</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="comp-name">run_train_bpe</td><td class="comp-lec">第 1 课</td><td>从训练数据学习 token 词表</td></tr>
+        <tr><td class="comp-name">get_tokenizer</td><td class="comp-lec">第 1 课</td><td>encode/decode 接口</td></tr>
+        <tr><td class="comp-name">run_linear</td><td class="comp-lec">第 2 课</td><td>矩阵乘法</td></tr>
+        <tr><td class="comp-name">run_embedding</td><td class="comp-lec">第 2 课</td><td>查表操作</td></tr>
+        <tr><td class="comp-name">run_swiglu</td><td class="comp-lec">第 3 课</td><td>门控激活函数</td></tr>
+        <tr><td class="comp-name">run_scaled_dot_product_attention</td><td class="comp-lec">第 3 课</td><td>注意力机制</td></tr>
+        <tr><td class="comp-name">run_multihead_self_attention</td><td class="comp-lec">第 3 课</td><td>并行注意力</td></tr>
+        <tr><td class="comp-name">run_rope</td><td class="comp-lec">第 3 课</td><td>旋转位置编码</td></tr>
+        <tr><td class="comp-name">run_rmsnorm</td><td class="comp-lec">第 3 课</td><td>归一化</td></tr>
+        <tr><td class="comp-name">run_transformer_block</td><td class="comp-lec">第 3 课</td><td>组合以上组件</td></tr>
+        <tr><td class="comp-name">run_transformer_lm</td><td class="comp-lec">第 3 课</td><td>多层 + embedding + head</td></tr>
+        <tr><td class="comp-name">run_cross_entropy</td><td class="comp-lec">第 2 课</td><td>分类损失</td></tr>
+        <tr><td class="comp-name">get_adamw_cls</td><td class="comp-lec">第 2 课</td><td>自适应学习率</td></tr>
+        <tr><td class="comp-name">run_get_lr_cosine_schedule</td><td class="comp-lec">第 2 课</td><td>学习率调度</td></tr>
+        <tr><td class="comp-name">run_gradient_clipping</td><td class="comp-lec">第 2 课</td><td>训练稳定性</td></tr>
+        <tr><td class="comp-name">run_save_checkpoint</td><td class="comp-lec">第 2 课</td><td>序列化</td></tr>
+        <tr><td class="comp-name">run_load_checkpoint</td><td class="comp-lec">第 2 课</td><td>反序列化</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="prereq">前置知识清单</h2>
+
+    <p>在开始之前，确保你掌握了以下内容：</p>
+
+    <h3>课程知识</h3>
+    <ul class="checklist">
+      <li><strong>第 1 课</strong>：BPE 算法原理、character/byte/word tokenization 的权衡</li>
+      <li><strong>第 2 课</strong>：PyTorch 基础、资源核算（FLOPs、内存）</li>
+      <li><strong>第 3 课</strong>：Transformer 架构、Attention 机制、RMSNorm、RoPE、SwiGLU</li>
+      <li><strong>第 4 课</strong>：训练流程、优化器、学习率调度</li>
+    </ul>
+
+    <h3>数学与编程基础</h3>
+    <ul class="checklist">
+      <li>矩阵乘法的维度和广播规则</li>
+      <li>Softmax 函数的定义和数值稳定性</li>
+      <li>交叉熵损失的推导</li>
+      <li>梯度下降和 Adam 更新规则</li>
+      <li>PyTorch Tensor 操作（reshape, transpose, einsum, bmm）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="approach">如何开始？</h2>
+
+    <div class="step-card">
+      <div class="step-number">0</div>
+      <h3>读 handout</h3>
+      <p>Handout（PDF）是 assignment 的权威描述。先通读一遍，了解每个函数的输入输出格式和约束条件。Handout 中通常包含重要的实现提示和边界情况说明。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>理解测试</h3>
+      <p>在写任何代码之前，先读测试文件。测试告诉你函数<strong>应该做什么</strong>：</p>
+      <pre><code># 例：tests/test_nn_utils.py 会测试 run_linear
+# 它构造特定的 weights 和 in_features，检查你的输出是否正确</code></pre>
+      <p>重点关注：输入 tensor 的 shape、输出的 shape 和数值、边界情况（空输入、单元素、大 batch）。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>从最简单开始</h3>
+      <p>建议的实现顺序：</p>
+      <ol>
+        <li><code>run_silu</code> — 一个元素级函数，最简单</li>
+        <li><code>run_linear</code> — 一次矩阵乘法</li>
+        <li><code>run_embedding</code> — 一次查表</li>
+        <li><code>run_swiglu</code> — 组合以上</li>
+        <li><code>run_softmax</code>、<code>run_cross_entropy</code> — 数学函数</li>
+        <li><code>run_rmsnorm</code> — 归一化</li>
+        <li><code>run_scaled_dot_product_attention</code> — 注意力的核心</li>
+        <li>...逐步推进到完整的 Transformer</li>
+      </ol>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>小数据调试</h3>
+      <p>用最小的输入测试你的实现：batch_size=1, sequence_length=1, d_model=2, num_heads=2。手工计算预期结果，对比你的输出。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="common-pitfalls">常见陷阱</h2>
+
+    <div class="pitfall">
+      <p><strong>Weight matrix 的方向：</strong> Assignment 中很多 weight 的 shape 是 <code>(d_out, d_in)</code>，计算时需要转置。这是最常见的 bug 来源。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>Numerical stability：</strong> Softmax 和 cross-entropy 要注意数值溢出。直接计算 <code>exp(x)</code> 在大数值时会溢出。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>Attention mask：</strong> 因果 mask（causal mask）确保位置 i 只能 attend 到 ≤i 的位置。注意 mask 的应用方式（加到 softmax 前的 logits 上）。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>RoPE 的维度：</strong> RoPE 应用在 head 维度上（d_model // num_heads），不是整个 d_model。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="testing">测试与调试策略</h2>
+
+    <h3>运行测试</h3>
+    <pre><code># 运行单个测试文件
+uv run pytest tests/test_nn_utils.py -v
+
+# 运行单个测试函数
+uv run pytest tests/test_nn_utils.py::test_linear -v
+
+# 运行全部测试
+uv run pytest -v</code></pre>
+
+    <h3>调试技巧</h3>
+    <ul>
+      <li><strong>从最小例子开始</strong>：用 2-3 个 token 测试 BPE，而不是整个文件</li>
+      <li><strong>打印中间结果</strong>：每轮合并后打印 splits 和 pair_counts</li>
+      <li><strong>对比参考实现</strong>：用 tiktoken 对同一文本做 tokenize，对比结果</li>
+      <li><strong>注意边界情况</strong>：空文本、单个字符、特殊 token 在开头/结尾</li>
+      <li><strong>用 assert 验证 shape</strong>：在每个函数开头断言输入 shape 符合预期</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="connection">与课程的关系</h2>
+
+    <div class="connection-map">
+      <div class="connection-item">
+        <div class="conn-lec">第 1 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">BPE → 实现 tokenizer</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 2 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">PyTorch/优化 → 训练循环</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 3 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">Transformer 架构 → 模型</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 4 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">GPU/效率 → 优化速度</div>
+      </div>
+    </div>
+
+    <p>完成 Assignment 1 后，你就拥有了一个<strong>完整的、从零实现的语言模型</strong>。后续 assignment 会在它的基础上构建：</p>
+    <ul>
+      <li>Ass2：让它更快（并行、kernel 优化）</li>
+      <li>Ass3：用 scaling law 决定怎么训练</li>
+      <li>Ass4：用更好的数据训练</li>
+      <li>Ass5：让它对齐人类偏好</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="mindset">学习心态</h2>
+
+    <div class="mindset-banner">
+      <p><strong>这个 assignment 很难。</strong> 去年的学生评价说："第一次作业的工作量约等于 CS224n 所有 5 次作业加期末项目的总和。"</p>
+      <p style="margin-top:10px">这是正常的。不要因为一开始卡住而沮丧。每个函数都对应课程中的一个概念——回头复习课程，理解原理后再写代码。</p>
+    </div>
+
+    <p><strong>卡住时的正确顺序：</strong> 复习课程 → 读 handout → 读测试 → 从最小例子开始 → 如果仍然卡住，带着具体问题去问。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">自测：你准备好了吗？</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！BPE 从 256 个字节开始，每轮合并增加一个 token。" data-incorrect="BPE 从 256 个初始 token（字节）开始，每轮合并增加 1 个新 token。">
+      <p><strong>问题 1：</strong>BPE 训练做了 30000 次合并后，词表大小是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">30000</button>
+        <button data-choice="b" aria-pressed="false">30256</button>
+        <button data-choice="c" aria-pressed="false">256</button>
+        <button data-choice="d" aria-pressed="false">取决于文本长度</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！因果 mask 让位置 i 只能 attend 到 ≤i 的位置，防止看到未来信息。" data-incorrect="因果 mask 的作用是防止模型在预测位置 i 时看到 i 之后的信息。">
+      <p><strong>问题 2：</strong>Transformer 训练时为什么要用 causal mask？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">为了加速计算</button>
+        <button data-choice="b" aria-pressed="false">为了防止看到未来 token</button>
+        <button data-choice="c" aria-pressed="false">为了减少内存使用</button>
+        <button data-choice="d" aria-pressed="false">为了让模型双向理解上下文</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！RoPE 的维度是 d_model // num_heads，即每个 head 的维度。" data-incorrect="RoPE 应用在 head 维度上（d_model // num_heads），不是整个 d_model。">
+      <p><strong>问题 3：</strong>如果 d_model=512，num_heads=8，RoPE 的维度是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">512</button>
+        <button data-choice="b" aria-pressed="false">64</button>
+        <button data-choice="c" aria-pressed="false">8</button>
+        <button data-choice="d" aria-pressed="false">256</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">导读要点</h2>
+    <div class="loop">
+      <article>
+        <h3>目标</h3>
+        <p>从零实现完整 Transformer LM</p>
+      </article>
+      <article>
+        <h3>前置</h3>
+        <p>第 1-4 课 + PyTorch 基础</p>
+      </article>
+      <article>
+        <h3>策略</h3>
+        <p>从简到繁，小数据调试</p>
+      </article>
+      <article>
+        <h3>原则</h3>
+        <p>不复制代码，理解后手写</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="../0004-attention-alternatives-moe.html">← 回到课程 #4</a>
+      <a href="../0005-gpus.html">继续课程 #5 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Assignment 1 导读 · 不含任何实现答案</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

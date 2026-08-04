@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 14 课：数据过滤与去重 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 14 课</p>
+    <h1>数据过滤与去重</h1>
+    <p class="lede">第 13 课概览了数据来源；这一课深入数据处理的机制：如何从 HTML 提取文本？如何用算法过滤低质量数据？如何高效去重？这些工具决定了最终训练数据的质量。</p>
+
+    <div class="meta">
+      <span>授课：Sida Wang</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等 → 较高</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="pipeline">数据处理流水线回顾</h2>
+
+    <pre><code>Raw HTML (Common Crawl WARC)
+    ↓ HTML → Text 提取
+纯文本
+    ↓ 语言识别
+目标语言文本
+    ↓ 质量过滤
+高质量文本
+    ↓ 有害内容过滤
+安全文本
+    ↓ 去重
+最终训练数据</code></pre>
+
+    <div class="card idea">
+      <p><strong>通用过滤框架</strong>：给定目标数据 T（小量、高质量）和原始数据 R（大量、噪声），找到 R 中与 T 相似的子集 T'。算法需要满足两个要求：(1) 能从 T 泛化（T 和 T' 不完全相同），(2) 极快（要处理海量 R）。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="html-extraction">HTML → 文本提取</h2>
+
+    <h3>为什么这很重要？</h3>
+    <p>Common Crawl 存储的是原始 HTML。HTML 包含大量非内容信息：</p>
+    <ul>
+      <li>导航栏、页脚、侧边栏</li>
+      <li>广告、弹窗</li>
+      <li>JavaScript 代码</li>
+      <li>HTML 标签、CSS 样式</li>
+    </ul>
+
+    <h3>提取工具</h3>
+    <table>
+      <tr><th>工具</th><th>方法</th><th>特点</th></tr>
+      <tr><td>trafilatura</td><td>基于内容密度</td><td>精确，保留结构</td></tr>
+      <tr><td>jusText</td><td>基于标点/词比</td><td>快速，保留更多</td></tr>
+      <tr><td>readability</td><td>启发式布局分析</td><td>类似浏览器阅读模式</td></tr>
+      <tr><td>BeautifulSoup</td><td>DOM 解析</td><td>灵活，需自定义规则</td></tr>
+    </table>
+
+    <pre><code>import trafilatura
+
+# 从 HTML 提取主要内容
+html = """&lt;html&gt;
+&lt;body&gt;
+  &lt;nav&gt;Home | About | Contact&lt;/nav&gt;
+  &lt;article&gt;
+    &lt;h1&gt;Main Content&lt;/h1&gt;
+    &lt;p&gt;This is the actual article text...&lt;/p&gt;
+  &lt;/article&gt;
+  &lt;footer&gt;Copyright 2024&lt;/footer&gt;
+&lt;/body&gt;
+&lt;/html&gt;"""
+
+text = trafilatura.extract(html)
+# 结果: "Main Content\nThis is the actual article text..."
+
+# 注意: DCLM 论文显示，trafilatura vs jusText 的选择
+# 会影响下游任务精度 1-2 个百分点</code></pre>
+
+    <h3>WARC 处理示例</h3>
+    <pre><code># Common Crawl WARC 文件结构:
+# 1. WARC header (元数据)
+# 2. HTTP header (Content-Type, 状态码等)
+# 3. HTML content (实际页面)
+
+# 处理流程:
+# 1. 解析 WARC header
+# 2. 检查 HTTP status (只保留 200)
+# 3. 检查 Content-Type (只保留 text/html)
+# 4. 解码 HTML (处理各种编码)
+# 5. 提取文本
+# 6. 质量/语言/有害过滤
+# 7. 去重</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="filtering-algorithms">过滤算法</h2>
+
+    <h3>统一框架</h3>
+    <p>所有过滤算法都遵循相同的模式：</p>
+    <pre><code># 给定目标 T 和原始 R
+# 1. 基于 R 和 T 估计一个模型 → 得到评分函数 score(x)
+# 2. 根据 score(x) 保留 R 中的样本
+
+# 三种实例化:
+# - KenLM: score(x) = p_T(x)（生成模型）
+# - fastText: score(x) = p(T|x)（判别分类器）
+# - DSIR: score(x) = p_T(x) / p_R(x)（重要性采样）</code></pre>
+
+    <h3>KenLM：N-gram 语言模型</h3>
+    <p>KenLM 是数据过滤中最常用的工具之一：</p>
+    <pre><code># N-gram 语言模型:
+# p(in | the cat) = count(the cat in) / count(the cat)
+
+# 问题: 很多 n-gram 的 count 为 0
+# 解决: Kneser-Ney 平滑
+# - 插值: p(in | the cat) 也依赖于 p(in | cat)
+# - 折扣: count > 0 的 n-gram 的计数"分给" count=0 的
+
+# KenLM 的特点:
+# - 极快（C++ 实现）
+# - 内存效率高（基于 trie 和量化）
+# - 广泛用于机器翻译和 LM 数据过滤</code></pre>
+
+    <h4>KenLM 用于质量过滤</h4>
+    <pre><code>import kenlm
+
+# 在目标数据（如 Wikipedia）上训练 KenLM
+model = kenlm.Model("wikipedia.arpa.bin")
+
+def compute_perplexity(text):
+    """计算文本在模型下的 perplexity"""
+    score = model.score(text)
+    num_tokens = len(text.split())
+    perplexity = math.exp(-score / num_tokens)
+    return perplexity
+
+# 高质量文本 → 低 perplexity
+print(compute_perplexity("Stanford University was founded in 1885."))
+# → perplexity ≈ 50
+
+# 低质量文本 → 高 perplexity
+print(compute_perplexity("asdf asdf asdf asdf asdf"))
+# → perplexity ≈ 5000
+
+# CCNet 策略: 按 perplexity 排序，保留 top 1/3</code></pre>
+
+    <div class="card warning">
+      <p><strong>KenLM 的局限</strong>：N-gram 模型只看局部上下文（5-gram = 5 个词），无法捕捉长距离的语义质量。一个句子内部通顺但语义荒谬的文本，KenLM 可能给高分。</p>
+    </div>
+
+    <h3>fastText 分类器</h3>
+    <p>fastText 是一个快速的文本分类器：</p>
+    <pre><code># fastText 的核心思想:
+# 1. 把文本表示为词嵌入的平均（bag of embeddings）
+# 2. 通过线性分类器分类
+
+# 模型结构:
+# x = [word1, word2, ..., wordN]  (token 序列)
+# embed = mean(W[x] for x in tokens)  (平均词嵌入)
+# y = softmax(U @ embed)  (分类)
+
+# 参数: W (V × H) + U (H × K) = H(V + K)
+# 对比 bag-of-words: V × K 参数
+
+# 对于质量过滤（K=2 类）:
+# 参数 = H(V + 2)，即线性分类器</code></pre>
+
+    <h4>Bag of n-grams 和 Hashing Trick</h4>
+    <pre><code># 问题: n-gram 数量可能无限
+# 解决: Hashing trick
+
+import mmh3
+
+num_bins = 10_000_000  # 10M 哈希桶
+
+def hash_ngrams(text, n=2):
+    """将文本的 n-gram 哈希到固定数量的桶"""
+    tokens = text.split()
+    ngrams = [tokens[i:i+n] for i in range(len(tokens)-n+1)]
+    hashed = [mmh3.hash(" ".join(ngram)) % num_bins for ngram in ngrams]
+    return hashed
+
+# 这样无论有多少唯一 n-gram，都映射到 10M 个桶</code></pre>
+
+    <h3>DSIR：重要性重采样</h3>
+    <p>Data Selection for Language Models via Importance Resampling：</p>
+    <pre><code># 核心思想: 用重要性采样从 R 中采样出 T 的分布
+
+# 步骤:
+# 1. 在目标 T 上估计分布 p
+# 2. 在原始 R 上估计分布 q
+# 3. 对 R 中每个样本 x，计算权重 w(x) = p(x) / q(x)
+# 4. 按权重 w(x) 重新采样
+
+# 问题: T 太小，无法估计好的 p 和 q
+# 解决: 使用 hashed n-grams（高维但稀疏的特征）</code></pre>
+
+    <h3>三种过滤方法对比</h3>
+    <table>
+      <tr><th>方法</th><th>评分函数</th><th>优点</th><th>缺点</th></tr>
+      <tr><td>KenLM</td><td>p_T(x)</td><td>极快，简单</td><td>只看局部，模型容量低</td></tr>
+      <tr><td>fastText</td><td>p(T|x)</td><td>快速，可泛化</td><td>需要标注数据</td></tr>
+      <tr><td>DSIR</td><td>p_T(x)/p_R(x)</td><td>理论优雅</td><td>实现复杂</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="filtering-applications">过滤应用</h2>
+
+    <h3>语言识别</h3>
+    <pre><code># fastText 语言识别模型
+# - 支持 176 语言
+# - 基于 Wikipedia、Tatoeba、SETimes 训练
+# - 开箱即用
+
+import fasttext
+
+model = fasttext.load_model("lid.176.bin")
+
+# 预测
+print(model.predict("The quick brown fox."))
+# → ('__label__en', [0.98])
+
+print(model.predict("Auf dem Wasser zu singen"))
+# → ('__label__de', [0.95])
+
+print(model.predict("The quadratic formula is $x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$"))
+# → 可能被误判（包含大量符号）
+
+# 注意事项:
+# - 短文本难以识别
+# - 低资源语言效果差
+# - 代码和公式可能被误判
+# - 代码切换（中英混合）困难</code></pre>
+
+    <h3>质量过滤</h3>
+    <p>不同的模型使用不同的质量过滤策略：</p>
+    <table>
+      <tr><th>模型</th><th>正例</th><th>负例</th><th>方法</th></tr>
+      <tr><td>GPT-3</td><td>Wikipedia, WebText, Books</td><td>Common Crawl</td><td>线性分类器</td></tr>
+      <tr><td>LLaMA</td><td>Wikipedia 引用页面</td><td>Common Crawl</td><td>分类器</td></tr>
+      <tr><td>DCLM</td><td>OpenHermes, ELI5</td><td>RefinedWeb</td><td>fastText</td></tr>
+      <tr><td>phi-1</td><td>GPT-4 分类为高教育价值</td><td>The Stack</td><td>Random Forest</td></tr>
+    </table>
+
+    <pre><code># GPT-3 的质量过滤方法:
+# 1. 训练分类器区分 {Wikipedia, WebText, Books} vs Common Crawl
+# 2. 对每个文档得到质量分数 s ∈ [0, 1]
+# 3. 按 Pareto 分布随机保留:
+#    keep if np.random.pareto(9) > 1 - score
+
+# 效果: 高质量文档有更高概率被保留，但不是确定性过滤</code></pre>
+
+    <h3>有害内容过滤</h3>
+    <pre><code># Dolma 使用 Jigsaw Toxic Comments 数据集训练分类器
+
+# 两类分类器:
+# 1. Hate speech: positive = {unlabeled, obscene}, negative = 其他
+# 2. NSFW: positive = {obscene}, negative = 其他
+
+# 使用 fastText 在大ram 上训练
+
+# 注意: "I love strawberries" vs "I hate strawberries"
+# 简单的词袋模型可能误判包含 "hate" 的文本</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="deduplication">去重</h2>
+
+    <h3>为什么要去重？</h3>
+    <ul>
+      <li><strong>训练效率</strong>：重复数据浪费算力</li>
+      <li><strong>避免记忆</strong>：重复导致模型记忆而非泛化</li>
+      <li><strong>隐私/版权</strong>：重复可能放大隐私和版权问题</li>
+      <li><strong>评估有效</strong>：测试集重复会导致评估虚高</li>
+    </ul>
+
+    <h3>两种重复</h3>
+    <table>
+      <tr><th>类型</th><th>来源</th><th>检测方法</th></tr>
+      <tr><td>精确重复</td><td>镜像站点、GitHub fork</td><td>哈希</td></tr>
+      <tr><td>近似重复</td><td>模板文本、小修改</td><td>MinHash/LSH</td></tr>
+    </table>
+
+    <div class="card warning">
+      <p><strong>惊人的事实</strong>：C4 中有一条产品描述被重复了 61,036 次。Common Crawl 中大量内容是模板生成的（免责声明、许可证、导航栏）。</p>
+    </div>
+
+    <h3>去重的设计空间</h3>
+    <pre><code># 三个关键决策:
+
+# 1. 什么是"项"（item）？
+#    - 句子？段落？文档？
+#    - 越小越精细，越大越高效
+
+# 2. 如何匹配？
+#    - 精确匹配（哈希）
+#    - 存在公共子项
+#    - 公共子项比例（Jaccard 相似度）
+
+# 3. 匹配后如何处理？
+#    - 删除所有重复项
+#    - 只保留一个
+#    - 保留"最好"的一个</code></pre>
+
+    <h3>精确去重</h3>
+    <pre><code># 简单方法: 哈希 + 去重
+import mmh3
+
+def exact_dedup(documents):
+    """精确去重"""
+    seen = set()
+    unique = []
+    for doc in documents:
+        h = mmh3.hash(doc)  # 计算哈希
+        if h not in seen:
+            seen.add(h)
+            unique.append(doc)
+    return unique
+
+# C4 的方法:
+# - 项: 3 个句子的 span
+# - 匹配: 精确匹配
+# - 处理: 删除所有但一个
+# 注意: 删除中间的 span 可能导致文档不连贯
+
+# 可以 MapReduce 并行化:
+# Map: 每个文档 → (hash, document)
+# Reduce: 每个 hash 保留一个文档</code></pre>
+
+    <h3>Bloom Filter</h3>
+    <p>当数据量太大，<code>set</code> 放不进内存时：</p>
+    <pre><code># Bloom Filter: 概率性集合成员检测
+
+# 特点:
+# - 内存高效（每个元素 ~10 bits）
+# - 如果返回"不在" → 100% 正确
+# - 如果返回"在" → 大概率正确（有 false positive）
+# - 无法删除
+
+# 结构:
+# - 一个 bit array（m 位）
+# - k 个哈希函数
+
+# 操作:
+# - 插入: 对 item 计算 k 个哈希，将对应位置 1
+# - 查询: 对 item 计算 k 个哈希，检查是否全为 1
+
+from bitarray import bitarray
+import mmh3
+
+class BloomFilter:
+    def __init__(self, size, num_hashes):
+        self.size = size
+        self.num_hashes = num_hashes
+        self.table = bitarray(size)
+        self.table.setall(0)
+
+    def add(self, item):
+        for seed in range(self.num_hashes):
+            h = mmh3.hash(item, seed) % self.size
+            self.table[h] = 1
+
+    def might_contain(self, item):
+        for seed in range(self.num_hashes):
+            h = mmh3.hash(item, seed) % self.size
+            if not self.table[h]:
+                return False
+        return True  # 可能在（false positive 可能）</code></pre>
+
+    <h4>False Positive Rate</h4>
+    <pre><code># 假设哈希函数独立，给定:
+# m = bit array 大小
+# k = 哈希函数数量
+# n = 已插入元素数量
+
+# False positive rate:
+# f = (1 - (1 - 1/m)^(k*n))^k
+# 近似: f ≈ (1 - e^(-kn/m))^k
+
+# 最优 k（给定 m/n）:
+# k = ln(2) * m / n
+
+# 例: Dolma 设置 false positive rate = 1e-15
+# 每个元素约需 50 bits</code></pre>
+
+    <h3>MinHash 与 Jaccard 相似度</h3>
+    <p>检测近似重复：</p>
+    <pre><code># Jaccard 相似度:
+# J(A, B) = |A ∩ B| / |A ∪ B|
+# 范围: [0, 1]
+
+# 例:
+# A = {"the", "cat", "in", "the", "hat"}
+# B = {"the", "cat", "on", "the", "mat"}
+# J(A, B) = 3 / 7 ≈ 0.43
+
+# MinHash 的核心思想:
+# - 对集合 A，计算其 minhash 签名
+# - 两个集合的 minhash 签名相同的概率 = Jaccard 相似度
+# - 这样可以用固定大小的签名近似 Jaccard 相似度
+
+def minhash_signature(shingles, num_hashes=128):
+    """计算集合的 minhash 签名"""
+    signature = []
+    for i in range(num_hashes):
+        min_hash = float('inf')
+        for s in shingles:
+            h = mmh3.hash(s, seed=i)
+            min_hash = min(min_hash, h)
+        signature.append(min_hash)
+    return signature
+
+# 两个集合的 Jaccard 估计:
+# J ≈ (signature1 == signature2) 的比例</code></pre>
+
+    <h3>Locality-Sensitive Hashing (LSH)</h3>
+    <p>MinHash 签名仍然需要两两比较。LSH 将相似签名分到同一个桶：</p>
+    <pre><code># LSH 的核心思想:
+# - 将 minhash 签名分成 b 个 band
+# - 每个 band 有 r 行（b × r = num_hashes）
+# - 如果两个签名在某个 band 完全相同 → 进入同一个候选桶
+# - 只在候选桶内做精确比较
+
+# 参数选择:
+# - b 个 band, 每个 r 行
+# - 相似度为 s 的文档成为候选的概率:
+#   P = 1 - (1 - s^r)^b
+
+# 例: num_hashes=128, b=16, r=8
+# s=0.5: P ≈ 0.004（不太可能被选中）
+# s=0.8: P ≈ 0.99（几乎一定被选中）
+
+# 这样可以在 O(n) 时间内找到所有相似度 > 阈值的文档对</code></pre>
+
+    <h3>SemDedup</h3>
+    <p>语义层面的去重（更先进的方法）：</p>
+    <pre><code># SemDedup 的核心思想:
+# 1. 用 embedding 模型编码每个文档
+# 2. 聚类相似的文档
+# 3. 在每个聚类内随机保留一个
+
+# 步骤:
+# 1. 编码: embedding = model.encode(documents)
+# 2. 聚类: clusters = kmeans(embedding, k=...)
+# 3. 去重: 每个 cluster 只保留一个
+
+# 优势:
+# - 能检测语义重复（不同措辞但相同含义）
+# - 比基于字符串的方法更强大
+
+# 劣势:
+# - 需要 embedding 模型（计算成本高）
+# - 聚类质量影响去重效果</code></pre>
+
+    <h3>去重策略对比</h3>
+    <table>
+      <tr><th>方法</th><th>检测类型</th><th>速度</th><th>内存</th><th>精度</th></tr>
+      <tr><td>精确去重</td><td>完全相同</td><td>极快</td><td>中</td><td>精确</td></tr>
+      <tr><td>Bloom Filter</td><td>完全相同</td><td>极快</td><td>低</td><td>概率</td></tr>
+      <tr><td>MinHash</td><td>近似重复</td><td>快</td><td>中</td><td>估计</td></tr>
+      <tr><td>MinHash + LSH</td><td>近似重复</td><td>很快</td><td>中</td><td>估计</td></tr>
+      <tr><td>SemDedup</td><td>语义重复</td><td>慢</td><td>高</td><td>语义</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="data-mixing">数据配比</h2>
+
+    <h3>为什么需要配比？</h3>
+    <p>不同来源的数据有不同的能力和偏差。最终训练数据是多种来源的混合：</p>
+    <pre><code># The Pile 的配比（按 tokens）:
+# - Pile-CC (网页): 22.0%
+# - Books3 (书籍): 10.3%
+# - OpenWebText2 (Reddit): 8.1%
+# - ArXiv (论文): 7.8%
+# - GitHub (代码): 7.6%
+# - PubMed Central (医学): 6.3%
+# - Wikipedia: 3.9%
+# - 其他 20+ 来源: 34%
+
+# 配比的影响:
+# - 代码比例高 → 编程能力强，但可能"代码腔"
+# - 书籍比例高 → 叙事能力强，但可能过时
+# - 论文比例高 → 推理能力强，但可能"学术腔"</code></pre>
+
+    <h3>DoReMi：自动数据配比</h3>
+    <p>用 reference model 指导数据配比：</p>
+    <pre><code># DoReMi 的核心思想:
+# 1. 训练一个小的 reference model
+# 2. 用 reference model 的 excess loss 作为权重
+# 3. 优化配比使 reference model 的 loss 最小
+
+# 算法:
+# 1. 用均匀配比训练 reference model
+# 2. 计算每个 domain 的 excess loss
+# 3. 用 excess loss 更新配比权重
+# 4. 用新配比训练 target model</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！KenLM 基于 n-gram，只看局部上下文，无法捕捉长距离语义质量。" data-incorrect="KenLM 只看局部 n-gram 上下文，无法捕捉长距离语义质量。">
+      <p><strong>问题 1：</strong>KenLM 用于质量过滤的主要局限是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">太慢</button>
+        <button data-choice="b" aria-pressed="false">只看局部上下文，无法捕捉长距离语义</button>
+        <button data-choice="c" aria-pressed="false">需要 GPU</button>
+        <button data-choice="d" aria-pressed="false">只能处理英文</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！Bloom filter 保证"不在"一定正确，但"在"可能有 false positive。" data-incorrect="Bloom filter 保证"不在"一定正确，但"在"可能有 false positive。">
+      <p><strong>问题 2：</strong>Bloom filter 的 false positive 和 false negative 特性是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">没有 false positive，也没有 false negative</button>
+        <button data-choice="b" aria-pressed="false">有 false positive，没有 false negative</button>
+        <button data-choice="c" aria-pressed="false">没有 false positive，有 false negative</button>
+        <button data-choice="d" aria-pressed="false">两者都有</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！MinHash 签名的碰撞概率等于 Jaccard 相似度，这是其数学基础。" data-incorrect="MinHash 的碰撞概率等于 Jaccard 相似度，这是其核心数学性质。">
+      <p><strong>问题 3：</strong>MinHash 为什么能估计 Jaccard 相似度？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为哈希函数是完美的</button>
+        <button data-choice="b" aria-pressed="false">因为 minhash 签名碰撞的概率 = Jaccard 相似度</button>
+        <button data-choice="c" aria-pressed="false">因为使用了多个哈希函数</button>
+        <button data-choice="d" aria-pressed="false">因为文档长度相同</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！去重提高训练效率、减少记忆、缓解隐私/版权问题。" data-incorrect="去重提高效率、减少记忆、缓解隐私/版权问题。">
+      <p><strong>问题 4：</strong>为什么训练数据需要去重？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">只是为了减小数据量</button>
+        <button data-choice="b" aria-pressed="false">提高训练效率、减少记忆、缓解隐私/版权问题</button>
+        <button data-choice="c" aria-pressed="false">因为重复数据会降低模型容量</button>
+        <button data-choice="d" aria-pressed="false">去重是不必要的</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>过滤框架</h3>
+        <p>目标数据 + 原始数据 → 评分函数 → 保留/拒绝</p>
+      </article>
+      <article>
+        <h3>三种算法</h3>
+        <p>KenLM（生成）、fastText（判别）、DSIR（重要性采样）</p>
+      </article>
+      <article>
+        <h3>去重层次</h3>
+        <p>精确 → MinHash → SemDedup，从字符到语义</p>
+      </article>
+      <article>
+        <h3>工具链</h3>
+        <p>trafilatura + fastText + Bloom filter + LSH</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Xie et al. (2023): <a href="https://arxiv.org/abs/2302.03169">DSIR: Data Selection via Importance Resampling</a></li>
+      <li>Lee et al. (2022): <a href="https://arxiv.org/abs/2107.06499">Deduplicating Training Data Makes Language Models Better</a></li>
+      <li>Kandpal et al. (2022): <a href="https://arxiv.org/abs/2205.12647">Deduplicating Training Data Mitigates Privacy Risks</a></li>
+      <li>Ayara et al. (2024): <a href="https://openreview.net/forum?id=NCgEpVDEzn">SemDedup</a></li>
+      <li>Xie et al. (2024): <a href="https://arxiv.org/abs/2308.12284">DoReMi: Optimizing Data Mixtures</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0013-data-sources.html">← 第 13 课</a>
+      <a href="0015-alignment-sft-rlhf.html">第 15 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课基于 Lecture 14 内容深入展开</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

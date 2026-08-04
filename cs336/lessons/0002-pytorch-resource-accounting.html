@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 2 课：PyTorch 构建块与资源核算 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 2 课</p>
+    <h1>PyTorch 构建块与资源核算</h1>
+    <p class="lede">训练一个 70B 模型到底要花多少钱、多长时间？答案可以用"餐巾纸数学"（napkin math）算出来——你只需要会乘法和理解几个关键数字。这一课建立整个课程的方法论：从第一性原理出发，用资源核算驱动每一个工程决策。</p>
+
+    <div class="meta">
+      <span>授课：Percy Liang</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：入门 → 中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="overview">本课路线图</h2>
+
+    <p>上一课建立了全课框架：<strong>理解源于构建，效率驱动一切</strong>。这一课进入实战——从 PyTorch 的基本构建块开始，自底向上搭建：</p>
+
+    <div class="loop">
+      <article>
+        <h3>Tensors</h3>
+        <p>一切数据的基本单元</p>
+      </article>
+      <article>
+        <h3>Operations</h3>
+        <p>计算与内存的代价</p>
+      </article>
+      <article>
+        <h3>Modules</h3>
+        <p>参数化模型的抽象</p>
+      </article>
+      <article>
+        <h3>Training Loop</h3>
+        <p>端到端训练流程</p>
+      </article>
+    </div>
+
+    <p>贯穿始终的是<strong>资源核算</strong>——对两种核心资源保持持续追踪：</p>
+    <ul>
+      <li><strong>内存（GB）</strong>：你的模型能放进去吗？</li>
+      <li><strong>算力（FLOPs）</strong>：训练要多久？</li>
+    </ul>
+
+    <p>我们不会在这课讲 Transformer 架构本身（Assignment 1 会深入），而是用更简单的模型来演示原理——这些原理在任何规模都适用。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="napkin-math">激发思考：餐巾纸数学</h2>
+
+    <h3>问题 1：训练 70B 模型要多久？</h3>
+
+    <div class="card idea">
+      <p><strong>场景：</strong>用 1024 张 H100 训练一个 70B 参数模型，数据量 15T tokens。</p>
+    </div>
+
+    <p><strong>Step 1：计算总 FLOPs</strong></p>
+    <pre><code>总 FLOPs = 6 × P × T
+         = 6 × 70×10⁹ × 15×10¹²
+         = 6.3×10²⁴ FLOPs</code></pre>
+
+    <p>这个 <strong>6PD 公式</strong>（6 × Parameters × Data）是整个领域最常用的估算公式。它来自：</p>
+    <ul>
+      <li>前向传播：~2 × P × T FLOPs</li>
+      <li>反向传播：~4 × P × T FLOPs（前向的约 2 倍）</li>
+    </ul>
+
+    <p><strong>Step 2：估算实际吞吐</strong></p>
+    <pre><code>H100 稠密峰值（bf16）: ~989 TFLOP/s
+假设 MFU = 0.5（50% 利用率）
+单卡实际: 989 × 0.5 ≈ 495 TFLOP/s
+1024 卡集群: 495 × 1024 ≈ 5.07×10¹⁷ FLOP/s</code></pre>
+
+    <p><strong>Step 3：计算时间</strong></p>
+    <pre><code>时间 = 6.3×10²⁴ / 5.07×10¹⁷ ≈ 1.24×10⁷ 秒 ≈ 144 天 ≈ 5 个月</code></pre>
+
+    <p>这和 Meta 公布 Llama 3 405B 的训练时间量级一致——他们用 ~16K H100s 训 ~15T tokens 花约 30 天。</p>
+
+    <h3>问题 2：8 张 H100 能训多大的模型？</h3>
+
+    <div class="card warning">
+      <p><strong>关键：</strong>这取决于你用什么优化器、什么精度。</p>
+    </div>
+
+    <p><strong>用 AdamW + float32（最坏情况）：</strong></p>
+    <pre><code>每参数内存:
+  - 参数（fp32）:     4 bytes
+  - 梯度（fp32）:     4 bytes
+  - 优化器状态（m+v）: 8 bytes（fp32）
+  总计: 16 bytes/parameter
+
+8 × 80GB = 640 GB
+最大模型 ≈ 640×10⁹ / 16 ≈ 40B 参数</code></pre>
+
+    <p><strong>加上主参数副本（mixed precision）：</strong></p>
+    <pre><code>实际中还需要额外的 fp32 参数副本用于更新:
+  4（bf16 参数）+ 4（fp32 主参数）+ 4（梯度）+ 8（优化器）= 20 bytes/parameter
+
+最大模型 ≈ 640×10⁹ / 20 ≈ 32B 参数</code></pre>
+
+    <div class="card idea">
+      <p><strong>注意：</strong>这还没算 activations！Activations 的内存取决于 batch size 和 sequence length，可能占很大一部分——这也是为什么后面要学 gradient checkpointing。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="tensors">Tensors：一切的基础</h2>
+
+    <h3>什么是 Tensor？</h3>
+    <p>Tensor 是 PyTorch 中存储所有数据的基本结构——参数、梯度、优化器状态、数据、激活值，一切皆是 tensor。</p>
+
+    <pre><code>import torch
+
+# 创建方式
+x = torch.tensor([[1., 2, 3], [4, 5, 6]])  # 从数据
+x = torch.zeros(4, 8)                        # 全零
+x = torch.ones(4, 8)                         # 全一
+x = torch.randn(4, 8)                        # 随机初始化
+x = torch.empty(4, 8)                        # 未初始化（最快）</code></pre>
+
+    <h3>Tensor 的内存布局</h3>
+    <p>PyTorch tensor 本质上是一个指针加上描述如何寻址元素的元数据（stride）：</p>
+
+    <pre><code>x = torch.tensor([
+    [0., 1, 2, 3],
+    [4, 5, 6, 7],
+    [8, 9, 10, 11],
+])
+
+# stride 描述在存储中跳过多少元素到达下一个维度
+x.stride(0)  # = 4  （到下一行，跳过 4 个元素）
+x.stride(1)  # = 1  （到下一列，跳过 1 个元素）
+
+# 元素 [r, c] 的索引 = r * stride(0) + c * stride(1)
+# 例如 [1, 2] → 1*4 + 2*1 = 6</code></pre>
+
+    <h3>Views 与拷贝</h3>
+    <p>很多操作只是提供 tensor 的<strong>不同视图</strong>（view），不做拷贝：</p>
+
+    <pre><code>x = torch.tensor([[1., 2, 3], [4, 5, 6]])
+
+# 切片 - view，共享存储
+y = x[0]       # [1., 2, 3]，共享存储
+y = x[:, 1]    # [2, 5]，共享存储
+
+# reshape（可能 view，可能拷贝）
+y = x.view(3, 2)  # view，共享存储
+
+# transpose - view，共享存储
+y = x.t()
+y.is_contiguous()  # False！非连续
+
+# 非连续 tensor 不能再 view，需要先 contiguous()
+y.view(2, 3)  # RuntimeError!
+y.contiguous().view(2, 3)  # OK，但会拷贝</code></pre>
+
+    <div class="card warning">
+      <p><strong>性能陷阱：</strong>Views 是零开销的，但 <code>contiguous()</code> 需要拷贝数据。理解何时需要拷贝对性能优化至关重要。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="memory">内存核算：数据类型</h2>
+
+    <h3>精度与动态范围</h3>
+    <table>
+      <tr><th>类型</th><th>字节</th><th>指数位</th><th>尾数位</th><th>动态范围</th><th>精度</th></tr>
+      <tr><td>float32</td><td>4</td><td>8</td><td>23</td><td>±3.4×10³⁸</td><td>高</td></tr>
+      <tr><td>float16</td><td>2</td><td>5</td><td>10</td><td>±6.5×10⁴</td><td>中</td></tr>
+      <tr><td>bfloat16</td><td>2</td><td>8</td><td>7</td><td>±3.4×10³⁸</td><td>低</td></tr>
+      <tr><td>fp8 (E4M3)</td><td>1</td><td>4</td><td>3</td><td>±448</td><td>很低</td></tr>
+    </table>
+
+    <h3>为什么 bfloat16 是深度学习的宠儿？</h3>
+
+    <pre><code># float16 的问题：小数值下溢
+x = torch.tensor([1e-8], dtype=torch.float16)
+print(x)  # tensor([0.])  ← 下溢了！
+
+# bfloat16 没问题
+x = torch.tensor([1e-8], dtype=torch.bfloat16)
+print(x)  # tensor([1.0000e-8])  ← 保留了</code></pre>
+
+    <p><strong>直觉：</strong>bfloat16 把 float16 的尾数位砍了一半（10→7），但保留了 8 位指数。深度学习对精度不敏感（噪声有正则化效果），但对范围很敏感（梯度消失/爆炸）。</p>
+
+    <h3>FP8：H100 的新武器</h3>
+    <p>H100 支持两种 FP8 格式：</p>
+    <ul>
+      <li><strong>E4M3</strong>：4 位指数 + 3 位尾数，范围 ±448，精度稍高。用于<strong>前向传播</strong>。</li>
+      <li><strong>E5M2</strong>：5 位指数 + 2 位尾数，范围 ±57344，精度更低。用于<strong>反向传播梯度</strong>。</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>GPT-3 的一个 FFN 矩阵有多大？</strong></p>
+      <pre><code>GPT-3 的 d_model = 12288, d_ff = 4 × 12288 = 49152
+一个矩阵: 12288 × 49152 × 4 bytes (fp32)
+     = 2,415,919,104 bytes ≈ 2.3 GB
+
+GPT-3 有 96 层 → 一个模型光参数就 175 GB（fp32）</code></pre>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="compute">计算核算：FLOPs</h2>
+
+    <h3>什么是 FLOP？</h3>
+    <p><strong>FLOP</strong>（Floating-Point Operation）是一次浮点加法或乘法。注意区分：</p>
+    <ul>
+      <li><strong>FLOPs</strong>（小写 s）：Floating-Point Operations，计算量的度量</li>
+      <li><strong>FLOP/s</strong>（大写 S）：Floating-Point Operations per Second，硬件速度</li>
+    </ul>
+
+    <h3>矩阵乘法的 FLOPs</h3>
+    <p>深度学习中几乎一切计算量都来自矩阵乘法。对于 <code>Y = XW</code>，X 是 (B×D)，W 是 (D×F)：</p>
+
+    <pre><code>每个输出元素需要 D 次乘法和 (D-1) 次加法 ≈ 2D 次 FLOP
+总共 B × F 个输出元素
+FLOPs = 2 × B × D × F</code></pre>
+
+    <h3>从矩阵乘法到 6PD 公式</h3>
+    <p>考虑一个简单的线性模型：输入 x（B 个 token，每个 D 维），通过权重 W（D×K）映射到 K 维输出：</p>
+    <pre><code>前向: FLOPs = 2 × B × D × K = 2 × tokens × parameters
+反向: FLOPs ≈ 2 × 前向 = 4 × tokens × parameters
+总计: 6 × tokens × parameters</code></pre>
+
+    <div class="card idea">
+      <p><strong>关键洞察：</strong>这个 6PD 公式对 Transformer 同样适用（一阶近似）。虽然 Transformer 还有 attention 的 O(T²) 项，但当模型足够大时，矩阵乘法项主导。</p>
+    </div>
+
+    <h3>其他操作的 FLOPs</h3>
+    <table>
+      <tr><th>操作</th><th>FLOPs</th><th>和 matmul 对比</th></tr>
+      <tr><td>矩阵乘法 (m×n × n×p)</td><td>2mnp</td><td>基准</td></tr>
+      <tr><td>逐元素运算 (m×n)</td><td>O(mn)</td><td>可忽略</td></tr>
+      <tr><td>加法 (m×n + m×n)</td><td>mn</td><td>可忽略</td></tr>
+      <tr><td>LayerNorm</td><td>O(mn)</td><td>可忽略</td></tr>
+      <tr><td>Softmax</td><td>O(mn)</td><td>可忽略</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="mfu">Model FLOPs Utilization (MFU)</h2>
+
+    <h3>定义</h3>
+    <pre><code>MFU = 实际 FLOP/s / 硬件峰值 FLOP/s</code></pre>
+
+    <p>MFU 衡量你的代码"吃满"了硬件的百分之多少。主要损失来自：</p>
+    <ul>
+      <li>内存读写等待（memory-bound 操作）</li>
+      <li>通信开销（多 GPU 时）</li>
+      <li>Kernel launch 开销</li>
+      <li>Python/PyTorch 开销</li>
+    </ul>
+
+    <h3>硬件峰值参考</h3>
+    <table>
+      <tr><th>GPU</th><th>fp32 (TFLOP/s)</th><th>bf16 (TFLOP/s)</th><th>HBM 带宽</th></tr>
+      <tr><td>A100</td><td>19.5</td><td>312</td><td>2 TB/s</td></tr>
+      <tr><td>H100 (稠密)</td><td>67.5</td><td>989</td><td>3.35 TB/s</td></tr>
+      <tr><td>H100 (稀疏)</td><td>—</td><td>1979</td><td>3.35 TB/s</td></tr>
+    </table>
+
+    <h3>实测 MFU</h3>
+    <pre><code>import timeit
+import torch
+
+# 大矩阵乘法，bf16
+B, D, K = 16384, 32768, 8192
+x = torch.ones(B, D, device='cuda', dtype=torch.bfloat16)
+w = torch.randn(D, K, device='cuda', dtype=torch.bfloat16)
+
+# 预热（JIT 编译、缓存预热）
+for _ in range(5):
+    _ = x @ w
+torch.cuda.synchronize()
+
+# 正式计时
+num_trials = 5
+start = timeit.default_timer()
+for _ in range(num_trials):
+    y = x @ w
+torch.cuda.synchronize()
+elapsed = (timeit.default_timer() - start) / num_trials
+
+flops = 2 * B * D * K
+actual_flops_per_sec = flops / elapsed
+promised_flops_per_sec = 989e12  # H100 bf16
+mfu = actual_flops_per_sec / promised_flops_per_sec
+print(f"MFU: {mfu:.2%}")  # 通常 40-60%</code></pre>
+
+    <div class="card warning">
+      <p><strong>经验法则：</strong>MFU ≥ 0.5（50%）被认为是良好的。当矩阵乘法主导时（大 batch、大模型），MFU 会更高。低 MFU 通常意味着你的代码是 memory-bound 的。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="arithmetic-intensity">算术强度与 Ridge Point</h2>
+
+    <h3>算术强度（Arithmetic Intensity）</h3>
+    <pre><code>算术强度 = FLOPs / 传输的字节数</pre></code></pre>
+
+    <p>对于矩阵乘法 Y = XW（X: B×D, W: D×F）：</p>
+    <pre><code>读 X: B × D × 2 bytes (bf16)
+读 W: D × F × 2 bytes
+写 Y: B × F × 2 bytes
+总传输: 2BD + 2DF + 2BF bytes
+
+FLOPs: 2BDF
+
+算术强度 = 2BDF / (2BD + 2DF + 2BF)
+         ≈ B （当 D, F >> B 时）</code></pre>
+
+    <h3>Ridge Point</h3>
+    <p>每个硬件有一个<strong>ridge point</strong>——计算和内存带宽的平衡点：</p>
+    <pre><code>H100 ridge point = 989 TFLOP/s / 3.35 TB/s ≈ 295
+
+如果算术强度 > 295 → compute-bound（好！）
+如果算术强度 < 295 → memory-bound（坏！）
+
+结论: 矩阵乘法要 compute-bound，需要 B > 295</code></pre>
+
+    <h3>推理的困境</h3>
+    <p>推理时生成一个 token（B=1, T=1）：</p>
+    <pre><code>算术强度 ≈ 1 << 295
+
+这意味着推理时每个 matmul 都是 memory-bound！
+读整个权重矩阵，只为一次矩阵-向量乘法。
+
+这就是为什么推理优化如此困难——
+你永远无法"算得快"，只能"搬得少"（量化、KV cache 压缩等）。</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="einops">Einops：让维度不再出错</h2>
+
+    <h3>问题：维度地狱</h3>
+    <pre><code># 传统写法——你能一眼看出在算什么吗？
+scores = query @ key.transpose(-2, -1)  # -2, -1 是什么维度？
+x = x.view(x.size(0), x.size(1), num_heads, -1)  # -1 是多少？</code></pre>
+
+    <h3>Einsum：爱因斯坦求和</h3>
+    <pre><code>from einops import einsum
+
+# attention scores: Q @ K^T
+scores = einsum(query, key,
+    'batch seq1 head dim, batch seq2 head dim -> batch head seq1 seq2'
+)
+# 不再需要 transpose，维度命名让意图一目了然</code></pre>
+
+    <h3>Rearrange：维度重组</h3>
+    <pre><code>from einops import rearrange
+
+# 把 hidden 拆成 heads × head_dim
+x = rearrange(x, 'batch seq (heads dim) -> batch heads seq dim', heads=8)
+
+# 合并回去
+x = rearrange(x, 'batch heads seq dim -> batch seq (heads dim)')</code></pre>
+
+    <h3>jaxtyping：文档化维度</h3>
+    <pre><code>from jaxtyping import Float
+import torch
+
+# 声明式维度标注（仅文档，不强制检查）
+x: Float[torch.Tensor, "batch seq heads dim"] = torch.ones(2, 3, 8, 64)</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="autograd">Autograd：自动微分</h2>
+
+    <h3>前向与反向</h3>
+    <pre><code># 简单模型: y = 0.5 * (x @ w - 5)^2
+x = torch.tensor([1., 2, 3])
+w = torch.tensor([1., 1, 1], requires_grad=True)
+
+# 前向
+pred_y = x @ w           # = 6
+loss = 0.5 * (pred_y - 5).pow(2)  # = 0.5
+
+# 反向——自动计算 d(loss)/d(w)
+loss.backward()
+print(w.grad)  # [1, 2, 3]  (= x * (pred_y - 5))</code></pre>
+
+    <h3>反向传播的 FLOPs</h3>
+    <p>对于每个线性层 <code>Y = XW</code>：</p>
+    <pre><code>前向: Y = X @ W                    → 2BDF FLOPs
+反向:
+  dL/dX = dL/dY @ W^T              → 2BDF FLOPs
+  dL/dW = X^T @ dL/dY              → 2BDF FLOPs
+
+总计: 6BDF = 3 × 前向</code></pre>
+
+    <div class="card idea">
+      <p><strong>重要：</strong>反向传播需要保存前向的中间值（activations）。这就是为什么训练比推理费内存——你不仅要存参数，还要存 backward 需要的所有中间结果。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="modules">nn.Module：构建模型</h2>
+
+    <h3>参数初始化</h3>
+    <p>不恰当的初始化会导致梯度爆炸或消失：</p>
+    <pre><code># 不稳定的初始化
+w = nn.Parameter(torch.randn(input_dim, output_dim))
+# output 的元素大小 ~ sqrt(input_dim) → 随维度增长！
+
+# Xavier/Glorot 初始化
+w = nn.Parameter(torch.randn(input_dim, output_dim) / np.sqrt(input_dim))
+# output 的元素大小 ~ 1（与维度无关）
+
+# 更安全的截断版本
+nn.init.trunc_normal_(w, std=1/np.sqrt(input_dim), a=-3, b=3)</code></pre>
+
+    <h3>构建自定义 Module</h3>
+    <pre><code>class Linear(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+        self.weight = nn.Parameter(
+            torch.randn(input_dim, output_dim) / np.sqrt(input_dim)
+        )
+
+    def forward(self, x):
+        return x @ self.weight
+
+class Cruncher(nn.Module):
+    """简单深度线性模型，用于演示。"""
+    def __init__(self, dim, num_layers):
+        super().__init__()
+        self.layers = nn.ModuleList([Linear(dim, dim) for _ in range(num_layers)])
+        self.final = Linear(dim, 1)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return self.final(x).squeeze(-1)
+
+model = Cruncher(dim=64, num_layers=2)
+print(f"参数数: {sum(p.numel() for p in model.parameters())}")
+# 64*64 + 64*64 + 64 = 8256</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="training-loop">训练循环</h2>
+
+    <h3>训练循环的五个步骤</h3>
+    <pre><code>for step in range(num_steps):
+    # 1. 获取数据
+    x, y = get_batch(batch_size=B)
+
+    # 2. 前向传播
+    pred_y = model(x)
+    loss = F.mse_loss(pred_y, y)
+
+    # 3. 反向传播
+    loss.backward()
+
+    # 4. 参数更新
+    optimizer.step()
+
+    # 5. 清零梯度（重要！否则梯度会累积）
+    optimizer.zero_grad(set_to_none=True)  # set_to_none 比 fill_(0) 更高效</code></pre>
+
+    <h3>优化器进化史</h3>
+    <table>
+      <tr><th>优化器</th><th>公式</th><th>内存</th></tr>
+      <tr><td>SGD</td><td>θ -= lr × g</td><td>0</td></tr>
+      <tr><td>Momentum</td><td>θ -= lr × (βm + g)</td><td>1× params</td></tr>
+      <tr><td>AdaGrad</td><td>θ -= lr / √(Σg²) × g</td><td>1× params</td></tr>
+      <tr><td>RMSProp</td><td>θ -= lr / √(EMA(g²)) × g</td><td>1× params</td></tr>
+      <tr><td>AdamW</td><td>θ -= lr × (EMA(g) / √(EMA(g²)) + λθ)</td><td>2× params</td></tr>
+    </table>
+
+    <h3>内存全景图</h3>
+    <pre><code># 对于参数量 P，batch 大小 B，序列长度 L，维度 D，层数 L_num
+# 假设 float32 + AdamW
+
+parameters:       4P  (fp32 参数)
+gradients:         4P  (fp32 梯度)
+optimizer_state:   8P  (m + v, 各 4P)
+activations:       ~4 × B × D × L_num × L_seq  (取决于具体结构)
+
+总计（不含 activations）: 16P bytes
+加上 mixed precision 主参数副本: 20P bytes</code></pre>
+
+    <h3>数据加载最佳实践</h3>
+    <pre><code># 1. numpy memmap 做懒加载——不占用内存
+data = np.memmap('data.npy', dtype=np.int32, mode='r')
+
+# 2. pin_memory → 异步 CPU→GPU 传输
+x = x.pin_memory().to(device, non_blocking=True)
+
+# 3. 多个 worker 预取
+loader = DataLoader(dataset, num_workers=4, pin_memory=True,
+                    prefetch_factor=2, persistent_workers=True)</code></pre>
+
+    <h3>Checkpointing</h3>
+    <pre><code># 保存
+checkpoint = {
+    'model': model.state_dict(),
+    'optimizer': optimizer.state_dict(),
+    'step': step,
+    'loss': loss.item(),
+}
+torch.save(checkpoint, f'checkpoint_{step}.pt')
+
+# 加载
+checkpoint = torch.load('checkpoint.pt')
+model.load_state_dict(checkpoint['model'])
+optimizer.load_state_dict(checkpoint['optimizer'])</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="mixed-precision">混合精度训练</h2>
+
+    <h3>核心思想</h3>
+    <div class="card idea">
+      <p><strong>混合精度：</strong>用低精度做前向计算（快、省内存），用高精度存参数和做更新（稳）。</p>
+    </div>
+
+    <pre><code>from torch.cuda.amp import autocast, GradScaler
+
+# scaler 防止 bf16 下溢
+scaler = GradScaler()
+
+for x, y in loader:
+    with autocast(dtype=torch.bfloat16):
+        # 前向用 bf16——激活值只占一半内存
+        output = model(x)
+        loss = criterion(output, y)
+
+    # 反向也在 bf16 下做（scaler 防止下溢）
+    scaler.scale(loss).backward()
+    scaler.step(optimizer)
+    scaler.update()
+    optimizer.zero_grad(set_to_none=True)</code></pre>
+
+    <h3>内存节省</h3>
+    <pre><code># 无混合精度 (fp32):
+参数: 4P, 梯度: 4P, 优化器: 8P → 16P bytes
+
+# 混合精度 (bf16 前向 + fp32 主参数):
+bf16 参数: 2P
+fp32 主参数: 4P
+fp32 梯度: 4P
+fp32 优化器: 8P
+bf16 激活值: ~half → 显著节省！
+
+总计参数相关: ~18P（稍多，但激活值节省巨大）</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！训练总计 ≈ 6 × tokens × params（前向 2× + 反向 4×）。" data-incorrect="记住：前向 ≈ 2PD，反向 ≈ 4PD，总计 ≈ 6PD。">
+      <p><strong>问题 1：</strong>训练一个 P 参数的模型，处理 T 个 token，总 FLOPs 约为？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">2 × P × T</button>
+        <button data-choice="b" aria-pressed="false">4 × P × T</button>
+        <button data-choice="c" aria-pressed="false">6 × P × T</button>
+        <button data-choice="d" aria-pressed="false">8 × P × T</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！bfloat16 用 2 字节但保持了 fp32 的指数范围（8 位指数），不易下溢。" data-incorrect="bfloat16 的指数位与 fp32 相同（8 位），所以动态范围一样大，但尾数位更少（7 vs 23）。">
+      <p><strong>问题 2：</strong>为什么训练 LLM 通常用 bfloat16 而不是 float16？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">bfloat16 精度更高</button>
+        <button data-choice="b" aria-pressed="false">bfloat16 动态范围与 fp32 相同，不易下溢</button>
+        <button data-choice="c" aria-pressed="false">float16 不被 GPU 支持</button>
+        <button data-choice="d" aria-pressed="false">bfloat16 占用更少内存</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！H100 ridge point ≈ 989/3.35 ≈ 295。算术强度 = B（当 D,F >> B），所以 B > 295 时 compute-bound。" data-incorrect="ridge point = 算力/带宽 = 989 TFLOP/s / 3.35 TB/s ≈ 295。">
+      <p><strong>问题 3：</strong>H100 上矩阵乘法在什么情况下是 compute-bound？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">batch size > 1</button>
+        <button data-choice="b" aria-pressed="false">batch size > 295</button>
+        <button data-choice="c" aria-pressed="false">永远 compute-bound</button>
+        <button data-choice="d" aria-pressed="false">永远 memory-bound</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！反向传播需要保存前向的中间激活值用于计算梯度，所以训练比推理费内存。" data-incorrect="反向传播需要前向的中间值（activations）来计算梯度，所以需要额外内存。">
+      <p><strong>问题 4：</strong>为什么训练比推理需要更多内存？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为模型更大</button>
+        <button data-choice="b" aria-pressed="false">因为需要保存前向激活值用于反向传播</button>
+        <button data-choice="c" aria-pressed="false">因为需要更多 GPU</button>
+        <button data-choice="d" aria-pressed="false">因为数据更多</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！optimizer.zero_grad(set_to_none=True) 把梯度设为 None 而不是 0，节省内存和计算。" data-incorrect="set_to_none=True 把梯度设为 None 而不是填充零，更高效。">
+      <p><strong>问题 5：</strong><code>optimizer.zero_grad(set_to_none=True)</code> 比 <code>zero_grad()</code> 更好是因为？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">它更快</button>
+        <button data-choice="b" aria-pressed="false">它把梯度设为 None，节省内存和写零开销</button>
+        <button data-choice="c" aria-pressed="false">它防止梯度爆炸</button>
+        <button data-choice="d" aria-pressed="false">没有区别</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>6PD 公式</h3>
+        <p>训练 FLOPs ≈ 6 × 参数 × token 数</p>
+      </article>
+      <article>
+        <h3>内存预算</h3>
+        <p>每参数 ~20 bytes（bf16 + AdamW + fp32 主参数）</p>
+      </article>
+      <article>
+        <h3>MFU</h3>
+        <p>≥ 0.5 是良好利用率，受内存带宽限制</p>
+      </article>
+      <article>
+        <h3>Ridge Point</h3>
+        <p>H100 ≈ 295，决定 compute vs memory bound</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Micikevicius et al. (2018): <a href="https://arxiv.org/abs/1710.03740">Mixed Precision Training</a> — 混合精度训练的原始论文</li>
+      <li>Horace He: <a href="https://horace.io/brrr_intro.html">Making Deep Learning Go Brrr</a> — kernel fusion 的直观解释</li>
+      <li><a href="https://einops.rocks/">Einops 教程</a> — 命名维度的艺术</li>
+      <li><a href="https://erees.dev/transformer-memory/">Transformer 内存使用详解</a> — 各组件内存分析</li>
+      <li><a href="https://www.adamcasson.com/posts/transformer-flops">Transformer FLOPs 计算</a> — 更精确的 FLOPs 核算</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0001-intro-tokenization.html">← 第 1 课</a>
+      <a href="0003-architectures-hyperparameters.html">第 3 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 2 内容</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

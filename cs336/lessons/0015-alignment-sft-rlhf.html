@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 15 课：Alignment — SFT/RLHF — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 15 课</p>
+    <h1>Alignment：从 Base Model 到 Useful Model</h1>
+    <p class="lede">预训练模型只是"预测下一个 token"的机器。要让它成为有用的助手，需要 alignment——教会它遵循指令、有帮助、无害。SFT 和 RLHF 是 alignment 的两大支柱。</p>
+
+    <div class="meta">
+      <span>授课：Sida Wang & Kangwook Lee</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等 → 较高</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="what-is-alignment">什么是 Alignment？</h2>
+
+    <div class="card idea">
+      <p><strong>核心问题</strong>：预训练模型 p(x) 是 token 上的概率分布。它学会的是"什么 token 最可能出现"，而非"什么回答最有用"。Alignment 是将模型行为从"likely"调整到"helpful, harmless, honest"的过程。</p>
+    </div>
+
+    <h3>Base Model vs Instruct Model</h3>
+    <table>
+      <tr><th></th><th>Base Model</th><th>Instruct Model</th></tr>
+      <tr><td>训练目标</td><td>预测下一个 token</td><td>遵循指令、有帮助</td></tr>
+      <tr><td>行为</td><td>续写文本</td><td>回答问题、完成任务</td></tr>
+      <tr><td>示例</td><td>输入"The cat"→"sat on the mat"</td><td>输入"What is 2+2?"→"2+2=4"</td></tr>
+      <tr><td>能力</td><td>语言建模、知识</td><td>+ 指令跟随、对话</td></tr>
+    </table>
+
+    <h3>Alignment 的三种方法</h3>
+    <table>
+      <tr><th>方法</th><th>数据</th><th>训练方式</th><th>复杂度</th></tr>
+      <tr><td>SFT</td><td>(input, output) 对</td><td>监督学习</td><td>低</td></tr>
+      <tr><td>RLHF</td><td>偏好对 (chosen, rejected)</td><td>强化学习</td><td>高</td></tr>
+      <tr><td>DPO</td><td>偏好对 (chosen, rejected)</td><td>监督学习</td><td>中</td></tr>
+    </table>
+
+    <h3>训练流程概览</h3>
+    <pre><code>Base Model (预训练完成)
+    ↓ SFT (Supervised Fine-Tuning)
+SFT Model (能遵循指令)
+    ↓ RLHF (Reinforcement Learning from Human Feedback)
+RLHF Model (符合人类偏好)</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="sft">SFT：监督微调</h2>
+
+    <h3>核心思想</h3>
+    <p>SFT 是最直接的 alignment 方法：收集高质量的 (instruction, response) 对，用标准的监督学习微调模型。</p>
+
+    <pre><code># SFT 的数据格式
+{
+    "instruction": "解释什么是机器学习",
+    "output": "机器学习是人工智能的一个分支，它允许计算机从数据中学习...",
+}
+
+# 或者多轮对话格式
+{
+    "messages": [
+        {"role": "user", "content": "你好"},
+        {"role": "assistant", "content": "你好！有什么可以帮助你的吗？"},
+        {"role": "user", "content": "解释什么是机器学习"},
+        {"role": "assistant", "content": "机器学习是..."},
+    ]
+}</code></pre>
+
+    <h3>SFT 数据的特点</h3>
+    <ul>
+      <li><strong>高质量</strong>：每个样本都经过人工审核或来自高质量来源</li>
+      <li><strong>多样性</strong>：覆盖多种任务类型和语言风格</li>
+      <li><strong>格式一致</strong>：使用统一的对话/指令格式</li>
+      <li><strong>数量适中</strong>：通常 10K-100K 样本（远少于预训练）</li>
+    </ul>
+
+    <h3>SFT 数据来源</h3>
+    <table>
+      <tr><th>来源</th><th>方法</th><th>代表</th></tr>
+      <tr><td>人工标注</td><td>标注员撰写高质量回答</td><td>Llama 2 instruction data</td></tr>
+      <tr><td>强模型蒸馏</td><td>用 GPT-4 生成回答</td><td>Alpaca, OpenHermes</td></tr>
+      <tr><td>用户共享</td><td>收集真实人机对话</td><td>ShareGPT</td></tr>
+      <tr><td>现有数据集</td><td>转换 NLP 数据集为指令格式</td><td>Flan, Super-Natural Instructions</td></tr>
+    </table>
+
+    <h3>SFT 训练细节</h3>
+    <pre><code># SFT 的损失函数（与预训练相同，但只在 response 上计算）
+
+# 对于每个样本 (instruction, response):
+# 1. 拼接为: [instruction_tokens, response_tokens]
+# 2. 计算 loss 时，instruction 部分 mask 掉
+# 3. 只在 response token 上计算 cross-entropy loss
+
+def sft_loss(model, instruction, response):
+    # 拼接输入
+    input_ids = tokenize(instruction + response)
+    # 创建 mask：只对 response 部分计算 loss
+    mask = [0] * len(tokenize(instruction)) + [1] * len(tokenize(response))
+    # 前向传播
+    logits = model(input_ids)
+    # 计算 loss（只对 response 部分）
+    loss = cross_entropy(logits[mask], input_ids[mask])
+    return loss
+
+# 训练参数:
+# - 学习率: 比预训练低 10-100 倍 (如 1e-6 到 1e-5)
+# - Epochs: 1-3（容易过拟合）
+# - Batch size: 适中（32-128）</code></pre>
+
+    <div class="card warning">
+      <p><strong>SFT 的局限</strong>：</p>
+      <ul>
+        <li><strong>过拟合风格</strong>：模型可能学会回答的"格式"而非"内容"</li>
+        <li><strong>能力上限</strong>：SFT 只能教模型生成训练数据中见过的模式</li>
+        <li><strong>无法区分好坏</strong>：给定一个指令，SFT 不知道多个可能回答中哪个更好</li>
+      </ul>
+    </div>
+
+    <h3>SFT 数据的数量 vs 质量</h3>
+    <p>Llama 2 的发现：27,540 个人工标注的高质量样本，效果优于数百万个开源数据样本。<strong>质量远比数量重要</strong>。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="rlhf-overview">RLHF 概述</h2>
+
+    <h3>为什么需要 RLHF？</h3>
+    <p>SFT 只能让模型"模仿"训练数据。但很多时候我们需要模型在多个合理回答中选择最好的那个——这超出了 SFT 的能力：</p>
+    <ul>
+      <li>创造性写作：多个合理的故事开头</li>
+      <li>代码生成：多个能工作的实现</li>
+      <li>对话：多个有帮助的回答风格</li>
+    </ul>
+
+    <h3>RLHF 的三步流程</h3>
+    <pre><code>Step 1: SFT
+Base Model → SFT Model (初始化 policy)
+
+Step 2: Reward Model
+收集偏好数据 → 训练 Reward Model R(s, a)
+
+Step 3: PPO 优化
+用 Reward Model 作为奖励信号，通过 PPO 优化 policy</code></pre>
+
+    <h3>Reward Model</h3>
+    <p>Reward Model 学会预测"人类更喜欢哪个回答"：</p>
+    <pre><code># 偏好数据收集
+# 给定同一个 prompt，模型生成多个回答
+# 人类标注者排序: A > B > C
+
+# Reward Model 训练
+# 输入: (prompt, response)
+# 输出: 标量 reward
+
+# 损失函数 (Bradley-Terry 模型):
+# L = -E[log(σ(R(prompt, chosen) - R(prompt, rejected)))]
+
+# 即: 让 chosen 的 reward 高于 rejected
+
+class RewardModel(nn.Module):
+    def __init__(self, base_model):
+        super().__init__()
+        self.transformer = base_model
+        # 替换 classification head 为标量输出
+        self.reward_head = nn.Linear(hidden_dim, 1)
+
+    def forward(self, input_ids, attention_mask):
+        outputs = self.transformer(input_ids, attention_mask)
+        # 取最后一个 token 的隐藏状态
+        last_hidden = outputs.last_hidden_state[:, -1, :]
+        reward = self.reward_head(last_hidden)
+        return reward.squeeze(-1)</code></pre>
+
+    <h3>PPO 优化</h3>
+    <pre><code># PPO (Proximal Policy Optimization) 的核心思想:
+# 用 Reward Model 的输出作为奖励
+# 通过 policy gradient 优化语言模型
+# 同时用 KL 惩罚防止模型偏离太远
+
+# 对每个 prompt:
+# 1. 用当前 policy π 生成 response
+# 2. 用 Reward Model 计算 reward R(prompt, response)
+# 3. 计算 KL 惩罚: KL(π || π_SFT)
+# 4. 总奖励 = R - β × KL
+# 5. 用 PPO 更新 policy
+
+# PPO 的 loss:
+# L = -E[min(ratio × advantage, clip(ratio, 1-ε, 1+ε) × advantage)]
+# 其中 ratio = π_new(a|s) / π_old(a|s)</code></pre>
+
+    <h3>PPO 的完整流程</h3>
+    <pre><code># RLHF/PPO 训练循环:
+
+for batch in prompts:
+    # 1. 生成 responses
+    responses = policy.generate(batch.prompt)
+
+    # 2. 计算 rewards
+    rewards = reward_model(batch.prompt, responses)
+
+    # 3. 计算 KL 惩罚
+    kl_penalty = compute_kl(policy, sft_model, batch.prompt, responses)
+
+    # 4. 总奖励
+    total_reward = rewards - beta * kl_penalty
+
+    # 5. 计算 advantage (使用 GAE)
+    advantages = compute_gae(total_reward, values)
+
+    # 6. PPO 更新
+    for _ in range(ppo_epochs):
+        new_log_probs = policy.log_prob(batch.prompt, responses)
+        ratio = exp(new_log_probs - old_log_probs)
+        loss = -min(ratio * advantages,
+                    clip(ratio, 1-eps, 1+eps) * advantages)
+        loss.backward()
+        optimizer.step()</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="preference-data">偏好数据收集</h2>
+
+    <h3>如何收集偏好？</h3>
+    <pre><code># 方法 1: 直接比较
+# 给定 prompt，生成 4 个 responses
+# 人类标注者排序: A > C > B > D
+# 生成偏好对: (A, C), (A, B), (A, D), (C, B), (C, D), (B, D)
+
+# 方法 2: 成对比较
+# 给定 prompt，生成 2 个 responses
+# 人类标注者选择: A > B
+# 生成一个偏好对: (A, B)
+
+# 方法 3: Elo 评分 (类似 Chatbot Arena)
+# 多次比较，计算每个 response 的 Elo 分数</code></pre>
+
+    <h3>偏好数据的质量</h3>
+    <ul>
+      <li><strong>一致性</strong>：不同标注者对同一对回答的判断应该一致</li>
+      <li><strong>区分度</chosen>：chosen 和 rejected 应该有明确的质量差异</li>
+      <li><strong>多样性</strong>：覆盖多种 prompt 类型和回答风格</li>
+    </ul>
+
+    <div class="card">
+      <p><strong>Llama 2 的发现</strong>：偏好数据的质量比数量重要。少量高质量偏好对（~10K）比大量低质量偏好对更有效。一致性（inter-annotator agreement）是关键指标。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="rlhf-challenges">RLHF 的挑战</h2>
+
+    <h3>Reward Hacking</h3>
+    <p>模型学会"欺骗" reward model，而非真正提高质量：</p>
+    <pre><code># Reward hacking 的表现:
+# 1. 生成 reward model 喜欢但人类不喜欢的回答
+# 2. 利用 reward model 的盲点
+# 3. 生成"安全但无用"的回答（reward model 不给负分）
+
+# 例: Reward model 偏好长回答
+# → 模型生成冗长、重复的回答
+# → Reward 高，但人类不喜欢
+
+# 缓解方法:
+# 1. KL 惩罚（防止偏离 SFT 太远）
+# 2. 定期更新 reward model
+# 3. 人类在环评估</code></pre>
+
+    <h3>KL 散度的作用</h3>
+    <pre><code># KL 惩罚: KL(π_RLHF || π_SFT)
+# 防止模型偏离 SFT 分布太远
+
+# 为什么需要 KL?
+# - 没有 KL: 模型可能找到 reward model 的漏洞
+# - 有 KL: 模型必须在"提高 reward"和"保持接近 SFT"之间权衡
+
+# KL 惩罚的大小 (β):
+# - β 太小: 几乎无约束，reward hacking 风险高
+# - β 太大: 模型几乎不更新，RLHF 无效
+# - 最优 β: 需要实验确定</code></pre>
+
+    <h3>其他挑战</h3>
+    <table>
+      <tr><th>挑战</th><th>表现</th><th>缓解</th></tr>
+      <tr><td>标注者不一致</td><td>不同标注者有不同偏好</td><td>多数投票、一致性过滤</td></tr>
+      <tr><td>Reward model 过拟合</td><td>在训练分布外表现差</td><td>正则化、更大模型</td></tr>
+      <tr><td>模式崩塌</td><td>模型输出多样性下降</td><td>温度调参、diversity reward</td></tr>
+      <tr><td>长度偏差</td><td>偏好长回答</td><td>长度归一化</td></tr>
+      <tr><td>计算成本</td><td>需要多个模型同时运行</td><td>模型压缩、蒸馏</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="sft-vs-rlhf">SFT vs RLHF 对比</h2>
+
+    <table>
+      <tr><th>维度</th><th>SFT</th><th>RLHF</th></tr>
+      <tr><td>数据</td><td>(input, output) 对</td><td>(prompt, chosen, rejected) 三元组</td></tr>
+      <tr><td>训练方式</td><td>监督学习</td><td>强化学习 (PPO)</td></tr>
+      <tr><td>计算成本</td><td>低</td><td>高（需要 4 个模型）</td></tr>
+      <tr><td>能力上限</td><td>受限于训练数据</td><td>可以超越训练数据</td></tr>
+      <tr><td>风格控制</td><td>直接模仿</td><td>通过 reward 间接控制</td></tr>
+      <tr><td>Reward hacking</td><td>无</td><td>有（主要风险）</td></tr>
+      <tr><td>实现复杂度</td><td>低</td><td>高</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>关键洞察</strong>：SFT 和 RLHF 不是互斥的。实际系统中通常先用 SFT 让模型"入门"，再用 RLHF 进一步"调优"。SFT 提供基础能力，RLHF 提供风格和安全。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="practical">实践要点</h2>
+
+    <h3>SFT 实践 Checklist</h3>
+    <div class="checklist">
+      <p>数据覆盖多种任务类型</p>
+      <p>数据经过人工审核或来自高质量来源</p>
+      <p>使用统一的对话格式</p>
+      <p>只在 response 上计算 loss</p>
+      <p>使用较低的学习率 (1e-6 到 1e-5)</p>
+      <p>训练 1-3 个 epoch（避免过拟合）</p>
+      <p>在 held-out 验证集上监控 loss</p>
+    </div>
+
+    <h3>RLHF 实践 Checklist</h3>
+    <div class="checklist">
+      <p>SFT model 质量足够好（作为初始化）</p>
+      <p>偏好数据覆盖多种 prompt 类型</p>
+      <p>标注者一致性 > 80%</p>
+      <p>Reward model 在验证集上准确率 > 70%</p>
+      <p>PPO 训练时监控 KL 散度</p>
+      <p>定期做人类评估（不只看 reward 分数）</p>
+      <p>保存多个 checkpoint，选择 reward 和 KL 的平衡点</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！SFT 只在 response token 上计算 loss，instruction 部分被 mask 掉。" data-incorrect="SFT 只在 response 上计算 loss，instruction 部分被 mask。">
+      <p><strong>问题 1：</strong>SFT 训练时，loss 在哪些 token 上计算？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">所有 token</button>
+        <button data-choice="b" aria-pressed="false">只在 response token 上</button>
+        <button data-choice="c" aria-pressed="false">只在 instruction token 上</button>
+        <button data-choice="d" aria-pressed="false">只在第一个 token 上</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！Reward hacking 是模型学会欺骗 reward model 而非真正提高质量。" data-incorrect="Reward hacking 是模型利用 reward model 的漏洞获得高奖励。">
+      <p><strong>问题 2：</strong>什么是 Reward Hacking？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">Reward model 训练得太好</button>
+        <button data-choice="b" aria-pressed="false">模型学会欺骗 reward model 而非真正提高质量</button>
+        <button data-choice="c" aria-pressed="false">Reward model 太小</button>
+        <button data-choice="d" aria-pressed="false">偏好数据太多</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！KL 惩罚防止模型偏离 SFT 分布太远，缓解 reward hacking。" data-incorrect="KL 惩罚防止模型偏离 SFT 分布太远，缓解 reward hacking。">
+      <p><strong>问题 3：</strong>RLHF 中 KL 惩罚的作用是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">提高 reward</button>
+        <button data-choice="b" aria-pressed="false">防止模型偏离 SFT 分布太远</button>
+        <button data-choice="c" aria-pressed="false">加速训练</button>
+        <button data-choice="d" aria-pressed="false">减小模型大小</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！SFT 和 RLHF 通常结合使用——SFT 先让模型入门，RLHF 进一步调优。" data-incorrect="SFT 和 RLHF 通常结合使用，SFT 先入门，RLHF 再调优。">
+      <p><strong>问题 4：</strong>SFT 和 RLHF 的关系是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">SFT 替代 RLHF</button>
+        <button data-choice="b" aria-pressed="false">RLHF 替代 SFT</button>
+        <button data-choice="c" aria-pressed="false">SFT 先入门，RLHF 再调优</button>
+        <button data-choice="d" aria-pressed="false">两者完全独立</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>SFT</h3>
+        <p>监督学习，高质量 (input, output) 对</p>
+      </article>
+      <article>
+        <h3>RLHF</h3>
+        <p>Reward model + PPO，从偏好中学习</p>
+      </article>
+      <article>
+        <h3>Reward Hacking</h3>
+        <p>主要风险，KL 惩罚缓解</p>
+      </article>
+      <article>
+        <h3>实践</h3>
+        <p>质量 > 数量，SFT + RLHF 结合</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Ouyang et al. (2022): <a href="https://arxiv.org/abs/2203.02155">InstructGPT</a> — RLHF 的开创性工作</li>
+      <li>Touvron et al. (2023): <a href="https://arxiv.org/abs/2307.09288">Llama 2</a> — 大规模 RLHF 实践</li>
+      <li>Stiennon et al. (2020): <a href="https://arxiv.org/abs/2009.01325">Learning to Summarize from Human Feedback</a> — RLHF 早期工作</li>
+      <li>Rafailov et al. (2023): <a href="https://arxiv.org/abs/2305.18290">DPO: Direct Preference Optimization</a> — RLHF 的替代</li>
+      <li>Christiano et al. (2017): <a href="https://arxiv.org/abs/1706.03741">Deep Reinforcement Learning from Human Preferences</a> — RLHF 思想源头</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0014-data-filtering-dedup.html">← 第 14 课</a>
+      <a href="0016-alignment-rlvr.html">第 16 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课深入 SFT/RLHF 机制</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

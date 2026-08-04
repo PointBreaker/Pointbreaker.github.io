@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 13 课：数据源与数据集 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 13 课</p>
+    <h1>数据来源与数据集</h1>
+    <p class="lede">数据是训练语言模型最重要的因素。但数据不会从天上掉下来——它来自特定的服务、经过特定的收集和处理流程。这一课带你遍历现代 LLM 使用的数据来源和知名数据集。</p>
+
+    <div class="meta">
+      <span>授课：Sida Wang</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="why-data">为什么数据如此重要？</h2>
+
+    <div class="card idea">
+      <p><strong>Hot take</strong>：训练基础模型最重要的是数据。架构和训练方法越来越趋同，数据是真正的差异化因素。</p>
+    </div>
+
+    <p>看看公司公开的信息就知道了：</p>
+    <ul>
+      <li><strong>架构</strong>：LLaMA、Qwen、DeepSeek 等开放模型都公开了详细的架构</li>
+      <li><strong>训练过程</strong>：很多论文描述了训练策略和参数</li>
+      <li><strong>数据</strong>：几乎不公开。Llama 2 的数据描述只有"from publicly available sources"一行</li>
+    </ul>
+
+    <h3>数据保密的原因</h3>
+    <table>
+      <tr><th>原因</th><th>解释</th></tr>
+      <tr><td>竞争壁垒</td><td>好的数据配方是核心竞争力</td></tr>
+      <tr><td>版权风险</td><td>公开数据来源可能引发诉讼</td></tr>
+      <tr><td>隐私问题</td><td>可能暴露数据中的个人信息</td></tr>
+    </table>
+
+    <h3>数据工作的特点</h3>
+    <p>与架构和系统不同，数据工作有一个特殊性质：</p>
+    <ul>
+      <li><strong>Long-tail 问题</strong>：数据质量遵从幂律分布——少量高质量 + 大量低质量</li>
+      <li><strong>人力密集</strong>：不像架构可以"优雅地"自动化，数据需要大量人工判断</li>
+      <li><strong>启发式为主</strong>：大部分数据处理规则是经验性的，而非理论驱动</li>
+      <li><strong>不可逆</strong>：训练完成后发现数据问题，无法"修复"模型</td>li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="pipeline">数据流水线概览</h2>
+
+    <h3>数据来源 → 原始快照 → 处理后数据</h3>
+    <pre><code>Live service (Reddit, GitHub, Wikipedia)
+    ↓ 爬取/API/dump
+Raw snapshot (Common Crawl, GH Archive, dumps)
+    ↓ 转换/过滤/去重
+Processed text (C4, FineWeb, The Pile)
+    ↓ 配比混合
+Aggregated dataset (Dolma, RedPajama)</code></pre>
+
+    <h3>训练的三个阶段</h3>
+    <table>
+      <tr><th>阶段</th><th>数据</th><th>目标</th></tr>
+      <tr><td>Pre-training</td><td>海量原始文本（万亿 tokens）</td><td>基础语言能力</td></tr>
+      <tr><td>Mid-training</td><td>高质量数据（百亿 tokens）</td><td>增强特定能力</td></tr>
+      <tr><td>Post-training</td><td>指令/偏好数据（百万样本）</td><td>指令跟随、alignment</td></tr>
+    </table>
+
+    <div class="card">
+      <p><strong>术语</strong>：</p>
+      <ul>
+        <li><strong>Base model</strong>：完成 pre-training + mid-training 后的模型</li>
+        <li><strong>Instruct/Chat model</strong>：完成 post-training 后的模型</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="web-sources">网页数据</h2>
+
+    <h3>Common Crawl</h3>
+    <p>最大的公开网页爬取数据集：</p>
+    <ul>
+      <li>2007 年成立，非营利组织</li>
+      <li>每月运行一次爬取，已有 ~100 次爬取存档</li>
+      <li>每次爬取 10-12 天，使用 100 台机器</li>
+      <li>2025 年 4 月的爬取包含数十亿页面</li>
+    </ul>
+
+    <h4>爬取过程</h4>
+    <pre><code># Apache Nutch 爬取流程:
+# 1. 从种子 URL 开始（数亿个）
+# 2. 下载页面，提取链接
+# 3. 将新链接加入队列
+# 4. 重复直到队列为空或达到预算
+
+# 爬取策略:
+# - Selection policy: 哪些页面下载？
+# - Politeness policy: 尊重 robots.txt，不超载服务器
+# - Re-visit policy: 多久重新检查更新？</code></pre>
+
+    <h4>两种格式</h4>
+    <table>
+      <tr><th>格式</th><th>内容</th><th>大小</th><th>用途</th></tr>
+      <tr><td>WARC</td><td>原始 HTTP 响应（HTML）</td><td>大</td><td>需要精确提取</td></tr>
+      <tr><td>WET</td><td>转换后的文本</td><td>小</td><td>快速开始</td></tr>
+    </table>
+
+    <div class="card warning">
+      <p><strong>重要</strong>：WET 转换是有损的。DCLM 论文显示，使用不同的 HTML→text 工具（trafilatura vs jusText）会影响下游任务精度。如果质量要求高，应该从 WARC 自己提取。</p>
+    </div>
+
+    <h3>WebText 和 OpenWebText</h3>
+    <p>GPT-2 使用的数据集：</p>
+    <ul>
+      <li>选择 Reddit 上 ≥3 karma 的出站链接</li>
+      <li>800 万页面，40GB 文本</li>
+      <li>OpenWebTextCorpus 是开源复现</li>
+    </ul>
+
+    <h3>FineWeb</h3>
+    <p>目前最广泛使用的开源预训练数据集之一：</p>
+    <ul>
+      <li>基于 95 个 Common Crawl 快照</li>
+      <li>URL 过滤 + 语言识别（p(en) > 0.65）</li>
+      <li>Gopher + C4 规则过滤</li>
+      <li>MinHash 模糊去重</li>
+      <li>PII 匿名化（邮箱、IP 地址）</li>
+      <li>结果：15T tokens</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="books">书籍与论文</h2>
+
+    <h3>Project Gutenberg</h3>
+    <ul>
+      <li>1971 年由 Michael Hart 创立</li>
+      <li>2025 年约 75,000 本书</li>
+      <li>只包含版权已清理的书籍（大部分是公共领域）</li>
+      <li>PG-19：2019 年之前的书籍子集</li>
+    </ul>
+
+    <h3>Books3 和 Shadow Libraries</h3>
+    <p>Books3 来自 Bibliotik 影子图书馆：</p>
+    <ul>
+      <li>196K 本书，包含许多版权作品</li>
+      <li>已被下架（版权诉讼）</li>
+      <li>Meta 曾使用 LibGen 数据训练模型</li>
+    </ul>
+
+    <div class="card warning">
+      <p><strong>影子图书馆</strong>：Library Genesis (LibGen)、Z-Library、Anna's Archive、Sci-Hub 等绕过版权和付费墙。LibGen 有 ~400 万本书，Sci-Hub 有 ~8800 万篇论文。这些资源的法律地位存疑。</p>
+    </div>
+
+    <h3>arXiv</h3>
+    <ul>
+      <li>1991 年成立的学术论文预印本平台</li>
+      <li>使用 LaTeX 格式</li>
+      <li>处理时需要移除注释、展开宏、处理参考文献</li>
+    </ul>
+
+    <h3>PubMed Central</h3>
+    <ul>
+      <li>NIH 资助的医学论文强制公开</li>
+      <li>500 万篇论文</li>
+    </ul>
+
+    <h3>PeS2o (Semantic Scholar)</h3>
+    <ul>
+      <li>4000 万学术论文</li>
+      <li>来自 Semantic Scholar 数据库</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="code">代码</h2>
+
+    <h3>GitHub</h3>
+    <ul>
+      <li>2008 年成立，2018 年被微软收购</li>
+      <li>2018 年已有 2800 万个公开仓库</li>
+      <li>内容多样：代码、文档、配置、数据</li>
+      <li>大量重复（fork、复制代码）</li>
+    </ul>
+
+    <h3>The Stack</h3>
+    <p>大规模代码数据集：</p>
+    <ul>
+      <li>从 GH Archive 获取仓库名（2015-2022）</li>
+      <li>git clone 了 1.37 亿个仓库</li>
+      <li>510 亿个文件（50 亿唯一）</li>
+      <li>只保留宽松许可证（MIT、Apache）</li>
+      <li>MinHash + Jaccard 相似度去重</li>
+      <li>结果：3.1 TB 代码</li>
+    </ul>
+
+    <pre><code># 代码数据的价值:
+# 1. 直接帮助编程任务
+# 2. 提升推理能力（folklore，但有实证支持）
+# 3. 帮助数学（代码可以验证数学推理）
+
+# 代码的挑战:
+# 1. 许可证复杂（GPL 有传染性）
+# 2. 大量重复（fork、模板）
+# 3. 质量差异大（学生作业 vs 生产代码）</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="qa-dialog">问答与对话</h2>
+
+    <h3>Stack Exchange</h3>
+    <ul>
+      <li>2008 年 StackOverflow 开始，扩展到其他主题</li>
+      <li>Q&A 格式接近指令调优</li>
+      <li>有元数据（投票、标签、评论）可用于过滤</li>
+      <li>数据以 XML dump 形式公开</li>
+    </ul>
+
+    <h3>Reddit</h3>
+    <ul>
+      <li>Pushshift 项目存档了 2005-2023 的 Reddit 数据</li>
+      <li>包含 submissions 和 comments</li>
+      <li>有投票、回复等元数据</li>
+    </ul>
+
+    <h3>Enron Emails</h3>
+    <ul>
+      <li>50 万封邮件，150 个用户</li>
+      <li>来自 Enron 公司调查（2002 年公开）</li>
+      <li>用于研究场景</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="datasets">知名数据集</h2>
+
+    <h3>C4 (Colossal Clean Crawled Corpus)</h3>
+    <p>T5 模型使用的数据集：</p>
+    <ul>
+      <li>基于 2019 年 4 月的 Common Crawl（1.4T tokens）</li>
+      <li>手动启发式规则过滤</li>
+      <li>结果：806 GB（156B tokens）</li>
+    </ul>
+
+    <pre><code># C4 的过滤规则:
+# 1. 只保留以标点结尾且 ≥5 个词的句子
+# 2. 移除少于 3 个句子的页面
+# 3. 移除包含"坏词"的页面
+# 4. 移除包含 '{' 的页面（无代码）
+# 5. 移除 'lorem ipsum'、'terms of use' 等
+# 6. 用 langdetect 过滤非英语（p > 0.99）</code></pre>
+
+    <h3>The Pile</h3>
+    <p>EleutherAI 的草根项目：</p>
+    <ul>
+      <li>22 个高质量领域</li>
+      <li>825 GB（~275B tokens）</li>
+      <li>包含书籍、论文、代码、邮件、维基百科等</li>
+    </ul>
+
+    <table>
+      <tr><th>领域</th><th>来源</th><th>大小</th></tr>
+      <tr><td>Pile-CC</td><td>Common Crawl WARC</td><td>227 GB</td></tr>
+      <tr><td>PubMed Central</td><td>医学论文</td><td>90 GB</td></tr>
+      <tr><td>Books3</td><td>Bibliotik</td><td>101 GB</td></tr>
+      <tr><td>OpenWebText2</td><td>Reddit 链接</td><td>63 GB</td></tr>
+      <tr><td>ArXiv</td><td>论文</td><td>85 GB</td></tr>
+      <tr><td>GitHub</td><td>代码</td><td>95 GB</td></tr>
+      <tr><td>Wikipedia</td><td>维基百科</td><td>25 GB</td></tr>
+    </table>
+
+    <h3>Dolma</h3>
+    <p>AI2 (Allen AI) 的开放数据集：</p>
+    <ul>
+      <li>3T tokens</li>
+      <li>来源：Common Crawl、Reddit、PeS2o、C4、Gutenberg、Wikipedia</li>
+      <li>完整的处理代码开放</li>
+    </ul>
+
+    <h3>RedPajama</h3>
+    <p>Together AI 的开放数据集：</p>
+    <ul>
+      <li>v1：复现 LLaMA 训练数据，1.2T tokens</li>
+      <li>v2：30T tokens，最小过滤，大量质量信号</li>
+      <li>SlimPajama：627B tokens（去重后）</li>
+    </ul>
+
+    <h3>DCLM (DataComp-LM)</h3>
+    <ul>
+      <li>目标：定义标准数据集用于比较数据处理算法</li>
+      <li>DCLM-pool：240T tokens（原始 Common Crawl）</li>
+      <li>DCLM-baseline：用质量过滤器筛选到 3.8T tokens</li>
+      <li>证明模型-based 过滤优于规则过滤</li>
+    </ul>
+
+    <h3>Nemotron-CC</h3>
+    <p>NVIDIA 的大规模数据集：</p>
+    <ul>
+      <li>6.3T tokens（HQ 子集 1.1T）</li>
+      <li>分类器集成（Nemotron-340B-instruct + DCLM）</li>
+      <li>合成数据重写（低质量数据用 LM 重写）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="copyright">数据许可与版权</h2>
+
+    <h3>版权法基础</h3>
+    <ul>
+      <li>版权保护"表达"而非"思想"（quicksort 的想法不受保护，但具体代码受保护）</li>
+      <li>门槛极低——你的网站自动受版权保护</li>
+      <li>注册费用 $65，保护期 75 年</li>
+      <li>大多数互联网内容都受版权保护</li>
+    </ul>
+
+    <h3>使用受版权保护数据的途径</h3>
+    <table>
+      <tr><th>途径</th><th>说明</th><th>例子</th></tr>
+      <tr><td>获得许可</td><td>向版权持有者付费</td><td>Google-Reddit 协议</td></tr>
+      <tr><td>合理使用 (Fair use)</td><td>法律豁免条款</td><td>Google Books 索引</td></tr>
+      <tr><td>公共领域</td><td>版权已过期</td><td>Project Gutenberg</td></tr>
+      <tr><td>Creative Commons</td><td>作者主动开放</td><td>Wikipedia, Khan Academy</td></tr>
+    </table>
+
+    <h3>Fair Use 四要素</h3>
+    <ol>
+      <li><strong>使用目的</strong>：教育优于商业，转换性优于复制性</li>
+      <li><strong>作品性质</strong>：事实性优于虚构性</li>
+      <li><strong>使用量</strong>：片段优于全文</li>
+      <li><strong>市场影响</strong>：是否影响原作市场</li>
+    </ol>
+
+    <div class="card warning">
+      <p><strong>现状</strong>：AI 训练是否属于 fair use 仍在法律争议中。多个诉讼正在进行（Authors Guild v. Google 的先例对 AI 训练有利但不确定）。这是数据保密的重要原因之一。</p>
+    </div>
+
+    <h3>数据许可协议</h3>
+    <pre><code># 常见开放许可证:
+# - CC0: 完全放弃版权
+# - CC BY: 允许使用，需署名
+# - CC BY-SA: 允许使用，需署名，衍生作品需同许可证
+# - CC BY-NC: 允许非商业使用
+# - MIT/Apache: 代码许可证
+# - GPL: 传染性许可证（衍生作品也需 GPL）
+
+# 商业数据许可:
+# - Google-Reddit: 据报 $60M/年
+# - OpenAI-Shutterstock: 图片数据
+# - OpenAI-StackExchange: 问答数据</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="exploration">数据探索</h2>
+
+    <h3>为什么要看数据？</h3>
+    <p>数据工作的一个重要但常被忽视的部分是<strong>亲自查看数据</strong>：</p>
+    <ul>
+      <li>发现数据中的模式和质量问题</li>
+      <li>验证过滤规则的效果</li>
+      <li>理解模型的"知识来源"</li>
+    </ul>
+
+    <h3>数据探索方法</h3>
+    <pre><code># 1. 随机抽样查看
+import random
+samples = random.sample(dataset, 100)
+for sample in samples:
+    print(sample.text[:500])
+    print("---")
+
+# 2. 统计特征
+# - 平均长度
+# - 语言分布
+# - 主题分布（用 classifier）
+# - 重复率
+
+# 3. 可视化
+# - 长度分布直方图
+# - 主题聚类（t-SNE/UMAP）
+# - 时间分布
+
+# 4. 与模型行为关联
+# - 模型擅长什么 → 看训练数据中有什么
+# - 模型犯错 → 看训练数据中缺什么或有什么噪声</code></pre>
+
+    <h3>数据探索的发现示例</h3>
+    <ul>
+      <li>C4 中有一条产品描述重复了 61,036 次</li>
+      <li>Common Crawl 中大量内容不是自然语言（代码、垃圾、模板）</li>
+      <li>某些"高质量"数据集中混入了测试集内容</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！数据是真正的差异化因素——架构和训练方法趋同，但数据配方高度保密。" data-incorrect="数据是真正的差异化因素，公司公开架构但保密数据。">
+      <p><strong>问题 1：</strong>为什么公司公开架构细节但保密数据细节？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">架构更重要</button>
+        <button data-choice="b" aria-pressed="false">数据是竞争壁垒，且有版权风险</button>
+        <button data-choice="c" aria-pressed="false">数据没有价值</button>
+        <button data-choice="d" aria-pressed="false">架构更难理解</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！WET 转换是有损的，从 WARC 自己用更好的工具（如 trafilatura）提取效果更好。" data-incorrect="WET 是有损转换，从 WARC 自己提取效果更好。">
+      <p><strong>问题 2：</strong>Common Crawl 的 WET 格式和 WARC 格式有什么区别？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">WARC 是文本，WET 是 HTML</button>
+        <button data-choice="b" aria-pressed="false">WARC 是原始 HTML，WET 是有损文本转换</button>
+        <button data-choice="c" aria-pressed="false">两者完全相同</button>
+        <button data-choice="d" aria-pressed="false">WET 质量更高</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！Fair use 保护转换性使用——Google Books 只显示片段，属于转换性使用。" data-incorrect="Fair use 保护转换性使用，Google Books 只显示片段属于此类。">
+      <p><strong>问题 3：</strong>为什么 Google Books 的全文索引被判定为 fair use？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 Google 付了钱</button>
+        <button data-choice="b" aria-pressed="false">因为只显示片段，属于转换性使用</button>
+        <button data-choice="c" aria-pressed="false">因为书籍是公共领域</button>
+        <button data-choice="d" aria-pressed="false">因为只用于研究</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！数据工作需要大量人工判断，是 long-tail 问题，不能像架构那样优雅地自动化。" data-incorrect="数据工作是 long-tail 问题，需要大量人力，不能优雅地自动化。">
+      <p><strong>问题 4：</strong>为什么数据工作比架构或系统工作更难自动化？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为数据量太大</button>
+        <button data-choice="b" aria-pressed="false">因为数据质量判断需要人工，是 long-tail 问题</button>
+        <button data-choice="c" aria-pressed="false">因为数据不重要</button>
+        <button data-choice="d" aria-pressed="false">因为数据已经完美</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>数据最重要</h3>
+        <p>数据是真正的差异化因素，公司高度保密</p>
+      </article>
+      <article>
+        <h3>数据来源多样</h3>
+        <p>网页、书籍、论文、代码、对话各有特点</p>
+      </article>
+      <article>
+        <h3>版权复杂</h3>
+        <p>Fair use 有争议，许可是替代方案</p>
+      </article>
+      <article>
+        <h3>看你的数据</h3>
+        <p>亲自查看数据是数据工作的重要部分</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Raffel et al. (2020): <a href="https://arxiv.org/abs/1910.10683">C4: Colossal Clean Crawled Corpus</a></li>
+      <li>Biderman et al. (2023): <a href="https://arxiv.org/abs/2101.00027">The Pile</a></li>
+      <li>Soldaini et al. (2024): <a href="https://arxiv.org/abs/2402.00159">Dolma</a></li>
+      <li>Li et al. (2024): <a href="https://arxiv.org/abs/2406.11794">DataComp-LM</a></li>
+      <li>HuggingFaceFW: <a href="https://huggingface.co/datasets/HuggingFaceFW/fineweb">FineWeb</a></li>
+      <li>Authors Guild v. Google (2015): <a href="https://en.wikipedia.org/wiki/Authors_Guild,_Inc._v._Google,_Inc.">Fair use 判例</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0012-evaluation.html">← 第 12 课</a>
+      <a href="0014-data-filtering-dedup.html">第 14 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课基于 Lecture 13 内容深入展开</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

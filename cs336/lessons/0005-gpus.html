@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 5 课：GPU 架构与性能 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 5 课</p>
+    <h1>GPU 架构与性能</h1>
+    <p class="lede">理解 GPU 硬件是理解为什么深度学习代码这样写的关键。为什么 matmul 那么快？为什么 memory-bound 操作这么慢？为什么 kernel fusion 能加速？这一课从硬件层面回答这些问题。</p>
+
+    <div class="meta">
+      <span>授课：Tatsu Hashimoto</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="gpu-basics">GPU 架构概览</h2>
+
+    <h3>CPU vs GPU</h3>
+    <table>
+      <tr><th>特性</th><th>CPU</th><th>GPU</th></tr>
+      <tr><td>核心数</td><td>~16-64 复杂核心</td><td>~1000s 简单核心</td></tr>
+      <tr><td>优化目标</td><td>低延迟（latency）</td><td>高吞吐（throughput）</td></tr>
+      <tr><td>适合任务</td><td>串行、分支密集</td><td>并行、计算密集</td></tr>
+      <tr><td>内存</td><td>低延迟，大容量</td><td>高带宽，较大容量</td></tr>
+    </table>
+
+    <h3>A100 GPU 架构</h3>
+    <pre><code>A100 SM (Streaming Multiprocessor) 结构:
+├── 108 个 SM
+├── 每个 SM 包含:
+│   ├── 64 FP32 CUDA cores (INT32 也可)
+│   ├── 4 个 Tensor Cores (第三代)
+│   │   └── 每个每时钟 256 FP16 FMA = 512 FLOPs
+│   ├── 192 KB L1 cache / Shared Memory (可配置)
+│   └── 寄存器文件 (256 KB)
+├── 40 MB L2 cache (共享)
+└── 80 GB HBM2e (高带宽内存)
+    带宽: 2 TB/s</code></pre>
+
+    <h3>H100 GPU 架构（新一代）</h3>
+    <pre><code>H100 SM (Streaming Multiprocessor) 结构:
+├── 132 个 SM (SXM5) / 144 个 SM (NVSwitch)
+├── 每个 SM 包含:
+│   ├── 128 FP32 CUDA cores
+│   ├── 4 个 Tensor Cores (第四代)
+│   │   └── 支持 FP8, FP16, BF16, TF32
+│   ├── 228 KB L1 cache / Shared Memory
+│   └── 寄存器文件 (256 KB)
+├── 50 MB L2 cache
+└── 80 GB HBM3
+    带宽: 3.35 TB/s</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="memory-hierarchy">GPU 内存层次</h2>
+
+    <h3>从慢到快，从大到小</h3>
+    <table>
+      <tr><th>层次</th><th>大小</th><th>带宽</th><th>延迟</th><th>访问者</th></tr>
+      <tr><td>HBM (Global Memory)</td><td>80 GB</td><td>3.35 TB/s</td><td>~500 cycles</td><td>所有 thread</td></tr>
+      <tr><td>L2 Cache</td><td>50 MB</td><td>~10 TB/s</td><td>~30 cycles</td><td>所有 thread</td></tr>
+      <tr><td>L1 Cache / Shared Memory</td><td>228 KB/SM</td><td>~19 TB/s</td><td>~3 cycles</td><td>同 block</td></tr>
+      <tr><td>Registers</td><td>256 KB/SM</td><td>~160 TB/s</td><td>0 cycle</td><td>单个 thread</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>仓库 vs 工厂类比（Horace He）：</strong></p>
+      <p><strong>HBM = 仓库</strong>：容量大，但搬运慢（带宽有限）</p>
+      <p><strong>SRAM = 工厂车间</strong>：容量小，但搬运快（带宽极高）</p>
+      <p><strong>Registers = 工人手</strong>：容量极小，但最快</p>
+      <p><strong>优化目标：</strong>最小化从"仓库"（HBM）搬运数据的次数。</p>
+    </div>
+
+    <h3>内存带宽 vs 计算速度</h3>
+    <pre><code>H100 (SXM5) 关键数字:
+  计算峰值 (bf16): 989 TFLOP/s
+  内存带宽:       3.35 TB/s
+  Ridge point:    989e12 / 3.35e12 ≈ 295 FLOP/byte
+
+  这意味着: 每从 HBM 读 1 字节数据，需要做 295 次浮点运算
+  才能"掩盖"内存延迟，达到 compute-bound。</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="execution-model">GPU 执行模型</h2>
+
+    <h3>Thread, Block, Grid</h3>
+    <pre><code># GPU 编程的基本抽象
+Grid
+ └── Thread Block (CTA)  ← 在单个 SM 上执行
+      └── Warp (32 threads)  ← 以 SIMD 方式执行
+           └── Thread        ← 基本执行单位
+
+# 为什么是 Warp？
+# 32 个线程以 lockstep 执行同一条指令
+# 这是 GPU SIMD (Single Instruction, Multiple Thread) 的基础</code></pre>
+
+    <h3>SIMT 执行模型</h3>
+    <p><strong>SIMT = Single Instruction, Multiple Thread</strong></p>
+    <pre><code># Warp 中的 32 个线程同时执行同一条指令
+# 但操作不同的数据
+
+# 例如: 向量加法
+# Thread 0: a[0] + b[0] → c[0]
+# Thread 1: a[1] + b[1] → c[1]
+# ...
+# Thread 31: a[31] + b[31] → c[31]
+# 这 32 个加法在同一时钟周期完成！</code></pre>
+
+    <div class="card warning">
+      <p><strong>分支发散（Branch Divergence）：</strong>如果 warp 中的一些线程走 if 分支，一些走 else 分支，GPU 会串行执行两个分支。这会导致性能下降。</p>
+      <pre><code># 坏: 分支发散
+if threadIdx.x % 2 == 0:
+    do_A()  # 16 个线程执行
+else:
+    do_B()  # 16 个线程执行
+# 实际执行时间 = time(A) + time(B)
+
+# 好: 无分支
+# 让所有线程走相同路径</code></pre>
+    </div>
+
+    <h3>Occupancy</h3>
+    <p><strong>Occupancy = 活跃 warp 数 / 最大支持 warp 数</strong></p>
+    <p>高 occupancy 意味着 SM 有更多的 warp 可以调度——当一个 warp 等待内存时，SM 可以切换到另一个 warp。</p>
+
+    <pre><code># 影响 occupancy 的因素:
+# 1. 每个 thread 使用的寄存器数
+# 2. 每个 block 使用的 shared memory
+# 3. block 大小
+
+# 经验法则:
+# - 目标 occupancy > 50%
+# - block size 应该是 warp size (32) 的倍数
+# - 通常 block size = 128 或 256</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="roofline">Roofline Model</h2>
+
+    <h3>概念</h3>
+    <p>Roofline model 直观地展示一个操作的性能上限：</p>
+    <pre><code>性能 (FLOP/s)
+    ↑
+    │        ┌──────── 计算上限 (compute ceiling)
+    │       /
+    │      /  ← 斜率 = 内存带宽
+    │     /
+    │    /
+    │───/───────────────→ 算术强度 (FLOP/byte)
+    │  ridge point</code></pre>
+
+    <ul>
+      <li><strong>低算术强度</strong>：在斜线上 → memory-bound，性能 = 带宽 × 算术强度</li>
+      <li><strong>高算术强度</strong>：在平顶下 → compute-bound，性能 = 计算峰值</li>
+    </ul>
+
+    <h3>常见操作的 Roofline 位置</h3>
+    <table>
+      <tr><th>操作</th><th>算术强度</th><th>瓶颈</th></tr>
+      <tr><td>Element-wise (add, mul)</td><td>~0.5 FLOP/byte</td><td>Memory-bound</td></tr>
+      <tr><td>LayerNorm</td><td>~1 FLOP/byte</td><td>Memory-bound</td></tr>
+      <tr><td>Softmax</td><td>~1 FLOP/byte</td><td>Memory-bound</td></tr>
+      <tr><td>MatMul (B=1)</td><td>~1 FLOP/byte</td><td>Memory-bound</td></tr>
+      <tr><td>MatMul (B=1024)</td><td>~512 FLOP/byte</td><td>Compute-bound</td></tr>
+      <tr><td>Large MatMul</td><td>>> 295 FLOP/byte</td><td>Compute-bound</td></tr>
+    </table>
+
+    <h3>优化策略</h3>
+    <div class="card idea">
+      <p><strong>Memory-bound 操作的优化：</strong></p>
+      <ul>
+        <li><strong>Kernel fusion</strong>：合并多个操作，减少 HBM 读写</li>
+        <li><strong>提高精度</strong>：用 bf16 替代 fp32，减少传输量</li>
+        <li><strong>减少 batch/sequence</strong>：推理时 B=1 是 memory-bound 的根源</li>
+      </ul>
+      <p><strong>Compute-bound 操作的优化：</strong></p>
+      <ul>
+        <li><strong>Tensor Cores</strong>：确保使用 Tensor Core（维度对齐）</li>
+        <li><strong>FlashAttention</strong>：减少不必要的计算</li>
+        <li><strong>混合精度</strong>：用低精度 Tensor Core</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="tensor-cores">Tensor Cores</h2>
+
+    <h3>什么是 Tensor Core？</h3>
+    <p>Tensor Core 是 GPU 上的专用硬件单元，专门做矩阵乘法：</p>
+    <pre><code># 一个 Tensor Core 每个时钟周期执行:
+# D = A × B + C
+# 其中 A, B, C, D 是小矩阵 (如 16×16)
+
+# H100 第四代 Tensor Core:
+# - 支持 FP8, FP16, BF16, TF32, FP64
+# - 每个 SM 有 4 个 Tensor Core
+# - 每个 Tensor Core 每时钟 256 FP16 FMA = 512 FLOPs</code></pre>
+
+    <h3>使用 Tensor Core 的条件</h3>
+    <ul>
+      <li>数据类型：FP16, BF16, TF32, FP8（不支持 FP32！）</li>
+      <li>矩阵维度：通常需要是 8 或 16 的倍数</li>
+      <li>内存布局：需要满足对齐要求</li>
+    </ul>
+
+    <h3>TF32：两全其美</h3>
+    <pre><code># TF32 (TensorFloat-32): A100 引入
+# 1 位符号 + 8 位指数 + 10 位尾数 = 19 bits
+# 范围和 FP32 一样（8 位指数），精度稍低（10 vs 23 尾数）
+# 但用 Tensor Core 加速！
+
+# 使用方式: PyTorch 默认开启
+# torch.backends.cuda.matmul.allow_tf32 = True</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="memory-access">内存访问模式</h2>
+
+    <h3>Coalesced Access（合并访问）</h3>
+    <p>GPU 内存访问以 32/128 字节的 "sector" 为单位。如果 warp 中的线程访问连续地址，可以合并为一个内存事务：</p>
+    <pre><code># Good: Coalesced (连续访问)
+# Thread 0 → address 0
+# Thread 1 → address 4
+# Thread 2 → address 8
+# ... → 一个 128B 事务搞定
+
+# Bad: Strided (跨步访问)
+# Thread 0 → address 0
+# Thread 1 → address 1024
+# Thread 2 → address 2048
+# ... → 32 个独立事务！</code></pre>
+
+    <h3>Shared Memory Bank Conflicts</h3>
+    <p>Shared memory 被分为 32 个 bank，每个 bank 宽 4 字节：</p>
+    <pre><code># 如果 warp 中多个线程访问同一 bank 的不同地址
+# 会发生 bank conflict，串行化访问
+
+# Good: 无 conflict
+# Thread 0 → bank 0
+# Thread 1 → bank 1
+# ...
+
+# Bad: 2-way bank conflict
+# Thread 0 → bank 0, address 0
+# Thread 16 → bank 0, address 1024
+# 这两个访问会被串行化</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="practical">实际 GPU 规格对比</h2>
+
+    <table>
+      <tr><th>规格</th><th>A100 80GB</th><th>H100 80GB</th><th>H100 80GB (稀疏)</th></tr>
+      <tr><td>FP64</td><td>9.7 TFLOP/s</td><td>34 TFLOP/s</td><td>67 TFLOP/s</td></tr>
+      <tr><td>FP32</td><td>19.5 TFLOP/s</td><td>67 TFLOP/s</td><td>67 TFLOP/s</td></tr>
+      <tr><td>TF32</td><td>156 TFLOP/s</td><td>494 TFLOP/s</td><td>989 TFLOP/s</td></tr>
+      <tr><td>BF16</td><td>312 TFLOP/s</td><td>989 TFLOP/s</td><td>1979 TFLOP/s</td></tr>
+      <tr><td>FP8</td><td>—</td><td>1979 TFLOP/s</td><td>3958 TFLOP/s</td></tr>
+      <tr><td>HBM</td><td>80 GB</td><td>80 GB</td><td>80 GB</td></tr>
+      <tr><td>HBM 带宽</td><td>2.0 TB/s</td><td>3.35 TB/s</td><td>3.35 TB/s</td></tr>
+      <tr><td>L2 Cache</td><td>40 MB</td><td>50 MB</td><td>50 MB</td></tr>
+      <tr><td>SM 数</td><td>108</td><td>132</td><td>132</td></tr>
+      <tr><td>TDP</td><td>400W</td><td>700W</td><td>700W</td></tr>
+    </table>
+
+    <h3>训练性能对比</h3>
+    <pre><code># GPT-3 175B 训练 (3.14e24 FLOPs):
+# A100 (312 TFLOP/s bf16, MFU=0.5):
+#   单卡实际: 156 TFLOP/s
+#   1024 卡: 1.6e17 FLOP/s
+#   时间: ~227 天
+
+# H100 (989 TFLOP/s bf16, MFU=0.5):
+#   单卡实际: 495 TFLOP/s
+#   1024 卡: 5.07e17 FLOP/s
+#   时间: ~69 天
+
+# H100 vs A100: ~3.3× 加速</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="multi-gpu">多 GPU 互联</h2>
+
+    <h3>节点内互联</h3>
+    <pre><code># NVLink (节点内 GPU 间)
+# H100: 18 条 NVLink 4.0, 每条 50 GB/s
+# 总带宽: 900 GB/s (双向)
+
+# NVSwitch (全连接)
+# H100 SXM5: 所有 GPU 通过 NVSwitch 全连接
+# 任意两 GPU 间 900 GB/s</code></pre>
+
+    <h3>节点间互联</h3>
+    <pre><code># InfiniBand / RoCE (节点间)
+# 典型: 400 Gb/s = 50 GB/s
+# 远慢于 NVLink！
+
+# 这意味着:
+# 节点内通信快 → 可以放 expert parallel
+# 节点间通信慢 → 尽量 data parallel</code></pre>
+
+    <h3>通信层次</h3>
+    <table>
+      <tr><th>层次</th><th>带宽</th><th>典型用途</th></tr>
+      <tr><td>NVLink (节点内)</td><td>900 GB/s</td><td>Tensor Parallel, Expert Parallel</td></tr>
+      <tr><td>NVSwitch (全连接)</td><td>900 GB/s</td><td>All-reduce within node</td></tr>
+      <tr><td>InfiniBand (节点间)</td><td>50 GB/s</td><td>Data Parallel gradient sync</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="gpu-programming">GPU 编程范式</h2>
+
+    <h3>CUDA C++</h3>
+    <pre><code>// 最底层，最灵活，最复杂
+__global__ void vector_add(float *a, float *b, float *c, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        c[i] = a[i] + b[i];
+    }
+}
+
+// 启动 kernel
+vector_add&lt;&lt;&lt;num_blocks, block_size&gt;&gt;&gt;(d_a, d_b, d_b, n);</code></pre>
+
+    <h3>Triton</h3>
+    <pre><code># Python 语法，自动优化
+@triton.jit
+def vector_add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK: tl.constexpr):
+    pid = tl.program_id(0)
+    offsets = pid * BLOCK + tl.arange(0, BLOCK)
+    mask = offsets < n
+    x = tl.load(x_ptr + offsets, mask=mask)
+    y = tl.load(y_ptr + offsets, mask=mask)
+    tl.store(out_ptr + offsets, x + y, mask=mask)</code></pre>
+
+    <h3>torch.compile</h3>
+    <pre><code># 不写 kernel，让编译器自动优化
+@torch.compile
+def fused_operation(x, w):
+    return gelu(x @ w)  # 自动融合 matmul + gelu</code></pre>
+
+    <table>
+      <tr><th>方法</th><th>抽象级别</th><th>性能</th><th>易用性</th></tr>
+      <tr><td>手写 CUDA</td><td>最低</td><td>最高</td><td>最难</td></tr>
+      <tr><td>Triton</td><td>中</td><td>高</td><td>中</td></tr>
+      <tr><td>torch.compile</td><td>最高</td><td>中-高</td><td>最易</td></tr>
+      <tr><td>PyTorch 原生</td><td>最高</td><td>中</td><td>最易</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！Ridge point = 989/3.35 ≈ 295。算术强度 > 295 时 compute-bound。" data-incorrect="Ridge point = 算力/带宽 = 989 TFLOP/s / 3.35 TB/s ≈ 295。">
+      <p><strong>问题 1：</strong>H100 的 ridge point 大约是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">~10</button>
+        <button data-choice="b" aria-pressed="false">~100</button>
+        <button data-choice="c" aria-pressed="false">~295</button>
+        <button data-choice="d" aria-pressed="false">~1000</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！Kernel fusion 把多个操作合并，减少 HBM 读写次数。" data-incorrect="Kernel fusion 的核心是减少 HBM 读写——多个操作合并后只读一次、写一次。">
+      <p><strong>问题 2：</strong>为什么 kernel fusion 能加速 memory-bound 操作？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">它减少了计算量</button>
+        <button data-choice="b" aria-pressed="false">它减少了 HBM 读写次数</button>
+        <button data-choice="c" aria-pressed="false">它使用了 Tensor Core</button>
+        <button data-choice="d" aria-pressed="false">它减少了 kernel launch 开销</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！Warp 是 32 个线程以 lockstep 执行同一条指令。" data-incorrect="Warp 是 32 个线程以 SIMD 方式执行同一条指令。">
+      <p><strong>问题 3：</strong>GPU 中的 warp 是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">一个 thread block</button>
+        <button data-choice="b" aria-pressed="false">32 个线程以 lockstep 执行</button>
+        <button data-choice="c" aria-pressed="false">一个 SM</button>
+        <button data-choice="d" aria-pressed="false">一个内存事务</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！TF32 用 10 位尾数（vs FP32 的 23 位），但保留 8 位指数，用 Tensor Core 加速。" data-incorrect="TF32 保留了 FP32 的 8 位指数（范围相同），但尾数只有 10 位。">
+      <p><strong>问题 4：</strong>TF32 和 FP32 的区别是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">TF32 范围更大</button>
+        <button data-choice="b" aria-pressed="false">TF32 尾数更少但用 Tensor Core</button>
+        <button data-choice="c" aria-pressed="false">TF32 不支持负数</button>
+        <button data-choice="d" aria-pressed="false">没有区别</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！节点间通信（~50 GB/s）远慢于节点内 NVLink（900 GB/s），所以 expert parallel 应该放在节点内。" data-incorrect="节点间通信带宽远低于节点内，所以通信密集的并行策略（如 expert parallel）应该放在节点内。">
+      <p><strong>问题 5：</strong>为什么 expert parallel 通常放在节点内而不是跨节点？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">节点内 GPU 更多</button>
+        <button data-choice="b" aria-pressed="false">节点内通信带宽远高于节点间</button>
+        <button data-choice="c" aria-pressed="false">节点间不支持 all-to-all</button>
+        <button data-choice="d" aria-pressed="false">没有区别</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>内存层次</h3>
+        <p>HBM → L2 → L1/SRAM → Registers</p>
+      </article>
+      <article>
+        <h3>Ridge Point</h3>
+        <p>H100 ≈ 295，决定 compute vs memory bound</p>
+      </article>
+      <article>
+        <h3>Tensor Cores</h3>
+        <p>专用矩阵乘法硬件，bf16/fp8 加速</p>
+      </article>
+      <article>
+        <h3>Roofline</h3>
+        <p>算术强度决定优化方向</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Horace He: <a href="https://horace.io/brrr_intro.html">Making Deep Learning Go Brrr</a> — 仓库/工厂类比</li>
+      <li>NVIDIA <a href="https://resources.nvidia.com/en-us-tensor-core/nvidia-tensor-core-gpu-datasheet">H100 Datasheet</a></li>
+      <li><a href="https://docs.nvidia.com/cuda/parallel-thread-execution/">PTX ISA</a> — GPU 汇编语言</li>
+      <li>CUDA MODE: <a href="https://www.youtube.com/watch?v=lTmYrKwjSOU">Compute and Memory Basics</a></li>
+      <li><a href="https://github.com/srush/gpu-puzzles">GPU Puzzles</a> — 通过谜题学 GPU 编程</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0004-attention-alternatives-moe.html">← 第 4 课</a>
+      <a href="0006-kernels-triton.html">第 6 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 5 内容</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>
