@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 11 课：设备驱动与中断 — 6.828 / 6.1810</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">6.828 / 6.1810 · 第 11 课 · rtm</p>
+    <h1>设备驱动与中断</h1>
+    <p class="lede">CPU 需要外设：存储、通信、显示。操作系统设备驱动程序控制这些设备，而中断是硬件通知软件"我需要关注"的核心机制。本节课通过 UART 驱动详解中断、DMA、轮询等概念。</p>
+
+    <div class="meta">
+      <p><strong>授课教师：</strong>rtm</p>
+      <p><strong>日期：</strong>2025 年春季</p>
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>阅读：</strong>xv6 源码 <code>kernel/uart.c</code>, <code>kernel/trap.c</code></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>设备驱动概述</h2>
+    <ul>
+      <li>设备处理可能很困难：接口僵硬而复杂、设备与 CPU 并行运行</li>
+      <li><strong>中断：</strong>硬件现在就需要关注！（如数据包到达）</li>
+      <li>软件必须放下当前工作、响应中断——RISC-V 使用与系统调用相同的 Trap 机制</li>
+      <li><strong>生产内核中大多数代码是设备驱动程序</strong></li>
+    </ul>
+
+    <h2>编程设备：内存映射 I/O</h2>
+    <ul>
+      <li>设备硬件有一些控制和状态寄存器</li>
+      <li>这些寄存器位于物理"内存"地址</li>
+      <li>对这些地址的加载/存储会读写设备控制寄存器</li>
+      <li>平台设计师决定设备的物理地址</li>
+    </ul>
+
+    <h2>示例设备：UART</h2>
+    <p>UART（Universal Asynchronous Receiver/Transmitter）是串行接口，QEMU 模拟常见的 16550 UART 芯片。</p>
+
+    <h3>UART 结构</h3>
+    <table>
+      <thead>
+        <tr><th>组件</th><th>作用</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>RX wire / TX wire</td><td>串行输入/输出线路</td></tr>
+        <tr><td>Receive Shift Register / FIFO</td><td>接收数据（16 字节 FIFO）</td></tr>
+        <tr><td>Transmit FIFO / Shift Register</td><td>发送数据（16 字节 FIFO）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>内存映射寄存器（UART0 = 0x10000000）</h3>
+    <table>
+      <thead>
+        <tr><th>偏移</th><th>名称</th><th>作用</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>RHR / THR</td><td>接收/发送保持寄存器</td></tr>
+        <tr><td>1</td><td>IER</td><td>中断使能寄存器（0x1=接收，0x2=发送）</td></tr>
+        <tr><td>5</td><td>LSR</td><td>线路状态寄存器（0x1=接收数据就绪）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>驱动如何使用寄存器</h3>
+    <pre><code>// uartgetc() in kernel/uart.c
+ReadReg(RHR) → *(char*)(0x10000000 + 0)</code></pre>
+
+    <div class="card idea">
+      <h3>为什么 UART 需要 FIFO？</h3>
+      <p>FIFO 缓冲允许设备在 CPU 来不及处理时暂存数据，避免丢失。16 字节 FIFO 意味着 CPU 最多可以每 16 字节处理一次，而非每字节一次。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>中断：设备通知 CPU 的机制</h2>
+    <h3>为什么不用忙等待？</h3>
+    <pre><code>// 忙等待示例
+while ((LSR & 1) == 0)
+  ;
+return RHR;</code></pre>
+    <p>如果输入马上就到，忙等待可以。但控制台经常没有输入，忙等待浪费大量 CPU。</p>
+
+    <h3>中断方案</h3>
+    <p>当设备需要关注时，发出中断：</p>
+    <ul>
+      <li>RX FIFO 从空变为非空</li>
+      <li>TX FIFO 从满变为非满</li>
+    </ul>
+
+    <h3>中断路径</h3>
+    <p><code>设备 → PLIC → CPU → trap → usertrap()/kerneltrap() → devintr()</code></p>
+    <ul>
+      <li>PLIC（Platform-Level Interrupt Controller）选择源设备和目标核心</li>
+      <li><code>scause</code> 高位表示这是设备中断</li>
+      <li>PLIC 寄存器指示是哪个设备的中断（IRQ）</li>
+      <li>UART 的 IRQ 是 10</li>
+    </ul>
+
+    <div class="card warning">
+      <h3>中断只是提示</h3>
+      <p>中断只是提示设备状态<strong>可能</strong>已改变。真正的真相在设备的状态寄存器中。驱动必须读取它们决定如何行动。一个中断可能表示多个操作需要处理。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>GDB 实战：跟踪 UART 中断</h2>
+    <p>以 shell 从控制台读取输入为例：</p>
+    <ol>
+      <li><code>sys_read()</code> → <code>fileread()</code> → <code>consoleread()</code></li>
+      <li><code>consoleread()</code> 看到缓冲区为空，调用 <code>sleep()</code></li>
+      <li>UART → PLIC → <code>stvec</code> → <code>kernelvec</code>（内核中，使用调度器栈）</li>
+      <li><code>kerneltrap()</code> → <code>devintr()</code></li>
+      <li><code>plic_claim()</code> 获取 IRQ = 10</li>
+      <li><code>uartintr()</code> → <code>uartgetc()</code> → 读 LSR → 读 RHR</li>
+      <li><code>consoleintr()</code> 处理字符 → <code>wakeup()</code></li>
+      <li>调度器恢复 shell 的 <code>read()</code></li>
+    </ol>
+
+    <hr class="rule">
+
+    <h2>通用驱动模式：Bottom-half 与 Top-half</h2>
+    <table>
+      <thead>
+        <tr><th>部分</th><th>调用者</th><th>职责</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Bottom half</strong></td>
+          <td>进程的系统调用（read/write）</td>
+          <td>告诉设备开始输入/输出；等待输入就绪或输出完成</td>
+        </tr>
+        <tr>
+          <td><strong>Top half</strong></td>
+          <td>中断处理程序</td>
+          <td>从设备读取输入/发送更多输出；与 bottom half 交互（通过 buffer + sleep/wakeup）</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>Top half 不在 bottom half 进程的上下文中运行（可能在另一个核心，或中断其他进程），所以交互必须通过 arms-length 方式——缓冲区 + <code>sleep()</code>/<code>wakeup()</code>。</p>
+
+    <hr class="rule">
+
+    <h2>并发与同步问题</h2>
+    <h3>多设备同时中断</h3>
+    <p>PLIC 将中断分配到不同核心，不同中断可并行处理。每个中断由第一个调用 <code>plic_claim()</code> 的核心认领。每个设备最多只有一个中断在进行中（通过 <code>plic_complete()</code> 通知完成）。</p>
+
+    <h3>中断可能在任意两条指令之间发生</h3>
+    <pre><code>// bottom half:     n = n + 1
+// interrupt top:   n = n + 1
+// 机器码：
+lw a4, n
+add a4, a4, 1
+sw a4, n</code></pre>
+    <p>如果中断发生在 <code>lw</code> 和 <code>add</code> 之间，两个 <code>n = n + 1</code> 可能只增加一次！</p>
+
+    <h3>解决方案：暂时禁用中断</h3>
+    <pre><code>intr_off();
+n = n + 1;
+intr_on();</pre></pre>
+    <div class="card warning">
+      <h3>禁用中断不够！</h3>
+      <p>中断可能在另一个 CPU 上发生。完整解决方案需要锁——下一讲的主题。</p>
+    </div>
+
+    <h3>SSTATUS_SIE = 0 时中断去哪了？</h3>
+    <p>PLIC/CPU 记住未决中断，在内核重新使能中断时投递。</p>
+
+    <hr class="rule">
+
+    <h2>中断的开销与优化</h2>
+    <h3>中断开销</h3>
+    <p>约 1 微秒（不包括有用的设备驱动工作）。包括：CPU trap、保存寄存器、可能切换页表、决定哪个设备、之后恢复一切并返回。流水线、大寄存器集、cache/TLB 缺失、慢 RAM 都增加开销。</p>
+
+    <h3>高中断率问题</h3>
+    <p>以太网每秒可交付数百万包。在此速率下，大部分 CPU 时间花在<strong>中断开销</strong>上。</p>
+
+    <h3>轮询（Polling）</h3>
+    <ul>
+      <li>告诉设备（或 PLIC）不要为设备生成中断</li>
+      <li>定期检查输入（如在 <code>scheduler()</code> 或定时器中断中）</li>
+      <li>然后处理自上次轮询以来积累的所有内容</li>
+      <li>高比率下比中断更高效</li>
+    </ul>
+
+    <h3>DMA（直接内存访问）</h3>
+    <ul>
+      <li>xv6 的 UART 驱动逐字节软件读取——CPU 不擅长这个（片外、不可缓存、8 位）</li>
+      <li>高速设备使用 DMA 自动将批量输入复制到 RAM，然后中断</li>
+      <li>输入已在普通 RAM 中，CPU 可高效读写</li>
+    </ul>
+
+    <h3>中断演进</h3>
+    <table>
+      <thead>
+        <tr><th>年代</th><th>开销</th><th>策略</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>几十年前</td><td>几个周期</td><td>简单硬件、智能软件、大量中断</td></tr>
+        <tr><td>现在</td><td>数千周期</td><td>智能硬件、每个中断做更多工作</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>发展方向</h3>
+      <ul>
+        <li>专用快速中断路径（也用于缺页、系统调用）</li>
+        <li>跨 CPU 分配设备工作</li>
+        <li>用户态设备驱动——完全绕过内核</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="c" data-incorrect="a,b,d">
+      <p><strong>Q1：</strong>内存映射 I/O 是什么意思？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 将设备的内存映射到进程的虚拟地址空间</button>
+        <button data-choice="b" aria-pressed="false">B. 用内存作为设备的缓存</button>
+        <button data-choice="c" aria-pressed="false">C. 设备的控制/状态寄存器位于物理内存地址，通过加载/存储访问</button>
+        <button data-choice="d" aria-pressed="false">D. 设备使用与 CPU 相同的内存</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="b" data-incorrect="a,c,d">
+      <p><strong>Q2：</strong>中断处理程序必须读取设备状态寄存器的原因是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 中断会破坏寄存器内容</button>
+        <button data-choice="b" aria-pressed="false">B. 中断只是提示状态"可能"已改变，真相在状态寄存器中</button>
+        <button data-choice="c" aria-pressed="false">C. 必须清除中断标志</button>
+        <button data-choice="d" aria-pressed="false">D. 为了向设备确认收到中断</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="d" data-incorrect="a,b,c">
+      <p><strong>Q3：</strong>为什么 bottom half 和 top half 的交互必须通过 arms-length 方式？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 它们运行在不同的进程</button>
+        <button data-choice="b" aria-pressed="false">B. 它们不能同时访问同一内存</button>
+        <button data-choice="c" aria-pressed="false">C. 它们使用不同的虚拟地址空间</button>
+        <button data-choice="d" aria-pressed="false">D. Top half 不在 bottom half 进程的上下文中运行</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="a" data-incorrect="b,c,d">
+      <p><strong>Q4：</strong>高中断率下，轮询比中断更高效的原因是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 减少中断开销（trap、保存/恢复寄存器等）的累积</button>
+        <button data-choice="b" aria-pressed="false">B. 轮询不需要 CPU</button>
+        <button data-choice="c" aria-pressed="false">C. 轮询更准确</button>
+        <button data-choice="d" aria-pressed="false">D. 轮询可以并行处理多个中断</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="b" data-incorrect="a,c,d">
+      <p><strong>Q5：</strong>仅禁用中断（intr_off）为什么不足以保护并发？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 中断无法被禁用</button>
+        <button data-choice="b" aria-pressed="false">B. 中断可能在另一个 CPU 上发生</button>
+        <button data-choice="c" aria-pressed="false">C. 禁用中断会导致系统崩溃</button>
+        <button data-choice="d" aria-pressed="false">D. 设备驱动程序不使用中断</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>内存映射 I/O</h3>
+        <p>设备寄存器位于物理地址，通过加载/存储访问，统一了 CPU 与设备的编程模型。</p>
+      </article>
+      <article>
+        <h3>中断驱动</h3>
+        <p>中断让设备主动通知 CPU，避免浪费的忙等待。但中断有开销，高负载下需轮询。</p>
+      </article>
+      <article>
+        <h3>Top/Bottom 分离</h3>
+        <p>系统调用（bottom half）与中断处理（top half）通过缓冲区 + sleep/wakeup 交互。</p>
+      </article>
+      <article>
+        <h3>并发挑战</h3>
+        <p>中断可能发生在任意指令间，需要禁用中断 + 锁来保证正确性。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://pdos.csail.mit.edu/6.1810/2025/xv6/book-riscv-rev3.pdf" target="_blank" rel="noopener">xv6 手册</a> —— 第 5 章（中断与设备驱动）</li>
+      <li><a href="https://www.qemu.org/docs/master/system/riscv/virt.html" target="_blank" rel="noopener">QEMU RISC-V virt 平台文档</a></li>
+      <li><a href="https://pdos.csail.mit.edu/6.1810/2025/lec/l-interrupt.txt" target="_blank" rel="noopener">原始讲义</a></li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="10-uservm.html">← 第 10 课</a>
+      <a href="12-locking.html">第 12 课 →</a>
+    </div>
+    <footer>
+      <p>6.828 / 6.1810: Operating System Engineering · MIT</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

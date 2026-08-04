@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 18 课：崩溃恢复 — MIT 6.828 (6.1810)</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.828 · 第 18 课 · rtm</p>
+    <h1>崩溃恢复</h1>
+    <p class="lede">断电后文件系统还能用吗？本节课探讨崩溃恢复问题及其解决方案——预写日志（Write-Ahead Logging）。</p>
+
+    <div class="meta">
+      <p><strong>授课教师：</strong>rtm (Robert T. Morris)</p>
+      <p><strong>年份：</strong>2025 秋季</p>
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>视频：</strong><a href="https://pdos.csail.mit.edu/6.1810/2025/lec/l-crash.txt" target="_blank" rel="noopener">Lecture 18 Notes</a></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>问题：崩溃恢复</h2>
+    <h3>什么是崩溃恢复？</h3>
+    <ol>
+      <li>进程创建文件、目录等</li>
+      <li>然后断电</li>
+      <li>重启后，文件系统还能用吗？</li>
+    </ol>
+
+    <div class="card warning">
+      <h3>核心问题</h3>
+      <p>文件系统操作需要<strong>多次磁盘写入</strong>，崩溃可能发生在部分写入之后，导致文件系统不变量被破坏：</p>
+      <ul>
+        <li>inode 标记为空闲但文件仍在目录中</li>
+        <li>目录项指向空闲 inode</li>
+        <li>块既在空闲列表中又在文件中使用</li>
+      </ul>
+    </div>
+
+    <h3>具体例子</h3>
+    <table>
+      <thead>
+        <tr><th>操作</th><th>崩溃风险</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>创建文件</strong></td>
+          <td>inode 已分配但目录项未写入 → inode 泄漏</td>
+        </tr>
+        <tr>
+          <td><strong>写入数据</strong></td>
+          <td>inode 指向未分配的块 → 读取垃圾数据</td>
+        </tr>
+        <tr>
+          <td><strong>删除文件 (unlink)</strong></td>
+          <td>目录项指向已释放的 inode → 灾难性后果</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>我们希望达到什么目标？</h3>
+    <ol>
+      <li><strong>文件系统内部不变量保持</strong>——没有块既在空闲列表中又在文件中</li>
+      <li><strong>除最后几个操作外，所有操作都被保留</strong>——昨天的数据保留，正在写的可能丢失</li>
+      <li><strong>没有顺序异常</strong>——如果程序先写 result 再写 status，不能出现 status 存在但 result 不存在</li>
+    </ol>
+
+    <div class="card idea">
+      <h3>正确性与性能的冲突</h3>
+      <p><strong>安全：</strong>立即写入磁盘（但磁盘很慢！）</p>
+      <p><strong>性能：</strong>批量写入、写回缓存（但有崩溃风险！）</p>
+    </div>
+
+    <h2>解决方案：预写日志 (Write-Ahead Logging)</h2>
+    <h3>基本思想</h3>
+    <ol>
+      <li>将要做的所有写入<strong>记录到日志</strong>中</li>
+      <li>在磁盘上写入"<strong>完成</strong>"标记（提交点）</li>
+      <li>然后执行实际的 FS 写入（安装）</li>
+      <li>崩溃+恢复时：如果日志有"完成"，重放日志；否则忽略</li>
+    </ol>
+
+    <h3>预写日志规则</h3>
+    <div class="card warning">
+      <p><strong>核心规则：</strong>在日志中所有写入完成且标记为已提交之前，不能将任何事务的写入安装到磁盘上的文件系统。</p>
+    </div>
+
+    <h3>为什么这个规则有效？</h3>
+    <ul>
+      <li>一旦安装了第一个写入，就必须完成事务的所有其他写入（保证原子性）</li>
+      <li>崩溃后，其他写入必须在日志中仍然可用</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>日志是"魔法"</h3>
+      <p>崩溃恢复对于复杂可变数据结构通常很难。日志可以：</p>
+      <ul>
+        <li>分层在现有存储系统之上</li>
+        <li>与高性能兼容（下节课主题）</li>
+      </ul>
+    </div>
+
+    <h2>xv6 日志实现</h2>
+    <h3>日志表示</h3>
+    <pre><code>┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│  缓冲缓存    │     │  磁盘 FS 树   │     │  磁盘日志    │
+│  (buffer    │     │  (实际文件    │     │  (事务记录   │
+│   cache)    │     │   系统)       │     │  + 提交点)   │
+└─────────────┘     └──────────────┘     └─────────────┘</code></pre>
+
+    <h3>提交流程</h3>
+    <ol>
+      <li><strong>写入时：</strong>将块号添加到内存数组，数据保留在缓冲缓存中（固定）</li>
+      <li><strong>提交时：</strong></li>
+      <ul>
+        <li>将缓冲区写入磁盘日志</li>
+        <li>等待磁盘完成写入（同步）</li>
+        <li>写入日志头扇区（块号 + 非零的 "n"）</li>
+      </ul>
+      <li><strong>提交后：</strong>将块安装到 FS 中的实际位置，解除固定，将 "n" 写零</li>
+    </ol>
+
+    <h3>日志头中的 "n" 值</h3>
+    <ul>
+      <li><strong>非零 = 已提交：</strong>日志内容有效，是完整事务</li>
+      <li><strong>零 = 未提交：</strong>可能不完整，恢复时应忽略日志</li>
+      <li>写入非零 "n" 是<strong>提交点</strong></li>
+    </ul>
+
+    <h3>示例：创建文件</h3>
+    <pre><code>$ echo > x
+log_write 34   // ialloc
+log_write 34   // iupdate
+log_write 47   // writei (目录项)
+log_write 33   // iupdate (目录 inode)
+log_write 34   // iupdate (itrunc)
+// 提交前没有磁盘写入！
+bwrite 3       // 写入日志块 (x 的 inode)
+bwrite 4       // 写入日志块 (目录块)
+bwrite 5       // 写入日志块 (目录 inode)
+bwrite 2       // 提交（写入日志头）
+bwrite 34      // 安装 inode
+bwrite 47      // 安装目录内容
+bwrite 33      // 更新目录 inode
+bwrite 2       // 标记日志为空
+// 同一块的多次写入合并为一次
+// 每个块写两次：日志 + 安装</code></pre>
+
+    <h3>崩溃场景分析</h3>
+    <table>
+      <thead>
+        <tr><th>崩溃时机</th><th>后果</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>提交前</td><td>日志头 n=0，恢复时忽略日志，操作未发生</td></tr>
+        <tr><td>提交期间</td><td>提交点是单个扇区写入，原子的；要么提交要么不提交</td></tr>
+        <tr><td>安装期间</td><td>恢复时重放日志，完成安装</td></tr>
+        <tr><td>恢复期间</td><td>再次重放日志（幂等）——只要没有其他活动介入就没问题</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <p><strong>关键洞察：</strong>多次重放日志是安全的（幂等性），只要没有其他活动介入。</p>
+    </div>
+
+    <h3>代码结构</h3>
+    <pre><code>sys_open()                     // sysfile.c
+  → begin_op() / end_op()      // 标记事务边界
+  → create()
+      → ialloc()               // 分配 inode
+          → log_write()        // 记录到日志
+      → iupdate()              // 更新 inode
+      → dirlink()              // 创建目录项
+          → writei()
+              → iupdate()
+  → itrunc()
+      → iupdate()
+
+begin_op()                      // log.c
+  → 检查日志是否正在提交
+  → 检查写入是否能容纳在日志中
+
+log_write()                     // log.c
+  → 添加扇区号到内存数组
+  → bpin() 固定缓冲区
+
+end_op()                        // log.c
+  → 如果没有未完成操作，提交
+
+commit()                        // log.c
+  → 将更新的块从缓存复制到磁盘日志
+  → 在磁盘日志头中记录扇区号和 "done"
+  → 安装写入（从磁盘日志复制到磁盘 FS）
+  → bunpin() 解除固定
+  → 擦除日志中的 "done"</code></pre>
+
+    <h2>挑战与 xv6 解决方案</h2>
+
+    <h3>挑战 1：防止写回缓存</h3>
+    <div class="card warning">
+      <p><strong>问题：</strong>系统调用可以安全地更新缓存块，但在事务提交之前不能写入 FS。</p>
+      <p><strong>xv6 方案：</strong></p>
+      <ul>
+        <li>确保缓冲缓存足够大</li>
+        <li>在缓冲缓存中固定脏块</li>
+        <li>提交后解除固定</li>
+      </ul>
+    </div>
+
+    <h3>挑战 2：系统调用数据必须能容纳在日志中</h3>
+    <ul>
+      <li>计算每个系统调用写入的块数上界</li>
+      <li>将大操作拆分为多个事务（如大文件写入）</li>
+    </ul>
+
+    <h3>挑战 3：允许并发系统调用</h3>
+    <ul>
+      <li>允许多个调用的写入在日志中</li>
+      <li>提交时写入所有</li>
+      <li>但不能写入仍在事务中的调用的数据</li>
+    </ul>
+
+    <h3>挑战 4：块可能在事务中被多次写入</h3>
+    <p><strong>解决方案：</strong>日志只影响内存中的缓存块，安装只在没有进行中的事务时发生 → <strong>写入吸收 (write absorption)</strong>优化</p>
+
+    <h3>挑战 5：孤儿文件/目录</h3>
+    <p><strong>解决方案：</strong>ireclaim 在重启时检查孤儿文件</p>
+
+    <h3>挑战 6：进程何时知道其写入在磁盘上？</h3>
+    <p><strong>典型方案：</strong>sync() 系统调用——仅在所有脏块写入磁盘后返回</p>
+
+    <h2>xv6 日志：优缺点</h2>
+    <table>
+      <thead>
+        <tr><th>优点</th><th>缺点</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>预写日志保证正确性</td>
+          <td>每个块写两次（日志 + 安装）</td>
+        </tr>
+        <tr>
+          <td>日志自然批量化写入，磁盘吞吐量好</td>
+          <td>即使只修改几个字节也记录整个块</td>
+        </tr>
+        <tr>
+          <td>支持并发</td>
+          <td>同步写入日志块（可以批量化）</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>不适合操作超出日志容量的情况</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>崩溃恢复是存储系统的核心问题</h3>
+        <p>任何涉及多次磁盘写入的操作都可能因崩溃而不一致。</p>
+      </article>
+      <article>
+        <h3>预写日志提供原子性</h3>
+        <p>先记录到日志，再安装到实际位置，崩溃后重放日志。</p>
+      </article>
+      <article>
+        <h3>提交点是关键</h3>
+        <p>单个扇区的原子写入（日志头）决定了事务是否提交。</p>
+      </article>
+      <article>
+        <h3>正确性与性能的权衡</h3>
+        <p>xv6 的日志牺牲了一些性能换取简单性和正确性。</p>
+      </article>
+    </div>
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>预写日志的核心规则是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="correct" data-correct="正确！在日志中所有写入完成且标记为已提交之前，不能将任何事务的写入安装到文件系统。">A. 在日志中所有写入完成且标记为已提交之前，不能安装任何写入</button>
+        <button data-answer="wrong" data-incorrect="这会破坏原子性。">B. 每次写入后立即安装到文件系统</button>
+        <button data-answer="wrong" data-incorrect="日志写入和安装有严格的顺序要求。">C. 日志写入和安装可以任意交错</button>
+        <button data-answer="wrong" data-incorrect="必须先写日志。">D. 先安装到文件系统，再写入日志</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>为什么可以多次重放日志？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="日志重放不是并发的。">A. 因为日志重放是并发的</button>
+        <button data-answer="correct" data-correct="正确！日志重放是幂等的——重复安装相同的块到相同的位置，结果不变。">B. 因为日志重放是幂等的</button>
+        <button data-answer="wrong" data-incorrect="日志块不会被多次写入。">C. 因为日志块会被多次写入</button>
+        <button data-answer="wrong" data-incorrect="重放期间 FS 仍然可用。">D. 因为重放期间 FS 不可用</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>xv6 日志的提交点是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="开始写入日志不是提交点。">A. 开始写入日志时</button>
+        <button data-answer="wrong" data-incorrect="安装到 FS 发生在提交之后。">C. 安装到 FS 时</button>
+        <button data-answer="correct" data-correct="正确！写入日志头（将 n 设为非零）是提交点——单个扇区写入是原子的。">B. 写入日志头（将 n 设为非零）时</button>
+        <button data-answer="wrong" data-incorrect="擦除日志发生在所有安装完成之后。">D. 擦除日志时</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://pdos.csail.mit.edu/6.1810/2025/xv6/book-riscv-rev5.pdf" target="_blank" rel="noopener">xv6 手册</a></li>
+      <li>Linux ext3/ext4 文件系统日志实现</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="17-fs.html">← 第 17 课</a>
+      <a href="19-journal.html">第 19 课 →</a>
+    </div>
+    <footer>
+      <p>MIT 6.828 (6.1810): Operating System Engineering · 2025 秋季</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 3 课：操作系统设计 — MIT 6.828</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.828 · 第 3 课</p>
+    <h1>操作系统设计</h1>
+    <p class="lede">操作系统设计的核心目标是<strong>隔离（isolation）</strong>。本课探讨如何实现隔离：硬件支持（用户/超级模式、虚拟内存）、宏内核与微内核的权衡、以及 xv6 系统调用的实际实现。</p>
+
+    <div class="meta">
+      <span>授课：nz (Nickolai Zeldovich)</span>
+      <span>日期：2025-01-28</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2>操作系统全景</h2>
+    <p>操作系统由应用程序（sh、echo 等）、系统调用接口（open、read、fork 等）、内核（实现系统调用的代码）、以及底层硬件（CPU、RAM、磁盘）组成。严格来说，<strong>"操作系统"包含内核 + 用户态服务</strong>，而<strong>"内核"</strong>是其中运行在特权模式的核心部分。</p>
+
+    <h2>隔离：为什么需要受保护的内核？</h2>
+
+    <h3>稻草人设计：没有操作系统</h3>
+    <p>如果应用程序直接与硬件交互——高效、灵活，但完全没有隔离：</p>
+    <table>
+      <thead><tr><th>问题</th><th>后果</th></tr></thead>
+      <tbody>
+        <tr><td>资源隔离</td><td>一个程序耗尽内存、CPU 或磁盘，其他程序全部崩溃</td></tr>
+        <tr><td>内存隔离</td><td>一个程序的 bug 写入另一个进程的内存，破坏其状态</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>UNIX 系统调用如何帮助隔离</h3>
+      <ul>
+        <li><strong>fork() + 进程</strong>：抽象 CPU 核心，OS 在进程间透明切换，可拥有比核心更多的进程。</li>
+        <li><strong>exec() + sbrk() + 虚拟地址</strong>：抽象 RAM，每个进程有自己的地址空间，OS 决定物理布局。</li>
+        <li><strong>文件</strong>：抽象磁盘块，OS 确保不同用户不冲突，并执行权限检查。</li>
+        <li><strong>管道</strong>：抽象共享内存，提供受控的进程间通信。</li>
+      </ul>
+    </div>
+
+    <div class="card warning">
+      <h3>隔离不仅是防 bug，更是防攻击</h3>
+      <p><strong>安全假设：</strong></p>
+      <ul>
+        <li>用户代码是<strong>恶意的</strong>——会主动试图打破隔离、欺骗系统调用、干扰其他程序。</li>
+        <li>内核代码是<strong>可信的</strong>——开发者善意且胜任（尽管仍有 bug）。</li>
+      </ul>
+      <p>内核必须谨慎处理所有用户交互。任何内核 bug 都可能成为安全漏洞——这就是 <strong>security mindset</strong>。内核位于 <strong>可信计算基（TCB）</strong> 中。</p>
+    </div>
+
+    <h2>内核如何防御恶意用户代码？</h2>
+    <p>两大支柱：</p>
+    <ol>
+      <li><strong>硬件级控制</strong>：限制用户态指令的行为</li>
+      <li><strong>谨慎的系统调用接口与实现</strong>：防御性编程</li>
+    </ol>
+
+    <h3>硬件级隔离</h3>
+    <p>CPU 与内核协同设计：</p>
+    <table>
+      <thead><tr><th>机制</th><th>作用</th></tr></thead>
+      <tbody>
+        <tr><td><strong>用户/超级模式</strong></td><td>超级模式可执行特权指令（访问设备、修改页表）；用户模式不能</td></tr>
+        <tr><td><strong>虚拟内存</strong></td><td>页表将 VA → PA，限制进程可访问的内存；页表只在超级模式下可修改</td></tr>
+      </tbody>
+    </table>
+
+    <h3>系统调用如何跨越模式？</h3>
+    <p>应用程序运行在用户模式，但系统调用需要超级模式。RISC-V 提供 <code>ecall</code> 指令：</p>
+    <pre><code>// 用户代码
+open():
+    ecall SYS_open   // 触发系统调用
+    // ecall 会：
+    //   1. 切换到超级模式
+    //   2. 跳转到内核已知的入口点
+    //   3. 内核接管执行</code></pre>
+
+    <div class="card idea">
+      <h3>没有硬件隔离也能实现隔离吗？</h3>
+      <p>可以！使用强类型语言（如 Singularity OS）。但用户只能使用经过批准的编译器/语言，灵活性受限。目前主流仍是硬件用户/超级模式。</p>
+    </div>
+
+    <h2>宏内核 vs. 微内核</h2>
+
+    <h3>宏内核（Monolithic Kernel）</h3>
+    <p>整个内核是一个大程序——xv6、Linux 都采用这种设计。</p>
+    <table>
+      <thead><tr><th>优点</th><th>缺点</th></tr></thead>
+      <tbody>
+        <tr><td>子系统易于协作（共享缓存、直接函数调用）</td><td>复杂度高、bug 多、内部无隔离</td></tr>
+        <tr><td>性能高（无 IPC 开销）</td><td>一个模块崩溃可能导致整个内核崩溃</td></tr>
+      </tbody>
+    </table>
+
+    <h3>微内核（Microkernel）</h3>
+    <p>把大部分 O/S 功能移到用户态服务进程，内核只保留最小功能：地址空间、内存管理、线程、IPC。</p>
+    <table>
+      <thead><tr><th>期望收益</th><th>设计挑战</th></tr></thead>
+      <tbody>
+        <tr><td>更小 → 更少 bug → 更安全（可形式化验证，如 seL4）</td><td>最小功能集是什么？能否保证安全？</td></tr>
+        <tr><td>更简单 → 更易优化</td><td>性能（IPC 开销）能否接受？</td></tr>
+        <tr><td>用户态 → 更易扩展/替换/重启服务</td><td>如何让程序共享磁盘/网络？</td></tr>
+      </tbody>
+    </table>
+
+    <h2>xv6 在 RISC-V 上的实现</h2>
+
+    <h3>硬件平台</h3>
+    <p>xv6 运行在 SiFive HiFive Unleashed 开发板上（QEMU 模拟为 <code>virt</code> 机器）：</p>
+    <ul>
+      <li>4 个 RISC-V 核心</li>
+      <li>128 MB RAM</li>
+      <li>UART 控制台、磁盘、以太网</li>
+    </ul>
+
+    <h3>什么是仿真（Emulation）？</h3>
+    <p>QEMU 是一个 C 程序，忠实地模拟硬件：</p>
+    <pre><code>// 简化模型
+uint64 reg[32];
+for (;;) {
+    instruction = read_mem(pc);
+    decode(instruction);
+    execute(instruction);  // e.g., add, ld, ecall
+}</code></pre>
+
+    <h3>xv6 内核源码结构</h3>
+    <pre><code>$ ls kernel/
+  bio.c      -- buffer cache 层
+  console.c  -- 控制台驱动
+  exec.c     -- exec() 实现
+  file.c     -- 文件描述符
+  fs.c       -- 文件系统
+  kalloc.c   -- 物理页分配
+  kernelvec.S -- 内核中断入口
+  main.c     -- 启动初始化
+  pipe.c     -- 管道
+  proc.c     -- 进程管理
+  spinlock.c -- 自旋锁
+  start.c    -- 机器模式入口
+  trap.c     -- 中断/异常/系统调用
+  uart.c     -- UART 驱动
+  vm.c       -- 虚拟内存/页表
+  ...</code></pre>
+
+    <h3>构建与运行 xv6</h3>
+    <pre><code>$ make              # 编译内核 + 用户程序 + 文件系统镜像
+$ ls -l kernel/kernel
+$ more kernel/kernel.asm
+$ ls -l fs.img
+$ make qemu          # QEMU 仿真运行</code></pre>
+
+    <h3>xv6 启动过程</h3>
+    <ol>
+      <li>QEMU 加载内核到 0x80000000，跳转到第一条指令。</li>
+      <li><code>main()</code> 初始化内核与硬件。</li>
+      <li><code>userinit()</code> 创建第一个用户进程，执行 <code>exec("/init")</code>。</li>
+      <li><code>init</code> 是顶级进程，打开控制台 fd 0/1，fork/exec 启动 shell。</li>
+    </ol>
+
+    <h3>系统调用实现示例：exec</h3>
+    <pre><code>// user/usys.S 中的 exec
+exec:
+  li a7, SYS_exec   # 系统调用号
+  ecall             # 进入内核
+  ret
+
+// kernel/syscall.c
+void syscall(void) {
+    num = p->trapframe->a7;
+    syscalls[num]();  // → sys_exec()
+}
+
+// kernel/sysfile.c
+uint64 sys_exec(void) {
+    // 获取参数（pathname, argv）
+    return kexec();   // → kernel/exec.c
+}
+
+// kernel/exec.c
+int kexec(char *path, char **argv) {
+    // 1. 从磁盘读取 ELF 文件
+    // 2. 严格的防御性检查（防止恶意文件欺骗内核）
+    // 3. 分配新内存、加载代码和数据
+    // 4. 分配用户栈、写入 argv
+    // 5. 设置进程为新程序
+}</code></pre>
+
+    <div class="card warning">
+      <h3>防御性编程的重要性</h3>
+      <p>用户程序可能故意构造恶意 ELF 文件。<code>kexec()</code> 必须检查：文件大小、魔数、段边界、栈溢出等。内核绝不能信任用户数据！</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>知识检查</h2>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q1：</strong>操作系统设计的核心目标是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="性能重要，但不是核心目标。">A. 最高性能</button>
+        <button data-choice="b" data-correct="正确！隔离（isolation）是内核设计的首要目标，防止程序间互相干扰。">B. 隔离（Isolation）</button>
+        <button data-choice="c" data-incorrect="兼容 POSIX 是 UNIX 的目标，不是所有 OS 的核心。">C. 兼容 POSIX</button>
+        <button data-choice="d" data-incorrect="最小代码量不是核心目标。">D. 代码量最小</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="c">
+      <p><strong>Q2：</strong>RISC-V 中，用户态（user mode）不能执行以下哪项操作？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="用户态可以执行算术运算。">A. 算术运算</button>
+        <button data-choice="b" data-incorrect="用户态可以使用虚拟内存中的普通地址。">B. 访问虚拟地址</button>
+        <button data-choice="c" data-correct="正确！修改 satp 寄存器（切换页表）是特权指令，只能在超级模式下执行。">C. 修改页表（satp 寄存器）</button>
+        <button data-choice="d" data-incorrect="用户态可以调用 ecall。">D. 调用 ecall</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="a">
+      <p><strong>Q3：</strong>宏内核（Monolithic Kernel）的主要缺点是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-correct="正确！所有内核代码运行在同一地址空间，一个模块的 bug 可能危及整个内核。">A. 内部无隔离，一个 bug 可影响整个内核</button>
+        <button data-choice="b" data-incorrect="宏内核的系统调用比微内核少。">B. 系统调用多</button>
+        <button data-choice="c" data-incorrect="宏内核性能通常比微内核高。">C. 性能低</button>
+        <button data-choice="d" data-incorrect="宏内核易于扩展。">D. 难以扩展</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="d">
+      <p><strong>Q4：</strong>QEMU 是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="QEMU 不是操作系统内核。">A. 操作系统内核</button>
+        <button data-choice="b" data-incorrect="QEMU 不是编译器。">B. 编译器</button>
+        <button data-choice="c" data-incorrect="QEMU 不是硬件。">C. 物理硬件</button>
+        <button data-choice="d" data-correct="正确！QEMU 是硬件仿真器，用 C 程序模拟 CPU、内存、设备。">D. 硬件仿真器（Emulator）</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q5：</strong>微内核设计的主要目标是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="性能是挑战，不是目标。">A. 最高性能</button>
+        <button data-choice="b" data-correct="正确！微内核追求最小内核，把大部分功能移到用户态服务进程。">B. 最小内核，减少内核 bug</button>
+        <button data-choice="c" data-incorrect="微内核的系统调用通常比宏内核少。">C. 最多的系统调用</button>
+        <button data-choice="d" data-incorrect="微内核恰恰要避免把所有功能放进内核。">D. 把所有功能放进内核</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <h2>本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>隔离是核心</h3>
+        <p>内核的首要目标是隔离——防 bug、防攻击。硬件提供用户/超级模式和虚拟内存作为基础。</p>
+      </article>
+      <article>
+        <h3>安全思维</h3>
+        <p>假设用户代码恶意，内核必须防御性编程。任何内核 bug 都可能是安全漏洞。</p>
+      </article>
+      <article>
+        <h3>宏内核 vs. 微内核</h3>
+        <p>宏内核性能高但复杂；微内核简洁但 IPC 开销大。现代 OS 是两种设计的混合体。</p>
+      </article>
+      <article>
+        <h3>xv6 是起点</h3>
+        <p>xv6 是一个小型的宏内核，代码量小但包含所有核心机制——是理解 OS 的理想案例。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://cve.mitre.org/cgi-bin/cvekey.cgi?keyword=linux" target="_blank" rel="noopener">Linux CVE 数据库</a> — 了解内核 bug 的实际影响</li>
+      <li><a href="https://www.usenix.org/events/osdi00/" target="_blank" rel="noopener">Singularity OS</a> — 用强类型语言实现隔离的替代方案</li>
+      <li><a href="https://www.qemu.org/docs/master/system/riscv/virt.html" target="_blank" rel="noopener">QEMU virt 平台</a> — QEMU 模拟的 RISC-V 平台</li>
+      <li><a href="https://www.sifive.com/boards" target="_blank" rel="noopener">SiFive 开发板</a> — xv6 的目标硬件</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="02-c-in-xv6.html">← 上一课</a>
+      <a href="04-organization.html">下一课 →</a>
+    </div>
+    <footer><p>MIT 6.828: Operating Systems Engineering</p></footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

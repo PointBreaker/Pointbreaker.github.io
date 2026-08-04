@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 5 课：页表与虚拟内存 — MIT 6.828</title>
+  <link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.828 · 第 5 课</p>
+    <h1>页表与虚拟内存</h1>
+    <p class="lede">页表是实现隔离的关键机制。本课深入 RISC-V 的三级页表结构，探讨内核页表与用户页表的布局，并通过 xv6 代码走读理解虚拟内存的实际实现。</p>
+
+    <div class="meta">
+      <span>授课：rtm (Robert Morris)</span>
+      <span>日期：2025-02-04</span>
+      <span>难度：较高</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2>虚拟内存：为什么需要它？</h2>
+    <p>假设 shell 有一个 bug：偶尔会写到随机内存地址。没有虚拟内存，shell 可能覆盖内核数据或其他进程的内存。</p>
+
+    <div class="card idea">
+      <h3>目标：隔离的地址空间</h3>
+      <ul>
+        <li>每个进程拥有自己的内存</li>
+        <li>进程可以读写自己的内存</li>
+        <li>进程不能读写其他进程或内核的内存</li>
+        <li>如何在共享的物理内存上实现多个隔离的地址空间？</li>
+      </ul>
+    </div>
+
+    <h2>页表：寻址的间接层</h2>
+    <p>CPU → MMU → RAM，MMU 通过页表把虚拟地址（VA）翻译为物理地址（PA）：</p>
+    <pre><code>CPU 发出 VA ──→ MMU 查页表 ──→ 得到 PA ──→ 访问 RAM</code></pre>
+
+    <table>
+      <thead><tr><th>概念</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><strong>satp 寄存器</strong></td><td>存放当前页表的物理地址，内核写 satp 切换页表</td></tr>
+        <tr><td><strong>页（Page）</strong></td><td>RISC-V 的页大小 = 4 KB = $2^{12}$ 字节</td></tr>
+        <tr><td><strong>PTE</strong></td><td>页表条目（Page Table Entry），64 位</td></tr>
+      </tbody>
+    </table>
+
+    <h3>RISC-V Sv39 的地址空间限制</h3>
+    <p>64 位地址中只使用低 39 位（Sv39），地址空间上限 512 GB：</p>
+    <ul>
+      <li>64 位地址 - 12 位页内偏移 = 52 位页号</li>
+      <li>Sv39 只用低 27 位作为页号（$2^{9} \times 2^{9} \times 2^{9} = 2^{27}$）</li>
+      <li>每个页表（directory）512 个条目 = 4096 字节 = 1 页</li>
+    </ul>
+
+    <h3>PTE 结构</h3>
+    <pre><code>[10 保留位 | 44 位 PPN（物理页号）| 10 位标志]
+标志位：V（Valid）, R（Read）, W（Write）, X（Execute）, U（User）</code></pre>
+    <p>地址翻译：高 27 位是页号（索引页表），低 12 位是页内偏移（直接复制到物理地址）。</p>
+
+    <h2>三级页表：节省空间</h2>
+
+    <h3>为什么不用单级页表？</h3>
+    <p>如果使用单级数组，需要 $2^{27}$ 个 PTE × 8 字节 ≈ 1 GB 每个地址空间——即使进程只使用几 KB 内存，也要占 1 GB 页表空间，完全不可接受。</p>
+
+    <h3>三级树形结构</h3>
+    <pre><code>VA: [L2 索引 9位 | L1 索引 9位 | L0 索引 9位 | 页内偏移 12位]
+
+Level 2 目录 ──→ Level 1 目录 ──→ Level 0 目录 ──→ 物理页
+     ↑                 ↑                 ↑
+   9 bits            9 bits            9 bits</code></pre>
+    <p>只为实际使用的地址分配中间目录页——未使用的部分不占内存。</p>
+
+    <div class="card idea">
+      <h3>为什么是 9 位？</h3>
+      <p>9 bits → 512 个 PTE × 8 字节 = 4096 字节 = 正是一个页的大小。每个目录刚好占一页，方便分配与管理。</p>
+    </div>
+
+    <h3>TLB：加速地址翻译</h3>
+    <p>三级页表每次内存访问需要 4 次查表。CPU 用 <strong>Translation Look-aside Buffer (TLB)</strong> 缓存最近使用的翻译结果，避免频繁查表。</p>
+    <ul>
+      <li><code>sfence.vma</code>：刷新 TLB（切换页表时必须使用）</li>
+      <li><strong>ASID</strong>：地址空间标识符，避免每次切换都刷新整个 TLB</li>
+      <li><strong>Super Pages</strong>：2 MB / 1 GB 大页，减少 TLB miss</li>
+    </ul>
+
+    <h3>PTE 标志位</h3>
+    <table>
+      <thead><tr><th>标志</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td><strong>V</strong></td><td>Valid：该 PTE 是否有效</td></tr>
+        <tr><td><strong>R/W/X</strong></td><td>可读/可写/可执行</td></tr>
+        <tr><td><strong>U</strong></td><td>User：用户态可访问</td></tr>
+        <tr><td><strong>G</strong></td><td>Global：全局 TLB 条目（跨地址空间共享）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>页错误（Page Fault）</h3>
+      <p>当 V 位为 0，或写操作但 W 位为 0 时，硬件触发 page fault，强制进入内核。内核可以：</p>
+      <ul>
+        <li>惰性分配（lazy allocation）：分配物理页并安装 PTE</li>
+        <li>应用 bug：打印错误信息，杀死进程</li>
+      </ul>
+    </div>
+
+    <h2>xv6 的虚拟内存实现</h2>
+
+    <h3>内核页表（图 3.3）</h3>
+    <p>内核页表建立<strong>直接映射（direct mapping）</strong>：虚拟地址 = 物理地址（大部分区域）。这使得内核可以直接把物理地址 cast 成 C 指针写入。</p>
+
+    <table>
+      <thead><tr><th>虚拟地址</th><th>物理地址</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td>0x10000000</td><td>0x10000000</td><td>UART 控制台</td></tr>
+        <tr><td>0x10001000</td><td>0x10001000</td><td>VIRTIO 磁盘</td></tr>
+        <tr><td>0x80000000 → 0x88000000</td><td>0x80000000 → 0x88000000</td><td>128 MB RAM</td></tr>
+        <tr><td>0x3ffffff000</td><td>-</td><td>Trampoline（用户/内核过渡页）</td></tr>
+        <tr><td>0x3fffffe000</td><td>-</td><td>内核栈（每个进程一个）</td></tr>
+      </tbody>
+    </table>
+
+    <p>注意：</p>
+    <ul>
+      <li>内核 text 没有 W 位（防写入）</li>
+      <li>内核 data 没有 X 位（防执行）</li>
+      <li>Trampage 在每个用户页表和内核页表中映射到相同 VA——这是用户/内核切换的关键</li>
+    </ul>
+
+    <h3>用户地址空间（图 3.4）</h3>
+    <table>
+      <thead><tr><th>地址范围</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>低地址</td><td>text → data → heap（向上增长）</td></tr>
+        <tr><td>stack 下方</td><td>stack guard（无 PTE_U，不可访问）</td></tr>
+        <tr><td>stack</td><td>用户栈（向下增长）</td></tr>
+        <tr><td>0x3ffffff000</td><td>Trampoline（无 PTE_U）</td></tr>
+        <tr><td>0x3fffffe000</td><td>Trapframe（无 PTE_U）</td></tr>
+      </tbody>
+    </table>
+
+    <h2>代码走读：xv6 页表实现</h2>
+
+    <h3>1. 建立内核页表：kvmmake()</h3>
+    <pre><code>// kernel/vm.c
+pagetable_t kvmmake(void) {
+    pagetable_t kpgtbl = (pagetable_t) kalloc();
+    memset(kpgtbl, 0, PGSIZE);
+
+    // UART0 直接映射
+    kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+    // VIRTIO0
+    kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+    // 物理 RAM 直接映射
+    kvmmap(kpgtbl, KERNBASE, KERNBASE, PHYSTOP - KERNBASE,
+           PTE_R | PTE_W);
+
+    // 内核栈
+    proc_mapstacks(kpgtbl);
+    return kpgtbl;
+}</code></pre>
+
+    <h3>2. 添加映射：kvmmap() → mappages()</h3>
+    <pre><code>// kernel/vm.c
+void kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa,
+            uint64 size, int perm) {
+    mappages(kpgtbl, va, size, pa, perm);
+}
+
+// 为 [va, va+size) 的每个页建立映射
+int mappages(pagetable_t pagetable, uint64 va, uint64 size,
+              uint64 pa, int perm) {
+    uint64 a, last;
+    pte_t *pte;
+
+    a = PGROUNDDOWN(va);
+    last = PGROUNDDOWN(va + size - 1);
+    for(;;) {
+        // walk 找到 va 对应的 PTE 地址（必要时创建目录页）
+        if((pte = walk(pagetable, a, 1)) == 0)
+            return -1;
+        if(*pte & PTE_V)
+            panic("remap");
+        // 设置 PTE：物理页号 + 权限 + Valid
+        *pte = PA2PTE(pa) | perm | PTE_V;
+        if(a == last)
+            break;
+        a += PGSIZE;
+        pa += PGSIZE;
+    }
+    return 0;
+}</code></pre>
+
+    <h3>3. 页表遍历：walk()</h3>
+    <p><code>walk()</code> 模拟硬件的页表遍历过程：</p>
+    <pre><code>// kernel/vm.c
+pte_t *walk(pagetable_t pagetable, uint64 va, int alloc) {
+    if(va >= MAXVA)
+        panic("walk");
+
+    for(int level = 2; level > 0; level--) {
+        pte_t *pte = &pagetable[PX(level, va)];  // 提取 9 位索引
+        if(*pte & PTE_V) {
+            // 下一级目录已存在
+            pagetable = (pagetable_t)PTE2PA(*pte);
+        } else {
+            // 需要分配新的目录页
+            if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
+                return 0;
+            memset(pagetable, 0, PGSIZE);
+            *pte = PA2PTE(pagetable) | PTE_V;
+        }
+    }
+    // 最后一级：返回叶 PTE 的地址
+    return &pagetable[PX(0, va)];
+}</code></pre>
+
+    <h3>4. 启用分页：kvminithart()</h3>
+    <pre><code>// kernel/vm.c
+void kvminithart() {
+    // satp 需要页表的物理地址！
+    w_satp(MAKE_SATP(kernel_pagetable));
+    sfence_vma();  // 刷新 TLB
+}</code></pre>
+
+    <h3>手动计算示例：UART0 = 0x10000000</h3>
+    <pre><code>页号 = 0x10000000 >> 12 = 0x10000
+L2 索引 = (0x10000 >> 18) & 0x1FF = 0x0
+L1 索引 = (0x10000 >> 9) & 0x1FF = 0x80
+L0 索引 = 0x10000 & 0x1FF = 0x0
+页内偏移 = 0x10000000 & 0xFFF = 0x0
+
+PTE 低 10 位 = 0x7 = 0b000111
+→ PTE_R (0b00001) | PTE_W (0b00010) | PTE_V (0b00001)</code></pre>
+
+    <h2>调试技巧</h2>
+    <ul>
+      <li><code>vmprint(pagetable)</code>：打印页表结构（你将实现这个函数）</li>
+      <li>QEMU 命令 <code>info mem</code>：查看当前 satp 的页表映射</li>
+      <li>GDB 单步跟踪 <code>walk()</code> 的每一级遍历</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2>知识检查</h2>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q1：</strong>RISC-V Sv39 的虚拟地址空间大小是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="64 位地址空间是 2^64。">A. 2^64 字节</button>
+        <button data-choice="b" data-correct="正确！Sv39 使用 39 位，2^39 = 512 GB。">B. 512 GB (2^39 字节)</button>
+        <button data-choice="c" data-incorrect="Sv39 是 2^39，不是 2^27。">C. 2^27 字节</button>
+        <button data-choice="d" data-incorrect="Sv48 才是 2^48。">D. 2^48 字节</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="c">
+      <p><strong>Q2：</strong>为什么 xv6 使用三级页表而不是单级页表？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="三级页表更慢（需要多次查表）。">A. 单级页表更快</button>
+        <button data-choice="b" data-incorrect="三级页表不能映射更多地址。">B. 单级页表能映射更多地址</button>
+        <button data-choice="c" data-correct="正确！三级页表只为实际使用的地址分配目录页，节省内存。单级页表需要 2^27 × 8 字节 ≈ 1 GB。">C. 三级页表节省内存，只分配实际使用的部分</button>
+        <button data-choice="d" data-incorrect="单级页表也能实现隔离。">D. 单级页表不能实现隔离</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="a">
+      <p><strong>Q3：</strong>为什么 Trampoline 页必须在用户页表和内核页表中映射到相同的虚拟地址？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-correct="正确！ecall 不改变 satp，切换到内核页表后必须能继续执行——只有 Trampoline 映射在相同 VA。">A. 因为 ecall 不切换页表，切换页表后必须能继续执行</button>
+        <button data-choice="b" data-incorrect="不是性能原因。">B. 为了提高性能</button>
+        <button data-choice="c" data-incorrect="不是硬件强制要求。">C. 因为硬件要求</button>
+        <button data-choice="d" data-incorrect="不是代码共享原因。">D. 为了共享代码</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="d">
+      <p><strong>Q4：</strong>当用户程序访问未映射的虚拟地址时，会发生什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="不会静默忽略。">A. 静默忽略</button>
+        <button data-choice="b" data-incorrect="不会立即终止。">B. 立即终止</button>
+        <button data-choice="c" data-incorrect="不会返回 0。">C. 返回 0</button>
+        <button data-choice="d" data-correct="正确！硬件触发 page fault，进入内核。内核可以惰性分配或杀死进程。">D. 触发 page fault，进入内核处理</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q5：</strong>内核页表使用"直接映射"（VA = PA）的主要好处是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="直接映射不提高安全性。">A. 更高的安全性</button>
+        <button data-choice="b" data-correct="正确！内核可以直接把物理地址 cast 成 C 指针使用，简化设备寄存器访问。">B. 内核可以直接把物理地址 cast 成 C 指针使用</button>
+        <button data-choice="c" data-incorrect="直接映射不减少页表大小。">C. 更小的页表</button>
+        <button data-choice="d" data-incorrect="直接映射不加快地址翻译。">D. 更快的地址翻译</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <h2>本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>页表 = 间接层</h3>
+        <p>页表是寻址的间接层，内核通过它控制每个进程能看到什么内存。</p>
+      </article>
+      <article>
+        <h3>三级页表节省空间</h3>
+        <p>Sv39 的三级结构只为实际使用的地址分配目录页，避免单级页表的 1 GB 浪费。</p>
+      </article>
+      <article>
+        <h3>Trampoline 是关键</h3>
+        <p>Trampoline 页映射在用户和内核页表的相同 VA，使用户/内核切换时能继续执行。</p>
+      </article>
+      <article>
+        <h3>walk() 模拟硬件</h3>
+        <p>xv6 的 walk() 函数模拟硬件页表遍历，用于更新页表或访问用户指针。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://pdos.csail.mit.edu/6.1828/2024/xv6/book-riscv-rev3.pdf" target="_blank" rel="noopener">xv6 教材 — Chapter 3: Page tables</a></li>
+      <li><a href="https://riscv.org/technical/specifications/" target="_blank" rel="noopener">RISC-V Privileged Specification</a> — 页表硬件规范</li>
+      <li><a href="https://github.com/qemu/qemu/blob/master/hw/riscv/virt.c" target="_blank" rel="noopener">QEMU virt 平台</a> — 物理地址布局</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="04-organization.html">← 上一课</a>
+      <a href="06-syscall-entry.html">下一课 →</a>
+    </div>
+    <footer><p>MIT 6.828: Operating Systems Engineering</p></footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab: 文件系统 — MIT 6.828 (6.1810)</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.828 · Lab fs · 文件系统</p>
+    <h1>Lab: 文件系统</h1>
+    <p class="lede">在本实验中，你将为 xv6 文件系统添加大文件和符号链接支持。</p>
+
+    <div class="meta">
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>分支：</strong>fs</p>
+      <p><strong>实验日期：</strong>2026 秋季</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="lab-prereq">
+      <p>在编写代码之前，你应该阅读<a href="xv6/book-riscv-rev5.pdf">xv6 手册</a>的"第 10 章：文件系统"并研究相应代码。</p>
+    </div>
+
+    <pre><code class="language-bash">$ git fetch
+$ git checkout fs
+$ make clean</code></pre>
+
+    <h2>大文件 <span class="badge moderate">中等</span></h2>
+
+    <p>在这个任务中，你将增加 xv6 文件的最大大小。目前 xv6 文件限制为 268 个块，或 268*BSIZE 字节（xv6 中 BSIZE 为 1024）。这个限制来自 xv6 inode 包含 12 个"直接"块号和 1 个"单间接"块号。</p>
+
+    <pre><code class="language-bash">$ bigfile
+..
+wrote 268 blocks
+bigfile: file is too small
+$</code></pre>
+
+    <p>你将更改 xv6 文件系统代码以支持每个 inode 中的"<strong>双间接</strong>"块，包含 256 个单间接块的地址，每个单间接块最多可以包含 256 个数据块的地址。结果是一个文件最多可以包含 65803 个块。</p>
+
+    <h3>初步知识</h3>
+
+    <p><tt>mkfs</tt> 程序创建 xv6 文件系统磁盘映像并确定文件系统有多少总块；这个大小由 <tt>kernel/param.h</tt> 中的 <tt>FSSIZE</tt> 控制。本实验仓库中的 <tt>FSSIZE</tt> 设置为 200,000 个块。</p>
+
+    <pre><code>nmeta 71 (boot, super, log blocks 31, inode blocks 13, bitmap blocks 25) blocks 199929 total 200000</code></pre>
+
+    <h3>需要查看的内容</h3>
+
+    <p>磁盘上 inode 的格式由 <tt>fs.h</tt> 中的 <tt>struct dinode</tt> 定义。你特别感兴趣的是 <tt>NDIRECT</tt>、<tt>NINDIRECT</tt>、<tt>MAXFILE</tt> 和 <tt>struct dinode</tt> 的 <tt>addrs[]</tt> 元素。</p>
+
+    <p>在磁盘上查找文件数据的代码在 <tt>fs.c</tt> 中的 <tt>bmap()</tt> 中。<tt>bmap()</tt> 在读取和写入文件时都被调用。</p>
+
+    <p><tt>bmap()</tt> 处理两种块号。<tt>bn</tt> 参数是"逻辑块号"——文件内的块号。<tt>ip->addrs[]</tt> 中的块号和传递给 <tt>bread()</tt> 的参数是磁盘块号。</p>
+
+    <h3>你的工作</h3>
+
+    <div class="lab-required">
+      <p>修改 <tt>bmap()</tt> 使其实现双间接块，除了直接块和单间接块。你必须只有 11 个直接块，而不是 12 个，以腾出空间给你的新双间接块；你不允许更改磁盘上 inode 的大小。<tt>ip->addrs[]</tt> 的前 11 个元素应该是直接块；第 12 个应该是单间接块（和当前一样）；第 13 个应该是你的新双间接块。</p>
+    </div>
+
+    <pre><code class="language-bash">$ bigfile
+..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................
+wrote 65803 blocks
+done; ok
+$ usertests -q
+...
+ALL TESTS PASSED
+$</code></pre>
+
+    <p><tt>bigfile</tt> 将至少需要一分半钟运行。</p>
+
+    <p>提示：</p>
+    <ul>
+      <li>确保你理解 <tt>bmap()</tt>。画出 <tt>ip->addrs[]</tt>、间接块、双间接块和它指向的单间接块以及数据块之间的关系图</li>
+      <li>思考你将如何用逻辑块号索引双间接块和它指向的间接块</li>
+      <li>如果你更改 <tt>NDIRECT</tt> 的定义，你可能必须更改 <tt>file.h</tt> 中 <tt>struct inode</tt> 中 <tt>addrs[]</tt> 的声明</li>
+      <li>如果你更改 <tt>NDIRECT</tt> 的定义，确保创建一个新的 <tt>fs.img</tt>，因为 <tt>mkfs</tt> 使用 <tt>NDIRECT</tt> 构建文件系统</li>
+      <li>不要忘记 <tt>brelse()</tt> 每个你 <tt>bread()</tt> 的块</li>
+      <li>你应该只在需要时才分配间接块和双间接块，就像原始的 <tt>bmap()</tt></li>
+      <li>确保 <tt>itrunc</tt> 释放文件的所有块，包括双间接块</li>
+    </ul>
+
+    <h2>符号链接 <span class="badge moderate">中等</span></h2>
+
+    <p>在这个练习中，你将向 xv6 添加符号链接。符号链接（或软链接）通过路径名引用链接的文件或目录；当打开符号链接时，内核查找链接到的名称。</p>
+
+    <p>你不需要处理指向目录的符号链接；唯一需要知道如何跟随符号链接的系统调用是 <tt>open()</tt>。</p>
+
+    <h3>你的工作</h3>
+
+    <div class="lab-required">
+      <p>你将实现 <tt>symlink(char *target, char *path)</tt> 系统调用，它在 path 创建一个指向 target 的新符号链接。要测试，将 symlinktest 添加到 Makefile 并运行它。</p>
+    </div>
+
+    <pre><code class="language-bash">$ symlinktest
+Start: test symlinks
+test symlinks: ok
+Start: test concurrent symlinks
+test concurrent symlinks: ok
+$ usertests -q
+...
+ALL TESTS PASSED
+$</code></pre>
+
+    <p>提示：</p>
+    <ul>
+      <li>首先为 symlink 创建一个新的系统调用号，添加到 user/usys.pl、user/user.h，并在 kernel/sysfile.c 中实现一个空的 sys_symlink</li>
+      <li>在 kernel/stat.h 中添加一个新的文件类型（<tt>T_SYMLINK</tt>）来表示符号链接</li>
+      <li>在 kernel/fcntl.h 中添加一个新标志（<tt>O_NOFOLLOW</tt>），可与 open 系统调用一起使用</li>
+      <li>实现 <tt>symlink(target, path)</tt> 系统调用。注意 target 不需要存在系统调用就能成功。你需要选择某个地方存储符号链接的目标路径，例如在 inode 的数据块中</li>
+      <li>修改 open 系统调用处理路径引用符号链接的情况</li>
+      <li>如果链接的文件也是符号链接，你必须递归跟随它直到到达非链接文件。如果链接形成循环，你必须返回错误代码</li>
+      <li>其他系统调用（如 link 和 unlink）不得跟随符号链接；这些系统调用在符号链接本身上操作</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>提交实验</h2>
+
+    <h3>时间花费</h3>
+    <p>创建一个新文件 <tt>time.txt</tt>，放入一个整数，表示你花在实验上的小时数。</p>
+
+    <h3>答案</h3>
+    <p>如果本实验有问题，将答案写在 <tt>answers-fs.txt</tt> 中。</p>
+
+    <h3>提交</h3>
+    <p>运行 <kbd>make zipball</kbd>，上传到 Gradescope。</p>
+
+    <div class="card warning">
+      <ul>
+        <li>请运行 <kbd>make grade</kbd> 确保代码通过所有测试</li>
+        <li>在运行 <kbd>make zipball</kbd> 之前提交任何修改的源代码</li>
+      </ul>
+    </div>
+
+    <h2>可选挑战练习</h2>
+    <ul>
+      <li>支持三间接块</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="lock.html">← 上一个实验：锁</a>
+      <a href="mmap.html">下一个实验：内存映射 →</a>
+    </div>
+    <footer>
+      <p>MIT 6.828 (6.1810): Operating System Engineering · Lab: 文件系统</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+</body>
+</html>
