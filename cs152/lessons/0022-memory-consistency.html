@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory Consistency — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 22 课</p>
+    <h1>Memory Consistency：跨地址的读写顺序</h1>
+    <p class="lede">第 21 课解决了"单个地址的读该返回什么值"；这一课处理更难的问题——"多个地址的读写顺序，对不同处理器而言应该看起来是什么样"。答案不是唯一的：从最严格的顺序相合性到宽松得多的模型，都是真实处理器做出的不同权衡。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：60 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="definition">相合性模型的定义</h2>
+    <p><strong>内存相合性模型（Memory Consistency Model, MCM）</strong>描述"跨多个硬件线程，load 指令可以返回哪些值"。在这个语境下重新定义：<strong>一致性（coherence）</strong>描述单个内存地址应该返回哪些合法值；<strong>相合性（consistency）</strong>描述跨越<strong>所有</strong>内存地址的属性。</p>
+    <p>一个具体的生产者-消费者例子：生产者写数据、设置 <code>flag=1</code>；消费者自旋等待 <code>flag</code> 变为 1，再读取数据。这段代码能否正确工作，完全取决于底层相合性模型是否保证"生产者写数据一定先于写 flag 被消费者观察到"。</p>
+
+    <hr class="rule">
+
+    <h2 id="sc">顺序相合性（Sequential Consistency, SC）</h2>
+    <p>Lamport 给出的经典定义（原文引用）："一个系统是顺序相合的，如果任意一次执行的结果，都等同于把所有处理器的操作按某个顺序串行执行的结果，且每个处理器自己的操作在这个顺序里保持程序指定的顺序。"直观的"开关"比喻：所有处理器按程序顺序发出 load/store；内存随机选择一个处理器，把它的一次内存操作执行完，再切换到另一个处理器，如此往复。</p>
+
+    <div class="card">
+      <p><strong>具体的判定实例（重新逐一枚举验证）：</strong>初始 <code>M[X]=M[Y]=0</code>；P1 执行 (1)<code>M[X]=1</code> 然后 (2)读 <code>x2=M[Y]</code>；P2 执行 (3)<code>M[Y]=1</code> 然后 (4)读 <code>x2=M[X]</code>。在 SC 下，四步操作必须能排成一个尊重"1 先于 2、3 先于 4"的全局顺序。枚举全部 6 种满足这个约束的排列（1234、1324、1342、3124、3142、3412），逐一推演每种排列下 (P1.x2, P2.x2) 的结果，得到的可达结果集合恰好是 <code>{(0,1), (1,1), (1,0)}</code>——<strong>(0,0) 在任何合法的 SC 全序下都无法达到</strong>。这与幻灯片给出的判定表完全一致：<code>(0,0)→N；(0,1)/(1,0)/(1,1)→Y</code>。</p>
+    </div>
+
+    <p>幻灯片明确指出：<strong>大多数真实机器并不是 SC 的</strong>——原因是 SC 的强顺序保证会严重限制硬件优化空间（例如禁止 store 缓冲这类常见优化）。真实实现 SC 的例子：<strong>MIPS R10K</strong>——用硬件推测执行 load/store，一旦跨核检测到顺序违反就撤销重来。</p>
+
+    <hr class="rule">
+
+    <h2 id="tso">TSO：允许本地 Store 缓冲</h2>
+    <p><strong>TSO（Total Store Order）</strong>允许处理器把自己的 store 暂存在本地的 <strong>Store Buffer</strong> 里："处理器可以比其他处理器更早看到自己的写入"。优化规则：更晚的 load 如果访问不同地址，可以越过缓冲中尚未真正写出的 store；更晚的 load 如果访问同一地址，可以直接从缓冲中的 store 里"旁路"取值。幻灯片指出：<strong>TSO 是目前常见处理器里最强的相合性模型</strong>。</p>
+
+    <div class="card warning">
+      <p><strong>TSO 允许 (0,0)：一个经典的"Store 缓冲违反 SC"实例（重新验证）。</strong>同样的程序，TSO 下的判定表变成全部四行都是 <code>Y</code>，即 <code>(0,0)</code> 现在也合法了。原因：P1 把 <code>M[X]=1</code> 暂存进自己的 Store Buffer（还没真正写入共享内存），随后就去读 <code>M[Y]</code>；P2 同理把 <code>M[Y]=1</code> 暂存在自己的 Store Buffer 里，随后去读 <code>M[X]</code>。只要两次读操作都发生在各自缓冲的 store 真正"排空"到共享内存<strong>之前</strong>，P1 就会读到 <code>Y=0</code>（陈旧值），P2 也会读到 <code>X=0</code>（陈旧值）——即使从每个处理器自己的视角看，"我的写入已经发生了"。这正是内存模型文献中著名的"Dekker 式检测实例"，专门用来暴露 Store 缓冲对 SC 的破坏。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="weak-models">更宽松的模型：多副本原子 vs. 非多副本原子</h2>
+    <p>从强到弱的相合性模型谱系（附真实 ISA 例子）：</p>
+    <table>
+      <tr><th>模型</th><th>真实 ISA 例子</th></tr>
+      <tr><td>SC（最强）</td><td>—（IBM 370、x86、ARM、RISC-V 均<strong>不是</strong> SC）</td></tr>
+      <tr><td>TSO</td><td>IBM-370 TSO、x86 TSO、SPARC TSO（默认）、RISC-V RVTSO（可选）</td></tr>
+      <tr><td>弱、多副本原子</td><td>修订版 ARM v8、RISC-V RVWMO（RISC-V 基线弱内存模型）</td></tr>
+      <tr><td>弱、非多副本原子（最弱）</td><td>ARM v7、原始 ARM v8、IBM POWER、Digital Alpha（"极弱"）</td></tr>
+    </table>
+    <p><strong>多副本原子性（multi-copy atomicity）</strong>："每个硬件线程必须按程序顺序看待自己的内存操作，可以在本地缓冲、围绕缓冲重排访存顺序；但一旦某个本地 store 对系统中<strong>任何一个</strong>其他硬件线程变得可见，它就必须同时对<strong>所有</strong>其他硬件线程可见"——这正是"原子"一词的含义：可见性要么对所有人同时发生，要么都还没发生，不存在"对 A 可见、对 B 不可见"的中间状态。<strong>非多副本原子</strong>模型放弃了这个保证：不同处理器可能以<strong>不同的顺序</strong>看到另一个处理器的写入序列（例如通过分层的共享缓冲区结构，共享同一中间缓冲的处理器之间同步得更快）。幻灯片明确指出：<strong>"近期业界共识认为，非多副本原子模型对通用处理器而言过于弱了"</strong>——这也是为什么 ARM 在 v8 修订版里收紧到了多副本原子模型。</p>
+
+    <hr class="rule">
+
+    <h2 id="fences">Fence 指令：软件显式指定顺序</h2>
+    <p>在弱内存模型下，软件需要显式的 <strong>fence（栅栏）指令</strong>来指定必须保证的顺序——例如 <code>fence w,w</code>（写-写栅栏）、<code>fence r,r</code>（读-读栅栏）。回到生产者-消费者例子：生产者需要在写数据和写 flag 之间插入 <code>fence w,w</code>，消费者需要在读到 flag 和读数据之间插入 <code>fence r,r</code>，才能在弱内存模型下依然保证正确的先后关系——这正是硬件把"排序保证"这份责任转移给软件的具体代价。此外，<strong>编译器本身也会重排指令</strong>（不仅仅是硬件），所以语言级别的内存模型（如 C11/C++11 的 <code>atomic</code> 类型）同样需要明确定义，并最终映射到具体 ISA 的 fence 指令上。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：现代主流 ISA（x86/ARM/RISC-V）都是顺序相合的。</strong>幻灯片明确指出 IBM 370、x86、ARM、RISC-V 都<strong>不是</strong> SC——它们都在不同程度上允许 Store 缓冲等优化，只是放宽的具体规则各不相同。</li>
+      <li><strong>误区：Store 缓冲只是一个无关紧要的硬件实现细节，不影响程序正确性。</strong>本课的具体判定实例证明，Store 缓冲会让 <code>(0,0)</code> 这样的结果在 TSO 下变得合法，而这在 SC 下是不可能出现的——这正是并发程序里许多微妙 bug 的根源，也是 fence 指令存在的原因。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！穷举全部6种满足程序顺序约束的全局排列后，(0,0) 这个结果在任何一种排列下都无法达到——这正是SC最强的地方。" data-incorrect="重新看"顺序相合性"一节的判定实例：枚举全部满足程序顺序的排列后，哪个结果组合是不可达的。">
+      <p><strong>问题 1：</strong>初始 M[X]=M[Y]=0，P1 执行"写X=1，读Y"，P2 执行"写Y=1，读X"。在严格的顺序相合性（SC）下，(P1读到的Y, P2读到的X) 能否等于 (0, 0)？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">可以，这是最常见的结果</button>
+        <button data-choice="b" aria-pressed="false">不可以——枚举所有满足程序顺序的全局排列后，(0,0) 在任何排列下都无法达到</button>
+        <button data-choice="c" aria-pressed="false">可以，但只有在双核系统上才行</button>
+        <button data-choice="d" aria-pressed="false">无法判断，取决于具体硬件实现</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！TSO 允许每个处理器把自己的 store 暂存在本地 Store Buffer 里，两次读操作都可能发生在各自 store 排空到共享内存之前，从而都读到陈旧值。" data-incorrect="重新看"TSO 允许 (0,0)"一节：Store Buffer 具体是如何让这个在 SC 下不可能的结果变得合法的。">
+      <p><strong>问题 2：</strong>为什么同样的程序，在 TSO 下 (P1.x2, P2.x2)=(0,0) 是合法的，而在 SC 下不合法？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">TSO 和 SC 在这个例子上没有区别</button>
+        <button data-choice="b" aria-pressed="false">因为 TSO 禁止了所有的 load 操作</button>
+        <button data-choice="c" aria-pressed="false">TSO 允许每个处理器把自己的 store 暂存在本地 Store Buffer 里，两次读操作可能都发生在各自的 store 真正排空到共享内存之前，从而各自读到对方的陈旧值</button>
+        <button data-choice="d" aria-pressed="false">因为 TSO 要求所有内存操作必须原子广播</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！多副本原子性要求一旦某个 store 对任何一个其他线程可见，就必须同时对所有其他线程可见；非多副本原子模型放弃了这个保证，不同处理器可能以不同顺序看到同一个处理器的写入序列。" data-incorrect="重新看"更宽松的模型"一节：多副本原子性的核心保证是什么，非多副本原子模型放弃了什么。">
+      <p><strong>问题 3：</strong>"多副本原子性（multi-copy atomicity）"具体保证了什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">一旦某个本地 store 对系统中任何一个其他硬件线程变得可见，它就必须同时对所有其他硬件线程可见——不存在"对某些线程可见、对另一些不可见"的中间状态</button>
+        <button data-choice="b" aria-pressed="false">所有处理器必须严格按程序顺序执行，不允许任何本地缓冲</button>
+        <button data-choice="c" aria-pressed="false">每个处理器必须拥有独立的物理内存，不能共享</button>
+        <button data-choice="d" aria-pressed="false">编译器不能对指令进行任何重排</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>SC 的严格定义</h3>
+        <p>Lamport 的开关比喻，穷举法可以精确判定哪些结果合法</p>
+      </article>
+      <article>
+        <h3>TSO 的 Store 缓冲</h3>
+        <p>允许本地提前看到自己的写入，打开了 SC 不允许的结果空间</p>
+      </article>
+      <article>
+        <h3>多副本原子性</h3>
+        <p>可见性要么对所有人同时发生，要么都还没发生</p>
+      </article>
+      <article>
+        <h3>Fence 指令</h3>
+        <p>软件显式指定顺序，把排序责任从硬件转移给程序员/编译器</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 5.5-5.6</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L22_Memory_Consistency.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Lamport, "How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Programs," IEEE Trans. Computers, 1979</li>
+      <li>RISC-V RVWMO 内存模型规范：<a href="https://github.com/riscv/riscv-isa-manual">github.com/riscv/riscv-isa-manual</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0021-cache-coherence.html">← 第 21 课：Cache Coherence</a>
+      <span>🎓 第 22 课</span>
+      <a href="0023-synchronization.html">第 23 课：Synchronization →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

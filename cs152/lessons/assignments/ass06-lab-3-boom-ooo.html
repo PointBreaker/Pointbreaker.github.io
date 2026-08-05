@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 3: BOOM Out-of-Order Core — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Lab 3</p>
+    <h1>Lab 3: BOOM Out-of-Order Core</h1>
+    <p class="lede">这个实验把第 11-15 课的乱序执行、寄存器重命名、分支预测理论，变成对一颗真实乱序超标量核心（BOOM）的直接操作——并且用一次真实的 Spectre 攻击复现，让"推测执行会泄露信息"这件事不再是抽象的安全新闻标题，而是你亲手触发、亲手观测到的具体现象。</p>
+
+    <div class="meta">
+      <span>发布：2023-03-02（随第 14 课）</span>
+      <span>截止：2023-03-23</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="objectives">实验目标</h2>
+    <ul>
+      <li>在 Chipyard 框架中使用 BOOMv3（Berkeley Out-of-Order Machine）超标量核心</li>
+      <li>亲手调整 ROB 大小、物理寄存器数、分支预测结构，观察第 12、13 课讲过的这些参数如何直接影响真实 CPI</li>
+      <li>理解推测执行与缓存旁路结合，如何构成真实的硬件安全漏洞（Spectre Variant 1）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="directed">指导性部分（约占 20% 分数）</h2>
+    <p>核心任务：从一个"最差情况"的 BOOM 配置（33 项物理寄存器堆、4 项 ROB、无分支预测）开始，通过 <code>config-mixins.scala</code> 里的 <code>WithNCS152BaselineBooms</code> 逐步升级到一个"改进版"配置（64 项物理寄存器堆、16 项 ROB、BTB+BHT+8 项返回地址栈），在 dhrystone、median、multiply、qsort、spmv、towers、vvadd 等基准测试上，对比乱序 BOOM 与顺序 Rocket 核心的 CPI 差异——这是第 11、12 课"ROB 大小、物理寄存器数量限制乱序执行效果"这一理论在真实硬件上的直接验证。</p>
+
+    <hr class="rule">
+
+    <h2 id="open-ended">开放性部分（约占 80% 分数，二选一）</h2>
+    <ol>
+      <li><strong>自定义分支预测器</strong>：用 C++（<code>predictor_sw.cc</code>）设计一个分支预测器，目标是打败 256 项双模态基线预测器（<code>CS152SWPredBoomConfig</code>），可选择性地与内置的 TAGE 实现对比——这是第 15 课讲过的两级预测器、TAGE 等结构的直接实践</li>
+      <li><strong>复现真实的 Spectre Variant 1 攻击</strong>：针对 <code>CS152SmallBoomConfig</code>，训练分支预测器使其偏向某个方向，预热（prime）缓存，利用 <code>pk</code>（proxy kernel）中一个故意植入的、存在越界推测性读取漏洞的 <code>sys_leak</code> 系统调用接口，配合缓存计时侧信道（Prime+Probe 技术），一次一位地窃取一段 128 字节的秘密数据。仓库中已经附带了一份可运行的概念验证代码（<code>lab/open2/spectre.c</code>）、预编译好的 <code>pk-spectre</code>，以及一份真实运行日志作为参考。</li>
+    </ol>
+    <div class="card warning">
+      <p><strong>关于这个安全实验的说明：</strong>这是课程官方设计的教学实验，目的是让学生在受控、隔离的教学环境中，亲手理解 Spectre 这一类推测执行侧信道攻击的真实机制——这是计算机体系结构与安全交叉领域的经典教学案例（该漏洞本身在 2018 年由学术界公开披露，影响了几乎所有现代乱序处理器）。本页只描述这个作业已经公开的任务背景，不提供额外的攻击代码或漏洞利用细节；具体实现请参照课程仓库中已经提供的教学用代码。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="deliverables">交付物与评分说明</h2>
+    <ul>
+      <li>指导性部分独立完成；开放性部分可以组队（每组一个问题）</li>
+      <li>报告须为可读的英文摘要，不接受日志文件转储</li>
+      <li>全学期至少完成 3/5 个实验，否则自动判定为 F</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！指导性部分从最差情况配置（33 项物理寄存器、4 项 ROB、无分支预测）升级到改进版配置，正是第 11、12 课'ROB 大小、物理寄存器数量限制乱序执行效果'这一理论在真实硬件上的直接验证。" data-incorrect="重新看指导性部分段落。">
+      <p><strong>问题 1：</strong>Lab 3 指导性部分对比"最差情况"与"改进版"BOOM 配置的 CPI，主要验证了第几课的哪条理论？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">第 1 课，ISA 与微架构分离</button>
+        <button data-choice="b" aria-pressed="false">第 11、12 课，ROB 大小和物理寄存器数量会限制乱序执行的实际效果</button>
+        <button data-choice="c" aria-pressed="false">第 21 课，缓存一致性协议</button>
+        <button data-choice="d" aria-pressed="false">第 4 课，Iron Law 三分量</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！本页明确说明：这是课程官方设计的教学实验，用于在受控隔离环境中理解 Spectre 侧信道攻击机制；本页只描述已公开的任务背景，不提供额外的攻击代码或漏洞利用细节。" data-incorrect="重新看开放性部分选项 2 下方的警告卡片，关于本页对 Spectre 实验的处理方式。">
+      <p><strong>问题 2：</strong>本页对开放性部分选项 2（复现 Spectre Variant 1 攻击）采取了什么处理方式？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">提供比课程仓库更详细的漏洞利用代码，方便快速完成</button>
+        <button data-choice="b" aria-pressed="false">完全略去这一选项，不在页面中提及</button>
+        <button data-choice="c" aria-pressed="false">说明这是课程官方设计的教学实验，只描述已公开的任务背景，不提供额外攻击代码或漏洞利用细节</button>
+        <button data-choice="d" aria-pressed="false">建议学生在生产环境的真实处理器上直接测试该漏洞</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>课程依赖内容：第 11-13 课（复杂流水线、寄存器重命名、ROB）、第 15 课（分支预测）</li>
+      <li>BOOM 文档：<a href="https://github.com/riscv-boom/riscv-boom">github.com/riscv-boom/riscv-boom</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>🧪 Lab 3</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+</body>
+</html>

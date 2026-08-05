@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synchronization — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 23 课</p>
+    <h1>Synchronization：从 Dekker 算法到无锁编程</h1>
+    <p class="lede">有了一致性和相合性模型，还差最后一块拼图：程序员该用什么原语来保证多个线程正确地互斥访问共享资源？这一课从纯软件的 Dekker 算法出发，一路讲到 RISC-V 真正提供的原子指令。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="dekker">纯用 Load/Store 实现互斥：Dekker 算法</h2>
+    <p>两种同步需求：<strong>生产者-消费者</strong>（消费者必须等待生产者产出数据）与<strong>互斥</strong>（同一时刻只允许一个进程使用某项资源）。假设底层是 SC 模型，只用普通 load/store 能否实现互斥？<strong>第一次尝试</strong>（各自设置忙碌标志 c1/c2，检测对方标志再决定是否等待）会<strong>死锁</strong>：两个进程都设置了自己的标志，又都因为看到对方的标志而拒绝继续，谁都不肯让步。<strong>第二次尝试</strong>修复了死锁，却引入了<strong>活锁/饥饿</strong>：死锁不会发生了，但小概率下可能出现"倒霉的进程永远抢不到临界区"。</p>
+    <p><strong>Dekker 算法</strong>（T. Dekker，1966）用三个共享变量 c1、c2、turn 彻底解决问题：<code>turn=i</code> 确保"只有进程 i 可能等待"，c1/c2 确保互斥本身。幻灯片补充了一个有趣的历史注脚：<strong>把这个方案推广到 n 个进程的解法由 Dijkstra 给出，而且相当精巧复杂</strong>——这提示我们，纯软件的互斥算法虽然理论上可行，但复杂度会随进程数快速膨胀。</p>
+
+    <hr class="rule">
+
+    <h2 id="rmw">硬件支持：原子读-改-写指令</h2>
+    <p>幻灯片明确指出：普通 load/store（配合弱模型下的 fence）<strong>理论上足够</strong>实现互斥，但代码<strong>低效且复杂</strong>——这正是硬件提供<strong>原子读-改-写（RMW）指令</strong>的动机。两个经典原语：<strong>Test-and-Set</strong>（<code>reg_x=M[a]; M[a]=1</code>，一步完成"读旧值+置位"）；<strong>Swap</strong>（<code>reg_x=M[a]; M[a]=reg_y</code>，一步完成"读旧值+写新值"）。基于 <code>amoswap</code> 的自旋锁：获取锁时反复尝试把锁字原子交换为"已锁定"，直到交换前读到的旧值是"未锁定"；释放锁时把锁字写回"未锁定"。</p>
+
+    <hr class="rule">
+
+    <h2 id="aqrl">RISC-V 的 aq/rl 排序位：比 fence 更精细的排序粒度</h2>
+    <p>RISC-V 的原子内存操作（AMO）指令带有两个可选排序位——<strong>获取（acquire, aq）</strong>和<strong>释放（release, rl）</strong>：两者都不设置时，不附加任何额外排序；设置 <code>aq</code> 后，这条 AMO"发生在"其后所有 load/store 之前；设置 <code>rl</code> 后，这条 AMO"发生在"其前所有 load/store 之后；两者都设置时，AMO 严格按程序顺序发生。</p>
+    <div class="card idea">
+      <p><strong>FENCE vs. AMO.aq/rl：排序范围的关键区别</strong>——幻灯片用一张对比图明确指出："<strong>AMO 只对自己与其他 load/store/AMO 之间的顺序做出约束；FENCE 则约束 FENCE 前后<em>所有</em>的 load/store/AMO</strong>"。也就是说，AMO 的 aq/rl 位只保护"临界区边界与 AMO 本身"这一层关系，临界区外那些与锁无关的"无关 store/load"完全不受影响；而一条通用 FENCE 指令则会把它前后<strong>所有</strong>访存都纳入排序约束，粒度粗得多。这正是为什么 RISC-V 既提供通用 FENCE、又单独给 AMO 配备 aq/rl 位——后者能用更小的排序代价实现同样的锁语义。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="nonblocking">无锁同步：Compare-and-Swap 与 Load-Reserve/Store-Conditional</h2>
+    <p>动机：如果一个软件线程在持有锁的时候被操作系统换出调度，其他线程在锁被释放之前完全无法在临界区内取得任何进展。<strong>无锁（non-blocking）同步</strong>让临界区可以在不真正持锁的情况下原子执行。</p>
+    <p><strong>Compare-and-Swap (CAS)</strong>：<code>Compare&amp;Swap(m), Rt, Rs</code>——如果 <code>Rt==M[m]</code>，则 <code>M[m]=Rs</code>，<code>Rs=Rt</code>，返回成功；否则返回失败。CAS 的已知问题：<strong>ABA 问题</strong>——设想 <code>Load(A)</code>，处理一段时间后 <code>CAS(A,Y)</code>；如果在处理期间，另一个任务把 A 从某个值改成 B、又改回原来的值，CAS 会误以为"没人动过"而成功——但实际上数据已经被别人动过了。解决办法是<strong>双重比较交换（DCAS）</strong>：额外加一个计数器，让 CAS 同时访问两个字（一个地址、两个待比较值、两个待写入值，共 5 个源操作数）。</p>
+    <p><strong>Load-Reserve / Store-Conditional (LR/SC)</strong>：<code>Load-reserve R,(m)</code> 设置一个隐藏的 <code>&lt;flag,addr&gt;=&lt;1,m&gt;</code>预约标记，并把值读入 R；<code>Store-conditional (m),R</code> 只有当预约标记仍然是 <code>&lt;1,m&gt;</code> 时才真正写入并使其他处理器对 m 的预约失效，否则失败。真实硬件实现（借助 MESI）：Load-Reserve 确保该行进入独占/已修改状态；Store-Conditional 只有在该行仍处于独占/已修改状态时才成功（幻灯片补充说明："实践中这种实现只适用于较小规模的系统"）。</p>
+    <div class="card">
+      <p><strong>LR/SC vs. CAS 的权衡：</strong>LR/SC <strong>天然免疫 ABA 问题</strong>——因为对该地址的<strong>任何</strong>访问都会清除预约标记，无论新写入的值是什么（不需要额外的版本计数器）；但 LR/SC 的无锁同步<strong>可能在两个竞争处理器之间发生活锁</strong>。相反，CAS 保证前进性——CAS 只有在<strong>另一个线程成功</strong>时才会失败，所以整个系统必然有进展。RISC-V 通过要求 LR/SC 配对之间的代码遵守特定规则，来<strong>保证前进性</strong>，从而弥补了朴素 LR/SC 的活锁风险。</p>
+    </div>
+    <p>RISC-V 还提供一整套原子操作指令：swap、add、and、or、xor、有符号/无符号的 max/min，覆盖了绝大多数常见的无锁数据结构操作需求。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：只要没有死锁，纯软件互斥算法就是完美的。</strong>Dekker 算法的第二次尝试正是一个反例——它成功避免了死锁，却引入了活锁/饥饿，说明"没有死锁"和"公平前进"是两个独立的正确性要求。</li>
+      <li><strong>误区：LR/SC 完全没有缺点，可以无脑替代 CAS。</strong>LR/SC 确实天然免疫 ABA 问题，但代价是可能在两个竞争处理器之间发生活锁——CAS 反而能保证系统整体前进性。RISC-V 通过额外规则弥补了 LR/SC 的活锁风险，但这不是 LR/SC 本身天然具备的性质。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！FENCE 会把前后所有的 load/store/AMO 都纳入排序约束，而 AMO 的 aq/rl 位只约束 AMO 自身与其他访存之间的顺序，不影响与锁无关的"无关 load/store"。" data-incorrect="重新看"RISC-V 的 aq/rl 排序位"一节：FENCE 和 AMO.aq/rl 在排序范围上的关键区别。">
+      <p><strong>问题 1：</strong>RISC-V 的 FENCE 指令和 AMO 指令上的 aq/rl 排序位，在排序范围上有什么关键区别？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">两者完全等价，可以互相替换</button>
+        <button data-choice="b" aria-pressed="false">AMO.aq/rl 的排序范围比 FENCE 更广</button>
+        <button data-choice="c" aria-pressed="false">AMO 只约束自己与其他 load/store/AMO 之间的顺序；FENCE 则约束前后所有的 load/store/AMO，排序范围粗得多</button>
+        <button data-choice="d" aria-pressed="false">FENCE 只能用于单核系统</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="a" data-correct="正确！对该地址的任何访问都会清除预约标记，无论新写入的值是什么，因此 LR/SC 不需要额外的版本计数器就能天然规避 ABA 问题。" data-incorrect="重新看"LR/SC vs. CAS 的权衡"一节：LR/SC 为什么天然免疫 ABA 问题。">
+      <p><strong>问题 2：</strong>为什么 Load-Reserve/Store-Conditional (LR/SC) 天然免疫 ABA 问题，而 Compare-and-Swap (CAS) 不能？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">对该地址的任何访问都会清除 LR/SC 的预约标记，无论新写入的值是什么，因此不需要额外的版本信息就能检测到"值被动过"</button>
+        <button data-choice="b" aria-pressed="false">因为 LR/SC 需要两个地址，CAS 只需要一个</button>
+        <button data-choice="c" aria-pressed="false">因为 LR/SC 从不允许多个处理器同时访问同一地址</button>
+        <button data-choice="d" aria-pressed="false">因为 CAS 天生就有 ABA 问题，与硬件设计无关，是数学上无法避免的</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！CAS 保证前进性——只有在另一个线程成功时才会失败，系统整体必然有进展；LR/SC 则可能在两个竞争处理器之间反复互相清除对方的预约，导致活锁。" data-incorrect="重新看"LR/SC vs. CAS 的权衡"一节：两者在"前进性保证"上的具体区别。">
+      <p><strong>问题 3：</strong>朴素的 LR/SC 相对 CAS，在"前进性保证"上存在什么风险？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">LR/SC 完全没有风险，比 CAS 更可靠</button>
+        <button data-choice="b" aria-pressed="false">朴素 LR/SC 可能在两个竞争处理器之间发生活锁；CAS 保证只有在另一个线程成功时才会失败，因此系统整体必然有进展</button>
+        <button data-choice="c" aria-pressed="false">LR/SC 无法用于任何多处理器系统</button>
+        <button data-choice="d" aria-pressed="false">CAS 才会发生活锁，LR/SC 不会（与实际相反）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>Dekker 算法</h3>
+        <p>纯软件互斥可行，但复杂度随进程数快速膨胀</p>
+      </article>
+      <article>
+        <h3>原子 RMW 指令</h3>
+        <p>Test-and-Set、Swap，简化互斥锁的实现</p>
+      </article>
+      <article>
+        <h3>aq/rl vs. FENCE</h3>
+        <p>更精细的排序粒度，用更小代价实现锁语义</p>
+      </article>
+      <article>
+        <h3>CAS vs. LR/SC</h3>
+        <p>ABA 免疫性 vs. 前进性保证，各有取舍</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 5.5-5.6</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L23_Synchronization.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>T. Dekker, 1966（经由 Dijkstra 转述的互斥算法）</li>
+      <li>Herlihy and Moss, "Transactional Memory: Architectural Support for Lock-Free Data Structures," ISCA 1993</li>
+      <li>Discussion 11 worksheet：Cache Coherence（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0022-memory-consistency.html">← 第 22 课：Memory Consistency</a>
+      <span>🎓 第 23 课</span>
+      <a href="0024-hyperscale-architecture.html">第 24 课：Hyperscale Architecture →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

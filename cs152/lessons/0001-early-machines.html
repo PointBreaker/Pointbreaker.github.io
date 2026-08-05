@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Early Machines — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 1 课</p>
+    <h1>Early Machines：计算机体系结构是什么</h1>
+    <p class="lede">在学习任何具体的处理器设计之前，先要回答一个更根本的问题：计算机体系结构（computer architecture）到底在做什么？这一课通过 IBM 360 的真实故事，引出整门课的核心矛盾——指令集架构（ISA）与微架构（microarchitecture）的分离。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：45 分钟</span>
+      <span>难度：入门</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="what-is-arch">计算机体系结构的定义</h2>
+    <p>课程给出的定义：<strong>计算机体系结构是设计抽象层（abstraction layers），使我们能够用现有的制造技术高效地实现信息处理应用</strong>。应用（application）和物理（physics）之间的鸿沟太大，无法一步跨越，于是产生了一系列中间抽象层：</p>
+
+    <table>
+      <tr><th>抽象层</th><th>对应的 UCB EECS 课程</th></tr>
+      <tr><td>Application</td><td>—</td></tr>
+      <tr><td>Algorithm</td><td>CS170</td></tr>
+      <tr><td>Programming Language</td><td>CS164</td></tr>
+      <tr><td>Operating System / Virtual Machines</td><td>CS162</td></tr>
+      <tr><td><strong>Instruction Set Architecture (ISA)</strong></td><td rowspan="2"><strong>CS152/252A（本课程）</strong></td></tr>
+      <tr><td><strong>Microarchitecture</strong></td></tr>
+      <tr><td>Gates / Register-Transfer Level (RTL)</td><td>EECS151/251</td></tr>
+      <tr><td>Circuits</td><td>EE143</td></tr>
+      <tr><td>Devices / Physics</td><td>—</td></tr>
+    </table>
+
+    <p>CS152 恰好覆盖了 <strong>ISA</strong> 和 <strong>微架构</strong> 这两层——这正是本课程反复强调的一对概念，也是理解全课的钥匙：</p>
+
+    <div class="card idea">
+      <p><strong>ISA（指令集架构）</strong>：软件可见的语义——指令做什么、有哪些寄存器/内存/PC 等"架构状态"（architectural state）。</p>
+      <p><strong>微架构（microarchitecture）</strong>：ISA 的物理实现——数据如何存储和移动（datapath，数据通路）、控制信号如何生成并对数据通路排序（control，控制）。</p>
+      <p>同一个 ISA，可以有许多种不同的微架构实现——这正是本课程要讲的全部内容：Hardwired（硬连线）、Microcoded（微编码）、Pipelined（流水线）等风格。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="tech-app-cycle">技术与应用的螺旋</h2>
+    <p>体系结构并非一成不变，而是被两股力量持续推动：</p>
+    <ul>
+      <li><strong>应用</strong>建议如何改进技术，也为技术研发提供资金；</li>
+      <li><strong>技术</strong>的改进又使得新的应用成为可能。</li>
+    </ul>
+    <p>但这个循环受到第三个力量的强烈牵制：<strong>兼容性（compatibility）</strong>——软件开发的成本使兼容性成为市场中的主导力量。这条线索会在本课直接引出 IBM 360 的设计动机。</p>
+
+    <p>历史上主要的技术世代（technology generation）依次是：机电（electromechanical）→ 继电器（relay）→ 真空管（vacuum tube）→ 晶体管（bipolar/pMOS/nMOS）→ CMOS。每一代都带来数量级的性能/能耗提升，但也让"用什么技术实现控制逻辑最便宜"这个问题的答案不断变化——这正是第 2、3 课要讨论的硬连线 vs. 微编码之争的技术背景。</p>
+
+    <hr class="rule">
+
+    <h2 id="history">从计算装置到通用计算机：几个关键节点</h2>
+    <p>课程用历史叙事帮助理解设计动机："未来的技术可能和过去一样受限，忽视历史的人注定要重蹈覆辙"。这里只挑选对理解 ISA/微架构分离最关键的几个节点，而非逐台机器罗列。</p>
+
+    <h3>Babbage 的分析机（1837）：Store 与 Mill 的分离</h3>
+    <p>Charles Babbage 设计的 Analytical Engine 被认为是第一台通用数字计算机的设计（虽然只造出了很小一部分）。它已经包含了现代计算机的主要部件：</p>
+    <ul>
+      <li><strong>Store</strong>：保存数字和中间结果的主存储（1,000 个 40 位十进制字）——即今天的"内存"</li>
+      <li><strong>Mill</strong>：执行加减乘除的运算单元——即今天的"ALU"</li>
+      <li>支持条件分支、循环，溢出时产生异常（机器卡死、摇铃报警）</li>
+      <li>甚至有一种早期形式的微代码，称为"the Barrel"（滚筒）</li>
+    </ul>
+    <p>指令以打孔卡片形式提供，采用三地址格式（两个源操作数、一个目的操作数，均在 Store 中）。Ada Lovelace 为其撰写了计算伯努利数的程序——被公认为世界上第一个程序。</p>
+
+    <h3>ENIAC（1946）与 EDVAC：从硬连线到存储程序</h3>
+    <p>ENIAC 是第一台电子通用计算机，纯电子的取指令和执行，因此速度很快，但编程方式是插板和开关——修改一次程序可能要花费数天。ENIAC 团队随后讨论"存储程序"（stored-program）的想法：把程序像数据一样存放在存储器中，而不是通过硬件接线来表达。</p>
+    <div class="card">
+      <p><strong>关键教训：</strong>1948 年对 ENIAC 的改造使其可以以存储程序模式运行，但速度比硬连线模式慢 6 倍。由于当时 ENIAC 本来就受限于 I/O 速度，这个降速在实践中并不重要，而编程效率的提升让这个改动物有所值。</p>
+      <p>这正是"硬连线 vs. 可编程（微编码）控制"这对权衡第一次以具体数字的形式出现——性能 vs. 灵活性/开发效率——第 2、3 课会把这个权衡系统化。</p>
+    </div>
+    <p>曼彻斯特 SSEM "Baby"（1948）第一次运行了存储程序，剑桥 EDSAC（1949）则是第一台实用的存储程序计算机；EDSAC-II（1958）是第一台采用微程序控制单元（microprogrammed control unit）的机器——微编码思想由此进入实践。</p>
+
+    <hr class="rule">
+
+    <h2 id="ibm-dilemma">IBM 的困境：不兼容的产品线</h2>
+    <p>到 1960 年代初，IBM 拥有多条互不兼容的计算机产品线：</p>
+    <table>
+      <tr><th>早期型号</th><th>后续型号</th></tr>
+      <tr><td>701</td><td>→ 7094</td></tr>
+      <tr><td>650</td><td>→ 7074</td></tr>
+      <tr><td>702</td><td>→ 7080</td></tr>
+      <tr><td>1401</td><td>→ 7010</td></tr>
+    </table>
+    <p>每一条产品线都有自己独立的指令集、I/O 系统与外存（磁带、磁鼓、磁盘）、汇编器/编译器/程序库，以及各自的市场定位（商用/科学计算/实时系统）。这意味着：客户每换一个型号（哪怕只是升级同一"档次"内的机器），软件几乎要重写一遍。</p>
+
+    <hr class="rule">
+
+    <h2 id="ibm-360">IBM 360：第一个真正的可移植 ISA</h2>
+    <p>Amdahl、Blaauw 和 Brooks 在 1964 年提出的设计前提中，第一条就是：<strong>设计必须能够适应增长和后续机型</strong>。IBM 360 因此被设计为一个<strong>通用寄存器（General-Purpose Register, GPR）机器</strong>：</p>
+    <ul>
+      <li>16 个 32 位通用寄存器（可用作变址/基址寄存器），4 个 64 位浮点寄存器</li>
+      <li>一个程序状态字（PSW）：PC、条件码、控制标志</li>
+      <li>一台 32 位机器，却使用 24 位地址——但没有任何指令直接包含完整的 24 位地址</li>
+      <li>数据格式统一为 8 位字节、16 位半字、32 位字、64 位双字——<strong>"字节是 8 位"这一至今通行的约定，正是 IBM 360 确立的</strong></li>
+    </ul>
+
+    <p>关键在于：<strong>这一套 ISA 在从低端到高端、datapath 宽度相差 8 倍的多种硬件实现上完全一致</strong>：</p>
+    <table>
+      <tr><th></th><th>Model 30（低端）</th><th>Model 70（高端）</th></tr>
+      <tr><td>存储容量</td><td>8K–64 KB</td><td>256K–512 KB</td></tr>
+      <tr><td>数据通路（datapath）</td><td>8 位</td><td>64 位</td></tr>
+      <tr><td>电路延迟</td><td>30 ns/级</td><td>5 ns/级</td></tr>
+      <tr><td>局部存储（Local Store）</td><td>主存（Main Store）</td><td>晶体管寄存器</td></tr>
+      <tr><td>控制存储（Control Store）</td><td>只读，1 微秒</td><td>专用电路（硬连线）</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>这就是本课程的核心里程碑</strong>：IBM 360 的指令集架构完全隐藏了各型号之间的底层技术差异——8 位数据通路的 Model 30 用只读控制存储实现控制逻辑（更接近第 2、3 课要讲的"微编码"风格，因为逻辑门比 ROM 贵），64 位的 Model 70 则用专用电路直接实现控制逻辑（"硬连线"风格，因为在高端机器上性能优先，逻辑电路的相对成本可以负担）。<strong>同一份汇编代码、同一个编译器后端，可以不加修改地跑在两台性能相差悬殊的机器上</strong>。</p>
+    </div>
+
+    <p>这正是与用户直接相关的经济学：厂商不必为每一档性能重新开发软件生态；用户购买入门机型后，未来可以无痛升级到高性能机型而不必重写程序——这为软件开发节省了大量的时间和金钱，也是 IBM 360 能够统一多条产品线、后来 Intel x86 沿用同样策略统治市场的根本原因。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：ISA 和微架构是一回事。</strong>实际上 ISA 只规定"软件看到什么"（语义、架构状态），微架构规定"硬件如何实现"（datapath + control）。同一个 ISA 可以对应无数种微架构。</li>
+      <li><strong>误区：兼容性只是市场噱头。</strong>兼容性直接减少软件重写成本，这是一股实实在在的经济力量，会持续影响体系结构设计决策——本课程后续会反复看到"为了兼容性而妥协设计"的例子。</li>
+      <li><strong>误区：硬连线一定比微编码"更先进"。</strong>二者只是控制逻辑的两种不同实现方式，各有性能与成本/灵活性的权衡，历史上曾在不同技术条件下反复流行——第 2、3 课会展开讲这个权衡。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！ISA 规定语义和架构状态（软件可见），微架构规定如何用硬件（datapath + control）实现这套语义。" data-incorrect="再想想：ISA 和微架构的区别不在于"新旧"或"快慢"，而在于哪一层是软件可见的。">
+      <p><strong>问题 1：</strong>下列哪个说法准确描述了 ISA 与微架构的关系？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">ISA 是微架构的一种具体实现方式</button>
+        <button data-choice="b" aria-pressed="false">微架构决定程序的语义，ISA 决定硬件电路</button>
+        <button data-choice="c" aria-pressed="false">ISA 是软件可见的语义与架构状态，微架构是实现这套语义的硬件（数据通路+控制）</button>
+        <button data-choice="d" aria-pressed="false">二者是同一个概念的不同名称</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！IBM 360 通过统一的 ISA 隐藏了 8 位到 64 位数据通路之间的巨大差异，使同一软件可在不同档次机型上运行。" data-incorrect="重新看 Model 30 与 Model 70 的对比表——它们的数据通路宽度相差 8 倍，但暴露给软件的指令集完全相同。">
+      <p><strong>问题 2：</strong>IBM 360 Model 30 和 Model 70 的数据通路宽度分别是 8 位和 64 位，为什么它们仍能运行同一份编译后的程序？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为两者的时钟频率相同</button>
+        <button data-choice="b" aria-pressed="false">因为 ISA 是软件可见的公共契约，完全隐藏了两种机型底层数据通路/控制实现的差异</button>
+        <button data-choice="c" aria-pressed="false">因为程序在运行前会被自动改写以适配数据通路宽度</button>
+        <button data-choice="d" aria-pressed="false">因为两者使用同一种编程语言编写驱动程序</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！1948 年的实验表明，存储程序模式比硬连线模式慢 6 倍，但由于当时 I/O 才是瓶颈，且编程效率大幅提升，这个代价是值得的——这是"性能 vs. 灵活性"权衡第一次被量化。" data-incorrect="再看 EDVAC 一节：关键数字是"慢 6 倍"，以及为什么这个降速在当时是可以接受的。">
+      <p><strong>问题 3：</strong>1948 年，ENIAC 被改造为可以以"存储程序"模式运行，与原来的硬连线（插板）模式相比，性能发生了什么变化？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">运行速度慢了约 6 倍，但由于当时 I/O 才是瓶颈，且编程效率大幅提升，这个代价被认为是值得的</button>
+        <button data-choice="b" aria-pressed="false">运行速度完全不受影响</button>
+        <button data-choice="c" aria-pressed="false">运行速度提升了 6 倍</button>
+        <button data-choice="d" aria-pressed="false">无法运行，此次改造最终失败</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>体系结构的定义</h3>
+        <p>设计抽象层，用现有制造技术高效实现应用</p>
+      </article>
+      <article>
+        <h3>ISA vs. 微架构</h3>
+        <p>软件可见语义 vs. 数据通路+控制的硬件实现</p>
+      </article>
+      <article>
+        <h3>兼容性的力量</h3>
+        <p>软件重写成本使兼容性成为市场主导力量</p>
+      </article>
+      <article>
+        <h3>IBM 360 里程碑</h3>
+        <p>同一 ISA 首次跨越 8 位到 64 位数据通路，完全隐藏实现差异</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Appendix A, Chapter 1</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L01_Early_Machines.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>课程主页（存档）：<a href="https://inst.eecs.berkeley.edu/~cs152/archive/sp23/">CS152/252A Spring 2023</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>🎓 第 1 课</span>
+      <a href="0002-simple-machine-implementations-microcoding.html">第 2 课：Simple Machine Implementations, Microcoding →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

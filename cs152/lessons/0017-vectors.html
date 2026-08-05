@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vectors — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 17 课</p>
+    <h1>Vectors：另一种挖掘并行度的方式</h1>
+    <p class="lede">从这一课开始，课程进入 Unit 4——数据级并行。乱序执行、VLIW、多线程都在想方设法从"看起来顺序"的代码里挖掘并行；向量处理器换了一个思路：让程序员/编译器直接用一条指令表达"对一整个数组做同样的操作"，硬件只需要老老实实地把这份显式并行流水化执行。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：中等 → 较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="cray1">Cray-1：向量超算的奠基之作</h2>
+    <p>1970-80 年代，向量机就是超级计算机的代名词。<strong>Cray-1</strong>（1976）是这一课的核心案例：标量单元 + 向量扩展，内存系统 16 个存储体（64 位字 + 8 位 SECDED 校验），存储体周期 50ns，处理器周期 12.5ns（对应 80MHz，重新验算：1/12.5ns=80MHz，与幻灯片一致）；8 个 64 元素向量寄存器（V0-V7，每个还配一个向量掩码寄存器和向量长度寄存器）；标量寄存器 S0-S7、地址寄存器 A0-A7；4 个指令缓冲区实现前瞻取指（lookahead）。</p>
+
+    <hr class="rule">
+
+    <h2 id="programming-model">向量编程模型</h2>
+    <p>相对标量寄存器 x0-x31，向量寄存器 v0-v31 每个能容纳 <strong>VLMAX</strong>（向量寄存器能容纳的最大元素数）个元素；<strong>向量长度寄存器 vl</strong> 决定当前向量操作实际作用的元素范围 <code>[0]..[vl-1]</code>。<strong>向量算术指令</strong>（如 <code>vadd v3,v1,v2</code>）对每个元素索引并行执行同一个运算；<strong>向量访存指令</strong>（如 <code>vls v1,(x1),x2</code>）用标量寄存器 x1 存基地址、x2 存步长（stride），从内存中加载进向量寄存器 v1。这套指令集天然紧凑（一条指令表达整个循环）、表达力强、且可扩展（同一份向量代码可以在不同硬件实现的向量长度上运行）。</p>
+
+    <hr class="rule">
+
+    <h2 id="lanes">从流水化功能单元到多"通道"（Lane）</h2>
+    <p>向量运算天然适合流水化：多个功能单元并行处理，吞吐率随功能单元数线性提升——用 1 个 3 级流水化功能单元逐个处理元素对，还是用 4 个并行的 3 级流水化功能单元同时处理 4 组元素，后者吞吐率是前者的 4 倍。真实硬件把这种并行组织成<strong>通道（lane）</strong>：每条 lane 包含一套完整的功能单元流水线，加上按跨步存储的一部分向量寄存器元素（例如 4 通道机器里，lane 0 存元素 0,4,8,…，lane 1 存元素 1,5,9,…）。<strong>T0 向量微处理器</strong>（UCB/ICSI, 1995）的真实裸片照片直观展示了向量寄存器元素是如何按通道条带化分布的。</p>
+    <p>存储器同样需要跟上多通道的访存带宽，因此采用<strong>交织存储体</strong>：Cray-1 有 16 个存储体，每体的<strong>存储体忙碌时间（bank busy time）</strong>为 4 个周期，访存延迟 12 个周期——地址生成器用基地址+步长依次算出每次访问落在哪个存储体上。</p>
+
+    <hr class="rule">
+
+    <h2 id="startup">向量启动代价：功能单元延迟 + 死区时间</h2>
+    <p>一条向量指令的启动代价由两部分组成：<strong>功能单元延迟</strong>（流经流水线本身需要的时间）和<strong>死区时间（dead time）</strong>（下一条向量指令能够开始进入流水线之前，必须等待的额外时间）。</p>
+    <div class="card">
+      <p><strong>短向量下的效率对比（重新验算）：</strong><strong>Cray C90</strong>（2 条 lane，4 周期死区时间）处理 128 元素向量：<code>128÷2=64</code> 个有效周期，总周期 <code>64+4=68</code>，效率 <code>64/68≈94.1%</code>——与幻灯片给出的"94%"一致；<strong>T0</strong>（8 条 lane，无死区时间）处理仅 8 元素的向量：<code>8÷8=1</code> 个有效周期，0 个死区周期，效率 <code>1/1=100%</code>——与幻灯片一致。这组对比直观说明：<strong>lane 数越多、死区时间越短，向量机在短向量上的效率损失就越小</strong>——这对追求短向量高效率的机器（如后来的 RISC-V Vector）是一条重要的设计线索。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="chaining">向量链接（Chaining）：向量版的寄存器旁路</h2>
+    <p><strong>向量链接</strong>被幻灯片直接定义为"寄存器旁路的向量版本"：一条依赖指令不必等生产者指令把<strong>整个</strong>向量寄存器都写完，只要生产者的<strong>第一个元素</strong>结果出来，消费者指令就可以立刻开始消费。以 <code>Load → Mult → Add</code> 三级依赖链为例：没有链接时，Load、Mult、Add 三个阶段完全串行；有链接时，三个阶段的执行窗口彼此重叠/错开，Mult 在 Load 刚出第一个结果时就开始，Add 同理——这正是向量机能把一条长依赖链的延迟压缩到接近"单条流水线延迟+若干点缀"而非"三条流水线延迟相加"的关键机制。配合多通道并行，一台 32 元素/向量寄存器、8 通道的机器可以做到<strong>每周期发射 1 条短指令、却完成 24 次运算</strong>（重新验算：3 个功能单元 × 8 通道 = 24，与 Load/Multiply/Add 三个功能单元同时各自处理 8 宽通道组的图示完全吻合）。</p>
+
+    <hr class="rule">
+
+    <h2 id="masking">向量掩码、压缩/展开与规约</h2>
+    <p><strong>向量掩码寄存器</strong>是"谓词寄存器的向量版本"，每元素 1 位；掩码为 0 的元素处，向量操作变成气泡（NOP）。两种实现方式：<strong>简单实现</strong>——照常执行全部 N 个操作，只是根据掩码决定是否真正写回结果；<strong>密度时间实现（Density-Time）</strong>——直接扫描掩码，只真正执行掩码非零的那些元素，处理的输入更少更密集。<strong>压缩（Compress）</strong>把某个向量寄存器中掩码为真的元素紧凑地打包到目的寄存器的起始位置（掩码向量的"1 的个数"就是压缩后向量的长度）；<strong>展开（Expand）</strong>做相反的操作。<strong>向量规约</strong>（如 <code>sum += A[i]</code> 这类循环携带依赖）通过把归约变量重新结合成向量寄存器内的多个部分和，再用二叉树方式两两相加来实现。<strong>Gather（聚集）</strong>是一种索引化的 load（如 <code>vlx vC,(xC),vD</code>，地址为 <code>xC + vD[i]</code>）；<strong>Scatter（分散）</strong>是对应的索引化 store。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：向量长度越长，效率永远越高。</strong>Cray C90/T0 的对比恰恰说明相反的一面——在<strong>短向量</strong>场景下，lane 数更多、死区时间更短的设计反而能拿到更高的效率（T0 在仅 8 元素时就已达到 100%）。</li>
+      <li><strong>误区：向量链接只是"锦上添花"的优化。</strong>没有链接时，一条 Load→Mult→Add 依赖链的延迟是三段流水线延迟的总和；有链接后，三段几乎完全重叠——这是向量机器能兑现"高吞吐率"承诺的关键机制，而不是次要细节。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！128÷2=64个有效周期，加上4周期死区时间=68，效率=64/68≈94.1%，与幻灯片给出的94%一致。" data-incorrect="重新计算：128元素÷2条lane=有效周期数，再加上4周期死区时间得到总周期数，效率=有效周期/总周期。">
+      <p><strong>问题 1：</strong>Cray C90（2 条 lane，4 周期死区时间）处理一个 128 元素的向量，效率大约是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">约 50%</button>
+        <button data-choice="b" aria-pressed="false">约 75%</button>
+        <button data-choice="c" aria-pressed="false">约 94%</button>
+        <button data-choice="d" aria-pressed="false">100%</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！向量链接让消费者指令一旦拿到生产者的第一个元素结果就可以开始消费，不必等待生产者把整个向量寄存器都写完，这正是"寄存器旁路的向量版本"。" data-incorrect="重新看"向量链接"一节的定义：链接机制具体让消费者指令提前到什么时候就可以开始工作。">
+      <p><strong>问题 2：</strong>"向量链接（chaining）"具体解决了什么问题？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">让向量寄存器可以存储比 VLMAX 更多的元素</button>
+        <button data-choice="b" aria-pressed="false">让依赖指令不必等生产者写完整个向量寄存器，只要第一个元素结果就绪就可以开始消费，从而让一条依赖链上的多个流水线阶段彼此重叠</button>
+        <button data-choice="c" aria-pressed="false">让向量指令可以跳过掩码检查</button>
+        <button data-choice="d" aria-pressed="false">让存储体忙碌时间归零</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！密度时间实现直接扫描掩码、只执行掩码非零的元素；简单实现照常执行全部元素，只是根据掩码决定是否写回结果。" data-incorrect="重新看"向量掩码、压缩/展开与规约"一节：简单实现和密度时间实现的核心区别。">
+      <p><strong>问题 3：</strong>"密度时间实现（Density-Time Implementation）"和"简单实现（Simple Implementation）"处理带掩码向量指令时的关键区别是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">简单实现照常执行全部 N 个操作、只是按掩码决定是否写回；密度时间实现直接扫描掩码、只真正执行掩码非零的元素，处理的输入更少</button>
+        <button data-choice="b" aria-pressed="false">两者完全等价，只是命名不同</button>
+        <button data-choice="c" aria-pressed="false">密度时间实现需要两倍的向量寄存器</button>
+        <button data-choice="d" aria-pressed="false">简单实现不支持任何掩码操作</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>Cray-1</h3>
+        <p>向量寄存器+多存储体交织内存，向量超算的奠基设计</p>
+      </article>
+      <article>
+        <h3>Lane（通道）</h3>
+        <p>每条 lane 一套功能单元流水线+条带化的寄存器元素</p>
+      </article>
+      <article>
+        <h3>启动代价</h3>
+        <p>功能单元延迟+死区时间，lane 越多、死区越短，短向量效率越高</p>
+      </article>
+      <article>
+        <h3>链接（Chaining）</h3>
+        <p>向量版寄存器旁路，让依赖链上的流水线阶段彼此重叠</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 4.1-4.2</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L17_Vectors.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Reading: "An Efficient Algorithm for Exploiting Multiple Arithmetic Units"；"The Mips R10000 superscalar microprocessor"</li>
+      <li>Discussion 9 worksheet：Vectors（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0016-multithreading.html">← 第 16 课：Multithreading</a>
+      <span>🎓 第 17 课</span>
+      <a href="0018-gpus.html">第 18 课：GPUs →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VLIW — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 14 课</p>
+    <h1>VLIW：让编译器代替硬件调度</h1>
+    <p class="lede">乱序执行的控制逻辑非常昂贵——一张 MIPS R10000 的裸片照片上，"Control Logic"区域占据了相当大的面积。这一课提出一个针锋相对的设计哲学：如果编译器已经能找出指令间的并行性，为什么还要让硬件在运行时重新做一遍同样的依赖检查？</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="bottleneck">顺序 ISA 的瓶颈</h2>
+    <p>"超标量编译器"流程：找出独立的操作 → 调度这些操作 → 仍然生成<strong>顺序的</strong>机器代码。"超标量处理器"流程：检查指令依赖 → 调度执行——这一步是在硬件里、运行时、重复地做编译器早就做过的工作。<strong>VLIW（Very Long Instruction Word，超长指令字）</strong>的提出正是要打破这种重复劳动：把多个操作打包进一条指令，每个操作槽固定映射到一个功能单元，操作延迟在编译期就是已知常数；编译器必须<strong>保证</strong>（a）同一条指令内的操作彼此并行、无冲突（硬件不需要做跨操作的 RAW 检查），以及（b）数据在被使用前一定已经就绪（硬件不需要任何数据互锁电路）。</p>
+    <p>这一思想最早由 Fisher、Ellis、Ruttenberg、Nicolau 在耶鲁大学提出（"Parallel Processing: A Smart Compiler and a Dumb Machine," SIGPLAN '84），配套的 ELI（Enormously Long Instructions）机器项目由此得名。早期真实 VLIW 机器：<strong>FPS AP120B</strong>（1976，第一台商用宽指令机器，手工编写向量库，用软件流水线和循环展开）；<strong>Multiflow Trace</strong>（1987，商业化了 Fisher 团队的"trace scheduling"思想，配置 7/14/28 个操作/指令，28 个操作打包进 1024 位指令字）；<strong>Cydrome Cydra-5</strong>（1987，256 位指令字编码 7 个操作，带旋转寄存器堆，由 Bob Rau 创立）。</p>
+
+    <hr class="rule">
+
+    <h2 id="scheduling-example">循环调度实例：从 0.125 到 1 个 FLOPS/周期</h2>
+    <p>以 <code>for(i=0;i&lt;N;i++) B[i]=A[i]+C;</code> 为例，使用一个 6 槽的 VLIW 模板（Int1、Int2、M1、M2、FP+、FPx）：</p>
+    <ul>
+      <li><strong>朴素调度</strong>：一次循环体占 8 个周期，只有 1 条 <code>fadd</code> → <strong>1/8 = 0.125 FLOPS/周期</strong>（重新验算：1÷8=0.125，与幻灯片一致）</li>
+      <li><strong>4 路循环展开</strong>：展开后循环体变成 11 个周期，包含 4 条 <code>fadd</code> → <strong>4/11 ≈ 0.36 FLOPS/周期</strong>（重新验算：4÷11=0.3636…，四舍五入到 0.36，与幻灯片一致）</li>
+      <li><strong>软件流水线</strong>：把展开后的代码重组为"预备（prolog）→ 稳态迭代（iterate）→ 收尾（epilog）"三段，稳态部分只需要 4 个周期就能完成 4 条 <code>fadd</code> → <strong>4/4 = 1 FLOPS/周期</strong>（重新验算：4÷4=1，与幻灯片一致）</li>
+    </ul>
+    <div class="card idea">
+      <p><strong>循环展开 vs. 软件流水线的本质区别：</strong>循环展开的启动/收尾开销要在<strong>每一组</strong>展开的迭代里重复支付；软件流水线则把这份开销压缩到只需要为<strong>整个循环</strong>支付一次——这正是软件流水线能把吞吐率从 0.36 进一步提升到理论最优值 1 的原因。</p>
+    </div>
+    <p>循环展开还需要注意：展开程度受架构寄存器数量限制；会增大静态代码体积（NOP 填充+代码复制）；需要处理 N 不是展开因子倍数时的收尾循环。当代码里没有规整的循环（分支密集的不规则控制流限制了基本块大小）时，<strong>Trace Scheduling</strong>（Fisher, Ellis）通过 profiling 反馈或编译器启发式，挑出最常见的分支路径（一条"trace"）整体调度，再为偏离 trace 的分支插入修补代码。</p>
+
+    <hr class="rule">
+
+    <h2 id="ia64">Intel Itanium / IA-64：EPIC 风格的巅峰与终结</h2>
+    <p><strong>EPIC（Explicitly Parallel Instruction Computing）</strong>是 Intel 给 IA-64 起的架构风格名字——幻灯片直言"本质上就是 VLIW"。Merced 是第一代 Itanium 实现（原计划 1997 年首批出货，实际到 2001 年才真正出货）；McKinley（第二代）2002 年出货；Poulson（2011）8 核，32nm 工艺，超过 30 亿晶体管。IA-64 用 128 位的"束（bundle）"打包 3 条指令+1 个模板字段，模板位编码指令如何与相邻束组成可以跨越 bundle 边界的"并行执行组"；提供 128 个 64 位通用整数寄存器、128 个浮点寄存器、64 个 1 位谓词寄存器，且通用寄存器支持"旋转"（同一条静态指令在不同循环迭代访问不同的物理寄存器，是一种轻量级、编译器/硬件协作的重命名机制，专为压缩软件流水线循环的代码体积而设计）。</p>
+
+    <div class="card">
+      <p><strong>IA-64 的三项关键 ILP 增强技术：</strong></p>
+      <ul>
+        <li><strong>谓词化执行（Predicated Execution）</strong>：几乎每条指令都可以被一个 1 位谓词寄存器"守卫"，谓词为假时该指令直接变成 NOP——把一个 if/else 四基本块的控制流图折叠成一个基本块，从根本上消除难以预测的分支。引用 Mahlke et al., ISCA'95 的结果：平均可以消除超过 <strong>50%</strong> 的分支。（明确的代价：这会显著增加旁路电路的复杂度。）</li>
+        <li><strong>控制推测（<code>Load.s</code>/<code>Chk.s</code>）</strong>：让一条推测性 load 可以被提到分支之前——它自己永远不会抛出异常（只是给目标寄存器打一个"中毒"标记），原来的位置留一条检查指令 <code>Chk.s</code>，只有真正执行到那里且被标记中毒时才跳转到修补代码。</li>
+        <li><strong>数据推测（<code>Load.a</code>/<code>Load.c</code>）</strong>：让一条 load 可以被提到一条地址未知、可能别名的 store 之前——把地址记录进一张"地址检查表"，之后如果有 store 写入匹配的地址就使该记录失效；<code>Load.c</code> 检查指令负责发现失效并跳转到修补代码。</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="failure">静态调度的局限：为什么 VLIW 在通用计算领域"失败"了</h2>
+    <p>限制因素：静态不可预测的分支；可变的访存延迟（缓存缺失无法预知）；代码体积膨胀；编译器复杂度过高。幻灯片的结论直白："尽管多次尝试，VLIW 在通用计算领域还是失败了"——更复杂的 VLIW 设计最终在复杂度上逼近了乱序超标量，却在大型复杂应用上拿不出真正的优势。<strong>Transmeta</strong>（动态把 x86 翻译成内部 VLIW，首任 CEO Dave Ditzel）是一种混合尝试。VLIW 在嵌入式 DSP 市场却取得了成功（更简单的 VLIW 设计、更受限/更友好的代码），幻灯片明确指出：<strong>Google 的 TPU（张量处理单元）本质上就是一台 VLIW 机器。</strong></p>
+    <div class="card warning">
+      <p>幻灯片引用了 Donald Knuth 的评价："……Itanium 那套本来被吹得神乎其神的方案——直到人们发现，原本期待中的编译器根本不可能被写出来。"根据 Wikipedia 的说法，Intel 已于 <strong>2019 年 1 月 30 日</strong>正式宣布 Itanium 停产。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：VLIW 是一个失败的、毫无价值的设计思路。</strong>它在通用计算领域确实没有成功，但在嵌入式 DSP 和现代 AI 加速器（如 Google TPU）领域，"编译器保证并行性、硬件极简"这套哲学依然是主流选择——关键在于代码是否足够规整、可静态调度。</li>
+      <li><strong>误区：循环展开和软件流水线是同一回事，只是叫法不同。</strong>两者都能提高吞吐率，但代价结构完全不同：循环展开的启动/收尾开销按每组展开的迭代重复支付；软件流水线只为整个循环支付一次，这正是二者吞吐率上限不同（0.36 vs. 1）的根本原因。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="a" data-correct="正确！编译器必须静态保证同一条指令内的操作互不冲突、且数据在使用前已经就绪，硬件因此不需要运行时的跨操作依赖检查或数据互锁电路。" data-incorrect="重新看"顺序 ISA 的瓶颈"一节：VLIW 把原本超标量处理器在运行时做的哪两件事，转移给了编译器在编译期完成。">
+      <p><strong>问题 1：</strong>VLIW 架构要求编译器必须"保证"哪两件事，从而让硬件不再需要做运行时的依赖检查？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">同一条指令内的操作彼此并行无冲突；数据在被使用前一定已经就绪</button>
+        <button data-choice="b" aria-pressed="false">程序永远不会有分支指令</button>
+        <button data-choice="c" aria-pressed="false">所有指令的执行时间都相同</button>
+        <button data-choice="d" aria-pressed="false">程序只能有一个基本块</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！循环展开的启动/收尾开销要按每组展开的迭代重复支付；软件流水线只需要为整个循环支付一次，因此吞吐率能进一步从 0.36 提升到理论最优的 1。" data-incorrect="重新看"循环调度实例"一节：对比循环展开（4/11≈0.36）和软件流水线（4/4=1）各自的开销支付方式。">
+      <p><strong>问题 2：</strong>为什么软件流水线能把吞吐率从循环展开的约 0.36 FLOPS/周期进一步提升到 1 FLOPS/周期？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为软件流水线使用了更快的时钟频率</button>
+        <button data-choice="b" aria-pressed="false">因为软件流水线不需要编译器支持</button>
+        <button data-choice="c" aria-pressed="false">因为循环展开的启动/收尾开销要按每组展开的迭代重复支付，而软件流水线只需要为整个循环支付一次</button>
+        <button data-choice="d" aria-pressed="false">因为软件流水线消除了所有分支指令</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！幻灯片明确指出 VLIW 在通用计算领域失败了（编译器复杂度、代码膨胀、静态不可预测的分支/访存延迟），但在嵌入式 DSP 和 Google TPU 这样的加速器领域依然成功。" data-incorrect="重新看"静态调度的局限"一节：VLIW 在哪个领域失败了，又在哪个领域取得了成功。">
+      <p><strong>问题 3：</strong>根据本课内容，VLIW 架构的真实历史命运是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">在所有领域都彻底失败，今天已经没有任何 VLIW 机器在使用</button>
+        <button data-choice="b" aria-pressed="false">在通用计算领域失败（如 Itanium），但在嵌入式 DSP 和 AI 加速器（如 Google TPU）领域取得成功</button>
+        <button data-choice="c" aria-pressed="false">完全取代了乱序超标量处理器，成为今天唯一的主流设计</button>
+        <button data-choice="d" aria-pressed="false">只在 1970 年代短暂存在过，此后再未被采用</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>VLIW 的核心哲学</h3>
+        <p>编译器保证并行性和数据就绪，硬件不做运行时依赖检查</p>
+      </article>
+      <article>
+        <h3>循环展开 vs. 软件流水线</h3>
+        <p>0.125 → 0.36 → 1 FLOPS/周期，开销支付方式不同</p>
+      </article>
+      <article>
+        <h3>IA-64 的三大机制</h3>
+        <p>谓词化执行、控制推测、数据推测</p>
+      </article>
+      <article>
+        <h3>VLIW 的真实命运</h3>
+        <p>通用计算失败（Itanium），DSP/TPU 领域成功</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 3.2, 3.7</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L14_VLIW.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Fisher, Ellis, Ruttenberg &amp; Nicolau, "Parallel Processing: A Smart Compiler and a Dumb Machine," SIGPLAN '84</li>
+      <li>Mahlke et al., "Effective Compiler Support for Predicated Execution Using the Hyperblock," ISCA 1995</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0013-out-of-order-execution-ii.html">← 第 13 课：Out-of-order Execution II</a>
+      <span>🎓 第 14 课</span>
+      <a href="0015-guest-branch-prediction.html">第 15 课：Guest Lecture: Branch Prediction →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>
