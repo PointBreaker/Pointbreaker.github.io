@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 1: Sodor Single-Cycle and Microcoded Cores — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Lab 1</p>
+    <h1>Lab 1: Sodor Single-Cycle and Microcoded Cores</h1>
+    <p class="lede">把第 1-3 课学到的 ISA/微架构分离、单总线微编码数据通路，第一次变成能在真实 RISC-V 核上跑起来的实验：用 Chipyard 里的 Sodor 教学核家族，跑通指令级追踪、CPI 分析，并动手修改一个真实的微编码核心。</p>
+
+    <div class="meta">
+      <span>发布：2023-01-17（随第 1 课）</span>
+      <span>截止：2023-02-12</span>
+      <span>难度：入门 → 中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="objectives">实验目标</h2>
+    <ul>
+      <li>在 Chipyard 框架里构建并运行 Sodor 系列教学核（单周期、2/3/5 级流水线、微编码）</li>
+      <li>用真实的性能计数器（<code>mcycle</code>、<code>minstret</code>）验证第 4 课 Iron Law 中"CPI ≈ 1"的说法</li>
+      <li>通过切换全旁路/全互锁配置，亲手测量旁路对 CPI 的实际影响</li>
+      <li>在微编码核心里加一条自定义指令，理解微指令与硬件控制信号的对应关系</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="setup">环境与基础设施</h2>
+    <p>本实验基于 <a href="https://github.com/ucb-bar/chipyard">Chipyard</a> RISC-V SoC 生成框架，具体使用其中的 5 个 "Sodor" 教育用核心（位于 <code>generators/riscv-sodor</code>）：1 级（单周期）、2 级、3 级、5 级流水线，以及一个微编码核心。</p>
+    <div class="card">
+      <p><strong>实测记录：</strong>在真实的 cs152 教学主机上构建并运行 1 级核心的命令是：</p>
+      <pre><code class="language-bash">make CONFIG=Sodor1StageConfig run-binary-fast BINARY=path/to/test.riscv</code></pre>
+      <p>注意大小写：类名是 <code>Sodor1StageConfig</code>（"Stage" 中 S 大写），不是 <code>Sodor1stageConfig</code>；"Sodor" 得名于《托马斯小火车》里的 Sodor 岛，不要误拼成 "Sodar"。构建成功后的一次基线运行给出了 <code>mcycle = 6166</code>，<code>minstret = 6172</code>——即 <strong>CPI ≈ 6166/6172 ≈ 0.999</strong>，与第 4 课"单周期不流水机器 CPI = 1"的理论预测几乎完全吻合（个别周期差异来自复位/收尾开销）。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="directed">指导性部分（约占 30% 分数）</h2>
+    <p>指导性部分要求每位同学独立完成并提交个人报告，围绕四个具体问题：</p>
+    <ul>
+      <li><strong>指令混合追踪</strong>：用 <code>tracer.py</code> 工具，对 dhrystone、median、multiply、qsort、rsort、towers、vvadd 等基准程序做指令类型统计</li>
+      <li><strong>CPI 分析</strong>：在假设 load/store 有不同延迟的前提下，推算对应的 CPI</li>
+      <li><strong>全旁路 vs. 全互锁的 5 级流水线 CPI 对比</strong>：通过在 <code>consts.scala</code> 里切换 <code>USE_FULL_BYPASSING</code> 参数，实测第 4 课"旁路 vs. 互锁"这对权衡在真实 CPI 数字上的差异</li>
+      <li><strong>设计题：合并 EX/MEM 阶段</strong>：分析如果把执行和访存两个流水级合并会如何影响寻址模式的支持，需要修改 <code>tracer.py</code> 以检测非零偏移量的 load/store 指令</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="open-ended">开放性部分（约占 70% 分数，二选一 / 三选一）</h2>
+    <p>开放性部分类似"一天的迷你项目"，可以独立完成，也可以 2-3 人组队（但组队报告须单独提交），从以下选项中任选其一：</p>
+    <ol>
+      <li>写一段不超过 15 行的 C 代码，让分支指令与非分支指令的比例最大化</li>
+      <li>从 5 级流水线中移除一条旁路路径，分析对 CPI 的实际影响</li>
+      <li><strong>在微编码核心中定义并实现一条自定义指令</strong>——需要设计指令编码、编写对应的微码、并写一段汇编测试程序验证其行为</li>
+      <li>提出（但不必实现）一种流水线微架构的改动方案</li>
+      <li>自选题目（需要助教团队批准）</li>
+    </ol>
+
+    <div class="card idea">
+      <p><strong>与第 2、3 课的直接呼应：</strong>选项 3（在微编码核心里加一条自定义指令）正是第 2、3 课"微编码如何免费实现复杂指令"这一论点的亲手验证——按照第 3 课"内存-内存加法"例子的思路，新增指令通常不需要改动数据通路，只需要在微码 ROM 里多写几行控制程序。这也是验证第 2 课中被标记为"教学草图、需要对照真实源码"的 JAL/Branch 微码细节的最佳机会：直接去读 Sodor 微编码核心的 <code>microcode.scala</code> 源文件，确认 PC 相对寻址的精确寄存器传输顺序。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="deliverables">交付物与评分说明</h2>
+    <ul>
+      <li>每位同学必须完成并单独提交自己的实验报告（即使开放性部分是组队完成的）</li>
+      <li><strong>实验报告必须是可读的英文摘要，而不是日志文件的转储</strong>——课程明确表示会奖励写得好的报告、惩罚难以理解的报告</li>
+      <li>根据课程评分规则，<strong>整个学期至少要完成 3/5 个实验，否则无论其他成绩如何都会被自动判定为 F</strong></li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见坑点</h2>
+    <ul>
+      <li><strong>Config 类名大小写敏感</strong>：<code>Sodor1StageConfig</code> 中 "Stage" 的 S 必须大写，写成 <code>Sodor1stageConfig</code> 会直接触发 <code>ClassNotFoundException</code>。</li>
+      <li><strong>"Sodor" 拼写</strong>：来自《托马斯小火车》的 Sodor 岛，容易手滑打成 "Sodar"，同样会导致找不到类。</li>
+      <li><strong>不要只提交日志转储</strong>：报告需要用自己的话解释观察到的现象（例如为什么 CPI 接近 1、旁路移除后 CPI 如何变化），而不是粘贴一堆仿真器输出。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！实测记录里基线运行给出 mcycle=6166、minstret=6172，CPI≈0.999，与第 4 课'单周期不流水机器 CPI=1'的理论预测几乎完全吻合。" data-incorrect="重新看上方"环境与基础设施"一节的实测记录卡片。">
+      <p><strong>问题 1：</strong>Lab 1 中，对 Sodor 单周期核心的一次实测运行给出 mcycle=6166、minstret=6172，这验证了第 4 课的什么结论？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">流水线机器的 CPI 一定小于 1</button>
+        <button data-choice="b" aria-pressed="false">单周期不流水机器的 CPI 理论上应约等于 1，实测结果与之几乎完全吻合</button>
+        <button data-choice="c" aria-pressed="false">微编码机器永远比单周期机器慢</button>
+        <button data-choice="d" aria-pressed="false">CPI 与时钟周期时间无关</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！开放性部分选项 3 要求在微编码核心里加一条自定义指令——这正是第 2、3 课'微编码如何免费实现复杂指令'的亲手验证：通常不需要改动数据通路，只需要在微码 ROM 里多写几行控制程序。" data-incorrect="重新看开放性部分选项 3 及其对应的卡片说明。">
+      <p><strong>问题 2：</strong>开放性部分的选项 3（在微编码核心中实现自定义指令）主要呼应了第 2、3 课的哪个论点？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">硬连线控制逻辑总是比微编码更省电</button>
+        <button data-choice="b" aria-pressed="false">流水线级数越多性能一定越好</button>
+        <button data-choice="c" aria-pressed="false">微编码可以"免费"实现复杂指令——通常不需要改动数据通路，只需在微码 ROM 里增加控制步骤</button>
+        <button data-choice="d" aria-pressed="false">自定义指令必须先修改 ISA 手册才能实现</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>Chipyard 文档：<a href="https://chipyard.readthedocs.io/en/latest/">chipyard.readthedocs.io</a></li>
+      <li>Sodor 教学核心源码：<a href="https://github.com/ucb-bar/chipyard">github.com/ucb-bar/chipyard</a> 下的 <code>generators/riscv-sodor</code></li>
+      <li>课程依赖内容：第 1 课 Early Machines（IBM 360 ISA/微架构分离）、第 2、3 课 Microcoding、第 4 课 Iron Law 与经典 5 级流水线</li>
+      <li>本课程要求：至少完成 5 个实验中的 3 个，否则自动判定为 F</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>🧪 Lab 1</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+</body>
+</html>

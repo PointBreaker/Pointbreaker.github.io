@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 6 课</p>
+    <h1>Memory：为什么需要缓存</h1>
+    <p class="lede">从这一课开始，课程进入体系结构的第二大主题——存储系统。核心矛盾很直接：处理器和 DRAM 之间的性能差距每年都在扩大，而缓存正是靠"局部性"这一经验规律来弥合这道鸿沟的。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：50 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="gap">处理器-DRAM 性能鸿沟</h2>
+    <p>历史数据：微处理器性能每年增长约 60%，而 DRAM 性能每年只增长约 7%。两者的差距因此以复合方式扩大：</p>
+    <p>\[ \frac{1.60}{1.07} - 1 \approx 0.495 \]</p>
+    <p>即差距每年扩大约 <strong>49.5%</strong>，与幻灯片给出的"每年约 50%"基本吻合。一个具体量化例子：一台 4 发射、3 GHz 的超标量处理器，如果要访问一次 100 ns 延迟的 DRAM，在这段时间里本可以执行多少条指令？</p>
+    <p>\[ \frac{100\text{ ns}}{1/3\text{ GHz}} = \frac{100}{0.333} \approx 300 \text{ 周期}, \quad 300 \times 4 = 1200 \text{ 条指令} \]</p>
+    <p>重新验算后与幻灯片给出的"1,200 条指令"完全一致——这就是"存储墙"问题的直观体感：一次内存访问的时间，足够处理器做完上千条指令。</p>
+
+    <hr class="rule">
+
+    <h2 id="terminology">延迟、带宽、占用率</h2>
+    <p>与第 5 课引入的术语一致：<strong>延迟（latency）</strong>是单次操作从启动到可用结果的时间；<strong>带宽（bandwidth）</strong>是操作被执行的速率；<strong>占用率（occupancy）</strong>是某部件因处理一个操作而被阻塞（造成结构冒险）的时间。</p>
+
+    <hr class="rule">
+
+    <h2 id="dram-basics">DRAM 基础：行/列访问与刷新</h2>
+    <p>DRAM 用单个晶体管+电容（1-T cell）存储一个比特，比 SRAM（类似锁存器的交叉耦合结构）更紧凑但需要周期性刷新。一次 DRAM 访问包含三个阶段：</p>
+    <ul>
+      <li><strong>行访问（Row Access, RAS）</strong>：译码行地址，激活整行（往往有几千位宽），位线与存储单元共享电荷，灵敏放大器（sense amplifier）检测微弱的电压变化并锁存整行，再把位线驱动回满幅以给存储单元充电</li>
+      <li><strong>列访问（Column Access, CAS）</strong>：译码列地址，从已锁存的整行中选出所需的若干位（4/8/16/32 位，取决于封装）；同一行内的多次列访问、无需重新行访问，称为<strong>突发模式（burst mode）</strong></li>
+      <li><strong>预充电（Precharge）</strong>：把位线充到已知电平，为下一次行访问做准备</li>
+    </ul>
+    <p>多个 DRAM 芯片并联组成 DIMM（Dual Inline Memory Module），共享时钟/控制/地址信号，数据引脚协同工作凑出更宽的字（例如 16 颗 4 位芯片拼出 64 位总线）。以 Apple M1 为例：128 位数据总线、单引脚速率 4.2 Gb/s，带宽为：</p>
+    <p>\[ 128 \times 4.2\text{ Gb/s} = 537.6\text{ Gb/s} \div 8 \approx 67.2\text{ GB/s} \]</p>
+    <p>与幻灯片给出的"约 68 GB/s"基本一致（小的舍入差异，不构成实质性矛盾）。</p>
+
+    <hr class="rule">
+
+    <h2 id="hierarchy">存储层级与局部性</h2>
+    <p>存储层级的基本原则：容量 寄存器 &lt;&lt; SRAM &lt;&lt; DRAM；延迟同样递增；片上带宽远大于片外带宽。存储层级之所以有效，靠的是程序访存模式中普遍存在的两种局部性（Hatfield &amp; Gerald 1971 的真实访存轨迹散点图直观展示了这一点）：</p>
+    <ul>
+      <li><strong>时间局部性（temporal locality）</strong>：如果一个地址被访问过，它很可能在不久的将来再次被访问</li>
+      <li><strong>空间局部性（spatial locality）</strong>：如果一个地址被访问过，它附近的地址很可能在不久的将来被访问</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="cache-structure">缓存的基本结构与放置策略</h2>
+    <p>缓存持有主存位置的副本：每一行（line/block）包含一个地址标签（tag）和一块数据；<strong>命中（hit）</strong>指在缓存中找到，直接返回；<strong>缺失（miss）</strong>指未找到，需要从主存读取整个数据块、等待、返回数据并更新缓存。缓存读取的核心问题是"应该替换哪一行？"（下一课展开）。</p>
+
+    <p>三种放置策略（以地址为 32 的第 12 号数据块为例）：</p>
+    <table>
+      <tr><th>策略</th><th>说明</th><th>12 号块的位置</th></tr>
+      <tr><td>全相联（Fully Associative）</td><td>可以放在任意一行</td><td>任意位置</td></tr>
+      <tr><td>组相联（Set-Associative）</td><td>只能放进某一组内的任意一行</td><td>4 组时，12 mod 4 = 0 → 第 0 组</td></tr>
+      <tr><td>直接映射（Direct-Mapped）</td><td>只能放进唯一确定的一行</td><td>8 行时，12 mod 8 = 4 → 第 4 行</td></tr>
+    </table>
+    <p>直接映射缓存把地址拆分成三段：<strong>Tag（t 位）| Index（k 位，选出 2^k 行中的一行）| 块内偏移（b 位）</strong>。命中判断：用 Index 选出对应行，用比较器核对存储的 Tag 是否与地址的 Tag 一致，并且该行的 Valid 位为真。组相联缓存则是并行运行多组（每组一个 Tag 比较器），命中信号做"或"运算后再用多路选择器选出数据。全相联缓存没有 Index 字段，每一行都并行比较自己的 Tag。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：缓存放置策略只是实现细节，不影响正确性。</strong>放置策略只影响性能（命中率），不影响正确性——但选错策略会显著增加冲突缺失。</li>
+      <li><strong>误区：DRAM 访存的瓶颈主要是带宽不够。</strong>本课的核心数字（4 发射 3GHz 处理器一次 100ns 访存能空转 1200 条指令的时间）说明真正的瓶颈往往是<strong>延迟</strong>，而不是带宽——这正是缓存要解决的问题。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！100ns / (1/3GHz) ≈ 300 周期，300 × 4 条/周期 = 1200 条指令。" data-incorrect="重新计算：先求出一次 100ns 访存对应多少个 3GHz 周期，再乘以每周期能发射的指令数（4 条）。">
+      <p><strong>问题 1：</strong>一台 4 发射、3 GHz 的超标量处理器，在等待一次 100 ns 的 DRAM 访问期间，理论上最多可以执行多少条指令？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">约 100 条</button>
+        <button data-choice="b" aria-pressed="false">约 400 条</button>
+        <button data-choice="c" aria-pressed="false">约 1200 条</button>
+        <button data-choice="d" aria-pressed="false">约 4800 条</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！12 mod 4 = 0，所以映射到第 0 组。" data-incorrect="重新计算 12 mod 4。">
+      <p><strong>问题 2：</strong>在一个 4 组的组相联缓存中，数据块 12 应该被放进第几组？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">第 1 组</button>
+        <button data-choice="b" aria-pressed="false">第 0 组</button>
+        <button data-choice="c" aria-pressed="false">第 3 组</button>
+        <button data-choice="d" aria-pressed="false">第 4 组</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！时间局部性关心同一地址被重复访问；空间局部性关心相邻地址被连续访问——两者是缓存有效性的根本假设。" data-incorrect="重新看"存储层级与局部性"一节的两个定义，注意区分"同一地址重复"和"相邻地址连续"。">
+      <p><strong>问题 3：</strong>下列哪一项准确描述了"空间局部性"（而非"时间局部性"）？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">如果一个地址被访问过，它附近的地址很可能在不久的将来被访问</button>
+        <button data-choice="b" aria-pressed="false">如果一个地址被访问过，同一个地址很可能在不久的将来再次被访问</button>
+        <button data-choice="c" aria-pressed="false">缓存的容量越大，空间局部性就越强</button>
+        <button data-choice="d" aria-pressed="false">空间局部性只出现在指令访问中，不出现在数据访问中</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>处理器-DRAM 鸿沟</h3>
+        <p>每年约扩大 50%，一次访存空转的时间足够执行上千条指令</p>
+      </article>
+      <article>
+        <h3>DRAM 三阶段访问</h3>
+        <p>行访问 → 列访问 → 预充电</p>
+      </article>
+      <article>
+        <h3>两种局部性</h3>
+        <p>时间局部性（重复访问）、空间局部性（相邻访问）</p>
+      </article>
+      <article>
+        <h3>三种放置策略</h3>
+        <p>全相联、组相联（mod N）、直接映射（mod 行数）</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Appendix B.1-B.2, Chapter 2.1-2.2</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L06_Memory.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Hatfield &amp; Gerald, "Program Restructuring for Virtual Memory," <em>IBM Systems Journal</em> 10(3), 1971</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0005-pipelining-ii.html">← 第 5 课：Pipelining II</a>
+      <span>🎓 第 6 课</span>
+      <a href="0007-memory-ii.html">第 7 课：Memory II →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

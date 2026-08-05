@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Out-of-order Execution I — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 12 课</p>
+    <h1>Out-of-order Execution I：两种真实重命名设计</h1>
+    <p class="lede">第 11 课确立了"重命名 + ROB"的基本框架。这一课把它变成两种真实处理器都采用过的具体工程方案——数据放在 ROB 里，还是放进一个统一的物理寄存器堆——并讲清楚每种设计各自需要维护哪些结构。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：60 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="phases">流水线阶段的顺序 vs. 乱序（术语澄清）</h2>
+    <p>取指/译码/重命名永远按程序顺序进行（必须按顺序解析 ISA）；<strong>派发（Dispatch）</strong>——把指令放进机器缓冲区等待发射——同样永远按顺序进行（本课程明确约定："有人把 Dispatch 等同于 Issue，但本课不这样用"）。<strong>顺序发射（InO issue）</strong>：遇到 RAW/结构冒险（可能还有 WAR/WAW）就停顿，不能跳过更早的未发射指令；<strong>乱序发射（OoO issue）</strong>：指令按程序顺序进入保留站/发射缓冲等待操作数，之后可以不按顺序发射。<strong>完成（completion）</strong>几乎在所有真实机器上都是乱序的（不同功能单元延迟不同）；即使是"经典 RISC 5 级流水线"，也只是"勉强"做到顺序完成（2 周期的 load 恰好和后面 1 周期的运算指令同时完成，而非更早）。<strong>提交（commit）</strong>：顺序提交⇒精确陷阱（今天的标准做法）；早期乱序机器的"完成即提交"造成了不精确陷阱。</p>
+
+    <hr class="rule">
+
+    <h2 id="data-in-rob">设计一：Data-in-ROB（真实例子：HP PA8000、Pentium Pro、Core2Duo、Nehalem）</h2>
+    <p>ROB 条目直接持有操作数标签/数值和结果：<code>v</code>（valid）、<code>i</code>（issued）、Opcode、<code>p|Tag|Src1</code>、<code>p|Tag|Src2</code>、<code>p|Reg|Result|Except?</code>；<strong>标签就是 ROB 索引本身</strong>（派发时的 Free 指针值）。规则：派发时，源操作数如果对应寄存器不"忙"，就直接从架构寄存器堆读入 Src1/Src2 并置位 <code>p</code>；如果"忙"，就复制生产者指令的标签，<code>p</code> 置零。完成时，在整个 ROB 里搜索/匹配等待这个标签的源操作数字段，把数据拷贝进去并置位 <code>p</code>。提交时检查异常状态，若无陷阱则把结果写入架构寄存器堆；若发生陷阱，清空整台机器和 ROB，Free 指针回退到最旧的未提交指令，跳转到陷阱处理程序。</p>
+
+    <hr class="rule">
+
+    <h2 id="unified-prf">设计二：统一物理寄存器堆（真实例子：MIPS R10K、Alpha 21264、Intel Pentium 4、Sandy/Ivy Bridge）</h2>
+    <p>重命名在译码阶段直接把架构寄存器映射到一个共享的物理寄存器堆里的具体物理寄存器（此时不读取数值）；功能单元直接读写这个唯一的物理寄存器堆；<strong>提交只更新架构→物理寄存器的映射表，不涉及任何数据搬运</strong>——这是它和 Data-in-ROB 设计的根本区别：Data-in-ROB 需要在完成/提交时把数据在 ROB 和架构寄存器堆之间搬来搬去，而统一物理寄存器堆设计里数据从一开始就待在物理寄存器堆原地不动，只是"名字"在变。</p>
+
+    <div class="card idea">
+      <p><strong>物理寄存器的生命周期</strong>：一个物理寄存器可以被回收复用的时机，是"同一个架构寄存器的<strong>下一个</strong>写者提交之后"——因为在那之前，旧的物理寄存器仍然可能是某个尚未提交指令所需的正确值。每条指令的 ROB 条目除了常规字段外，还需要记录 <strong>PRd</strong>（本指令新分配的物理寄存器）和 <strong>LPRd</strong>（这个逻辑目的寄存器在本指令之前映射到的<em>上一个</em>物理寄存器）——LPRd 用于在分支预测错误或异常时恢复映射表，也用于判断旧物理寄存器何时可以被释放。</p>
+    </div>
+
+    <p><strong>陷阱发生时如何修复重命名表：</strong>MIPS R10K 按相反顺序、利用每条指令的 PRd/LPRd 字段逐条"反向撤销重命名"来修复重命名表；Alpha 21264 则采取完全不同的策略——为每一条 ROB 指令都保留一份完整的重命名表快照（共 <strong>80</strong> 份），出错时直接把某一份快照整体"闪回"，一个周期内完成。两种方案的权衡很直接：MIPS R10K 省快照存储空间但恢复较慢（要逐条撤销）；Alpha 21264 用大量存储空间换取单周期恢复。</p>
+
+    <hr class="rule">
+
+    <h2 id="issue-window">发射窗口为什么要与 ROB 分开设计？</h2>
+    <p>ROB 是一个滑动窗口：每个周期由"提交"移除最旧的一批指令，"执行"填充中间部分，"取指"在最新端加入新指令。发射窗口可以与 ROB 完全分离：<strong>发射窗口</strong>只持有"已译码/重命名但尚未发射"的指令（字段 use/ex/op/p1/PR1/p2/PR2/PRd/ROB#，其中 ROB# 指回该指令在 ROB 中的条目）；<strong>ROB</strong> 本身只需要保存提交所需的信息（Done?/Rd/LPRd/PC/Except?）。幻灯片提出了一个留给课堂讨论的问题："ROB 通常比发射窗口大好几倍——为什么？"（幻灯片本身没有给出答案：直觉上，一条指令完成执行后往往还要在 ROB 里等待很久才轮到提交，而发射窗口只需要容纳"尚未发射"的这一小段，因此 ROB 需要覆盖的时间跨度天然更长。）</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：Data-in-ROB 和统一物理寄存器堆只是"叫法不同"，本质一样。</strong>两者在数据搬运路径上有本质区别：前者需要在完成/提交时把数据在 ROB 和架构寄存器堆之间来回搬运；后者的数据从一开始就待在物理寄存器堆里不动，提交只改变"映射"而不是"数据本身"。</li>
+      <li><strong>误区：物理寄存器一旦被读取过就可以立即释放复用。</strong>正确的释放时机是"同一个架构寄存器的下一个写者提交之后"——这需要 LPRd 字段来精确追踪。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！Data-in-ROB 需要在完成/提交时把数据在 ROB 和架构寄存器堆之间搬运；统一物理寄存器堆设计里数据从一开始就待在物理寄存器堆原地不动，提交只更新映射表。" data-incorrect="重新看"设计二：统一物理寄存器堆"一节：两种设计的根本区别在于数据是否需要被搬运。">
+      <p><strong>问题 1：</strong>"Data-in-ROB"设计和"统一物理寄存器堆"设计最根本的区别是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">前者支持乱序执行，后者不支持</button>
+        <button data-choice="b" aria-pressed="false">前者需要在完成/提交时把数据在 ROB 和架构寄存器堆之间搬运；后者的数据始终留在物理寄存器堆原地，提交只更新映射表</button>
+        <button data-choice="c" aria-pressed="false">前者不需要寄存器重命名，后者需要</button>
+        <button data-choice="d" aria-pressed="false">两者没有任何区别，只是命名习惯不同</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！物理寄存器要等到同一个架构寄存器的下一个写者提交之后才能安全释放，因为在此之前它仍可能是某个尚未提交指令需要的正确值。" data-incorrect="重新看"物理寄存器的生命周期"一节：关键是"下一个写者"必须先做完什么，旧物理寄存器才能被释放。">
+      <p><strong>问题 2：</strong>一个物理寄存器什么时候才可以被安全地释放、复用给新指令？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">一旦该指令完成执行，立即释放</button>
+        <button data-choice="b" aria-pressed="false">一旦该指令被派发（dispatch），立即释放</button>
+        <button data-choice="c" aria-pressed="false">同一个架构寄存器的下一个写者指令提交（commit）之后</button>
+        <button data-choice="d" aria-pressed="false">物理寄存器永远不需要被释放</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！MIPS R10K 逐条反向撤销重命名，省存储空间但恢复较慢；Alpha 21264 保留 80 份完整快照，恢复只需一个周期但存储代价大得多。" data-incorrect="重新看"陷阱发生时如何修复重命名表"一节：对比两种处理器的具体做法与各自的权衡。">
+      <p><strong>问题 3：</strong>MIPS R10K 和 Alpha 21264 在"陷阱发生后如何修复重命名表"这件事上分别采用了什么策略？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">MIPS R10K 用 PRd/LPRd 字段逐条反向撤销重命名；Alpha 21264 为每条 ROB 指令保留一份完整快照（80 份），出错时整体闪回</button>
+        <button data-choice="b" aria-pressed="false">两者都完全不支持从陷阱中恢复，只能重启整个程序</button>
+        <button data-choice="c" aria-pressed="false">两者都使用完全相同的 80 份快照机制</button>
+        <button data-choice="d" aria-pressed="false">MIPS R10K 用快照机制，Alpha 21264 用反向撤销机制（与实际相反）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>术语澄清</h3>
+        <p>Dispatch/Issue/Complete/Commit 各自顺序还是乱序</p>
+      </article>
+      <article>
+        <h3>Data-in-ROB</h3>
+        <p>数据存在 ROB 里，标签=ROB 索引，需要搬运数据</p>
+      </article>
+      <article>
+        <h3>统一物理寄存器堆</h3>
+        <p>数据原地不动，提交只改映射；PRd/LPRd 追踪生命周期</p>
+      </article>
+      <article>
+        <h3>快照 vs. 反向撤销</h3>
+        <p>Alpha 21264 用 80 份快照单周期恢复；MIPS R10K 逐条撤销更省空间</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 3.6, 3.8</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L12_OoO_Execution_I.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>MIPS R10000 与 Alpha 21264 微架构手册（真实寄存器重命名实现来源）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0011-complex-pipelines.html">← 第 11 课：Complex Pipelines</a>
+      <span>🎓 第 12 课</span>
+      <a href="0013-out-of-order-execution-ii.html">第 13 课：Out-of-order Execution II →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

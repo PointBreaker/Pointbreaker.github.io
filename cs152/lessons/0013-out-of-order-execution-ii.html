@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Out-of-order Execution II — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 13 课</p>
+    <h1>Out-of-order Execution II：多发射重命名与访存乱序</h1>
+    <p class="lede">这一课把第 12 课的重命名机制从"每周期一条指令"扩展到"每周期多条指令"，然后转向乱序执行里最容易被忽视、却往往是继控制冒险之后第二大瓶颈的问题：访存指令能不能也乱序执行？</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="superscalar-rename">超标量寄存器重命名：同一周期内的指令也可能互相依赖</h2>
+    <p>把重命名逻辑扩展到每周期重命名 N 条指令，只需要给重命名表和空闲寄存器列表增加额外的读写端口——但这样"能直接工作吗"？答案是：<strong>还必须额外检查同一周期内发射的指令之间的 RAW 冒险</strong>——例如第 2 条指令的源寄存器恰好是第 1 条指令要写的目的寄存器。解决办法是用"=?"比较器与重命名表查找并行进行：如果匹配，就用旁路多路选择器把第 1 条指令刚分配的标签直接转发给第 2 条指令，而不是让它去查（此时还未更新的）重命名表。真实例子：<strong>MIPS R10K 每周期可以重命名 4 条彼此存在 RAW 依赖的指令</strong>。</p>
+
+    <hr class="rule">
+
+    <h2 id="lsq">Load-Store Queue：访存乱序的核心结构</h2>
+    <p>课程明确指出：<strong>继控制冒险之后，访存数据冒险是限制超标量性能的第二大瓶颈</strong>。现代超标量处理器普遍采用精细的 load/store 重排序机制，通过推测性地提前发射 load 来降低有效访存延迟。</p>
+    <p><strong>推测性存储缓冲区（Speculative Store Buffer）</strong>：store 在提交之前绝不能真正修改内存；一个推测性存储缓冲区持有尚未提交的 store 地址/数据（字段 V、S［推测位］、Tag、Data）；store 被拆成"store address"和"store data"两个微操作（地址微操作写 Tag 字段，数据微操作写 Data 字段）。<strong>Store 提交</strong>的条件是：它是程序顺序中最旧的未提交指令，<strong>且</strong>地址和数据都已就绪——此时清除推测位，数据最终写入 L1 数据缓存。<strong>Store 中止</strong>（分支预测错误或异常回滚时）只需清除该缓冲区条目的有效位。</p>
+
+    <div class="card">
+      <p><strong>Load 如何从推测性存储缓冲区"旁路"取数：</strong>两个具体设计问题都有明确答案——如果同一个地址的数据同时存在于存储缓冲区和数据缓存中，应该<strong>使用存储缓冲区里的值</strong>（而不是缓存里可能过时的旧值）；如果存储缓冲区里对同一地址有多个待处理的 store，应该使用<strong>程序顺序上最年轻、但仍然早于该 load 的那一个 store</strong>。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="mem-dependency">Load 什么时候可以安全执行？三种递进策略</h2>
+    <p>以 <code>sd x1,(x2)</code> 之后紧跟 <code>ld x3,(x4)</code> 为例：</p>
+    <ul>
+      <li><strong>顺序访存队列（保守基线）</strong>：所有 load/store 严格按程序顺序执行——一条 load/store 在 ROB 中出列执行之前，必须等前面所有 load/store 都执行完毕；但访存指令仍然可以相对于<strong>非访存</strong>指令乱序、推测执行，只是访存指令彼此之间仍需要额外结构来维持顺序。</li>
+      <li><strong>保守式乱序 load 执行</strong>：只有当地址已知<strong>且能证明</strong> <code>x4 != x2</code> 时，load 才可以先于更早的 store 执行；每个 load 地址要和所有更早、尚未提交的 store 地址比较（可以只比较低若干位地址以节省硬件，作为一种保守近似）；只要有任何更早 store 的地址还未知，load 就<strong>不能</strong>执行。真实例子：<strong>MIPS R10K，16 项地址队列</strong>。</li>
+      <li><strong>地址推测</strong>：直接<strong>猜测</strong> <code>x4 != x2</code>，在 store 地址甚至还没算出来之前就提前执行 load——需要把所有已完成但未提交的 load/store 地址按程序顺序保留下来；如果之后发现 <code>x4==x2</code>，就必须撤销该 load 及其之后的所有指令。<strong>地址推测出错的代价很大。</strong></li>
+    </ul>
+    <p><strong>内存依赖预测</strong>（真实例子：<strong>Alpha 21264</strong>）：在地址推测出错之后，把那条具体的（静态）load 指令标记为"store-wait"；此后这条指令的每一次动态执行都会保守地等待所有更早的 store 完成；这个标记会被周期性清除，以便在冒险只是暂时性的情况下重新尝试推测。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：只要给重命名逻辑加端口，就能直接支持多发射重命名。</strong>还必须额外处理同一周期内指令之间的 RAW 依赖——这是超标量重命名相比单发射重命名真正新增的复杂度。</li>
+      <li><strong>误区：load 只要地址不同就可以随便提前执行。</strong>"保守式乱序执行"要求地址<strong>已知且被证明不相等</strong>；"地址推测"则是在不确定的情况下赌一把，代价是猜错时要撤销大量已经完成的工作——这是两种完全不同风险等级的策略。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！保守式乱序执行要求地址已知且能证明不相等；地址推测则是在地址未知时就直接赌一把，猜错代价很大，需要标记 store-wait 位应对反复出错的情况。" data-incorrect="重新看"Load 什么时候可以安全执行"一节：区分"保守式乱序执行"和"地址推测"分别对地址信息的要求。">
+      <p><strong>问题 1：</strong>"保守式乱序 load 执行"和"地址推测"这两种策略的关键区别是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">两者完全一样，只是名字不同</button>
+        <button data-choice="b" aria-pressed="false">保守式要求地址已知且能证明不相等才允许 load 提前执行；地址推测则是在store地址尚未知道时就直接猜测不相等，猜错需要撤销</button>
+        <button data-choice="c" aria-pressed="false">保守式只用于浮点指令，地址推测只用于整数指令</button>
+        <button data-choice="d" aria-pressed="false">地址推测完全不需要硬件支持</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="a" data-correct="正确！如果同一地址的数据同时存在于存储缓冲区和缓存中，应该用存储缓冲区里的值（更新），而不是缓存里可能过时的旧值。" data-incorrect="重新看"Load 如何从推测性存储缓冲区旁路取数"一节的第一条规则。">
+      <p><strong>问题 2：</strong>如果同一个地址的数据同时存在于推测性存储缓冲区和数据缓存中，load 应该使用哪一份数据？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">存储缓冲区里的值，因为它更新，缓存里的值可能是过时的</button>
+        <button data-choice="b" aria-pressed="false">数据缓存里的值，因为它更可靠</button>
+        <button data-choice="c" aria-pressed="false">两份数据的平均值</button>
+        <button data-choice="d" aria-pressed="false">无法确定，必须停顿等待</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="c" data-correct="正确！Alpha 21264 在地址推测出错后，把这条具体的静态 load 指令标记为 store-wait，之后每次动态执行都保守等待所有更早 store 完成，并周期性清除该标记以便重新尝试推测。" data-incorrect="重新看"内存依赖预测"一节：Alpha 21264 具体是如何应对反复出错的 load 指令的。">
+      <p><strong>问题 3：</strong>Alpha 21264 的"store-wait"位机制具体解决了什么问题？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">让所有 load 指令永远不能乱序执行</button>
+        <button data-choice="b" aria-pressed="false">让所有 store 指令永远不能乱序执行</button>
+        <button data-choice="c" aria-pressed="false">对曾经因地址推测出错的具体 load 指令，让它此后保守地等待所有更早 store 完成，并周期性清除该标记以便重新尝试推测</button>
+        <button data-choice="d" aria-pressed="false">彻底禁止推测性存储缓冲区的使用</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>超标量重命名</h3>
+        <p>需要额外检查同一周期内指令之间的 RAW 依赖</p>
+      </article>
+      <article>
+        <h3>推测性存储缓冲区</h3>
+        <p>store 拆成地址/数据两个微操作，最旧且就绪才提交</p>
+      </article>
+      <article>
+        <h3>Load 执行的三种策略</h3>
+        <p>顺序队列 → 保守乱序（地址已知不等）→ 地址推测（赌一把）</p>
+      </article>
+      <article>
+        <h3>内存依赖预测</h3>
+        <p>Alpha 21264 的 store-wait 位，从错误中学习</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 3.6, 3.8</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L13_OoO_Execution_II.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>MIPS R10000（16 项地址队列）与 Alpha 21264（内存依赖预测）微架构手册</li>
+      <li>Discussion 6 worksheet：Out-of-order Execution（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0012-out-of-order-execution-i.html">← 第 12 课：Out-of-order Execution I</a>
+      <span>🎓 第 13 课</span>
+      <a href="0014-vliw.html">第 14 课：VLIW →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

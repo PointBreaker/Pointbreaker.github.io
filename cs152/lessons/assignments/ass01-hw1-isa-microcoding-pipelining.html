@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW1: ISA, Microcoding, and Pipelining — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Homework 1 导读</p>
+    <h1>HW1: ISA, Microcoding, and Pipelining</h1>
+    <p class="lede">这份导读帮你理解 HW1 在考什么、需要哪些前置知识、如何组织解题思路。它<strong>不包含任何完整解答</strong>——官方解答会在截止日期后由课程组发布，这里只帮你搭建理解问题所需的概念框架。</p>
+
+    <div class="meta">
+      <span>发布：2023-01-24（随第 3 课）</span>
+      <span>截止：2023-02-02</span>
+      <span>前置：第 1-4 课</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="what">这份作业在考什么？</h2>
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>用同一段"循环左移 n 位"的 C 代码，横向比较 CISC（x86）、RISC（RISC-V）、栈式（stack）、累加器式（accumulator）四种 ISA 风格在代码体积、取指字节数、访存字节数上的真实差异；然后动手给一台微编码 RISC-V 机器新增两条自定义指令；最后回到第 4 课的 Iron Law，判断一系列微架构改动对性能三要素分别有什么影响。</p>
+    </div>
+
+    <table>
+      <tr><th>题目</th><th>对应课程</th><th>核心概念</th></tr>
+      <tr><td>Problem 1：CISC/RISC/栈式/累加器式 ISA 对比</td><td>第 1、2 课</td><td>ISA 风格如何影响代码体积与访存流量</td></tr>
+      <tr><td>Problem 2：微编码实现新指令</td><td>第 2、3 课</td><td>寄存器传输级微指令、微码 ROM 表格</td></tr>
+      <tr><td>Problem 3：6 级流水线的旁路与精确异常</td><td>第 4 课</td><td>旁路路径、写回端口、精确异常</td></tr>
+      <tr><td>Problem 4：CISC vs. RISC 情景判断</td><td>第 2、3 课</td><td>技术条件如何决定 ISA 风格的选择</td></tr>
+      <tr><td>Problem 5：Iron Law 表格</td><td>第 4 课</td><td>区分"指令数/CPI/周期时间"三者各自的变化</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <h2 id="prereq">前置知识清单</h2>
+    <ul class="checklist">
+      <li><strong>第 1 课</strong>：ISA 是软件可见的语义契约，微架构是实现</li>
+      <li><strong>第 2、3 课</strong>：单总线微编码数据通路、寄存器传输记号（如 <code>MA:=PC</code>）、微码 ROM 的地址/数据位宽计算、技术条件如何决定硬连线 vs. 微编码的选择</li>
+      <li><strong>第 4 课</strong>：Iron Law（<code>Time/Program = Instructions/Program × CPI × Cycle Time</code>）、经典 5 级流水线、旁路 vs. 互锁、精确异常与提交点</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="problem1">Problem 1：四种 ISA 风格的横向比较</h2>
+    <p>题目给出一段"循环左移 n 位"的 C 函数，先展示它在 x86（CISC，变长指令）上编译出的真实汇编。你需要分别把这段逻辑翻译成：</p>
+    <ul>
+      <li><strong>1.A CISC（已给定）</strong>：分析给定 x86 代码的字节数、取指字节数（给定 <code>x=0x01020304, n=5</code>）、访存加载/存储字节数</li>
+      <li><strong>1.B RISC-V</strong>：把每条 x86 指令直接翻译成最少数量的 RISC-V 指令</li>
+      <li><strong>1.C 栈式 ISA</strong>：用给定的 <code>PUSH/POP/OR/SHL/SIGN/DEC/BEQZ/BNEZ/JUMP</code> 指令集翻译，注意题目假设栈顶两项有寄存器缓存、更深层的栈访问才需要额外的内存引用</li>
+      <li><strong>1.D 累加器式 ISA</strong>：用给定的 <code>LOAD/STORE/OR/SHL/SIGN/INC/DEC/SWAP/ZERO/BEQZ/BNEZ/JUMP</code> 指令集翻译，题目额外引入了一个"副累加器"简化编程</li>
+      <li><strong>1.E 结论</strong>：横向比较四种 ISA 在代码体积、取指指令数、访存流量上的差异，并说明如果要为这段代码设计专用处理器会选择哪种风格</li>
+      <li><strong>1.F 优化</strong>：在 1.B 直译的基础上，进一步优化 RISC-V 代码，减少动态执行的指令数、降低被采纳分支的频率</li>
+    </ul>
+    <div class="card">
+      <p><strong>解题的关键提醒：</strong>题目每种 ISA 都给出了精确的指令字节宽度表——这不是可以跳过的细节，"代码体积""取指字节数""访存字节数"这三个问题必须基于这些具体位宽精确计算，而不能只凭直觉估算。<strong>四种 ISA 得出的数字差异，正是第 1 课"ISA 是软件可见契约"与第 2、3 课"CISC→RISC 技术论证"两条线索在具体数字上的交汇点</strong>——你可以直接用这道题的计算结果，去检验"RISC 代码通常更长但每条指令更简单"这类经验判断是否站得住脚。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem2">Problem 2：微编码实现两条新指令</h2>
+    <p>基于第 2、3 课讲过的单总线微编码 RISC-V 数据通路（"Handout #1 Bus-Based RISC-V Implementation"），题目要求你直接在微码 ROM 的表格里填写寄存器传输级的微指令：</p>
+    <ul>
+      <li><strong>2.A MODULOM</strong>：新增指令 <code>MODULOM rd, rs1, rs2</code>，语义是 <code>M[rd] ← M[rs1] % M[rs2]</code>。由于 ALU 本身不支持取余/除法，需要把取模运算实现成一个减法循环（<code>while(x>=y) x-=y; return x;</code>），并保证代码不破坏 <code>rd</code>/<code>rs1</code>/<code>rs2</code> 等通用架构寄存器，最终要通过微跳转（microbranch）回到 <code>FETCH0</code>。</li>
+      <li><strong>2.B MINV</strong>：新增指令 <code>MINV rd, rs1, rs2</code>，在内存中一段无符号整数向量（起止指针分别是 <code>rs1</code>/<code>rs2</code>）里找最小值，写入 <code>rd</code>。题目允许在执行过程中修改 <code>rs1</code>，并要求尽量减少所用的周期数、尽量多用"don't care"简化控制信号。</li>
+      <li><strong>2.C 指令执行周期数</strong>：针对一组给定指令（<code>SUB</code>、<code>ANDI</code>、<code>LW</code>、taken/not-taken 的 <code>BNE</code>/<code>BEQ</code>、<code>J</code>、<code>JAL</code>、<code>JALR</code>、<code>AUIPC</code>），推算各自在微编码实现中需要多少个周期，并指出哪条指令周期数最多、哪条最少。</li>
+    </ul>
+    <div class="card idea">
+      <p><strong>与 Lab 1 的直接呼应：</strong>题目明确建议参考 Sodor 微编码核心的真实源码 <code>rv32_ucode/microcode.scala</code>——但同时提醒"该微码虽然通过了所有测试，但不保证是最优实现，甚至可能仍有 bug"。这正好印证了第 2 课里对 JAL/Branch 微码"教学草图 vs. 真实 RTL"这条提醒：<strong>做这道题时，光靠幻灯片伪代码可能不够精确，必须去读真实的 Chisel 源码来确认每个控制信号的确切含义</strong>。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem3">Problem 3：6 级流水线的旁路取舍与精确异常</h2>
+    <p>题目把第 4 课的经典 5 级流水线扩展成 6 级：把访存阶段拆成 M1/M2 两级（对应两周期延迟的数据缓存），然后提出一个具体的硬件改动方案——让所有整数运算指令直接在执行阶段末尾写回寄存器堆（需要新增一个写端口），而不必等到写回阶段：</p>
+    <ul>
+      <li><strong>3.A</strong>：解释新增的写端口如何通过消除某些冒险，避免了原本需要的译码阶段互锁，并给出一段"如果只有单一写端口、又拿掉了同样的旁路路径，就必须互锁"的最小反例代码</li>
+      <li><strong>3.B</strong>：新写端口加入后，哪些旁路路径可以被安全移除？是否因为算术指令提前写回，引入了新的冒险？</li>
+      <li><strong>3.C</strong>：说明这个 6 级流水线在不做进一步修改的情况下，为什么可能无法保证精确异常，并给出一段会导致"非精确异常"的最小代码</li>
+      <li><strong>3.D</strong>：描述如何通过新增一个互锁来恢复精确异常，并定性分析这种方案的性能代价</li>
+      <li><strong>3.E</strong>：如果预算允许新增一个寄存器堆读端口，提出一种不需要任何新互锁就能实现精确异常的替代方案</li>
+    </ul>
+    <div class="card warning">
+      <p><strong>这道题是第 4 课"精确异常与提交点"最直接的应用</strong>：一旦允许"提前写回"，就打破了"所有指令按顺序到达同一个提交点"的假设——而这个假设正是第 4 课里保证精确异常的核心机制。解题时应该回到第 4 课明确提出的问题："如何处理多个流水级同时出现的异常？"来systematically 组织你的论证。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem4">Problem 4：CISC vs. RISC 情景判断题</h2>
+    <p>四道简答题，每道给出一个具体的技术/市场约束场景，要求判断该场景更适合 CISC 还是 RISC 风格，并说明理由：</p>
+    <ul>
+      <li>4.A 编译器技术落后、程序员大多直接写汇编</li>
+      <li>4.B 希望降低编译器开发难度，让用户能用高级语言（C、Fortran）编程</li>
+      <li>4.C 逻辑电路很快、但取指访存至少慢 10 倍（"假设你是 709 的首席架构师"——即向 1950 年代末的技术条件类比）</li>
+      <li>4.D 假设从 2023 年白手起家、面积/逻辑/存储都很便宜，要设计一款高性能（高频、深流水线）处理器</li>
+    </ul>
+    <p>这四道题直接对应第 2、3 课反复强调的核心论点：<strong>ISA 风格的选择不是审美偏好，而是由当时的编译器技术水平和存储/逻辑的相对成本决定的</strong>——回答时应该引用第 3 课里 Cocke 的 PL.8 编译器实验、Emer/Clark 的 VAX-11/780 实测数据，以及"IC 时代 RAM 追上 ROM 速度"这条技术反转论据。</p>
+
+    <hr class="rule">
+
+    <h2 id="problem5">Problem 5：Iron Law 表格分析</h2>
+    <p>题目给出 6 种微架构/ISA 改动，要求你分别判断它们对 Iron Law 三个分量（指令数/程序、CPI、每周期时间）各自的影响方向（增大/减小/不变），以及对整体性能的影响（增大/减小/不变/含糊不清——如果含糊不清，需要说明这是一个"看情况"的权衡，并给出工程判断）：</p>
+    <ol type="a">
+      <li>增加一个分支延迟槽</li>
+      <li>增加一条复杂指令</li>
+      <li>减少 ISA 中的寄存器数量</li>
+      <li>改善访存速度</li>
+      <li>给 RISC-V 增加最常用指令的 16 位版本（即让 RISC-V 变成变长指令集）</li>
+      <li>对同一个 CISC ISA，把微架构实现从微编码引擎换成"CISC-to-RISC 译码器 + RISC 流水线"（真实处理器如 Intel Ivy Bridge 采用的路线）</li>
+    </ol>
+    <div class="card idea">
+      <p><strong>这是全课程目前为止对 Iron Law 最系统的一次综合演练</strong>：每一小题都要求你把"改动"精确拆分到指令数、CPI、周期时间三个独立维度上分别推理，而不能笼统地说"应该会更快/更慢"。特别是 (f) 小题，直接呼应第 3 课"从 CISC 到 RISC"一节讲过的真实设计（Intel Ivy Bridge 式的硬连线流水线化 CISC 机器）——可以直接用第 3 课的论据来组织答案。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！四种 ISA 的代码体积/取指字节数/访存字节数差异必须基于题目给出的精确指令位宽计算，这正是第 1 课'ISA 是软件可见契约'与第 2、3 课'CISC→RISC 技术论证'两条线索在具体数字上的交汇点。" data-incorrect="重新看 Problem 1 的'解题的关键提醒'卡片。">
+      <p><strong>问题 1：</strong>Problem 1 比较 CISC/RISC/栈式/累加器式四种 ISA 时，为什么不能只凭直觉估算代码体积和访存流量？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为四种 ISA 的指令数一定完全相同</button>
+        <button data-choice="b" aria-pressed="false">因为栈式和累加器式 ISA 不存在真实的字节宽度</button>
+        <button data-choice="c" aria-pressed="false">因为题目给出了精确的指令字节宽度表，必须基于这些具体位宽精确计算，而不能笼统估算</button>
+        <button data-choice="d" aria-pressed="false">因为这道题与 ISA 风格无关，只与时钟频率有关</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="d" data-correct="正确！一旦允许算术指令提前写回（打破'所有指令按顺序到达同一提交点'的假设），就可能引入非精确异常——这正是第 4 课'精确异常与提交点'机制的直接应用。" data-incorrect="重新看 Problem 3 的警告卡片：新增写端口为什么会威胁精确异常。">
+      <p><strong>问题 2：</strong>Problem 3 中，为什么让整数指令提前在执行阶段末尾写回寄存器堆，可能会破坏精确异常？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为这会增加流水线级数</button>
+        <button data-choice="b" aria-pressed="false">因为寄存器堆写端口数量与异常处理无关</button>
+        <button data-choice="c" aria-pressed="false">因为提前写回会让指令数变多</button>
+        <button data-choice="d" aria-pressed="false">因为它打破了"所有指令按顺序到达同一个提交点"这一保证精确异常的核心假设</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="logistics">提交与评分说明</h2>
+    <ul>
+      <li>作业鼓励与同学讨论、在讨论课/答疑时间提问，但<strong>每位同学必须独立提交自己的解答</strong></li>
+      <li>提交平台为 Gradescope，截止时间为当地时间晚上 11:59:59</li>
+      <li>除了需要填图/填表的题目外，所有答案都必须<strong>用方框圈出</strong>——只有圈出的答案和填好的图表才会被批改</li>
+      <li>评分主要依据完成度（努力程度），但课程明确提醒：<strong>不亲自做完这些题目，几乎不可能在期中/期末考试中取得好成绩</strong>，因为习题集是考试的核心背景材料</li>
+      <li>官方解答会在截止日期次日发布，用于给出反馈</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>本作业原始 PDF：<code>sp23/hw01.pdf</code>（Problem Set #1, Version 1.2, UC Berkeley CS152, Spring 2023）</li>
+      <li>课程依赖内容：第 1-4 课；Handout #1（Bus-Based RISC-V Implementation，RV32I 5-Stage Pipeline Diagram）</li>
+      <li>Lab 1 参考代码：Sodor 微编码核心 <code>generators/riscv-sodor/src/main/scala/rv32_ucode/microcode.scala</code></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>📝 Homework 1</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+</body>
+</html>

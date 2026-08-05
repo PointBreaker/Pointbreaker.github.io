@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Microcoding — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 3 课</p>
+    <h1>Microcoding：从技术条件到 CISC→RISC 的转折</h1>
+    <p class="lede">这一课把第 2 课的微编码机制讲透——如何计算控制存储的大小、如何压缩它——然后用两组真实的历史数据（IBM 360 的微程序表、John Cocke 和 Emer/Clark 的实测结果）说明：正是底层存储技术的变化，才是 CISC 走向 RISC 背后真正的技术原因，而不仅仅是"品味"上的转变。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="recap">回顾第 2 课</h2>
+    <ul>
+      <li>微编码是管理控制单元复杂度的有效技术，诞生于逻辑（真空管）、主存（磁芯）、ROM（二极管）三者技术路线彼此不同的年代</li>
+      <li>ROM 和 RAM 的速度差异，促使人们愿意为处理器增加更多"复杂指令"（反正微码执行比访存更快，不算瓶颈）</li>
+      <li>技术进步带来了快速 SRAM，这条"ROM 天然比 RAM 快"的技术假设后来失效了——这正是本课要展开的关键伏笔</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="rom-implementation">纯 ROM 实现：控制存储有多大？</h2>
+    <p>把第 2 课的微码状态机直接实现成一个查找表（ROM），地址是<code>{µPC, opcode, Cond?, Busy?}</code>，数据是<code>{下一个 µPC, 控制信号}</code>：</p>
+    <ul>
+      <li>地址位数：<code>|µaddress| = |µPC| + |opcode| + 1 (Cond?) + 1 (Busy?)</code></li>
+      <li>数据位数：<code>|data| = |µPC| + |控制信号数|</code></li>
+      <li>ROM 总大小 = <code>2^|µaddress| × |data|</code></li>
+    </ul>
+
+    <div class="card">
+      <p><strong>把单总线 RISC-V 微码机的具体数字代入（并重新验算）：</strong></p>
+      <ul>
+        <li>取指序列 3 步，约 12 组指令，每组约 5 步（含 1 步分派）→ 总步数 <code>3 + 12×5 = 63</code> 步，需要 <code>⌈log2(63)⌉ = 6</code> 位 µPC</li>
+        <li>opcode 5 位，Cond?/Busy? 各 1 位 → 地址位数 = 6+5+1+1 = 13 位</li>
+        <li>约 18 个控制信号 → 数据位数 = 6（下一个 µPC）+ 18 = 24 位</li>
+        <li>ROM 大小 = <code>2^13 × 24 bit = 8192 × 24 bit = 196,608 bit = 24,576 字节 = 24 KiB</code></li>
+      </ul>
+      <p>幻灯片给出的估算是"~25 KiB"；按照给定的位宽精确计算，结果应为 <strong>24 KiB</strong>（幻灯片的说法是取整估算，不是四舍五入误差）。无论如何，量级是一致的：<strong>一个只有 12 组指令的极简 RISC-V 微码机，光是控制 ROM 就要 24 KiB 左右</strong>——这比你想象的大得多，也是为什么"压缩控制存储"是微编码设计中的实际工程问题。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reduce-size">压缩控制存储的两个方向</h2>
+    <table>
+      <tr><th>方向</th><th>具体做法</th></tr>
+      <tr><td>减少 ROM 高度（地址位数）</td><td>用外部逻辑合并输入信号；把相似的 opcode 分组以减少状态数</td></tr>
+      <tr><td>减少 ROM 宽度（数据位数）</td><td>限制 µPC 编码方式（如只允许 next/dispatch/wait 等固定跳转模式）；把控制信号编码压缩（即垂直微编码、纳米编码）</td></tr>
+    </table>
+
+    <p>限制 µPC 跳转方式的具体实现，是引入一个"µPC 跳转逻辑"，只允许几种固定的跳转类型，而不是让每条微指令都能任意指定下一个地址：</p>
+    <pre><code class="language-text">µPC jump ∈ { next, spin, fetch, dispatch, ftrue, ffalse }
+  next     : µPC 自增 1
+  spin     : 等待内存（原地不动）
+  fetch    : 跳到取指序列开头
+  dispatch : 根据译码后的 opcode 跳到对应指令组开头
+  ftrue / ffalse : 条件为真/假时跳回取指（否则顺序执行，用于分支指令）</code></pre>
+    <p>这样一来，每条微指令只需要存储"6 种跳转类型之一"，而不必存完整的下一地址，ROM 数据宽度大大压缩。例如分支指令的编码后微码：</p>
+    <pre><code class="language-text">Branch0 | A:=Reg[rs1]        next
+Branch1 | B:=Reg[rs2]        next
+Branch2 | A:=PC              ffalse （不跳转则直接回取指）
+Branch3 | A:=A-4             next   （跳转则继续往下执行）
+Branch4 | B:=ImmB            next
+Branch5 | PC:=A+B            fetch</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="complex-instructions">微编码如何"免费"实现复杂指令</h2>
+    <p>以一条假想的"内存-内存加法"指令 <code>M[rd] = M[rs1] + M[rs2]</code> 为例：</p>
+    <pre><code class="language-text">MMA0 | MA:=Reg[rs1]          next
+MMA1 | A:=Mem                spin
+MMA2 | MA:=Reg[rs2]          next
+MMA3 | B:=Mem                spin
+MMA4 | MA:=Reg[rd]           next
+MMA5 | Mem:=ALUOp(A,B)       spin
+MMA6 |                       fetch</code></pre>
+    <div class="card idea">
+      <p><strong>关键洞察：</strong>这样复杂的指令，数据通路完全不需要任何改动——只需要在 ROM 里多放几行控制程序。而如果用硬连线控制器实现同样的指令，往往需要对数据通路做实质性的修改（比如支持三次独立的访存）。<strong>这正是微编码相对硬连线控制的核心优势：用"多存一点 ROM"的代价，换来"数据通路不用变"的简洁性。</strong></p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="horizontal-vertical">水平微码 vs. 垂直微码 vs. 纳米编码</h2>
+    <table>
+      <tr><th>风格</th><th>特点</th></tr>
+      <tr><td>水平微码（horizontal）</td><td>微指令更宽，一条微指令能并行触发多个数据通路操作；每条宏指令所需的微码步数更少；但编码更稀疏 → 占用更多总位数</td></tr>
+      <tr><td>垂直微码（vertical）</td><td>微指令更窄，通常一条微指令只做一个数据通路操作（如分支要单独一条微指令）；每条宏指令所需步数更多；但更紧凑 → 占用更少总位数</td></tr>
+      <tr><td>纳米编码（nanocoding）</td><td>试图兼顾两者：用一层间接的"纳米指令 ROM"存储实际控制信号模式，微码 ROM 里存的只是纳米指令的地址（指针）</td></tr>
+    </table>
+
+    <div class="card">
+      <p><strong>真实例子：Motorola 68000</strong> 采用 17 位微码，其中每条微码要么是 10 位的微跳转（µjump），要么是 9 位的纳米指令指针。纳米指令本身宽达 68 位，译码后能产生 196 个控制信号。这样做的动机是：微码里大量重复出现相同的控制信号模式（例如 <code>ALU0: A←Reg[rs1]</code> 和 <code>ALUI0: A←Reg[rs1]</code> 其实是同一句），把这些重复模式提取成共享的纳米指令，就能用短得多的指针去引用它们，大幅压缩总存储。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="ibm360-microcode">真实案例：IBM 360 各型号的微程序参数</h2>
+    <p>IBM 360 系列中，除了最快的两个型号（Model 75 和 95）是硬连线之外，<strong>其余全部采用微编码</strong>：</p>
+    <table>
+      <tr><th></th><th>M30</th><th>M40</th><th>M50</th><th>M65</th></tr>
+      <tr><td>数据通路宽度（位）</td><td>8</td><td>16</td><td>32</td><td>64</td></tr>
+      <tr><td>微指令宽度（位）</td><td>50</td><td>52</td><td>85</td><td>87</td></tr>
+      <tr><td>微码大小（K 条微指令）</td><td>4</td><td>4</td><td>2.75</td><td>2.75</td></tr>
+      <tr><td>微存储技术</td><td>CCROS</td><td>TCROS</td><td>BCROS</td><td>BCROS</td></tr>
+      <tr><td>微存储周期（ns）</td><td>750</td><td>625</td><td>500</td><td>200</td></tr>
+      <tr><td>主存周期（ns）</td><td>1500</td><td>2500</td><td>2000</td><td>750</td></tr>
+      <tr><td>月租金（千美元）</td><td>4</td><td>7</td><td>15</td><td>35</td></tr>
+    </table>
+    <p>注意一个关键的量化规律：<strong>无论哪个型号，微存储（ROM）的周期都比主存（RAM）的周期快 2 倍左右</strong>（如 M30 的 750ns vs. 1500ns，M65 的 200ns vs. 750ns）——这正是第 2 课"ROM 比 RAM 快"这条技术前提在真实产品参数中的直接体现。IBM Card-Capacitor ROM（CCROS，用打孔金属卡片+固定感应板实现）是当时这类只读微存储的典型工艺。</p>
+
+    <hr class="rule">
+
+    <h2 id="thrive">为什么微编码在 60、70 年代蓬勃发展</h2>
+    <ul>
+      <li>当时能造出比 DRAM 显著更快的 ROM</li>
+      <li>对复杂指令集而言，用微编码实现数据通路和控制器都更便宜、更简单</li>
+      <li>增加新指令（例如浮点运算）不需要改动数据通路</li>
+      <li>修复控制器里的 bug 更容易（改微码，而不是改硬件电路）</li>
+      <li>不同型号之间的 ISA 兼容性更容易、更便宜地实现——这正是第 1 课 IBM 360 故事的技术支撑</li>
+    </ul>
+    <p><strong>除了最便宜和最快的两类机器之外，几乎所有计算机当时都是微编码的。</strong></p>
+
+    <hr class="rule">
+
+    <h2 id="wcs">1980 年代初：可写控制存储的兴衰</h2>
+    <p>微机器的演化带来了更复杂的问题：复杂指令集需要在微码里实现子程序调用和调用栈；修 bug 的需求又和 ROM 只读的特性冲突——于是出现了<strong>可写控制存储（Writable Control Store, WCS）</strong>：把控制存储从 ROM 换成 RAM（如 B1700、QMachine、Intel i432），允许用户为处理器改写微码。</p>
+    <p>但"面向用户开放"的 WCS 最终失败了，原因包括：几乎没有编程工具支持；很难把软件塞进很小的存储空间；微码控制逻辑是为原始 ISA 量身定制的，难以迁移到其他用途；大容量 WCS 成为处理器状态的一部分，使上下文切换代价高昂；用户能改微码使保护机制难以实现；虚拟内存要求微码可重入/可重启，进一步增加复杂度。</p>
+    <p>与此同时，随着 VLSI 技术的到来，"ROM 天然比 RAM 快"这条支撑微编码的技术假设本身开始失效——这条线索直接导向下面的技术性倒转。</p>
+
+    <hr class="rule">
+
+    <h2 id="not-extinct">微编码远未消失</h2>
+    <p>微编码在 80 年代的微处理器中（DEC uVAX、Motorola 68K 系列、Intel 286/386）扮演了关键角色；在今天几乎所有现代处理器中（AMD Zen、Intel Skylake、Intel Atom、IBM PowerPC 等）仍然扮演"辅助角色"——绝大多数指令直接用硬连线控制执行，只有不常用或特别复杂的指令才会触发微码。</p>
+    <div class="card warning">
+      <p><strong>真实世界的例子——本课开头引用的新闻：</strong>可打补丁的微码常被用来修复芯片流片之后才发现的 bug（例如 Intel 处理器在开机时加载微码补丁）。2018 年 Meltdown/Spectre 安全漏洞爆发时，<strong>Intel 不得不重新启用几乎已经废弃的微码开发工具，并找回当年设计原始微码的工程师</strong>，才能针对 Skylake、Kaby Lake、Coffee Lake 等芯片发布微码补丁来缓解"分支目标注入"（branch target injection）攻击。这说明微编码这套四十年前发明的机制，直到今天仍然是修复现代 CPU 安全漏洞的关键手段。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="measurements">真实测量：微编码机器到底把时间花在哪</h2>
+    <p><strong>John Cocke 在 IBM 的实验：</strong>Cocke 团队当时在做一款简单流水线处理器 801 和配套的先进编译器。他们把实验性的 PL.8 编译器移植到 IBM 370 上，但只让它使用与 801 类似的简单寄存器-寄存器和 load/store 指令（刻意不使用 370 丰富的复杂指令）。结果这样生成的代码，比使用全部 370 指令集的现有编译器<strong>运行得更快</strong>——达到 6 MIPS，而此前 2 MIPS 就被认为是不错的水平。</p>
+    <p><strong>Emer 与 Clark 在 DEC 的实测：</strong>他们用外部硬件实际测量 VAX-11/780 的运行情况，发现它实际上只是一台约 <strong>0.5 MIPS</strong> 的机器，而当时通常被想当然地认为是 1 MIPS 机器。更关键的发现是：<strong>20% 的 VAX 指令占据了 60% 的微码空间，但在实际执行时间中只占 0.2%</strong>——换句话说，大部分微码是为极少数很少被用到的复杂指令服务的，纯属"重装备、轻使用"。</p>
+    <p>作为佐证，VAX8800 的控制存储是 <code>16K × 147 位</code> 的 RAM，而统一缓存只有 <code>64K × 8 位</code> 的 RAM——控制存储的容量（16K×147 ≈ 294 KB）是缓存容量（64K×8 = 64 KB）的<strong>约 4.6 倍</strong>（幻灯片给出的说法是"4.5 倍"，与精确计算基本一致，量级相符）。<strong>大量昂贵的芯片面积，被用来支撑几乎从未被执行到的复杂指令。</strong></p>
+
+    <hr class="rule">
+
+    <h2 id="ic-tech-changes">技术反转：IC 时代 ROM 和 RAM"一样快"了</h2>
+    <p>到了集成电路时代，逻辑门、RAM、ROM 全部用 MOS 晶体管实现——<strong>半导体 RAM 的速度已经和 ROM 基本相当</strong>。这正好推翻了第 2 课里"逻辑贵、ROM 比 RAM 快"的原始技术前提。当支撑微编码存在的技术理由消失后，一个自然的问题浮现：既然 RAM 已经足够快，为什么还要绕一层微码，而不直接用快速 RAM 做指令缓存，硬连线直接译码执行用户可见的指令？</p>
+
+    <div class="card idea">
+      <p><strong>这正是本课程标题党式插图（"RISC!"贴纸贴在 Motorola 68000 纳米编码框图上）想表达的意思</strong>：把原来"用户 PC → 微码 ROM → 纳米指令 ROM → 控制信号"这条链路，换成"用户 PC → 指令缓存（快速 RAM）→ 硬连线译码"——本质上是用同样已经很快的 RAM，直接缓存用户级指令，绕开微码这一层间接。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="cisc-to-risc">从 CISC 到 RISC 的技术论证</h2>
+    <ul>
+      <li>用快速 RAM 构建用户可见指令的快速指令缓存，而不是固定的硬件微例程——缓存内容可以随应用变化而变化，比固化的微码更灵活</li>
+      <li>用简单的 ISA 使硬连线流水线实现成为可能——因为已经通过实测（Cocke 的 PL.8 实验、Emer/Clark 的 VAX 测量）知道，<strong>编译后的代码本来就只用到一小部分复杂指令</strong>，更简单的编码方式反而让流水线实现变得可行；某种意义上，RISC ISA 相当于"垂直微码"被直接暴露成了用户级 ISA</li>
+      <li>进一步受益于集成度提升：80 年代初，32 位数据通路加上小容量缓存终于能塞进单颗芯片，常见路径不再需要跨芯片通信，运行速度进一步提升</li>
+    </ul>
+    <p>1982-1983 年，伯克利建成了 RISC-I（44,420 个晶体管，5 微米 NMOS 工艺，芯片面积 77 mm²，主频 1 MHz，很可能是第一颗 VLSI RISC 芯片）和 RISC-II（40,760 个晶体管，3 微米 NMOS，主频 3 MHz，面积 60 mm²）——这两颗芯片正是本课程使用的 RISC-V 一脉相承的历史源头（"V"即代表伯克利第五代 RISC 设计）。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：RISC 取代 CISC 纯粹是设计理念的胜利。</strong>真实历史是先有实测数据（Cocke 的编译器实验、Emer/Clark 的 VAX 测量）揭示"复杂指令很少被用到"，再加上 IC 技术让 ROM/RAM 速度趋同，两者共同作用才推动了 RISC 的兴起。</li>
+      <li><strong>误区：微编码已经被 RISC 完全淘汰。</strong>事实上现代 x86/PowerPC 等处理器仍在用微码处理罕见或复杂指令，且这套机制在 Meltdown/Spectre 补丁中发挥了关键作用。</li>
+      <li><strong>误区：微编码对复杂指令没有代价。</strong>VAX8800 的例子说明，支撑复杂指令的微码控制存储可能比整个数据缓存还大好几倍，是实打实的芯片面积代价。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！2^13 × 24 位 = 8192 × 24 = 196,608 位 = 24,576 字节 = 24 KiB，与幻灯片"~25KiB"的估算量级一致，但精确计算应为 24 KiB。" data-incorrect="重新代入数字：地址位数=6+5+1+1=13，数据位数=6+18=24，ROM大小=2^13×24位，换算成字节再除以1024得到KiB。">
+      <p><strong>问题 1：</strong>单总线 RISC-V 微码机需要 6 位 µPC、5 位 opcode、各 1 位的 Cond?/Busy?，以及 18 个控制信号。按照 <code>2^|µaddress| × |data|</code> 精确计算，控制 ROM 的大小约为多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">约 13 KiB</button>
+        <button data-choice="b" aria-pressed="false">约 18 KiB</button>
+        <button data-choice="c" aria-pressed="false">约 24 KiB</button>
+        <button data-choice="d" aria-pressed="false">约 48 KiB</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！Emer 和 Clark 的实测发现 20% 的 VAX 指令占了 60% 的微码空间，却只占实际执行时间的 0.2%——这正是"复杂指令很少被用到"的量化铁证。" data-incorrect="重新看 Emer/Clark 一节的具体数字：20%/60%/0.2% 这三个数字分别对应什么。">
+      <p><strong>问题 2：</strong>Emer 和 Clark 对 VAX-11/780 的实测发现了什么，直接支持了"RISC 应该只保留常用指令"的论证？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">VAX-11/780 的实际性能比宣称的 1 MIPS 更快</button>
+        <button data-choice="b" aria-pressed="false">20% 的 VAX 指令占用了 60% 的微码空间，但在实际执行时间中只占 0.2%</button>
+        <button data-choice="c" aria-pressed="false">VAX 指令集里没有任何复杂指令被使用过</button>
+        <button data-choice="d" aria-pressed="false">微码的执行速度比硬连线控制快 6 倍</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！IC/VLSI 时代逻辑、RAM、ROM 都用 MOS 晶体管实现，半导体 RAM 速度已经追上 ROM，使原来"ROM 比 RAM 快"的假设失效，用快速 RAM 做指令缓存+ 硬连线译码变得可行。" data-incorrect="重新看"技术反转"一节：关键变化是 RAM 和 ROM 的相对速度关系，而不是 RISC-V 规范本身的设计诉求。">
+      <p><strong>问题 3：</strong>是什么技术条件的变化，让"用快速 RAM 做用户指令缓存 + 硬连线译码"取代"微码 ROM"重新变得有吸引力？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">MOS 集成电路时代，半导体 RAM 的速度已经追上 ROM，原有的"ROM 比 RAM 快"假设失效</button>
+        <button data-choice="b" aria-pressed="false">因为 ROM 的价格突然大幅上涨</button>
+        <button data-choice="c" aria-pressed="false">因为 RISC-V 规范禁止使用微编码</button>
+        <button data-choice="d" aria-pressed="false">因为编译器不再需要生成复杂指令</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>控制 ROM 有多大</h3>
+        <p>用地址位/数据位公式精确计算，量级常常比直觉大得多</p>
+      </article>
+      <article>
+        <h3>压缩手段</h3>
+        <p>限制跳转编码、垂直微码、纳米编码分层共享控制信号模式</p>
+      </article>
+      <article>
+        <h3>真实实测数据</h3>
+        <p>Cocke 的 PL.8、Emer/Clark 的 VAX 测量证明复杂指令很少被用到</p>
+      </article>
+      <article>
+        <h3>技术反转是根本原因</h3>
+        <p>MOS 时代 RAM 追上 ROM 速度，才是 CISC→RISC 的技术论据核心</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Appendix A, Chapter 1</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L03_Microcoding.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Meltdown 与 Spectre 攻击说明：<a href="https://meltdownattack.com/">meltdownattack.com</a></li>
+      <li>Discussion 1 worksheet：Microcoding, Lab 1 Overview（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0002-simple-machine-implementations-microcoding.html">← 第 2 课：Simple Machine Implementations, Microcoding</a>
+      <span>🎓 第 3 课</span>
+      <a href="0004-pipelining-i.html">第 4 课：Pipelining I →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

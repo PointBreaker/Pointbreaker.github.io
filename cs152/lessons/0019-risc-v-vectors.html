@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RISC-V Vectors — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 19 课</p>
+    <h1>RISC-V Vectors：把第 17 课的理论变成真实 ISA</h1>
+    <p class="lede">这一课把向量处理器的抽象概念——向量长度、通道、掩码——变成一份真实、已经批准的 ISA 规范：RISC-V "V" 向量扩展（2021 年 12 月批准）。这也正是 Lab 4 要动手编写的汇编代码所依据的规范。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="rvv-overview">RVV v1.0：2021 年批准，工业界已在采用</h2>
+    <p>RISC-V "V" 向量扩展规范 v1.0 于 <strong>2021 年 12 月</strong>正式批准；已知的采用者包括 <strong>Alibaba、Andes、Semidynamics、SiFive</strong>；也是<strong>欧洲处理器计划（European Processor Initiative, EPI）</strong>超算项目的基础。相对标量状态（x0-x31、f0-f31、fcsr），向量扩展新增的处理器状态包括：32 个向量寄存器 v0-v31（每个 <strong>VLEN</strong> 位宽，具体数值由实现决定）、向量长度寄存器 <strong>vl</strong>、向量类型寄存器 <strong>vtype</strong>、<code>vstart</code>（用于陷阱处理时恢复部分执行的向量指令）、<code>vrm</code>/<code>vxsat</code>（定点舍入模式/饱和标志，也出现在 <code>vcsr</code> 里）、以及只读的 <code>vlenb</code>（以字节为单位给出向量寄存器长度）。</p>
+
+    <hr class="rule">
+
+    <h2 id="sew-lmul">SEW 与 LMUL：两个决定"一条向量指令处理多少数据"的旋钮</h2>
+    <p><strong>vtype</strong> 寄存器编码了几个关键字段：<code>vsew[2:0]</code> 决定<strong>SEW（Selected Element Width，选定的元素宽度）</strong>：</p>
+    <p>\[ \text{SEW} = 8 \times 2^{\text{vsew}} \]</p>
+    <p>把 vsew 取值 0 到 7 依次代入，得到 SEW = 8, 16, 32, 64, 128, 256, 512, 1024 位——这是一列每次翻倍的等比数列，重新验算与幻灯片给出的 SEW 数值完全一致。（幻灯片表格里列出的具体 3 位二进制编码本身，第 3、5、6 行的印刷顺序看起来不完全是一个干净的 0-7 递增二进制序列——这更像是原始幻灯片的排版/转录问题，而不是 SEW 数值本身的错误：SEW 数值序列每次翻倍是完全正确、内部自洽的。）</p>
+    <p><code>vlmul[2:0]</code> 决定<strong>LMUL（向量寄存器长度乘数）</strong>：</p>
+    <p>\[ \text{LMUL} = 2^{\text{vlmul}}, \quad \text{取值范围 } \tfrac{1}{8} \text{ 到 } 8 \]</p>
+    <p>LMUL 大于 1 时，把多个物理向量寄存器合并成"更少但更长"的逻辑向量寄存器——LMUL=2 时只能用偶数编号寄存器（v0, v2, …），LMUL=4 时每 4 个一组（v0, v4, …），以此类推。</p>
+
+    <div class="card idea">
+      <p><strong>VLMAX 公式：一条向量指令到底能处理多少个元素？</strong></p>
+      <p>\[ \text{VLMAX} = \frac{\text{LMUL} \times \text{VLEN}}{\text{SEW}} \]</p>
+      <p>配置指令 <code>vsetvli</code>/<code>vsetivli</code>/<code>vsetvl</code> 会根据请求的 SEW/LMUL 计算出 VLMAX，再取 <strong>vl = min(AVL, VLMAX)</strong>（AVL 是程序请求的应用向量长度）。<code>vsetvli</code>（寄存器-立即数形式，最常用）、<code>vsetivli</code>（立即数-立即数形式，向量长度静态已知时使用）、<code>vsetvl</code>（寄存器-寄存器形式，"仅用于上下文保存/恢复"）三者的区别仅在于操作数的来源。</p>
+    </div>
+
+    <div class="card">
+      <p><strong>混合宽度实例（重新验算）：</strong>VLEN=128 位，保持 <code>SEW/LMUL=8</code> 不变：</p>
+      <ul>
+        <li>SEW=8 位，LMUL=1 → VLMAX = 1×128/8 = <strong>16</strong></li>
+        <li>SEW=16 位，LMUL=2 → VLMAX = 2×128/16 = <strong>16</strong></li>
+        <li>SEW=32 位，LMUL=4 → VLMAX = 4×128/32 = <strong>16</strong></li>
+        <li>SEW=64 位，LMUL=8 → VLMAX = 8×128/64 = <strong>16</strong></li>
+      </ul>
+      <p>四次重新计算都得到 16，与幻灯片完全一致——这正是这个例子想说明的核心洞察：<strong>只要保持 SEW/LMUL 的比值不变，无论元素宽度怎么变，一条向量指令能处理的元素个数（VLMAX）就保持不变。</strong>这让同一段向量代码可以在不同数据宽度之间复用，只需调整 SEW/LMUL 配置。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="memory-ops">访存指令：单位步长、跨步、索引</h2>
+    <p>RVV 提供三类 load/store：<strong>单位步长（unit-stride）</strong>——<code>vle8/16/32/64.v</code>、<code>vse8/16/32/64.v</code>，按连续地址访存；<strong>跨步（strided）</strong>——<code>vlse*</code>/<code>vsse*</code>，按固定步长跳跃访存；<strong>索引（indexed，即 gather/scatter）</strong>——<code>vluxei*</code>/<code>vloxei*</code>（无序/有序 load）、<code>vsuxei*</code>/<code>vsoxei*</code>（无序/有序 store）。索引访存的地址数据宽度在指令中单独编码，而实际数据大小由 <code>vtype.vsew</code> 字段决定；有序（ordered）版本对内存一致性/精确故障的处理更严格，无序（unordered）版本给硬件更多重排空间。</p>
+
+    <hr class="rule">
+
+    <h2 id="masking-elements">掩码与"预启动/激活/未激活/尾部"元素分类</h2>
+    <p>指令编码中的一个 <code>vm</code> 位决定该指令是否受 v0 掩码寄存器控制（由于 32 位编码空间有限，掩码寄存器被固定为 v0；未来的 64 位编码扩展将允许谓词存放在任意寄存器）。RVV 规范精确定义了向量寄存器中每个元素属于哪一类：<strong>预启动元素</strong>（索引小于 <code>vstart</code>，不会引发异常、不会更新目的寄存器）；<strong>主体元素</strong>（索引在 <code>[vstart, vl)</code> 之间），又分为<strong>激活元素</strong>（掩码为真，可以引发异常、可以更新目的寄存器）和<strong>未激活元素</strong>（掩码为假，默认不更新，除非设置了 <code>vma=1</code> 的"掩码不可知"策略，此时可能被覆写为全 1）；<strong>尾部元素</strong>（索引超出 <code>vl</code>，默认不更新，除非设置了 <code>vta=1</code> 的"尾部不可知"策略）。"不可知（agnostic）"策略允许硬件实现选择"保持不变"或"覆写为全 1"中的任意一种，为硬件实现留出优化空间。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：VLEN 和 vl 是同一个东西。</strong>VLEN 是硬件实现固定的向量寄存器物理位宽；vl 是当前向量操作实际生效的<strong>元素个数</strong>，由 <code>vsetvli</code> 根据请求的 AVL 和当前配置计算出的 VLMAX 共同决定，是一个可以按需调整的运行时值。</li>
+      <li><strong>误区：LMUL 只是一个无关紧要的配置选项。</strong>LMUL 直接决定了"多少个物理向量寄存器被捆绑成一个逻辑向量寄存器"，从而直接影响 VLMAX——混合宽度实例证明，正确搭配 SEW 和 LMUL 才能在不同数据宽度间保持一致的元素处理能力。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！VLMAX = LMUL × VLEN / SEW = 2 × 128 / 16 = 16。" data-incorrect="重新代入公式：VLMAX = LMUL × VLEN / SEW。">
+      <p><strong>问题 1：</strong>VLEN=128 位，SEW=16 位，LMUL=2，此时 VLMAX（一条向量指令最多处理的元素个数）是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">8</button>
+        <button data-choice="b" aria-pressed="false">16</button>
+        <button data-choice="c" aria-pressed="false">32</button>
+        <button data-choice="d" aria-pressed="false">64</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！只要 SEW/LMUL 的比值保持不变，VLMAX = LMUL×VLEN/SEW 就不会随元素宽度变化——四种宽度配置都得到相同的 VLMAX=16。" data-incorrect="重新看"混合宽度实例"一节：四种不同 SEW/LMUL 组合为什么都能得到相同的 VLMAX。">
+      <p><strong>问题 2：</strong>为什么在 VLEN=128 位固定的情况下，SEW=8/LMUL=1、SEW=16/LMUL=2、SEW=32/LMUL=4、SEW=64/LMUL=8 这四种配置都能得到相同的 VLMAX=16？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">这只是巧合，没有规律</button>
+        <button data-choice="b" aria-pressed="false">因为 VLEN 会随配置自动调整</button>
+        <button data-choice="c" aria-pressed="false">因为四种配置的 SEW/LMUL 比值都保持为 8，而 VLMAX=LMUL×VLEN/SEW 只取决于这个比值和 VLEN，比值不变则 VLMAX 不变</button>
+        <button data-choice="d" aria-pressed="false">因为 RISC-V 规范强制要求 VLMAX 恒定为 16</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！预启动元素索引小于 vstart，不会引发异常也不会更新目的寄存器——这是为了支持陷阱处理后恢复部分执行的向量指令。" data-incorrect="重新看"掩码与元素分类"一节：预启动元素的定义和作用。">
+      <p><strong>问题 3：</strong>RVV 规范中的"预启动元素（prestart elements）"是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">索引小于 vstart 寄存器值的元素，不会引发异常、也不会更新目的寄存器，用于支持陷阱处理后恢复部分执行的向量指令</button>
+        <button data-choice="b" aria-pressed="false">索引超出 vl 的元素</button>
+        <button data-choice="c" aria-pressed="false">被掩码关闭的元素</button>
+        <button data-choice="d" aria-pressed="false">尚未分配物理寄存器的元素</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>RVV v1.0</h3>
+        <p>2021 年 12 月批准，工业界已有多家采用者</p>
+      </article>
+      <article>
+        <h3>SEW 与 LMUL</h3>
+        <p>SEW=8×2^vsew，LMUL=2^vlmul，共同决定元素宽度与寄存器分组</p>
+      </article>
+      <article>
+        <h3>VLMAX 公式</h3>
+        <p>LMUL×VLEN/SEW，保持比值不变即可跨宽度复用代码</p>
+      </article>
+      <article>
+        <h3>元素分类</h3>
+        <p>预启动/主体（激活/未激活）/尾部，配合不可知/不受扰策略</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：本讲无官方指定新增阅读章节（延续第 17、18 课 Chapter 4 内容）</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L19_RISCV_Vectors.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023；原作者 Krste Asanović，本讲由 Albert Ou 修订）</li>
+      <li>RISC-V "V" 向量扩展规范 v1.0：<a href="https://github.com/riscv/riscv-v-spec">github.com/riscv/riscv-v-spec</a></li>
+      <li>Lab 4 直接基于本讲内容：RISC-V 向量汇编编程（复数向量乘法、矩阵-向量乘、矩阵-矩阵乘、索引最大值）</li>
+      <li>Discussion 9 worksheet：Vectors（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0018-gpus.html">← 第 18 课：GPUs</a>
+      <span>🎓 第 19 课</span>
+      <a href="0020-turing-award-lecture.html">第 20 课：Turing Award Lecture →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

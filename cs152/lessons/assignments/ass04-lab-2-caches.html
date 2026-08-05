@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 2: Rocket Cache Hierarchy — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Lab 2</p>
+    <h1>Lab 2: Rocket Cache Hierarchy</h1>
+    <p class="lede">把第 6-10 课讲的缓存放置策略、AMAT、TLB 变成真实硬件上可以测量的数字：在一颗真实的 Rocket RISC-V 核心上，通过矩阵转置这个经典的访存局部性案例，亲手调整缓存参数并观察性能变化。</p>
+
+    <div class="meta">
+      <span>发布：2023-02-14（随第 9 课）</span>
+      <span>截止：2023-03-02</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="objectives">实验目标</h2>
+    <ul>
+      <li>在单核 Rocket Chip（RV64GC，<code>CS152RocketConfig</code>，4KiB 直接映射 L1）上运行真实的矩阵转置代码</li>
+      <li>通过缓存分块（cache blocking）技术，亲手体会第 8 课"编译器局部性优化"讲过的循环变换如何转化为真实的性能提升</li>
+      <li>通过调整 L1 相联度、增加 L2，理解第 7 课"缓存参数如何影响命中率/命中时间"这对权衡在真实硬件上的具体表现</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="directed">指导性部分（约占 30% 分数）——矩阵转置案例</h2>
+    <p>核心案例研究围绕矩阵转置展开，循序渐进：</p>
+    <ol>
+      <li><strong>朴素转置</strong>：先跑一个未经优化的转置实现，观察其糟糕的访存局部性（正是第 8 课"矩阵乘法朴素代码"里按列访问模式差的同一类问题）</li>
+      <li><strong>缓存分块</strong>：引入分块因子 B，把大矩阵拆成能装进缓存的小块来转置，寻找最优的分块大小</li>
+      <li><strong>调整 L1 相联度</strong>：通过 <code>WithL1DCacheWays</code>/<code>WithL1DCacheSets</code> 配置项调整数据缓存的组织方式，观察相联度变化对命中率的影响</li>
+      <li><strong>增加 L2</strong>：接入一个 8 路组相联、64KiB 的二级缓存（<code>CS152RocketL2Config</code>），再引入第二层分块，观察多级缓存下最优分块策略如何变化</li>
+    </ol>
+
+    <hr class="rule">
+
+    <h2 id="open-ended">开放性部分（约占 70% 分数，三选一）</h2>
+    <ol>
+      <li><strong>逆向工程"神秘"配置</strong>：用 <code>ccbench</code> 指针追逐（pointer-chase）微基准测试，反推出一个未知配置的缓存/TLB/DRAM 参数——这是第 7、9 课讲的 AMAT/TLB Reach 概念的逆向应用</li>
+      <li><strong>设计一个硬件 L1 预取器</strong>：用 Chisel（<code>CustomL1Prefetcher</code>）或 C++ DPI 模型实现，在矩阵转置/Lab 1 基准测试/GAPBS BFS 上评估效果——直接呼应第 8 课"预取时机比预测准确性更重要"这一核心论点</li>
+      <li><strong>设计自定义缓存替换策略与受害者缓存</strong>：在 <code>spike</code> 模拟器的缓存模型（<code>cachesim.cc</code>）中实现，用 5 个 SPEC CPU2006 基准测试（bzip2、mcf、soplex、sjeng、lbm）评估——直接呼应第 8 课讲过的受害者缓存（HP 7200）设计思路</li>
+    </ol>
+
+    <hr class="rule">
+
+    <h2 id="deliverables">交付物与评分说明</h2>
+    <ul>
+      <li>指导性部分独立完成、单独提交；开放性部分可以组队（每组一个问题）</li>
+      <li>报告须为可读的英文摘要，不接受日志文件转储</li>
+      <li>全学期至少完成 3/5 个实验，否则自动判定为 F</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="a" data-correct="正确！缓存分块把大矩阵拆成能装进缓存的小块来转置，正是第 8 课'编译器局部性优化'讲过的循环变换在真实硬件上转化为性能提升的具体案例。" data-incorrect="重新看指导性部分第 2 步"缓存分块"。">
+      <p><strong>问题 1：</strong>Lab 2 指导性部分中的"缓存分块（cache blocking）"技术，直接呼应了第几课的什么内容？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">第 8 课的循环变换/局部性优化——把大矩阵拆成能装进缓存的小块，转化为真实的性能提升</button>
+        <button data-choice="b" aria-pressed="false">第 4 课的 Iron Law，与缓存无关</button>
+        <button data-choice="c" aria-pressed="false">第 21 课的缓存一致性协议</button>
+        <button data-choice="d" aria-pressed="false">第 1 课的 ISA/微架构分离</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！开放性选项 2（硬件 L1 预取器）直接呼应第 8 课'预取时机比预测准确性更重要'这一核心论点。" data-incorrect="重新看开放性部分选项 2。">
+      <p><strong>问题 2：</strong>开放性部分选项 2（设计硬件 L1 预取器）直接呼应第 8 课的哪条核心论点？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">预取器必须 100% 准确才有意义</button>
+        <button data-choice="b" aria-pressed="false">预取时机比预测准确性更重要</button>
+        <button data-choice="c" aria-pressed="false">预取只能在软件层面实现，硬件无法支持</button>
+        <button data-choice="d" aria-pressed="false">预取与缓存容量无关</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>课程依赖内容：第 6、7 课（缓存结构、AMAT、3C 模型）、第 8 课（受害者缓存、预取）、第 9 课（TLB）</li>
+      <li>Chipyard 文档：<a href="https://chipyard.readthedocs.io/en/latest/">chipyard.readthedocs.io</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>🧪 Lab 2</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+</body>
+</html>

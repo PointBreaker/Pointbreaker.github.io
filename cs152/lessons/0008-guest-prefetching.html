@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guest Lecture: Prefetching — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 8 课</p>
+    <h1>Guest Lecture: Prefetching</h1>
+    <p class="lede">这是本学期第一场客座讲座。官方课程表把这一讲的录像放在 bCourses Media Gallery（需要校内权限，本站无法访问或转载），并注明"前一年度的幻灯片链接在下方"作为公开参考。以下内容忠实依据那份公开可得的替代幻灯片（Krste Asanovic 讲授，涵盖受害者缓存、路预测、非阻塞缓存与预取），覆盖与本讲同一主题范围，但不代表 Spring 2023 客座讲者当场讲述的确切内容。</p>
+
+    <div class="meta">
+      <span>主讲：客座讲者（Sp23 录像未公开）；本页依据 Krste Asanovic 的公开替代幻灯片</span>
+      <span>预计用时：50 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <div class="card warning">
+      <p><strong>一条关于资料来源的说明：</strong>本地保存的幻灯片文件名为 "Guest_Prefetching"，但其内部标题页实际写着"Lecture 7 – Memory III"，讲者为 Krste Asanovic，并非客座讲者本人的幻灯片。这与官方课程表在第 8 讲一栏的备注完全吻合："Recording on bCourses Media Gallery（slides from previous year are linked below）"——也就是说，官方页面本身就说明了当年客座讲座没有公开幻灯片，只提供前一年度的同主题幻灯片作为参考资料。本页因此如实使用这份可公开获取的替代材料，不臆测客座讲者当场使用的具体表述。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="recap">回顾第 6、7 课</h2>
+    <p>3C 缺失模型（强制性/容量性/冲突性）；写策略（写通/写回 × 按写分配/不按写分配）；流水化缓存写入；多级缓存的局部/全局缺失率与 MPI。</p>
+
+    <hr class="rule">
+
+    <h2 id="victim-cache">受害者缓存（Victim Cache）</h2>
+    <p>在一个直接映射缓存旁边加一个很小的全相联"受害者缓存"，专门保存最近被换出的行：先查直接映射缓存，缺失则查受害者缓存；如果命中受害者缓存，就把该行与刚刚被换出的行互换位置；如果受害者缓存也缺失，则直接映射缓存换出的行进入受害者缓存（受害者缓存自己换出的行去了哪里，原始幻灯片没有给出答案）。这样既保留了直接映射的快速命中时间，又能吸收一部分冲突性缺失。真实实现例子：<strong>HP 7200</strong>，配有 4 行的全相联受害者缓存。</p>
+
+    <hr class="rule">
+
+    <h2 id="way-prediction">路预测缓存（Way-Predicting Cache）</h2>
+    <p>用处理器地址索引一张"路预测表"，先只查预测的那一路（快速路径）；如果那一路缺失，再查另一路（较慢的命中，同时更新预测表），仍然缺失才真正向下一级缓存请求数据块。真实例子：<strong>MIPS R10000</strong> 的二级缓存；类 <strong>Alpha 21264</strong> 的指令缓存为顺序取指路径和预测跳转路径分别存储独立的预测"路"，从而支持每周期多指令取指且预测正确时"零分支代价"。</p>
+
+    <hr class="rule">
+
+    <h2 id="miss-penalty">降低长行缺失代价：Early Restart 与 Critical Word First</h2>
+    <ul>
+      <li><strong>Early Restart</strong>：一旦缺失的那个字（word）到达，立即发给 CPU 并继续执行，行内其余部分仍按正常顺序继续填充</li>
+      <li><strong>Critical Word First</strong>：优先从内存请求真正缺失的那个字，一到达就送给 CPU，行内其余部分随后以回绕（wrap-around）方式填充——被标注为"被广泛使用"的长行缺失优化手段</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="non-blocking">非阻塞缓存</h2>
+    <p><strong>非阻塞（lockup-free）缓存</strong>允许数据缓存在一次未完成的缺失期间继续响应其他命中请求：<strong>命中穿越缺失（hit under miss）</strong>降低了有效缺失代价；<strong>命中穿越多重缺失 / 缺失穿越缺失（hit/miss under multiple miss）</strong>进一步允许多个未完成缺失重叠，但显著增加缓存控制器复杂度（需要支持多个未完成访存请求，可能出现对同一行的"二次缺失"）。真实例子：<strong>Pentium Pro</strong> 支持 4 个未完成访存缺失；<strong>Cray X1E</strong> 向量超级计算机支持多达 <strong>2,048</strong> 个未完成访存缺失——两者相差近 3 个数量级，直观体现了标量与向量机器在访存并行度需求上的巨大差异。</p>
+
+    <hr class="rule">
+
+    <h2 id="prefetching">预取（Prefetching）</h2>
+    <p>预取指在数据被真正需要之前，就推测性地把指令/数据取入缓存。指令访问通常比数据访问更容易预测。评价预取好坏的三个维度：<strong>有效性</strong>（是否真的能转化为命中）、<strong>时效性</strong>（既不能太晚也不能太早）、<strong>缓存/带宽污染</strong>。</p>
+    <ul>
+      <li><strong>Prefetch-on-miss</strong>：缺失块 b 时，顺带预取块 b+1</li>
+      <li><strong>One-Block Lookahead (OBL)</strong>：一旦访问了块 b，就立即为块 b+1 发起预取（可以推广到 N 块前瞻）</li>
+      <li><strong>跨步预取（Strided Prefetch）</strong>：观察到访问序列 b, b+N, b+2N 后，预取 b+3N。真实例子：<strong>IBM Power5（2003）</strong>每个处理器支持 8 条独立的跨步预取流，每条流提前 12 行进行预取</li>
+    </ul>
+    <p><strong>软件预取</strong>：程序员/编译器显式插入类似 <code>prefetch(&amp;a[i+1])</code> 的指令。幻灯片明确指出：<strong>"时机才是最大的难点，而不是可预测性"</strong>——预取太晚等于没用，太早则造成缓存污染；同时还要考虑预取指令本身的执行开销。</p>
+    <div class="card">
+      <p><strong>真实实验数据（Santhanam et al., 1997, HP PA8000）：</strong>随预取距离（1-10 行）变化的加速比曲线，从距离 1 的约 40% 加速，上升到距离 3 附近的峰值约 77%，之后逐渐回落到距离 7-10 附近的约 67%——这条曲线本身就是"预取太近没用、太远也不是越远越好"的实证。更细致的对比表格显示：当数据本来就已经在缓存中命中时，未经精简的预取指令会带来 <strong>-55%</strong> 的性能损失，而精简预取指令数量后这一损失收窄到 <strong>-13%</strong>——说明精简预取指令能显著降低（但不能完全消除）"预取了已经在缓存里的数据"这种浪费。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="compiler-opt">编译器局部性优化</h2>
+    <ul>
+      <li><strong>循环交换（Loop Interchange）</strong>：把 <code>for(j){for(i){x[i][j]=2*x[i][j];}}</code> 改写成 <code>for(i){for(j){x[i][j]=2*x[i][j];}}</code>——对行优先存储的数组而言，让最内层循环连续遍历内存，提升空间局部性</li>
+      <li><strong>循环融合（Loop Fusion）</strong>：把两个分别计算 <code>a[i]=b[i]*c[i]</code> 和 <code>d[i]=a[i]*c[i]</code> 的循环合并成一个循环体，让 <code>a[i]</code>/<code>c[i]</code> 在仍然驻留缓存时被复用，提升时间局部性</li>
+      <li><strong>缓存分块（Cache Tiling/Blocking）</strong>：矩阵乘法朴素三重循环的访存模式很差（尤其是按列访问的矩阵）；引入分块因子 B，把大矩阵拆成能装进缓存的小块来计算，减少容量性缺失</li>
+    </ul>
+    <p>（以上三个"这提升了哪种局部性"的问题，原始幻灯片本身没有给出文字答案，以上给出的解释是基于第 6 课局部性定义的合理推断，而非幻灯片原文直接陈述。）</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：预取的关键难点是"猜得准不准"。</strong>幻灯片明确强调，真正的难点是<strong>时机</strong>——猜得再准，如果时机不对（太晚或太早），一样起不到效果甚至适得其反。</li>
+      <li><strong>误区：非阻塞缓存只是"锦上添花"的优化。</strong>标量处理器（Pentium Pro，4 个未完成缺失）和向量超算（Cray X1E，2048 个）之间接近 3 个数量级的差距，说明非阻塞程度是决定一台机器能否有效隐藏访存延迟的关键设计参数，而不是可有可无的细节。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！幻灯片明确指出软件预取最大的难点是时机（timing），而不是能否预测将来会访问哪个地址。" data-incorrect="重新看"软件预取"一节：幻灯片原文强调的是哪一个维度，而不是"猜得准不准"。">
+      <p><strong>问题 1：</strong>根据本讲内容，软件预取最大的难点是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">预测程序未来会访问哪些地址</button>
+        <button data-choice="b" aria-pressed="false">时机（timing）：既不能太早也不能太晚，且要考虑预取指令本身的开销</button>
+        <button data-choice="c" aria-pressed="false">编译器无法生成预取指令</button>
+        <button data-choice="d" aria-pressed="false">硬件不支持任何形式的预取指令</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！Critical Word First 优先取回真正缺失的那个字，一到达就送给 CPU，其余部分随后以回绕方式填充。" data-incorrect="重新看"降低长行缺失代价"一节：区分 Early Restart 和 Critical Word First 各自的处理顺序。">
+      <p><strong>问题 2：</strong>"Critical Word First"策略具体做了什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">按行内正常顺序依次取回所有字，取完再交给 CPU</button>
+        <button data-choice="b" aria-pressed="false">只取回缺失的那个字，不取整行的其余部分</button>
+        <button data-choice="c" aria-pressed="false">优先请求真正缺失的那个字，一到达就送给 CPU，行内其余部分随后以回绕顺序填充</button>
+        <button data-choice="d" aria-pressed="false">把整行数据压缩后一次性传输</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！Pentium Pro 支持 4 个未完成缺失，Cray X1E 支持 2048 个，相差近 3 个数量级，反映标量与向量机器访存并行度需求的巨大差异。" data-incorrect="重新看"非阻塞缓存"一节给出的两个真实数字：Pentium Pro 和 Cray X1E 各自支持多少个未完成访存缺失。">
+      <p><strong>问题 3：</strong>Pentium Pro（4 个未完成缺失）与 Cray X1E 向量超算（2,048 个未完成缺失）之间的巨大差异说明了什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">标量处理器和向量超算对"同时进行多少个未完成访存"的需求量级差异巨大，非阻塞程度是关键设计参数</button>
+        <button data-choice="b" aria-pressed="false">Cray X1E 的设计存在缺陷，浪费了过多硬件资源</button>
+        <button data-choice="c" aria-pressed="false">两者的数字只是巧合，没有架构层面的原因</button>
+        <button data-choice="d" aria-pressed="false">Pentium Pro 不支持非阻塞缓存</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>受害者缓存 / 路预测</h3>
+        <p>用小容量辅助结构，在不牺牲命中时间的前提下降低冲突缺失</p>
+      </article>
+      <article>
+        <h3>Early Restart / Critical Word First</h3>
+        <p>不必等整行到齐即可继续执行，降低长行的有效缺失代价</p>
+      </article>
+      <article>
+        <h3>非阻塞缓存</h3>
+        <p>命中穿越缺失、缺失穿越缺失，标量与向量机器需求量级差异巨大</p>
+      </article>
+      <article>
+        <h3>预取</h3>
+        <p>时机是核心难点；硬件跨步预取、软件显式预取各有取舍</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：本讲无官方指定阅读章节（课程表未列出）</li>
+      <li>本课幻灯片（公开替代版本）：<code>sp23/lecture_slides/L08_Guest_Prefetching.pdf</code>（内部标注 "Lecture 7 – Memory III"，Krste Asanovic）</li>
+      <li>Yeager, "The Mips R10000 Superscalar Microprocessor," <em>IEEE Micro</em>, 1996</li>
+      <li>Santhanam et al., "Data Prefetching on the HP PA8000," 1997</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0007-memory-ii.html">← 第 7 课：Memory II</a>
+      <span>🎓 第 8 课</span>
+      <a href="0009-address-translation.html">第 9 课：Address Translation →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

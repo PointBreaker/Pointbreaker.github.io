@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipelining II — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 5 课</p>
+    <h1>Pipelining II：真实流水线与 CDC 6600 的历史伏笔</h1>
+    <p class="lede">这一课把第 4 课的抽象流水线原理落到两个真实案例上：MIPS R4000 的真实 8 级流水线（含真实的 load 延迟与分支延迟数字），以及 1964 年的 CDC 6600——它不仅是公认的第一台超级计算机，其 Scoreboard 机制更是乱序执行（out-of-order execution）的历史起点，直接埋下了第 12、13 课的伏笔。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="recap">回顾第 4 课</h2>
+    <ul>
+      <li>Iron Law：<code>time/program = insts/program × cycles/inst × time/cycle</code></li>
+      <li>经典 5 级 RISC 流水线；结构、数据（RAW/WAR/WAW）、控制冒险</li>
+      <li>结构冒险用互锁或增加硬件解决；数据冒险用互锁、旁路、推测解决</li>
+      <li>控制冒险（分支、中断）最棘手，因为它们改变"下一条指令是什么"——常用分支预测应对</li>
+      <li>精确陷阱（precise trap）：干净地停在某一条指令上，所有更早的指令已完成，所有更晚的指令都还没有改变架构状态</li>
+    </ul>
+    <p>本课先快速重温精确异常在流水线中的提交点机制（与第 4 课内容一致，此处不再重复展开），然后进入两个具体案例。</p>
+
+    <hr class="rule">
+
+    <h2 id="r4000">真实案例：MIPS R4000 的 8 级流水线</h2>
+    <p>R4000 把经典 5 级流水线进一步拆分成 8 级：<code>IF（取指）→ IS（指令第二拍）→ RF（寄存器读取+标签检查）→ EX（执行）→ DF（数据第一拍）→ DS（数据第二拍）→ TC（标签检查）→ WB（写回）</code>。<strong>提交点位于 TC 之后</strong>——因为要先确认数据缓存命中与否，才能真正把值写入寄存器。这里有一个精巧的设计：直接映射（direct-mapped）指令缓存允许在标签检查真正完成之前，就先把取到的指令内容提供给流水线使用（标签检查滞后到 RF 阶段才做）；数据缓存同理，也允许在标签检查完成前就先使用取到的数据。</p>
+
+    <div class="card">
+      <p><strong>Load-use 延迟（重新核对）：</strong>由于数据在 DS 阶段结束时就可以被旁路使用，R4000 的 load-use 延迟只有 <strong>1 个周期</strong>（即跟在 load 后面的指令要等 1 拍才能使用 load 的结果）。如果 TC 阶段的标签检查最终显示缺失（miss），流水线会退回一拍，等正确的数据真正可用后再继续——这是"先乐观使用、检测到错误再回退"的推测式设计，与第 4 课"异常预测"的思路一脉相承。</p>
+      <p><strong>分支延迟（重新核对）：</strong>因为分支条件在 EX 阶段（第 4 级）才被计算出来，所以 R4000 的<strong>基本分支延迟是 3 个周期</strong>——分支指令之后已经被取出/译码的 3 条指令，如果分支实际跳转，都必须被丢弃。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="scheduling">编译器如何帮流水线规避冒险：指令调度与循环展开</h2>
+    <p>以简单的向量加法 <code>A[i] = B[i] + C[i]</code> 为例：</p>
+    <pre><code class="language-text">loop: fld  f0, 0(x2)     // x2 指向 B
+      fld  f1, 0(x3)     // x3 指向 C
+      fadd.d f2, f0, f1
+      fsd  f2, 0(x1)     // x1 指向 A
+      addi x1, x1, 8
+      addi x2, x2, 8
+      addi x3, x3, 8
+      bne  x1, x4, loop</code></pre>
+    <p>Load 和浮点运算的长延迟限制了单次循环迭代内部能挖掘出的并行度。一个简单的优化是<strong>指令重排（scheduling）</strong>：把两个地址自增指令挪到 load 和 <code>fadd.d</code> 之间，让原本因为等待 load 结果而空闲的周期被有用的地址计算填满，同时把 store 的偏移量相应调整为负值（因为 <code>addi x1,x1,8</code> 被提前了）。</p>
+    <p>更进一步的优化是<strong>循环展开（loop unrolling）</strong>：把循环体复制多份（例如展开成处理两个元素），暴露出更多独立的并行指令，同时减少循环分支本身的动态执行次数。代价是：展开程度受限于可用的架构寄存器数量；展开会增加静态指令数量，从而增大指令缓存的占用；编译器需要更复杂的指针分析才能生成正确的展开代码。</p>
+
+    <div class="card idea">
+      <p><strong>历史侧写（CS252A 内容）：解耦访存/执行（decoupled access/execute）</strong>是循环展开之外的另一种思路：把控制流和访存地址计算，与真正的数据计算解耦——因为地址和控制流的计算根本不依赖于数据计算的结果，所以可以提前算好，数据计算则可以延后进行。这预示了后续课程会讲到的乱序执行机制。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="terminology">延迟、带宽、占用率：三个容易混淆的术语</h2>
+    <ul>
+      <li><strong>延迟（Latency，单位秒或周期）</strong>：单次操作从启动到产生可用结果所需的时间</li>
+      <li><strong>带宽（Bandwidth，单位次/秒或次/周期）</strong>：操作能够被执行的速率</li>
+      <li><strong>占用率（Occupancy，单位秒或周期）</strong>：某个部件因为正在处理一个操作而被"占用"（造成结构冒险）的时间</li>
+    </ul>
+    <p>对同一个功能部件而言：占用率可以远小于延迟（例如全流水化的乘法器，每周期都能接收新操作，占用率只有 1 个周期，延迟却可能是好几个周期）；占用率也可以大于延迟（例如未流水化、且启动开销很大的部件）；带宽可以大于 1/延迟（多个并行的同类功能部件）；带宽也可以小于 1/延迟（只有一个未流水化的部件时）。</p>
+
+    <hr class="rule">
+
+    <h2 id="cdc6600">历史案例：CDC 6600（1964）——被公认的第一台超级计算机</h2>
+    <p>"超级计算机"并没有单一严格定义，课程给出的几种戏谑说法包括："给定任务下世界最快的机器"、"把计算瓶颈问题转化成 I/O 瓶颈问题的装置"、"任何造价 3000 万美元以上的机器"、"任何 Seymour Cray 设计的机器"。<strong>CDC 6600（Seymour Cray 设计，1964 年）被公认为第一台超级计算机。</strong></p>
+
+    <div class="card">
+      <p><strong>硬件规格（原始数字）：</strong></p>
+      <ul>
+        <li>60 位字长，128K 字主存容量，分 32 个存储体（bank）</li>
+        <li>10 个功能单元（并行、但各自不流水）：浮点加法器、2 个浮点乘法器、浮点除法器；整数加法器、2 个自增器等</li>
+        <li>硬连线控制（不使用微编码）</li>
+        <li><strong>Scoreboard</strong>：用于指令的动态调度（本课后半段的重点）</li>
+        <li>10 个外围处理器（Peripheral Processor）负责 I/O，本质是一个快速的多线程 12 位整数 ALU</li>
+        <li>时钟高达 10 MHz（浮点加法只需 4 个时钟周期）</li>
+        <li>超过 40 万个晶体管，占地 750 平方英尺，重 5 吨，功耗 150 kW，采用当时新颖的氟利昂制冷技术</li>
+        <li>连续 5 年保持"世界最快机器"称号（直到被后继型号 7600 取代），共售出 100 多台，每台 700 万至 1000 万美元</li>
+      </ul>
+    </div>
+
+    <div class="card warning">
+      <p><strong>真实历史小插曲：</strong>1963 年 8 月，IBM CEO Thomas Watson Jr. 在一份内部备忘录中写道：CDC 的 6600 系统开发团队"只有 34 个人，包括门卫在内；其中 14 名工程师、4 名程序员……对比我们庞大的研发投入，我实在不明白，为什么我们会把'世界最强计算机'的头衔拱手让给别人。"Seymour Cray 的回应是：<strong>"看起来 Watson 先生已经自己回答了自己的问题。"</strong>——这是计算机架构史上最著名的"小团队精干设计打败大公司资源堆砌"的轶事之一。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="cdc6600-isa">CDC 6600 的 ISA：为高性能实现而设计</h2>
+    <p>CDC 6600 是一台<strong>load/store 架构</strong>的机器，把三种寄存器严格分开，各自有专用指令来操作：</p>
+    <ul>
+      <li>8 个 60 位数据寄存器（X）</li>
+      <li>8 个 18 位地址寄存器（A）</li>
+      <li>8 个 18 位变址寄存器（B）</li>
+    </ul>
+    <p>所有算术/逻辑指令都是纯寄存器-寄存器格式（15 位：6 位 opcode + 3 位 i + 3 位 j + 3 位 k，<code>Ri ← Rj op Rk</code>）；<strong>只有 load 和 store 指令才会访问内存</strong>（30 位：6 位 opcode + 3 位 i + 3 位 j + 18 位偏移量，<code>Ri ← M[Rj + disp]</code>）。一个巧妙的设计是：<strong>触碰地址寄存器 A1–A5 会自动触发一次 load，触碰 A6–A7 会自动触发一次 store</strong>——这对向量化的访存操作特别有用，因为地址的计算（设置 A 寄存器）本身就隐式地发起了内存操作，天然地把"算地址"和"用数据"这两件事解耦开来。</p>
+
+    <div class="card idea">
+      <p><strong>这套 ISA 设计的每一个决定，都是为了简化高性能实现：</strong></p>
+      <ul>
+        <li>三地址寄存器-寄存器 ALU 指令，让流水线只需要检查 3 位的寄存器编号字段就能判断依赖关系，输入和输出之间没有隐式的额外依赖</li>
+        <li>把"设置地址寄存器"和"取出数据寄存器的值"解耦，简化了支持多个未完成访存请求（outstanding memory access）的实现——软件可以提前调度地址寄存器的加载，中间穿插其他无关指令</li>
+        <li>CDC 6600 本身用的是多个并行但不流水的功能单元（例如两个独立的乘法器）；后继型号 CDC 7600 才把这些功能单元流水化——<strong>这已经预示了后来的 RISC 设计</strong></li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="scoreboard">CDC 6600 Scoreboard：乱序执行的历史起点</h2>
+    <p>为了让 10 个功能单元被尽量充分利用，CDC 6600 引入了 <strong>Scoreboard</strong> 机制来动态调度指令，规则是：</p>
+    <ul>
+      <li>指令按顺序（in-order）派发给功能单元，前提是<strong>没有结构冒险，也没有 WAW 冒险</strong>（同一时刻只允许一条指令对某个寄存器有"待写"状态）——如果没有空闲的功能单元，则在此处停顿</li>
+      <li>指令在执行前，会等待自己需要的输入操作数就绪（即等待 RAW 冒险消除）——<strong>但一旦操作数就绪，指令就可以乱序执行</strong>，不必等待程序中排在它前面、但尚未就绪的指令</li>
+      <li>指令会等到自己即将覆写的输出寄存器，已经被所有更早的指令读取完毕（即等待 WAR 冒险消除）——结果会被暂时保留在功能单元内部，直到目标寄存器"腾空"</li>
+    </ul>
+    <div class="card idea">
+      <p><strong>这正是本课程会在乱序执行单元（第 12、13 课）反复回来讨论的起点</strong>：Scoreboard 允许指令乱序执行（打破了"指令必须严格按程序顺序执行"这一假设），但仍然靠"派发时检查 WAW""执行前检查 RAW""写回前检查 WAR"这三条规则，在没有寄存器重命名的情况下正确地处理所有三类数据冒险。这比"随便乱序执行"复杂得多，也正是现代乱序处理器的历史源头。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="complex-pipeline-preview">承前启后：更复杂流水线控制中的新问题</h2>
+    <p>一旦引入多个延迟不同的功能单元（整数 ALU、浮点加法器、浮点乘法器、浮点除法器等），经典 5 级流水线的简单假设就会被打破，浮现出新的问题（这些问题正是第 11 课"Complex Pipelines"的开场）：</p>
+    <ul>
+      <li>如果某个浮点单元或访存单元本身不是流水化的、需要不止一个周期，会在执行阶段产生结构冒险</li>
+      <li>不同功能单元的延迟不同，会导致多条指令在同一周期同时争抢写回端口，产生写回阶段的结构冒险</li>
+      <li>延迟不同还会导致"乱序写回冒险"——后发射的短延迟指令，可能比先发射的长延迟指令更早写回</li>
+      <li>该如何在这种"结果可能乱序到达"的流水线里，依然正确处理异常？</li>
+    </ul>
+    <p>一种简单的应对思路（"更复杂的顺序流水线"）是：人为拉长所有短延迟操作的写回时机，让所有路径到达写回阶段的延迟保持一致，从而保证写回端口永不过载、且异常仍然可以在统一的提交点按顺序处理——代价是遇到长延迟操作（如除法、缓存缺失）时，整条流水线都要停顿。这个设计选择、以及如何在不牺牲性能的前提下避免这种停顿，正是后续课程要解决的核心问题。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：更深的流水线一定意味着更长的分支延迟惩罚。</strong>分支延迟惩罚取决于"分支条件在哪一级被计算出来"，而不是流水线总共有多少级——R4000 的分支惩罚是 3 级，恰好对应条件在第 4 级（EX）才可知。</li>
+      <li><strong>误区：乱序执行是一个"现代"发明。</strong>CDC 6600 的 Scoreboard 早在 1964 年就实现了指令乱序执行——只是当时还没有寄存器重命名，需要更保守地处理 WAR/WAW 冒险。</li>
+      <li><strong>误区：CDC 6600 靠微编码取胜。</strong>恰恰相反，它是硬连线控制（第 2、3 课的"硬连线"路线），这与同期 IBM 360 大量采用微编码形成了鲜明对比，也解释了它为何能在如此小的团队规模下实现极致性能。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！R4000 的分支条件在第 4 级 EX 阶段才被计算出来，因此分支之前多取出的 3 条指令，一旦分支实际跳转就必须被丢弃。" data-incorrect="重新看"R4000 的 8 级流水线"一节：分支延迟的大小由"条件在哪一级被算出"决定，而 R4000 的条件计算发生在 EX（第 4 级）。">
+      <p><strong>问题 1：</strong>MIPS R4000 的基本分支延迟是 3 个周期，这个数字是怎么来的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为流水线总共有 8 级，3 是随意选取的经验值</button>
+        <button data-choice="b" aria-pressed="false">因为分支条件在第 4 级（EX）才被计算出来，之前已取出的 3 条指令必须被丢弃</button>
+        <button data-choice="c" aria-pressed="false">因为 R4000 使用了分支延迟槽机制</button>
+        <button data-choice="d" aria-pressed="false">因为数据缓存的标签检查需要 3 个周期</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！触碰地址寄存器 A1-A5 会自动触发 load，A6-A7 会自动触发 store，这把地址计算和数据使用解耦，天然适合向量化访存。" data-incorrect="重新看"CDC 6600 的 ISA"一节：关键设计是触碰特定的地址寄存器就会隐式地发起访存操作。">
+      <p><strong>问题 2：</strong>CDC 6600 的 ISA 设计中，为什么"触碰地址寄存器 A1-A5"会有特殊含义？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">这只是历史遗留的编号惯例，没有功能含义</button>
+        <button data-choice="b" aria-pressed="false">A1-A5 是浮点专用寄存器，与访存无关</button>
+        <button data-choice="c" aria-pressed="false">触碰它们会自动触发一次 load，把地址计算和数据取回解耦，便于支持多个未完成的访存请求</button>
+        <button data-choice="d" aria-pressed="false">A1-A5 只能在监管模式下被访问</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！Scoreboard 允许指令在操作数就绪后乱序执行，同时用"派发检查WAW/执行前检查RAW/写回前检查WAR"三条规则正确处理所有数据冒险——这是乱序执行的历史起点。" data-incorrect="重新看"CDC 6600 Scoreboard"一节：关键在于指令可以不按程序顺序执行，但仍然通过三条独立的检查规则来保证正确性。">
+      <p><strong>问题 3：</strong>CDC 6600 的 Scoreboard 机制，在计算机体系结构历史上最重要的意义是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">它是乱序执行（out-of-order execution）的历史起点：允许指令在操作数就绪后不按程序顺序执行，同时正确处理 RAW/WAR/WAW 冒险</button>
+        <button data-choice="b" aria-pressed="false">它是第一个实现分支预测的机制</button>
+        <button data-choice="c" aria-pressed="false">它是第一个实现虚拟内存地址转换的机制</button>
+        <button data-choice="d" aria-pressed="false">它是第一个微编码控制器</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>R4000 真实数字</h3>
+        <p>8 级流水线，load-use 延迟 1 拍，分支延迟 3 拍</p>
+      </article>
+      <article>
+        <h3>编译器规避冒险</h3>
+        <p>指令重排、循环展开、解耦访存/执行</p>
+      </article>
+      <article>
+        <h3>CDC 6600</h3>
+        <p>1964 年第一台超级计算机，硬连线控制，load/store ISA</p>
+      </article>
+      <article>
+        <h3>Scoreboard</h3>
+        <p>乱序执行的历史起点，直接预示第 12、13 课</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Appendix C.4-C.6</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L05_Pipelining_II.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Reading: <em>Architecture of the IBM System/360</em>；<em>A Characterization of Processor Performance in the VAX-11/780</em></li>
+      <li>Discussion 2 worksheet：Pipelining（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0004-pipelining-i.html">← 第 4 课：Pipelining I</a>
+      <span>🎓 第 5 课</span>
+      <a href="0006-memory.html">第 6 课：Memory →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>

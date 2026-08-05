@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cache Coherence — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 21 课</p>
+    <h1>Cache Coherence：多核如何看到一致的内存</h1>
+    <p class="lede">单核性能提升在 2004 年前后趋于平缓（时钟频率、单线程性能都撞上了功耗墙），处理器转向多核。这一课直面多核带来的新问题：每个核心都有自己的私有缓存时，怎么保证所有核心看到的内存"故事"是一致的？</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：60 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="coherence-vs-consistency">一致性（Coherence）与相合性（Consistency）：两个不同的问题</h2>
+    <p><strong>一致性（Coherence）</strong>：一次读操作能返回什么值？——只关心对<strong>单个</strong>内存位置的读写。<strong>相合性（Consistency）</strong>：写入什么时候对读者可见？——关心对<strong>多个</strong>内存位置的读写顺序。这一课先解决一致性问题，第 22 课再处理相合性。</p>
+    <p><strong>缓存一致性问题</strong>的具体场景：Core1 读取 X（缓存了值 2），Core2 写入 X（自己的缓存变成 3），此时主存里仍然是旧值 2——如果 Core1 之后再读 X，如果直接信任自己缓存里的旧值 2，就会得到错误答案。</p>
+
+    <hr class="rule">
+
+    <h2 id="snoopy">窥探式缓存（Snoopy Cache, Goodman 1983）</h2>
+    <p>核心思路："让缓存监听（snoop）其他缓存在内存总线上的事务，然后做出正确的反应"。硬件上，缓存的标签阵列是<strong>双端口</strong>的：一个端口服务本地处理器，另一个只读端口挂在内存总线上，专门监听总线上的其他事务。协议的两条基本规则：<strong>写缺失</strong>——在真正执行写操作之前，先让该地址在所有其他缓存中失效；<strong>读缺失</strong>——如果在某个缓存中发现了脏（dirty）副本，先把它写回内存，再执行读取。</p>
+
+    <hr class="rule">
+
+    <h2 id="msi">MSI 协议：三个状态</h2>
+    <ul>
+      <li><strong>M（Modified，已修改）</strong>：该行被本缓存独占且已被修改</li>
+      <li><strong>S（Shared，共享）</strong>：该行可能被多个缓存共享，内存中的副本仍然有效</li>
+      <li><strong>I（Invalid，无效）</strong>：该行不在本缓存中，或已失效</li>
+    </ul>
+    <p>状态转移的核心：<code>I→M</code>（写缺失）、<code>I→S</code>（读缺失，从内存取得该行）、<code>S→M</code>（本处理器打算写入）、<code>M→S</code>（其他处理器读取，本处理器先写回）、<code>M→I</code>（其他处理器打算写入，本处理器先写回）、<code>S→I</code>（其他处理器打算写入）。<strong>关键观察：任何进入 M 状态的路径都要求独占——这正是保证内存整体一致的根本机制。</strong></p>
+    <p><strong>MESI</strong> 在 MSI 基础上新增了 <strong>E（Exclusive，独占但未修改）</strong>状态：如果读缺失发生时没有其他共享者，直接进入 E 而不是 S；此后如果本处理器要写入，E→M 可以<strong>静默</strong>完成，不需要产生任何一致性流量——这正是 MESI 相对 MSI 的性能优化：常见的"读后立即写"（read-modify-write）模式，如果数据本来就是私有的，就不必先经过 S 状态再触发一次多余的一致性广播。</p>
+
+    <hr class="rule">
+
+    <h2 id="l2-optimization">用二级缓存优化窥探开销</h2>
+    <p>如果 L1/L2 满足<strong>包含性质</strong>（L1 的内容必须也在 L2 中），窥探逻辑就只需要挂在 L2 上：L2 缺失就意味着 L1 里一定也没有；只有当某次失效命中了 L2，才需要进一步探测并使 L1 中对应的行失效——这样"在总线上窥探"这件事完全不占用 CPU-L1 之间的宝贵带宽。<strong>干预（Intervention）</strong>：当一个缓存持有脏（已修改）数据，而另一个处理器发生读缺失时，即使主存本身返回的是过期数据，也必须由持有脏数据的那个缓存通过内存控制器把正确的数据"插话"提供出来。</p>
+
+    <hr class="rule">
+
+    <h2 id="false-sharing">假共享（False Sharing）：缓存行粒度带来的意外代价</h2>
+    <p>一个缓存行通常包含不止一个字，而一致性协议是按<strong>行</strong>粒度维护的，不是按<strong>字</strong>粒度。<strong>假共享</strong>发生在两个处理器写入<strong>不同的字</strong>、但这些字恰好落在同一个缓存行里——这会触发本来不必要的失效流量。区分的关键测试：<strong>真共享缺失</strong>——即使缓存行只有 1 个字，这次缺失依然会发生（真实存在数据依赖）；<strong>假共享缺失</strong>——如果缓存行只有 1 个字，这次缺失就不会发生（纯粹是行粒度造成的误伤）。这正是缓存缺失的"第四个 C"：<strong>一致性缺失（Coherence miss）</strong>，与强制性、容量性、冲突性缺失并列。</p>
+
+    <div class="card">
+      <p><strong>真共享 vs. 假共享判定实例（MSI 协议，重新核对）：</strong>假设 x1 和 x2 位于同一缓存行，P1、P2 都曾经读过这行：</p>
+      <table>
+        <tr><th>时刻</th><th>P1</th><th>P2</th><th>判定</th></tr>
+        <tr><td>1</td><td>写 x1</td><td></td><td><strong>真共享</strong>缺失：使 P2 中 x1 失效</td></tr>
+        <tr><td>2</td><td></td><td>读 x2</td><td><strong>假共享</strong>缺失：x1 与 x2 无关</td></tr>
+        <tr><td>3</td><td>写 x1</td><td></td><td><strong>假共享</strong>缺失：x1 与 x2 无关</td></tr>
+        <tr><td>4</td><td></td><td>写 x2</td><td><strong>真共享</strong>缺失：x2 本身不可写</td></tr>
+        <tr><td>5</td><td>读 x2</td><td></td><td><strong>真共享</strong>缺失：P1 中 x2 已失效</td></tr>
+      </table>
+      <p>逐行核对 MSI 状态转移：T1 时 P1 写 x1 触发 S→M（P1）和 S→I（P2）——这是围绕 x1 本身的真实数据依赖，判定<strong>真共享</strong>；T2 时 P2 的行早已因 T1 失效，读 x2 触发缺失，但 x2 从未被 P1 碰过，判定<strong>假共享</strong>；T3 同理，P1 再次写 x1，与 x2 无关，<strong>假共享</strong>；T4 时 P2 写 x2，这次是围绕 x2 本身的真实写操作，判定<strong>真共享</strong>；T5 时 P1 读 x2，而 x2 恰好在 T4 被 P2 真正修改过，P1 的副本因此失效，判定<strong>真共享</strong>。<strong>逐行重新推演后，五行判定与幻灯片完全一致</strong>——这个例子直观展示了"同一缓存行、同一份失效流量，可能是真依赖，也可能是纯粹的行粒度误伤"，取决于当次访问的字是否真的是被写过的那个字。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="directory">目录式一致性：突破窥探的带宽瓶颈</h2>
+    <p>窥探协议要求每次访存都向<strong>所有</strong>缓存广播——核心数增多后，这条广播总线本身就会成为瓶颈（"大多数窥探请求根本找不到匹配"，纯属浪费带宽）。<strong>目录式一致性</strong>的思路：每一行内存都关联一份目录信息，记录当前有哪些缓存持有该行的副本、处于什么状态；发生缺失时，先查目录，然后<strong>只</strong>与真正持有副本的那些节点通信，而不是广播给所有节点。</p>
+    <p>目录侧的状态（区别于 MESI 命名）：<strong>R(dir)</strong>——被 dir 集合中的站点共享（dir 为空表示没有任何站点缓存该行）；<strong>W(id)</strong>——被站点 id 独占缓存并已修改，内存数据已过期；<strong>TR(dir)</strong>——瞬态，等待失效请求的确认；<strong>TW(id)</strong>——瞬态，等待站点 id 把该行数据同步回主存。真实例子：<strong>Intel Knights Corner（2012）</strong>用环形互联把核心和"标签目录（TD）"/"内存控制器（GDDR MC）"节点串起来，是目录式一致性在真实芯片上的落地。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：只要缓存行里发生了失效，就一定是真正的数据竞争。</strong>上面的真共享/假共享判定实例恰恰说明：同一份失效事件，可能纯粹是缓存行粒度造成的"误伤"——判断标准是"如果行只有 1 个字，这次缺失还会不会发生"。</li>
+      <li><strong>误区：目录式一致性只是窥探式协议的"另一种实现"，没有本质区别。</strong>窥探式协议本质上依赖广播（每次访存都要让所有缓存看到），目录式协议的关键突破是"只与真正持有副本的节点通信"——这正是它能突破核心数增多后广播带宽瓶颈的原因。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！在 MESI 中，如果读缺失发生时没有其他共享者，直接进入 E 而非 S；之后写入时 E→M 可以静默完成，不需要产生一致性流量。" data-incorrect="重新看"MSI 协议"一节末尾对 MESI 的介绍：E 状态相对 S 状态的关键优势是什么。">
+      <p><strong>问题 1：</strong>MESI 协议相对 MSI 协议新增的 E（Exclusive）状态，主要优化了什么场景？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">多个处理器同时频繁读取同一份共享数据的场景</button>
+        <button data-choice="b" aria-pressed="false">数据本来就是私有的、"读后立即写"（read-modify-write）的场景——E→M 可以静默完成，不必先经过 S 再触发多余的一致性广播</button>
+        <button data-choice="c" aria-pressed="false">缓存行大小超过页大小的场景</button>
+        <button data-choice="d" aria-pressed="false">目录式一致性协议专用，不适用于窥探式协议</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！判断标准是"如果缓存行只有1个字，这次缺失还会不会发生"——会发生就是真共享，不会发生就是假共享。" data-incorrect="重新看"假共享"一节：区分真共享缺失和假共享缺失的判断标准是什么。">
+      <p><strong>问题 2：</strong>如何判断一次缓存一致性缺失是"真共享"还是"假共享"？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">看这次缺失发生在读操作还是写操作</button>
+        <button data-choice="b" aria-pressed="false">看涉及的两个处理器是否在同一个物理核心上</button>
+        <button data-choice="c" aria-pressed="false">假设缓存行只有 1 个字——如果这次缺失依然会发生，就是真共享；如果不会发生，就是假共享（纯粹是行粒度造成的误伤）</button>
+        <button data-choice="d" aria-pressed="false">看缓存行当前处于 M 状态还是 S 状态</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！目录式一致性只与真正持有该行副本的节点通信，而不是像窥探协议那样广播给所有缓存——这正是它能突破核心数增多后带宽瓶颈的关键。" data-incorrect="重新看"目录式一致性"一节：它与窥探式协议在通信范围上的根本区别。">
+      <p><strong>问题 3：</strong>目录式一致性协议相对窥探式协议，是如何突破"核心数增多后广播带宽成为瓶颈"这个问题的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">每行内存关联一份目录信息，记录哪些缓存持有副本；发生缺失时只与真正持有副本的节点通信，而不是广播给所有缓存</button>
+        <button data-choice="b" aria-pressed="false">目录式协议完全取消了缓存一致性的需求</button>
+        <button data-choice="c" aria-pressed="false">目录式协议要求所有核心共享同一个物理缓存</button>
+        <button data-choice="d" aria-pressed="false">目录式协议只适用于单核处理器</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>一致性 vs. 相合性</h3>
+        <p>单地址读写规则 vs. 多地址读写顺序，本课先解决前者</p>
+      </article>
+      <article>
+        <h3>MSI / MESI</h3>
+        <p>M 态保证独占，E 态让私有数据写入无需广播</p>
+      </article>
+      <article>
+        <h3>假共享</h3>
+        <p>行粒度一致性带来的意外代价，用"单字缓存行"思想实验判定</p>
+      </article>
+      <article>
+        <h3>目录式一致性</h3>
+        <p>只与真正持有副本的节点通信，突破窥探式广播的带宽瓶颈</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 5.1-5.4</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L21_Cache_Coherence.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Goodman, "Using Cache Memory to Reduce Processor-Memory Traffic," ISCA 1983</li>
+      <li>Discussion 10 worksheet：Midterm 2 Review（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0020-turing-award-lecture.html">← 第 20 课：Turing Award Lecture</a>
+      <span>🎓 第 21 课</span>
+      <a href="0022-memory-consistency.html">第 22 课：Memory Consistency →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+</body>
+</html>
