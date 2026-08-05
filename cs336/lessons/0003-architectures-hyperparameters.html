@@ -101,18 +101,16 @@ x = x + FFN(LayerNorm(x))</code></pre>
 
     <div class="card idea">
       <p><strong>梯度流的关键差异：</strong></p>
-      <p><strong>Post-norm</strong>：归一化在残差之后 → 每层的输出幅度逐层缩小 → 需要 warmup 和精心的学习率调度。</p>
-      <p><strong>Pre-norm</strong>：归一化在残差之前 → 残差路径更干净 → 梯度可以直接回传到浅层 → 训练更稳定。</p>
+      <p><strong>Post-norm</strong> 的恒等残差路径会经过归一化，深层网络往往更依赖 warmup、初始化和残差缩放。</p>
+      <p><strong>Pre-norm</strong> 让残差主干保持恒等映射，梯度可以沿主干直接传播，因此通常更容易稳定训练很深的 Transformer。</p>
     </div>
 
-    <p>直觉：Post-norm 中，每层的 LayerNorm 把输出"拉回"均值为 0、方差为 1 的分布。经过 L 层后，残差路径的信号被反复归一化，浅层的梯度会变小。Pre-norm 让残差路径绕过归一化，梯度流更顺畅。</p>
+    <p>这不是“Pre-norm 在所有指标上都更好”。Post-norm 或混合方案在合适初始化与缩放下也能稳定训练，并可能有不同的表示与收敛特性。架构选择应结合深度、初始化和训练 recipe 判断。</p>
 
-    <p><strong>代价：</strong>Pre-norm 的表示能力稍弱（因为归一化在注意力之前，而不是之后），但在实践中这个差异可以忽略。</p>
-
-    <h3>Sandwich Norm（DeepNet 的改进）</h3>
-    <p>DeepSeek-V3 使用了 sandwich norm——在残差连接内部再加一个 LayerNorm：</p>
-    <pre><code class="language-python"># Sandwich norm: 兼顾稳定性和表示能力
-x = x + LayerNorm(MultiHeadAttention(LayerNorm(x)))</code></pre>
+    <h3>Norm 位置的现代变体</h3>
+    <p>官方 Lecture 3 特别讨论了把额外的 norm 放在残差分支输出、但不放进恒等残差主干的做法；Grok、Gemma 2、OLMo 2 等模型采用了不同组合。它们不应笼统称为“DeepNet 的 Sandwich Norm”，也不是 DeepSeek-V3 的统一配置。</p>
+    <pre><code class="language-python"># 一类示意：保留干净的 residual stream，规范化分支输入/输出
+x = x + PostNorm(Attention(PreNorm(x)))</code></pre>
 
     <hr class="rule">
 
@@ -126,14 +124,14 @@ x = x + LayerNorm(MultiHeadAttention(LayerNorm(x)))</code></pre>
 GELU(x) = x × Φ(x)   （Φ 是标准正态的 CDF）
         ≈ 0.5 × x × (1 + tanh(√(2/π) × (x + 0.044715 × x³)))</code></pre>
 
-    <p><strong>为什么 GELU 更好？</strong> ReLU 在 0 点不可导，且对负值完全截断。GELU 是平滑的，保留了负值的一些信息（乘以接近 0 但不等于 0 的权重）。</p>
+    <p><strong>为什么使用 GELU？</strong> GELU 是平滑的门控式非线性，按输入大小连续缩放信号，而 ReLU 对负值直接截断。它在 GPT/BERT 系列中表现良好，但不能仅凭“0 点不可导”解释优劣——深度学习可以正常优化 ReLU，最终选择主要来自经验结果与硬件代价。</p>
 
     <h3>SwiGLU：现代 LLM 的标准</h3>
     <p>Llama 系列和 Mistral 使用 SwiGLU：</p>
     <pre><code class="language-python"># 标准 FFN
 FFN(x) = W₂ × ReLU(W₁ × x)
 
-# SwiGLU FFN（Noam Shazer 2020 提出）
+# SwiGLU FFN（Noam Shazeer 2020 系统研究）
 FFN(x) = W_down × (Swish(W_gate × x) ⊙ (W_up × x))
 
 # 其中 Swish(x) = x × sigmoid(x)</code></pre>
@@ -142,7 +140,7 @@ FFN(x) = W_down × (Swish(W_gate × x) ⊙ (W_up × x))
     <ul>
       <li>门控机制让模型可以"选择性地通过"信息</li>
       <li>实验表明在相同 FLOPs 下表现更好</li>
-      <li>但参数量增加了 ~50%（三个矩阵而不是两个）</li>
+      <li>若保持原来的中间维度，三个矩阵会增加参数量；实践中通常缩小 d_ff 以保持参数/FLOPs 近似可比</li>
     </ul>
 
     <div class="card warning">
@@ -175,7 +173,7 @@ position_embedding = nn.Embedding(max_seq_len, d_model)</code></pre>
     <p><strong>优势：</strong>简单，可学习。</p>
     <p><strong>劣势：</strong>不能外推到训练时未见过的位置；需要固定 max_seq_len。</p>
 
-    <h3>RoPE（Rotary Position Embedding）—— 现代标准</h3>
+    <h3>RoPE（Rotary Position Embedding）—— 常见现代选择</h3>
     <p>RoPE 的核心思想：不直接编码位置，而是让 attention 分数自然包含相对位置信息。</p>
 
     <div class="card idea">
@@ -200,8 +198,8 @@ k_rotated = R(n) @ k
     <p><strong>RoPE 的优势：</strong></p>
     <ul>
       <li>编码相对位置（attention 天然需要这个）</li>
-      <li>可以外推（通过位置插值或 NTK-aware scaling）</li>
-      <li>现代所有主流模型都用：Llama, Mistral, Qwen, DeepSeek</li>
+      <li>可通过位置插值、频率缩放等方法扩展上下文，但外推质量不是自动保证</li>
+      <li>Llama、Mistral、Qwen、DeepSeek 等大量模型采用；也仍有模型使用相对偏置、ALiBi、NoPE 或混合方案</li>
     </ul>
 
     <h3>ALiBi（Attention with Linear Biases）</h3>
@@ -209,7 +207,7 @@ k_rotated = R(n) @ k
 scores = Q @ K^T / √d
 scores[i, j] -= |i - j| × slope_head_i  # 距离越远，惩罚越大</code></pre>
 
-    <p>ALiBi 的优势是极强的外推能力，但 RoPE 在大多数任务上表现更好。</p>
+    <p>ALiBi 不需要位置 embedding 表，并在原论文设置中展示了长度外推能力；RoPE 与 ALiBi 的优劣取决于训练长度、缩放方法、架构和任务，不能概括为一个方法在“大多数任务”上必然更好。</p>
 
     <table>
       <tr><th>方法</th><th>编码方式</th><th>外推能力</th><th>使用模型</th></tr>
@@ -251,7 +249,7 @@ output = γ × x_norm  # 没有 β！</code></pre>
     </div>
 
     <h3>归一化的位置</h3>
-    <pre><code class="language-python"># 现代标准: Pre-RMSNorm
+    <pre><code class="language-python"># 常见现代配置: Pre-RMSNorm
 x = x + Attention(RMSNorm(x))
 x = x + FFN(RMSNorm(x))
 
@@ -321,9 +319,9 @@ output = rearrange(output, 'b h s d -> b s (h d)')</code></pre>
     <h3>FlashAttention</h3>
     <p>不是架构创新，而是计算方法的革命：</p>
     <div class="card idea">
-      <p><strong>FlashAttention 的核心思想：</strong>不改变数学结果，但改变计算顺序——<strong>永远不把完整的 attention matrix 写入 HBM</strong>。</p>
+      <p><strong>FlashAttention 的核心思想：</strong>不改变 attention 的数学定义，而是用 tiling 与 online softmax 避免把完整的 attention score/probability 矩阵物化到 HBM。</p>
       <p>通过 tiling + online softmax，在 SRAM 中完成每个 block 的 attention，只把最终输出写回 HBM。</p>
-      <p><strong>效果：</strong>内存 O(n) 而非 O(n²)，速度 2-4× 提升。</p>
+      <p><strong>效果：</strong>attention 中间量的额外存储从 O(n²) 降到 O(n)；加速比取决于序列长度、head dimension、GPU 与具体 kernel，不能固定写成 2-4×。</p>
     </div>
 
     <hr class="rule">
@@ -353,7 +351,8 @@ output = rearrange(output, 'b h s d -> b s (h d)')</code></pre>
 
     <h3>参数量估算</h3>
     <pre><code class="language-python"># Transformer 参数量（忽略 embedding 和 final head）
-# Attention: 4 × d_model²  (W_q, W_k, W_v, W_o 各 d_model × d_model)
+# Attention（MHA 假设）: 4 × d_model²
+# GQA/MQA 的 K、V 投影更小，不能直接套 4d²
 # FFN (SwiGLU): 3 × d_model × d_ff  (W_gate, W_up, W_down)
 # RMSNorm: 2 × d_model  (每层两个 norm)
 
@@ -362,7 +361,7 @@ per_layer = 4d² + 3d × (8/3)d + 2d = 4d² + 8d² + 2d = 12d² + 2d
 total_params ≈ n_layers × 12 × d_model²</code></pre>
 
     <h3>Chinchilla 比例</h3>
-    <p>根据 Hoffmann et al. (2022) 的 scaling law，compute-optimal 的模型满足：</p>
+    <p>Hoffmann et al. (2022) 的实验常被概括为下面这个经验预算：</p>
     <pre><code class="language-python">D ≈ 20 × N
 
 其中:
@@ -370,6 +369,8 @@ D = 训练 token 数
 N = 模型参数量
 
 例如: 70B 模型 → ~1.4T tokens (compute-optimal)</code></pre>
+
+    <p><strong>边界：</strong><code>20 tokens/parameter</code> 是 Chinchilla 70B 配置及其量级的常用速记，不是跨架构、数据质量和推理成本都不变的物理常数。现代模型常为了摊薄推理成本而显著 overtrain。</p>
 
     <hr class="rule">
 
@@ -381,7 +382,7 @@ N = 模型参数量
       <tr><td>GPT-3 175B</td><td>12288</td><td>96</td><td>96</td><td>128</td><td>49152</td><td>GELU</td><td>Learned</td><td>Pre-LN</td></tr>
       <tr><td>Llama 2 70B</td><td>8192</td><td>80</td><td>64</td><td>128</td><td>28672</td><td>SwiGLU</td><td>RoPE</td><td>Pre-RMS</td></tr>
       <tr><td>Mistral 7B</td><td>4096</td><td>32</td><td>32</td><td>128</td><td>14336</td><td>SwiGLU</td><td>RoPE</td><td>Pre-RMS</td></tr>
-      <tr><td>Gemma 2 27B</td><td>4608</td><td>46</td><td>16</td><td>128</td><td>16 × d_model</td><td>GeGLU</td><td>RoPE</td><td>Pre-RMS</td></tr>
+      <tr><td>Gemma 2 27B</td><td>4608</td><td>46</td><td>32 Q / 16 KV</td><td>128</td><td>36864（8×d_model）</td><td>GeGLU</td><td>RoPE</td><td>Pre/Post RMSNorm</td></tr>
     </table>
 
     <div class="card idea">
@@ -430,7 +431,7 @@ w = torch.randn(d_model, d_model) * 0.02
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！Pre-norm 让残差路径绕过 LayerNorm，梯度可以直接回传到浅层，训练更稳定。" data-incorrect="Pre-norm 把 LayerNorm 放在 attention/FFN 之前，残差连接绕过 norm，梯度流更顺畅。">
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！Pre-norm 让残差路径绕过 LayerNorm，梯度可以直接回传到浅层，训练更稳定。" data-incorrect="Pre-norm 把 LayerNorm 放在 attention/FFN 之前，残差连接绕过 norm，梯度流更顺畅。">
       <p><strong>问题 1：</strong>为什么现代 Transformer 用 pre-norm 而不是 post-norm？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">Pre-norm 计算更快</button>
@@ -441,7 +442,7 @@ w = torch.randn(d_model, d_model) * 0.02
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！RoPE 通过旋转让 attention score 只依赖相对位置 (m-n)。" data-incorrect="RoPE 把位置信息编码为旋转，两个位置的 attention score 只依赖它们的相对距离。">
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！RoPE 通过旋转让 attention score 只依赖相对位置 (m-n)。" data-incorrect="RoPE 把位置信息编码为旋转，两个位置的 attention score 只依赖它们的相对距离。">
       <p><strong>问题 2：</strong>RoPE 的核心优势是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它比 sinusoidal 更精确</button>
@@ -452,7 +453,7 @@ w = torch.randn(d_model, d_model) * 0.02
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！RMSNorm 去掉了 mean centering（减均值），只保留除以 RMS，省掉了 β 参数。" data-incorrect="RMSNorm 去掉了 mean centering 步骤，只除以 RMS，参数从 γ, β 简化为只有 γ。">
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！RMSNorm 去掉了 mean centering（减均值），只保留除以 RMS，省掉了 β 参数。" data-incorrect="RMSNorm 去掉了 mean centering 步骤，只除以 RMS，参数从 γ, β 简化为只有 γ。">
       <p><strong>问题 3：</strong>RMSNorm 和 LayerNorm 的区别是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">RMSNorm 多了一个参数</button>
@@ -463,7 +464,7 @@ w = torch.randn(d_model, d_model) * 0.02
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！SwiGLU 把 d_ff 从 4×d_model 改为 ~2.67×d_model（8/3），因为有三个矩阵 (W_gate, W_up, W_down)。" data-incorrect="SwiGLU 用三个矩阵替代两个，为了保持参数量一致，d_ff 从 4×d 改为 ~2.67×d。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！SwiGLU 把 d_ff 从 4×d_model 改为 ~2.67×d_model（8/3），因为有三个矩阵 (W_gate, W_up, W_down)。" data-incorrect="SwiGLU 用三个矩阵替代两个，为了保持参数量一致，d_ff 从 4×d 改为 ~2.67×d。">
       <p><strong>问题 4：</strong>使用 SwiGLU 时，d_ff 应该怎么调整？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">保持 4×d_model 不变</button>
@@ -474,7 +475,7 @@ w = torch.randn(d_model, d_model) * 0.02
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="5" data-correct="正确！FlashAttention 不改变数学结果，只改变计算顺序——通过 tiling 避免把完整的 attention matrix 写入 HBM。" data-incorrect="FlashAttention 不改变数学结果，只是计算上更高效的实现——用 tiling + online softmax 减少 HBM 访问。">
+    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！FlashAttention 不改变数学结果，只改变计算顺序——通过 tiling 避免把完整的 attention matrix 写入 HBM。" data-incorrect="FlashAttention 不改变数学结果，只是计算上更高效的实现——用 tiling + online softmax 减少 HBM 访问。">
       <p><strong>问题 5：</strong>FlashAttention 为什么比普通 attention 更快？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它用了近似算法</button>
@@ -496,7 +497,7 @@ w = torch.randn(d_model, d_model) * 0.02
       </article>
       <article>
         <h3>SwiGLU + RoPE</h3>
-        <p>现代 LLM 的激活和位置编码标准</p>
+        <p>现代 LLM 中很常见，但仍存在 GeGLU、ALiBi、NoPE 等替代方案</p>
       </article>
       <article>
         <h3>RMSNorm</h3>
@@ -512,8 +513,9 @@ w = torch.randn(d_model, d_model) * 0.02
 
     <h2 id="reading">延伸阅读</h2>
     <ul>
+      <li><a href="https://github.com/stanford-cs336/spring2025-lectures/blob/main/nonexecutable/2025%20Lecture%203%20-%20architecture.pdf">CS336 Spring 2025 Lecture 3 官方讲义</a> — 架构选择与公开模型对比</li>
       <li>Vaswani et al. (2017): <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a> — 原版 Transformer</li>
-      <li>Shao et al. (2024): <a href="https://arxiv.org/abs/2002.05202">GLU Variants Improve Transformer</a></li>
+      <li>Shazeer (2020): <a href="https://arxiv.org/abs/2002.05202">GLU Variants Improve Transformer</a></li>
       <li>Su et al. (2021): <a href="https://arxiv.org/abs/2104.09864">RoFormer: Enhanced Transformer with Rotary Position Embedding</a></li>
       <li>Dao et al. (2022): <a href="https://arxiv.org/abs/2205.14135">FlashAttention: Fast and Memory-Efficient Exact Attention</a></li>
       <li>Zhang & Sennrich (2019): <a href="https://arxiv.org/abs/1906.00178">RMSNorm</a></li>

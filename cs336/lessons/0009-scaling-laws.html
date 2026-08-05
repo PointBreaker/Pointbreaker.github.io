@@ -43,10 +43,10 @@
     <h3>历史背景</h3>
     <table>
       <tr><th>时间</th><th>事件</th><th>影响</th></tr>
-      <tr><td>2020 年 1 月</td><td>Kaplan et al. (Chinchilla 前作)</td><td>首次提出幂律关系</td></tr>
-      <tr><td>2020 年 5 月</td><td>GPT-3 发布</td><td>验证了"大模型 + 少数据"的路线</td></tr>
-      <tr><td>2022 年 3 月</td><td>Hoffmann et al. (Chinchilla)</td><td>发现 GPT-3 训练不足</td></tr>
-      <tr><td>2022 年 9 月</td><td>Llama 发布</td><td>遵循 Chinchilla 比例</td></tr>
+      <tr><td>2020 年 1 月</td><td>Kaplan et al.</td><td>系统拟合语言模型的参数、数据与计算幂律</td></tr>
+      <tr><td>2020 年 5 月</td><td>GPT-3</td><td>以 175B 参数展示大规模自回归预训练与 in-context learning</td></tr>
+      <tr><td>2022 年 3 月</td><td>Hoffmann et al. (Chinchilla)</td><td>重新估计固定计算预算下的模型/数据分配</td></tr>
+      <tr><td>2023 年 2 月</td><td>LLaMA</td><td>进一步强调较小模型配合更多训练 token 的推理成本优势</td></tr>
     </table>
 
     <hr class="rule">
@@ -87,10 +87,10 @@ D_opt ∝ C^0.27
 
     <h3>GPT-3 的路线</h3>
     <p>GPT-3 175B 只用了 ~300B tokens（约 2× 模型参数数），远低于 Chinchilla 推荐的 20×。</p>
-    <p>根据 Kaplan et al. 的 scaling law，这是合理的——<strong>模型大小比数据量更重要</strong>（α_N > α_D）。</p>
+    <p>Kaplan et al. 的<strong>compute-optimal 拟合</strong>给出 <code>N_opt ∝ C^0.73</code>、<code>D_opt ∝ C^0.27</code>，因而更倾向把新增计算投入模型大小。注意这不能解释成 <code>α_N &gt; α_D</code>：页面上列出的单变量拟合反而是 0.076 &lt; 0.095。</p>
 
     <div class="card warning">
-      <p><strong>Kaplan et al. 的偏差：</strong>他们的实验中，<strong>大模型往往训练不足</strong>（没训到收敛）。这导致他们低估了数据的重要性，得出了"模型越大越好"的结论。</p>
+      <p><strong>为何后来估计不同：</strong>Hoffmann et al. 指出训练曲线采样、学习率 schedule 与固定计算预算下取最优点的方法会显著影响拟合。不能把差异只归结为“Kaplan 的大模型没训完”，更不能概括为 Kaplan 证明了“模型越大越好”。</p>
     </div>
 
     <hr class="rule">
@@ -99,43 +99,45 @@ D_opt ∝ C^0.27
     <h2 id="chinchilla">Chinchilla (Hoffmann et al. 2022)</h2>
 
     <h3>核心发现</h3>
-    <p>DeepMind 的 Chinchilla 论文重新做了实验——确保每个模型都训练到收敛：</p>
+    <p>DeepMind 使用三种方法重新估计固定计算预算下的最优模型大小与 token 数，包括 training-curve envelope、IsoFLOPs 和联合 loss 拟合：</p>
 
     <pre><code class="language-python"># Chinchilla 的 scaling law
 N_opt ∝ C^0.50
 D_opt ∝ C^0.50
 
-# 或者等价地:
+# 常用经验速记（来自 70B / 1.4T 的训练点）:
 D_opt ≈ 20 × N_opt
 
-# 含义: 模型和数据应该等比例增长</code></pre>
+# 含义: 在该论文的范围和训练 recipe 下，模型与数据随 compute 近似等比例增长。
+# “20 tokens/parameter”不是跨架构、数据与目标都不变的物理常数。</code></pre>
 
     <h3>Chinchilla vs Gopher</h3>
     <table>
       <tr><th>模型</th><th>参数量</th><th>训练 tokens</th><th>比例</th><th>Loss</th></tr>
-      <tr><td>Gopher</td><td>280B</td><td>300B</td><td>1:1</td><td>基准</td></tr>
+      <tr><td>Gopher</td><td>280B</td><td>300B</td><td>约 1.1:1</td><td>基准</td></tr>
       <tr><td>Chinchilla</td><td>70B</td><td>1.4T</td><td>1:20</td><td>更低！</td></tr>
     </table>
 
-    <p><strong>Chinchilla 70B 在所有 benchmark 上击败 Gopher 280B</strong>——用 1/4 的参数量，20× 的数据。</p>
+    <p><strong>Chinchilla 以约 1/4 的参数量和约 4.7× 的训练 token，获得更低的 validation loss，并在论文报告的大范围下游评测中整体优于 Gopher。</strong>“20×”是 token/parameter 比例，不是相对 Gopher 的数据倍数。</p>
 
     <h3>为什么 Kaplan 和 Chinchilla 结论不同？</h3>
-    <pre><code class="language-python"># Kaplan et al. 的实验设置:
-# - 小模型训到收敛
-# - 大模型训练步数不够（没训完）
-# → 大模型的 loss 被高估 → 低估了数据的重要性
-
-# Hoffmann et al. 的实验设置:
-# - 所有模型都训到收敛
-# - 25 个不同计算预算，每个做 4 个 (N, D) 组合
-# → 更准确的 scaling law</code></pre>
+    <pre><code class="language-python"># Kaplan 与 Hoffmann 的实验网格、训练 schedule、参数计数口径和
+# compute-optimal 点提取方法不同。
+#
+# Hoffmann et al. 使用三种方法交叉检查:
+# 1. 对多条 training curves 取固定 compute 下的最低 loss
+# 2. IsoFLOPs：每个 compute budget 扫描多个模型大小
+# 3. 联合拟合 L(N, D)
+#
+# 后续数据取证还指出原论文 method 3 的拟合实现存在问题；
+# 因此应报告拟合方法和不确定性，而不是把某组指数当作最终真理。</code></pre>
 
     <h3>Chinchilla 公式</h3>
     <p>更精确的 loss 预测公式：</p>
     <pre><code class="language-python">L(N, D) = E + A/N^α + B/D^β
 
 其中:
-E ≈ 1.69 (irreducible loss, 数据本身的熵)
+E ≈ 1.69 (该数据、tokenizer 与模型族拟合出的渐近 loss floor)
 A ≈ 406.4, α ≈ 0.34
 B ≈ 410.7, β ≈ 0.28
 
@@ -223,8 +225,8 @@ for N in [100M, 300M, 1B, 3B, 10B]:
     <h2 id="critiques">争议与局限</h2>
 
     <h3>批评 1：Chinchilla 比例可能不适用于更大尺度</h3>
-    <p>Chinchilla 的拟合基于 ~10B 以下的模型。外推到 1T+ 模型可能不准确。</p>
-    <p>一些后续研究（如 Llama 3）认为更大的模型可能需要更多数据。</p>
+    <p>Chinchilla 的拟合实验主要覆盖约 70M–16B 参数，再据此外推并训练 70B 模型。继续外推到数百 B 或 1T+ 时，不确定性会增大。</p>
+    <p>Llama 2/3 等模型使用了高于 20 tokens/parameter 的训练量，但这体现的是训练/推理成本、数据供给与目标能力的综合选择，不能单独证明新的通用最优比例。</p>
 
     <h3>批评 2：只优化 loss 不够</h3>
     <p>Chinchilla 优化的是 next-token prediction loss。但用户关心的是：</p>
@@ -239,9 +241,8 @@ for N in [100M, 300M, 1B, 3B, 10B]:
     <pre><code class="language-python"># Chinchilla: D = 20 × N
 # 假设所有 token 等权
 
-# 实际上:
-# 高质量 token 的价值可能是低质量 token 的 10×
-# → 1T 高质量 token 可能比 10T 低质量 token 更好
+# 实际上不同来源的 token 对目标 loss 与下游能力贡献不同；
+# 价值倍数必须由受控 data-mixing / filtering 实验估计，不能固定写成 10×。
 
 # 这也是为什么数据过滤如此重要</code></pre>
 
@@ -250,11 +251,9 @@ for N in [100M, 300M, 1B, 3B, 10B]:
     <p>MoE、SSM、线性 attention 的 scaling 行为可能不同。</p>
 
     <h3>批评 5：batch size 的影响</h3>
-    <pre><code class="language-python"># Chinchilla 假设 batch size 固定
-# 但实际上:
-# - 大 batch 训练更高效（更好的硬件利用率）
-# - 但大 batch 需要调整学习率（linear scaling rule）
-# - 最优 batch size 随模型大小变化</code></pre>
+    <pre><code class="language-python"># Batch size 会同时影响优化步数、critical batch、学习率 schedule 与硬件效率。
+# Chinchilla 的结论依赖其训练 recipe；把 batch 或 schedule 换掉后，应重新拟合，
+# 不能机械套用 linear scaling rule。</code></pre>
 
     <hr class="rule">
 
@@ -300,28 +299,28 @@ answer = model.generate_answer(context)</code></pre>
     <pre><code class="language-python"># Step 1: 确定计算预算
 C = num_gpus × time_per_gpu × flops_per_gpu × MFU
 
-# Step 2: 用 Chinchilla 比例估算
+# Step 2: 用 20 tokens/parameter 作为粗略起点，而不是最终答案
 N_opt ≈ (C / 6 / 20)^(1/2)  # 假设 D = 20N
 D_opt = 20 × N_opt
 
 # Step 3: 在小模型上验证
-# 训练 4-5 个不同大小的模型（10M - 1B）
-# 拟合 scaling law 参数
+# 设计覆盖多个 N、D、compute budget 的实验网格，并保持 tokenizer、数据、
+# optimizer 与 schedule 口径一致；实验数量由拟合不确定性决定
 
 # Step 4: 外推到大模型
 # 预测最优 N 和 D
 
-# Step 5: 训练目标模型，监控 loss
-# 如果 loss 高于预测，可能需要更多数据</code></pre>
+# Step 5: 训练目标模型，监控 loss 与小规模外推偏差
+# 偏差可能来自数据、优化、实现、架构或拟合失效，不能自动归因于“数据不够”</code></pre>
 
     <h3>常见模型的实际比例</h3>
     <table>
-      <tr><th>模型</th><th>参数量</th><th>训练 tokens</th><th>比例</th><th>遵循 Chinchilla?</th></tr>
-      <tr><td>GPT-3 175B</td><td>175B</td><td>300B</td><td>1.7:1</td><td>✗</td></tr>
-      <tr><td>PaLM 540B</td><td>540B</td><td>780B</td><td>1.4:1</td><td>✗</td></tr>
-      <tr><td>Chinchilla 70B</td><td>70B</td><td>1.4T</td><td>20:1</td><td>✓</td></tr>
-      <tr><td>Llama 2 70B</td><td>70B</td><td>2T</td><td>28:1</td><td>✓</td></tr>
-      <tr><td>Llama 3 405B</td><td>405B</td><td>15T</td><td>37:1</td><td>✓ (超)</td></tr>
+      <tr><th>模型</th><th>参数量</th><th>训练 tokens</th><th>tokens/parameter</th><th>如何解读</th></tr>
+      <tr><td>GPT-3 175B</td><td>175B</td><td>300B</td><td>约 1.7</td><td>远低于 20 的经验点</td></tr>
+      <tr><td>PaLM 540B</td><td>540B</td><td>780B</td><td>约 1.4</td><td>远低于 20 的经验点</td></tr>
+      <tr><td>Chinchilla 70B</td><td>70B</td><td>1.4T</td><td>20</td><td>论文训练点</td></tr>
+      <tr><td>Llama 2 70B</td><td>70B</td><td>2T</td><td>约 28.6</td><td>高于 20，兼顾更低推理成本</td></tr>
+      <tr><td>Llama 3 405B</td><td>405B</td><td>15.6T</td><td>约 38.5</td><td>高于 20；不是对通用最优比例的单独证明</td></tr>
     </table>
 
     <hr class="rule">
@@ -329,7 +328,7 @@ D_opt = 20 × N_opt
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！Chinchilla 发现模型和数据应等比例增长，D ≈ 20 × N。" data-incorrect="Chinchilla 比例是 D ≈ 20 × N，模型和数据等比例增长。">
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！Chinchilla 的主要结果是固定 compute 下 N 与 D 近似等比例扩展；20 tokens/parameter 是常用经验点。" data-incorrect="核心是 compute-optimal 的模型和数据指数都接近 0.5；D≈20N 是该实验设置下的经验速记。">
       <p><strong>问题 1：</strong>Chinchilla 论文的核心结论是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">模型越大越好</button>
@@ -340,18 +339,18 @@ D_opt = 20 × N_opt
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！Kaplan et al. 低估了数据的重要性，因为他们的大模型训练不足。" data-incorrect="Kaplan et al. 的大模型训练不足，导致低估了数据的重要性。">
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！两者的实验网格、学习率 schedule、参数口径和 compute-optimal 拟合方法不同，因此得到不同指数。" data-incorrect="不能只用“大模型训练不足”解释；训练 schedule 与拟合方法也是官方讲义强调的关键。">
       <p><strong>问题 2：</strong>为什么 Kaplan et al. 和 Chinchilla 的结论不同？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">用了不同的数据</button>
-        <button data-choice="b" aria-pressed="false">Kaplan 的大模型训练不足</button>
+        <button data-choice="b" aria-pressed="false">实验、schedule 与拟合方法不同</button>
         <button data-choice="c" aria-pressed="false">Chinchilla 用了更小的模型</button>
         <button data-choice="d" aria-pressed="false">没有区别</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！幂律意味着 loss 的对数与模型大小的对数成线性关系——回报递减。" data-incorrect="幂律 L(N) = (Nc/N)^α 意味着 loss 的对数与 log(N) 成线性关系——回报递减。">
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！在纯幂律项占主导的范围内，资源翻倍带来近似固定比例的误差下降，体现回报递减。" data-incorrect="加上不可约 loss floor 后，接近 floor 时下降比例还会变化。">
       <p><strong>问题 3：</strong>Scaling law 的幂律关系意味着什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">模型翻倍，loss 减半</button>
@@ -362,7 +361,7 @@ D_opt = 20 × N_opt
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！Scaling law 在小模型上拟合，然后外推预测大模型的最优配置。" data-incorrect="Scaling law 的核心价值是：在小模型上做实验，预测大模型的最优配置。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！Scaling law 可用较小实验预测更大规模的 loss 或配置，但必须报告外推范围与不确定性。" data-incorrect="外推是主要用途之一，不是无误差保证。">
       <p><strong>问题 4：</strong>Scaling law 的实际用途是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">预测模型的能力</button>
@@ -373,7 +372,7 @@ D_opt = 20 × N_opt
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="5" data-correct="正确！Chinchilla 只优化 pre-training loss，不保证下游任务表现也最优。" data-incorrect="Chinchilla 优化的是 next-token prediction loss，不保证所有下游任务都最优。">
+    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！Chinchilla 优化特定训练 recipe 下的 pre-training loss，不保证下游能力、推理成本或其他数据分布也最优。" data-incorrect="20 tokens/parameter 的适用边界包括目标指标、数据、架构和训练 recipe。">
       <p><strong>问题 5：</strong>Chinchilla 比例的局限是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">计算量太大</button>
@@ -395,7 +394,7 @@ D_opt = 20 × N_opt
       </article>
       <article>
         <h3>Chinchilla 比例</h3>
-        <p>D ≈ 20 × N，模型数据等比例增长</p>
+        <p>N 与 D 随 compute 近似等比例增长；20 tokens/parameter 是经验点</p>
       </article>
       <article>
         <h3>Isoflop</h3>
@@ -413,7 +412,8 @@ D_opt = 20 × N_opt
     <ul>
       <li>Kaplan et al. (2020): <a href="https://arxiv.org/abs/2001.08361">Scaling Laws for Neural Language Models</a></li>
       <li>Hoffmann et al. (2022): <a href="https://arxiv.org/abs/2203.15556">Training Compute-Optimal Large Language Models (Chinchilla)</a></li>
-      <li>Li et al. (2024): <a href="https://arxiv.org/abs/2407.07893">The Llama 3 Herd of Models</a> — 实际部署中的 scaling</li>
+      <li>Dubey et al. (2024): <a href="https://arxiv.org/abs/2407.21783">The Llama 3 Herd of Models</a> — 实际部署中的 scaling</li>
+      <li>Stanford CS336 Spring 2025: <a href="https://github.com/stanford-cs336/spring2025-lectures/blob/main/nonexecutable/2025%20Lecture%209%20-%20Scaling%20laws%20basics.pdf">Lecture 9 - Scaling Laws Basics</a></li>
       <li><a href="https://jax-ml.github.io/scaling-book/">The Scaling Book</a> — JAX 团队的 scaling 分析</li>
     </ul>
 
@@ -425,7 +425,7 @@ D_opt = 20 × N_opt
     </div>
 
     <footer>
-      <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 9 内容</p>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 基于官方 Lecture 9 与原论文校订</p>
     </footer>
   </div>
   <script src="../assets/prism.js"></script>

@@ -88,7 +88,7 @@
     <p><strong>Step 3：计算时间</strong></p>
     <pre><code class="language-python">时间 = 6.3×10²⁴ / 5.07×10¹⁷ ≈ 1.24×10⁷ 秒 ≈ 144 天 ≈ 5 个月</code></pre>
 
-    <p>这和 Meta 公布 Llama 3 405B 的训练时间量级一致——他们用 ~16K H100s 训 ~15T tokens 花约 30 天。</p>
+    <p>这个结果只是<strong>理想化的算力下界估算</strong>：它假设所有 GPU 始终以固定 MFU 工作，并忽略通信、检查点、故障恢复和数据管道开销。Meta 的 Llama 3 论文公开的是 405B 参数、15.6T tokens、最多 16K 张 H100；论文并没有给出一个可以直接引用为“约 30 天”的简单墙钟时间。因此不要用不同模型和集群的公开数字反推单一训练天数。</p>
 
     <h3>问题 2：8 张 H100 能训多大的模型？</h3>
 
@@ -106,14 +106,16 @@
 8 × 80GB = 640 GB
 最大模型 ≈ 640×10⁹ / 16 ≈ 40B 参数</code></pre>
 
-    <p><strong>加上主参数副本（mixed precision）：</strong></p>
-    <pre><code class="language-python">实际中还需要额外的 fp32 参数副本用于更新:
-  4（bf16 参数）+ 4（fp32 主参数）+ 4（梯度）+ 8（优化器）= 20 bytes/parameter
+    <p><strong>典型 mixed precision + AdamW：</strong></p>
+    <pre><code class="language-python">一种常见核算（具体实现会不同）:
+  2（bf16 参数）+ 4（fp32 主参数）+ 4（fp32 梯度）+ 8（Adam m、v）
+  = 18 bytes/parameter
 
-最大模型 ≈ 640×10⁹ / 20 ≈ 32B 参数</code></pre>
+若参数、梯度和优化器状态都能在 8 卡间完全分片：
+理论参数上限 ≈ 640×10⁹ / 18 ≈ 35.6B 参数</code></pre>
 
     <div class="card idea">
-      <p><strong>注意：</strong>这还没算 activations！Activations 的内存取决于 batch size 和 sequence length，可能占很大一部分——这也是为什么后面要学 gradient checkpointing。</p>
+      <p><strong>注意：</strong>这只是理论上限，不是“8 卡一定能训练 35B”。只有 ZeRO/FSDP 等方案才能接近聚合显存；普通数据并行会在每张卡复制模型。这里还没算 activations、临时缓冲区、通信 bucket 和显存碎片，实际可训练规模会更小。</p>
     </div>
 
     <hr class="rule">
@@ -197,14 +199,15 @@ print(x)  # tensor([0.])  ← 下溢了！
 x = torch.tensor([1e-8], dtype=torch.bfloat16)
 print(x)  # tensor([1.0000e-8])  ← 保留了</code></pre>
 
-    <p><strong>直觉：</strong>bfloat16 把 float16 的尾数位砍了一半（10→7），但保留了 8 位指数。深度学习对精度不敏感（噪声有正则化效果），但对范围很敏感（梯度消失/爆炸）。</p>
+    <p><strong>直觉：</strong>bfloat16 把有效精度从 float16 的 10 位尾数降到 7 位，但保留了与 fp32 相同的 8 位指数，因此动态范围更适合训练。代价是舍入误差更大；“低精度一定有正则化效果”并不是通用保证，数值稳定性仍取决于算子、归一化、累加精度和优化器实现。</p>
 
     <h3>FP8：H100 的新武器</h3>
     <p>H100 支持两种 FP8 格式：</p>
     <ul>
-      <li><strong>E4M3</strong>：4 位指数 + 3 位尾数，范围 ±448，精度稍高。用于<strong>前向传播</strong>。</li>
-      <li><strong>E5M2</strong>：5 位指数 + 2 位尾数，范围 ±57344，精度更低。用于<strong>反向传播梯度</strong>。</li>
+      <li><strong>E4M3</strong>：4 位指数 + 3 位尾数，范围约 ±448，精度稍高，常用于前向的权重与激活。</li>
+      <li><strong>E5M2</strong>：5 位指数 + 2 位尾数，范围更大、精度更低，常用于反向梯度。</li>
     </ul>
+    <p>这是 NVIDIA Transformer Engine 常见的 hybrid recipe，不是硬性规则；实际训练还需要缩放、amax 统计，并通常以更高精度累加。</p>
 
     <div class="card idea">
       <p><strong>GPT-3 的一个 FFN 矩阵有多大？</strong></p>
@@ -241,7 +244,7 @@ FLOPs = 2 × B × D × F</code></pre>
 总计: 6 × tokens × parameters</code></pre>
 
     <div class="card idea">
-      <p><strong>关键洞察：</strong>这个 6PD 公式对 Transformer 同样适用（一阶近似）。虽然 Transformer 还有 attention 的 O(T²) 项，但当模型足够大时，矩阵乘法项主导。</p>
+      <p><strong>关键洞察：</strong>6PD 是 dense Transformer 预训练的常用一阶近似。它在参数相关的线性层计算占主导时很好用；长上下文、小模型或稀疏/MoE 架构需要单独计入 attention、路由和通信成本，不能机械套用。</p>
     </div>
 
     <h3>其他操作的 FLOPs</h3>
@@ -376,11 +379,11 @@ x = rearrange(x, 'batch seq (heads dim) -> batch heads seq dim', heads=8)
 # 合并回去
 x = rearrange(x, 'batch heads seq dim -> batch seq (heads dim)')</code></pre>
 
-    <h3>jaxtyping：文档化维度</h3>
+    <h3>jaxtyping：文档化并可选检查维度</h3>
     <pre><code class="language-python">from jaxtyping import Float
 import torch
 
-# 声明式维度标注（仅文档，不强制检查）
+# 默认主要用于类型标注；配合 jaxtyped + typeguard/beartype 可运行时检查
 x: Float[torch.Tensor, "batch seq heads dim"] = torch.ones(2, 3, 8, 64)</code></pre>
 
     <hr class="rule">
@@ -479,8 +482,10 @@ print(f"参数数: {sum(p.numel() for p in model.parameters())}")
     # 4. 参数更新
     optimizer.step()
 
-    # 5. 清零梯度（重要！否则梯度会累积）
-    optimizer.zero_grad(set_to_none=True)  # set_to_none 比 fill_(0) 更高效</code></pre>
+    # 5. 清除梯度（重要！否则梯度会累积）
+    optimizer.zero_grad()  # 当前 PyTorch 默认 set_to_none=True</code></pre>
+
+    <p><code>set_to_none=True</code> 通常有更低的内存写入开销，但它也改变语义：没有收到梯度的参数会保持 <code>grad is None</code>，优化器通常会跳过该参数的更新；显式零梯度则可能执行一次“梯度为 0”的更新。当前 PyTorch 中 <code>zero_grad()</code> 已默认采用 <code>set_to_none=True</code>。</p>
 
     <h3>优化器进化史</h3>
     <table>
@@ -489,7 +494,7 @@ print(f"参数数: {sum(p.numel() for p in model.parameters())}")
       <tr><td>Momentum</td><td>θ -= lr × (βm + g)</td><td>1× params</td></tr>
       <tr><td>AdaGrad</td><td>θ -= lr / √(Σg²) × g</td><td>1× params</td></tr>
       <tr><td>RMSProp</td><td>θ -= lr / √(EMA(g²)) × g</td><td>1× params</td></tr>
-      <tr><td>AdamW</td><td>θ -= lr × (EMA(g) / √(EMA(g²)) + λθ)</td><td>2× params</td></tr>
+      <tr><td>AdamW</td><td>Adam 更新与 weight decay 解耦：先按矩估计更新，再单独衰减参数</td><td>2× params</td></tr>
     </table>
 
     <h3>内存全景图</h3>
@@ -502,11 +507,16 @@ optimizer_state:   8P  (m + v, 各 4P)
 activations:       ~4 × B × D × L_num × L_seq  (取决于具体结构)
 
 总计（不含 activations）: 16P bytes
-加上 mixed precision 主参数副本: 20P bytes</code></pre>
+
+# 常见 bf16 参数 + fp32 主参数/梯度/Adam 状态核算：
+mixed_precision_total: 2P + 4P + 4P + 8P = 18P bytes
+
+# 注意：框架可能不保留独立 master 参数，梯度 dtype 也可能不同，
+# 所以 18P 是预算模型，不是所有实现的固定常数。</code></pre>
 
     <h3>数据加载最佳实践</h3>
-    <pre><code class="language-python"># 1. numpy memmap 做懒加载——不占用内存
-data = np.memmap('data.npy', dtype=np.int32, mode='r')
+    <pre><code class="language-python"># 1. 对标准 .npy 文件使用 mmap_mode 懒加载
+data = np.load('data.npy', mmap_mode='r')
 
 # 2. pin_memory → 异步 CPU→GPU 传输
 x = x.pin_memory().to(device, non_blocking=True)
@@ -540,22 +550,20 @@ optimizer.load_state_dict(checkpoint['optimizer'])</code></pre>
       <p><strong>混合精度：</strong>用低精度做前向计算（快、省内存），用高精度存参数和做更新（稳）。</p>
     </div>
 
-    <pre><code class="language-python">from torch.cuda.amp import autocast, GradScaler
-
-# scaler 防止 bf16 下溢
-scaler = GradScaler()
+    <pre><code class="language-python">import torch
 
 for x, y in loader:
-    with autocast(dtype=torch.bfloat16):
+    # bf16 指数范围与 fp32 相同，通常不需要 GradScaler
+    with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
         # 前向用 bf16——激活值只占一半内存
         output = model(x)
         loss = criterion(output, y)
 
-    # 反向也在 bf16 下做（scaler 防止下溢）
-    scaler.scale(loss).backward()
-    scaler.step(optimizer)
-    scaler.update()
-    optimizer.zero_grad(set_to_none=True)</code></pre>
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()</code></pre>
+
+    <p>如果使用 <code>float16</code>，梯度更容易下溢，通常应使用 <code>torch.amp.GradScaler("cuda")</code>。对 bf16 无条件套用 GradScaler 会掩盖两种格式在动态范围上的关键差异。</p>
 
     <h3>内存节省</h3>
     <pre><code class="language-python"># 无混合精度 (fp32):
@@ -575,7 +583,7 @@ bf16 激活值: ~half → 显著节省！
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！训练总计 ≈ 6 × tokens × params（前向 2× + 反向 4×）。" data-incorrect="记住：前向 ≈ 2PD，反向 ≈ 4PD，总计 ≈ 6PD。">
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！训练总计 ≈ 6 × tokens × params（前向 2× + 反向 4×）。" data-incorrect="记住：前向 ≈ 2PD，反向 ≈ 4PD，总计 ≈ 6PD。">
       <p><strong>问题 1：</strong>训练一个 P 参数的模型，处理 T 个 token，总 FLOPs 约为？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">2 × P × T</button>
@@ -586,7 +594,7 @@ bf16 激活值: ~half → 显著节省！
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！bfloat16 用 2 字节但保持了 fp32 的指数范围（8 位指数），不易下溢。" data-incorrect="bfloat16 的指数位与 fp32 相同（8 位），所以动态范围一样大，但尾数位更少（7 vs 23）。">
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！bfloat16 用 2 字节但保持了 fp32 的指数范围（8 位指数），不易下溢。" data-incorrect="bfloat16 的指数位与 fp32 相同（8 位），所以动态范围一样大，但尾数位更少（7 vs 23）。">
       <p><strong>问题 2：</strong>为什么训练 LLM 通常用 bfloat16 而不是 float16？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">bfloat16 精度更高</button>
@@ -597,8 +605,8 @@ bf16 激活值: ~half → 显著节省！
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！H100 ridge point ≈ 989/3.35 ≈ 295。算术强度 = B（当 D,F >> B），所以 B > 295 时 compute-bound。" data-incorrect="ridge point = 算力/带宽 = 989 TFLOP/s / 3.35 TB/s ≈ 295。">
-      <p><strong>问题 3：</strong>H100 上矩阵乘法在什么情况下是 compute-bound？</p>
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！在本课的简化模型中，D、F 远大于 B 时算术强度约为 B；用 989 TFLOP/s 和 3.35 TB/s 估算的 ridge point 约为 295。" data-incorrect="这个结论依赖简化假设：矩阵足够大、D 和 F 远大于 B，并且使用对应的峰值精度。">
+      <p><strong>问题 3：</strong>在本课简化假设（D、F ≫ B）下，H100 上该矩阵乘法何时更可能 compute-bound？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">batch size > 1</button>
         <button data-choice="b" aria-pressed="false">batch size > 295</button>
@@ -608,7 +616,7 @@ bf16 激活值: ~half → 显著节省！
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！反向传播需要保存前向的中间激活值用于计算梯度，所以训练比推理费内存。" data-incorrect="反向传播需要前向的中间值（activations）来计算梯度，所以需要额外内存。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！反向传播需要保存前向的中间激活值用于计算梯度，所以训练比推理费内存。" data-incorrect="反向传播需要前向的中间值（activations）来计算梯度，所以需要额外内存。">
       <p><strong>问题 4：</strong>为什么训练比推理需要更多内存？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">因为模型更大</button>
@@ -619,13 +627,13 @@ bf16 激活值: ~half → 显著节省！
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="5" data-correct="正确！optimizer.zero_grad(set_to_none=True) 把梯度设为 None 而不是 0，节省内存和计算。" data-incorrect="set_to_none=True 把梯度设为 None 而不是填充零，更高效。">
-      <p><strong>问题 5：</strong><code>optimizer.zero_grad(set_to_none=True)</code> 比 <code>zero_grad()</code> 更好是因为？</p>
+    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！当前 PyTorch 的 zero_grad() 默认已经是 set_to_none=True；显式写出参数主要是强调语义，而不是获得额外优化。" data-incorrect="当前 PyTorch 中 zero_grad() 的 set_to_none 默认值就是 True。">
+      <p><strong>问题 5：</strong>当前 PyTorch 中，<code>optimizer.zero_grad(set_to_none=True)</code> 与 <code>optimizer.zero_grad()</code> 的关系是？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">它更快</button>
-        <button data-choice="b" aria-pressed="false">它把梯度设为 None，节省内存和写零开销</button>
-        <button data-choice="c" aria-pressed="false">它防止梯度爆炸</button>
-        <button data-choice="d" aria-pressed="false">没有区别</button>
+        <button data-choice="a" aria-pressed="false">显式写法总是更快</button>
+        <button data-choice="b" aria-pressed="false">默认调用已经采用 set_to_none=True，通常行为相同</button>
+        <button data-choice="c" aria-pressed="false">默认调用会把梯度填成 1</button>
+        <button data-choice="d" aria-pressed="false">显式写法可以防止梯度爆炸</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
@@ -641,7 +649,7 @@ bf16 激活值: ~half → 显著节省！
       </article>
       <article>
         <h3>内存预算</h3>
-        <p>每参数 ~20 bytes（bf16 + AdamW + fp32 主参数）</p>
+        <p>常见 mixed precision + AdamW 预算约 18 bytes/参数，但取决于实现与分片策略</p>
       </article>
       <article>
         <h3>MFU</h3>
@@ -657,6 +665,9 @@ bf16 激活值: ~half → 显著节省！
 
     <h2 id="reading">延伸阅读</h2>
     <ul>
+      <li><a href="https://github.com/pytorch/pytorch/blob/main/torch/optim/optimizer.py">PyTorch Optimizer.zero_grad 官方源码</a> — 默认值、性能与语义差异</li>
+      <li><a href="https://github.com/pytorch/pytorch/blob/main/torch/amp/grad_scaler.py">PyTorch GradScaler 官方源码</a> — gradient scaling 主要解决 float16 下溢</li>
+      <li>Meta (2024): <a href="https://arxiv.org/abs/2407.21783">The Llama 3 Herd of Models</a> — 405B 模型、15.6T tokens 与训练基础设施</li>
       <li>Micikevicius et al. (2018): <a href="https://arxiv.org/abs/1710.03740">Mixed Precision Training</a> — 混合精度训练的原始论文</li>
       <li>Horace He: <a href="https://horace.io/brrr_intro.html">Making Deep Learning Go Brrr</a> — kernel fusion 的直观解释</li>
       <li><a href="https://einops.rocks/">Einops 教程</a> — 命名维度的艺术</li>
