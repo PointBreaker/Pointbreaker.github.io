@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LU 分解 — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 4 课</p>
+    <h1>LU 分解</h1>
+    <p class="lede">消元法的最终形态不是上三角矩阵 \(U\)，而是把原矩阵 \(A\) 分解为下三角矩阵 \(L\) 和上三角矩阵 \(U\) 的乘积。LU 分解把"如何做消元"和"消元的结果是什么"清晰地分开，是数值线性代数中最重要的矩阵分解之一。</p>
+    <div class="meta">
+      <span>授课：Prof. Gilbert Strang</span>
+      <span>日期：2010-02-10</span>
+      <span>难度：中等</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>从消元过程推导出 \(A = LU\) 分解</li>
+      <li>理解 \(L\) 的对角线上是 1，其余位置是消元乘子</li>
+      <li>掌握带行交换的分解 \(PA = LU\)</li>
+      <li>了解 LDU 分解和对多个右端向量 \(\mathbf{b}\) 的重用</li>
+    </ul>
+
+    <h2 id="from-elimination-to-lu">从消元到 LU</h2>
+    <p>回顾第 2 课的消元过程。每一步消元对应一个初等矩阵：</p>
+    \[
+    E_{21} = \begin{bmatrix} 1 & 0 & 0 \\ -\frac32 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix},\;
+    E_{31} = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ -1 & 0 & 1 \end{bmatrix},\;
+    E_{32} = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & -4 & 1 \end{bmatrix}.
+    \]
+    <p>消元的最终结果是上三角矩阵 \(U\)：</p>
+    \[
+    E_{32} E_{31} E_{21} A = U =
+    \begin{bmatrix} 2 & 1 & -1 \\ 0 & \frac12 & \frac12 \\ 0 & 0 & -1 \end{bmatrix}.
+    \]
+
+    <p>把等式两边左乘这些初等矩阵的逆：</p>
+    \[
+    A = (E_{21}^{-1} E_{31}^{-1} E_{32}^{-1}) U = LU.
+    \]
+
+    <p>关键在于：每个消元矩阵的逆只是把乘子的符号翻转。例如</p>
+    \[
+    E_{21}^{-1} = \begin{bmatrix} 1 & 0 & 0 \\ \frac32 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix}.
+    \]
+    <p>把这些逆矩阵相乘，得到下三角矩阵 \(L\)：</p>
+    \[
+    L = \begin{bmatrix} 1 & 0 & 0 \\ \frac32 & 1 & 0 \\ 1 & 4 & 1 \end{bmatrix}.
+    \]
+
+    <div class="card idea">
+      <p><strong>\(L\) 的结构极其简单。</strong> \(L\) 的对角线全是 1，位置 \((i,j)\)（其中 \(i&gt;j\)）上的元素恰好是消元时使用的乘子 \(l_{ij}\)。不需要矩阵乘法就能写出 \(L\)——直接从消元过程中读取。</p>
+    </div>
+
+    <p>验证：</p>
+    \[
+    LU =
+    \begin{bmatrix} 1 & 0 & 0 \\ \frac32 & 1 & 0 \\ 1 & 4 & 1 \end{bmatrix}
+    \begin{bmatrix} 2 & 1 & -1 \\ 0 & \frac12 & \frac12 \\ 0 & 0 & -1 \end{bmatrix}
+    =
+    \begin{bmatrix} 2 & 1 & -1 \\ -3 & -1 & 2 \\ -2 & 1 & 2 \end{bmatrix}
+    = A.
+    \]
+
+    <h2 id="why-lu-helps">LU 分解为何有用</h2>
+    <p>假设我们需要对同一个矩阵 \(A\) 求解多个不同右端向量 \(\mathbf{b}_1, \mathbf{b}_2, \dots\) 的方程组。消元法对每个 \(\mathbf{b}\) 都要重复整个消元过程——这很浪费。</p>
+    <p>有了 \(A = LU\)，求解 \(A\mathbf{x} = \mathbf{b}\) 分两步：</p>
+    <ol>
+      <li><strong>前代 (forward substitution)：</strong>解 \(L\mathbf{y} = \mathbf{b}\)，得到中间向量 \(\mathbf{y}\)。</li>
+      <li><strong>回代 (back substitution)：</strong>解 \(U\mathbf{x} = \mathbf{y}\)，得到最终解 \(\mathbf{x}\)。</li>
+    </ol>
+    <p>分解 \(A=LU\) 只做一次（\(\sim \frac23 n^3\) 运算），之后每个新 \(\mathbf{b}\) 只需前代和回代（\(\sim 2n^2\) 运算）。当 \(n\) 很大且 \(\mathbf{b}\) 很多时，节省显著。</p>
+
+    <h2 id="pivoting">行交换：\(PA = LU\)</h2>
+    <p>当消元需要行交换时，标准 LU 分解不再适用。行交换可以用<strong>置换矩阵</strong> (permutation matrix) \(P\) 表示——把行交换移到最左边：</p>
+    \[
+    PA = LU.
+    \]
+    <p>置换矩阵 \(P\) 是把单位矩阵的行重新排列得到的矩阵。它满足 \(P^{-1} = P^T\)（第 5 课会证明）。</p>
+
+    <h2 id="ldu">LDU 分解</h2>
+    <p>把 \(U\) 的对角线元素（主元）单独提出来，得到对角矩阵 \(D\)：</p>
+    \[
+    U = D \cdot U'
+    \]
+    <p>其中 \(D = \operatorname{diag}(d_1, d_2, \dots, d_n)\) 包含主元，\(U'\) 是对角线全为 1 的上三角矩阵。于是</p>
+    \[
+    A = L D U',
+    \]
+    <p>其中 \(L\) 和 \(U'\) 的对角线都是 1。这种分解称为<strong>LDU 分解</strong>，对称性更好。</p>
+
+    <div class="card warning">
+      <p><strong>主元不能为零。</strong> 如果某个主元为零且无法通过行交换补救，LU 分解不存在（矩阵奇异）。数值计算中，即使主元非零但很小，也会导致严重的舍入误差，因此需要选主元 (pivoting) 策略。</p>
+    </div>
+
+    <h2 id="cost-revisited">运算量再审视</h2>
+    <p>\(A=LU\) 分解的运算量约为 \(\frac23 n^3\)，与消元相同。前代和回代的运算量约为 \(2n^2\)。对于单个 \(\mathbf{b}\)，LU 并不比直接消元快；但对于多个 \(\mathbf{b}\)，分解一次、多次使用前代/回代，优势明显。</p>
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b"
+         data-correct="正确！\(L\) 的对角线全是 1，下三角位置 \((i,j)\) 上恰好是消元乘子 \(l_{ij}\)。"
+         data-incorrect="再想想。\(L\) 的对角线和下三角位置分别放什么？">
+      <p><strong>问题 1：</strong> 在 \(A = LU\) 分解中，矩阵 \(L\) 的对角线元素是：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A\) 的主元</button>
+        <button data-choice="b" aria-pressed="false">全部为 1</button>
+        <button data-choice="c" aria-pressed="false">消元乘子的相反数</button>
+        <button data-choice="d" aria-pressed="false">随机值</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="a"
+         data-correct="正确！前代解 \(L\mathbf{y}=\mathbf{b}\)，回代解 \(U\mathbf{x}=\mathbf{y}\)。"
+         data-incorrect="再想想。\(L\) 是下三角，\(U\) 是上三角，求解顺序如何？">
+      <p><strong>问题 2：</strong> 利用 \(A = LU\) 求解 \(A\mathbf{x} = \mathbf{b}\) 的正确步骤是：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">先解 \(L\mathbf{y} = \mathbf{b}\)，再解 \(U\mathbf{x} = \mathbf{y}\)</button>
+        <button data-choice="b" aria-pressed="false">先解 \(U\mathbf{y} = \mathbf{b}\)，再解 \(L\mathbf{x} = \mathbf{y}\)</button>
+        <button data-choice="c" aria-pressed="false">直接计算 \(\mathbf{x} = U^{-1} L^{-1} \mathbf{b}\)</button>
+        <button data-choice="d" aria-pressed="false">先对 \(A\) 求逆，再计算 \(\mathbf{x} = A^{-1}\mathbf{b}\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="c"
+         data-correct="正确！LU 分解的运算量约为 \(\frac23 n^3\)，与消元相同。"
+         data-incorrect="再想想。LU 本质上就是消元，运算量应与消元同阶。">
+      <p><strong>问题 3：</strong> 对 \(n\times n\) 矩阵做 LU 分解的运算量约为：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(n^2\)</button>
+        <button data-choice="b" aria-pressed="false">\(n\)</button>
+        <button data-choice="c" aria-pressed="false">\(\frac23 n^3\)</button>
+        <button data-choice="d" aria-pressed="false">\(\frac13 n^2\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确！\(PA=LU\) 中置换矩阵 \(P\) 把行交换集中到最左边，\(L\) 和 \(U\) 保持标准形式。"
+         data-incorrect="再想想。行交换在分解中如何表示？">
+      <p><strong>问题 4：</strong> 当消元需要行交换时，标准分解形式变为：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(AP = LU\)</button>
+        <button data-choice="b" aria-pressed="false">\(A = PLU\)</button>
+        <button data-choice="c" aria-pressed="false">\(A = LUP\)</button>
+        <button data-choice="d" aria-pressed="false">\(PA = LU\)</button>
+      </div>
+    </div>
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>消元 = 分解</h3>
+        <p>消元法不仅是求解工具，更是把矩阵分解为 \(L\) 和 \(U\) 的过程。\(L\) 记录"怎么消"，\(U\) 记录"消成什么"。</p>
+      </article>
+      <article>
+        <h3>\(L\) 的简洁结构</h3>
+        <p>\(L\) 的对角线是 1，下三角位置直接是消元乘子。无需矩阵乘法，直接从消元过程读取。</p>
+      </article>
+      <article>
+        <h3>一次分解，多次求解</h3>
+        <p>对多个右端向量，\(A=LU\) 只需做一次，之后每个新 \(\mathbf{b}\) 只需前代和回代，运算量从 \(\frac23 n^3\) 降到 \(2n^2\)。</p>
+      </article>
+      <article>
+        <h3>行交换与 LDU</h3>
+        <p>\(PA=LU\) 处理行交换；LDU 分解把主元单独提出，对称性更好。这些变形在实际计算中都有其用武之地。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Gilbert Strang, <em>Introduction to Linear Algebra</em>, 第 5 版, §2.6 "Elimination = Factorization: A = LU" 与 §11.2 "LU Factorization"。</li>
+      <li>MIT OCW 18.06 官方页面：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>Golub &amp; Van Loan, <em>Matrix Computations</em>, 第 4 版, §3.2 "LU Factorization with Pivoting"，数值计算的权威参考。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_04.pdf</code></li>
+      <li><code>lecture_summaries/lecture_1_4_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0003-matrix-operations-and-inverses.html">← 矩阵运算与逆矩阵</a>
+      <a href="0005-transposes-and-permutations.html">转置、置换与向量空间 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 4</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

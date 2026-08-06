@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gram-Schmidt 与 A=QR — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 16 课</p>
+    <h1>Gram-Schmidt 与 A=QR</h1>
+    <p class="lede">Gram-Schmidt 正交化把一组无关向量改造成标准正交基。写成矩阵形式就是 \(A=QR\)：\(Q\) 列正交、\(R\) 上三角。代入法方程立刻得到 \(\hat{\mathbf{x}}=R^{-1}Q^T\mathbf{b}\)——最小二乘的计算因此大大简化。</p>
+    <div class="meta"><span>授课：Prof. Gilbert Strang</span><span>日期：2010-03-12</span><span>难度：较难</span></div>
+
+    <hr class="rule">
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>用 Gram-Schmidt 过程把无关向量组改造成标准正交向量组。</li>
+      <li>写出 \(A=QR\) 分解：\(Q\) 列标准正交、\(R\) 上三角可逆。</li>
+      <li>把 \(A=QR\) 代入法方程，得到简化形式 \(R\hat{\mathbf{x}}=Q^T\mathbf{b}\)。</li>
+      <li>理解 \(Q^TQ=I\) 如何避免计算 \(A^TA\) 的条件数恶化。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="gram-schmidt">Gram-Schmidt 正交化</h2>
+    <p>给定无关向量 \(\mathbf{a}_1,\mathbf{a}_2,\dots,\mathbf{a}_n\)，构造标准正交向量 \(\mathbf{q}_1,\mathbf{q}_2,\dots,\mathbf{q}_n\)：</p>
+    <p><strong>第一步。</strong></p>
+    \[\mathbf{A}_1 = \mathbf{a}_1,\qquad \mathbf{q}_1 = \frac{\mathbf{A}_1}{\|\mathbf{A}_1\|}.\]
+    <p><strong>第二步。</strong>从 \(\mathbf{a}_2\) 中减去它在 \(\mathbf{q}_1\) 方向的分量，得到与 \(\mathbf{q}_1\) 正交的向量，再归一化：</p>
+    \[\mathbf{A}_2 = \mathbf{a}_2 - (\mathbf{q}_1^T\mathbf{a}_2)\,\mathbf{q}_1,\qquad \mathbf{q}_2 = \frac{\mathbf{A}_2}{\|\mathbf{A}_2\|}.\]
+    <p><strong>第 \(k\) 步。</strong>从 \(\mathbf{a}_k\) 中减去它在所有已有 \(\mathbf{q}_1,\dots,\mathbf{q}_{k-1}\) 方向的分量：</p>
+    \[\mathbf{A}_k = \mathbf{a}_k - \sum_{j=1}^{k-1} (\mathbf{q}_j^T\mathbf{a}_k)\,\mathbf{q}_j,\qquad
+      \mathbf{q}_k = \frac{\mathbf{A}_k}{\|\mathbf{A}_k\|}.\]
+
+    <div class="card idea">
+      <p><strong>每次减去投影。</strong>\((\mathbf{q}_j^T\mathbf{a}_k)\mathbf{q}_j\) 正是 \(\mathbf{a}_k\) 在 \(\mathbf{q}_j\) 方向上的投影。Gram-Schmidt 逐次剔除所有已有方向的分量，留下垂直分量。</p>
+    </div>
+
+    <div class="card warning">
+      <p><strong>数值稳定性。</strong>经典 Gram-Schmidt 在浮点运算中正交性会逐渐丧失。实际计算常用修正 Gram-Schmidt（MGS）或 Householder 变换。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="qr">A=QR 分解</h2>
+    <p>把 Gram-Schmidt 的公式改写为原向量的表达式：</p>
+    \[\begin{aligned}
+      \mathbf{a}_1 &= \|\mathbf{A}_1\|\,\mathbf{q}_1,\\
+      \mathbf{a}_2 &= (\mathbf{q}_1^T\mathbf{a}_2)\,\mathbf{q}_1 + \|\mathbf{A}_2\|\,\mathbf{q}_2,\\
+      \mathbf{a}_k &= \sum_{j=1}^{k-1}(\mathbf{q}_j^T\mathbf{a}_k)\,\mathbf{q}_j + \|\mathbf{A}_k\|\,\mathbf{q}_k.
+    \end{aligned}\]
+    <p>写成矩阵形式，这就是 <strong>\(A=QR\) 分解</strong>：</p>
+    \[A = \begin{bmatrix}\mathbf{a}_1&\mathbf{a}_2&\cdots&\mathbf{a}_n\end{bmatrix}
+       = \begin{bmatrix}\mathbf{q}_1&\mathbf{q}_2&\cdots&\mathbf{q}_n\end{bmatrix}
+         \begin{bmatrix}
+           \|\mathbf{A}_1\| & \mathbf{q}_1^T\mathbf{a}_2 & \cdots & \mathbf{q}_1^T\mathbf{a}_n \\
+           0 & \|\mathbf{A}_2\| & \cdots & \mathbf{q}_2^T\mathbf{a}_n \\
+           \vdots & & \ddots & \vdots \\
+           0 & 0 & \cdots & \|\mathbf{A}_n\|
+         \end{bmatrix}.\]
+    <p>其中 \(Q=[\mathbf{q}_1\ \cdots\ \mathbf{q}_n]\) 列标准正交（\(Q^TQ=I\)），\(R\) 是上三角矩阵且对角元为正（\(\|\mathbf{A}_k\|>0\)，由无关性保证）。</p>
+
+    <div class="card idea">
+      <p><strong>QR 是 Gram-Schmidt 的矩阵语言。</strong>Gram-Schmidt 是算法，\(A=QR\) 是代数结果。两者等价，但 \(A=QR\) 把正交化过程凝聚成一个因式分解。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="least-squares-qr">QR 与最小二乘</h2>
+    <p>把 \(A=QR\) 代入法方程 \(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\)：</p>
+    \[A^TA = R^TQ^TQR = R^T R \quad (\text{因为 } Q^TQ=I).\]
+    <p>法方程变为</p>
+    \[R^T R\,\hat{\mathbf{x}} = R^T Q^T \mathbf{b}.\]
+    <p>\(R^T\) 可逆，两边左乘 \((R^T)^{-1}\) 得到<strong>简化法方程</strong>：</p>
+    \[R\,\hat{\mathbf{x}} = Q^T\mathbf{b}.\]
+    <p>\(R\) 是上三角矩阵，用回代法（back substitution）即可求解，无需矩阵求逆。</p>
+
+    <div class="card idea">
+      <p><strong>QR 让最小二乘更稳。</strong>直接解 \(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\) 的条件数是 \(\kappa(A)^2\)，而 \(R\hat{\mathbf{x}}=Q^T\mathbf{b}\) 的条件数是 \(\kappa(R)=\kappa(A)\)。QR 分解是数值最小二乘的标准方法。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="example">算例</h2>
+    <p>设 \(A=\begin{bmatrix}1&0\\1&1\\1&0\end{bmatrix}\)，列向量 \(\mathbf{a}_1=\begin{bmatrix}1\\1\\1\end{bmatrix},\mathbf{a}_2=\begin{bmatrix}0\\1\\0\end{bmatrix}\)。</p>
+    <p><strong>Gram-Schmidt：</strong></p>
+    \[\mathbf{q}_1 = \frac{1}{\sqrt{3}}\begin{bmatrix}1\\1\\1\end{bmatrix},\qquad
+      \mathbf{A}_2 = \mathbf{a}_2 - (\mathbf{q}_1^T\mathbf{a}_2)\mathbf{q}_1
+                   = \begin{bmatrix}0\\1\\0\end{bmatrix} - \frac{1}{\sqrt{3}}\cdot\frac{1}{\sqrt{3}}\begin{bmatrix}1\\1\\1\end{bmatrix}
+                   = \frac{1}{3}\begin{bmatrix}-1\\2\\-1\end{bmatrix}.\]
+    \[\|\mathbf{A}_2\| = \frac{1}{3}\sqrt{6} = \frac{\sqrt{6}}{3},\qquad
+      \mathbf{q}_2 = \frac{1}{\sqrt{6}}\begin{bmatrix}-1\\2\\-1\end{bmatrix}.\]
+    <p><strong>\(R\) 矩阵：</strong></p>
+    \[R = \begin{bmatrix}
+      \|\mathbf{A}_1\| & \mathbf{q}_1^T\mathbf{a}_2 \\
+      0 & \|\mathbf{A}_2\|
+    \end{bmatrix}
+    = \begin{bmatrix}
+      \sqrt{3} & \dfrac{1}{\sqrt{3}} \\
+      0 & \dfrac{\sqrt{6}}{3}
+    \end{bmatrix}.\]
+    <p>验证 \(Q R = A\)：</p>
+    \[\mathbf{q}_1\cdot\sqrt{3} = \begin{bmatrix}1\\1\\1\end{bmatrix} = \mathbf{a}_1,\qquad
+      \mathbf{q}_1\cdot\frac{1}{\sqrt{3}} + \mathbf{q}_2\cdot\frac{\sqrt{6}}{3}
+      = \frac{1}{3}\begin{bmatrix}1\\1\\1\end{bmatrix} + \frac{1}{3}\begin{bmatrix}-1\\2\\-1\end{bmatrix}
+      = \begin{bmatrix}0\\1\\0\end{bmatrix} = \mathbf{a}_2.\]
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！Gram-Schmidt 每一步减去 a_k 在所有已有 q_j 方向上的投影，留下垂直分量。" data-incorrect="再想想。Gram-Schmidt 的核心是逐次剔除已有方向的分量。">
+      <p><strong>问题 1：</strong>Gram-Schmidt 第 \(k\) 步中，\(\mathbf{A}_k\) 的计算方式是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\mathbf{A}_k = \mathbf{a}_k - \sum_{j<k} \mathbf{q}_j\)</button>
+        <button data-choice="b" aria-pressed="false">\(\mathbf{A}_k = \mathbf{a}_k - \sum_{j<k} (\mathbf{q}_j^T\mathbf{a}_k)\,\mathbf{q}_j\)</button>
+        <button data-choice="c" aria-pressed="false">\(\mathbf{A}_k = \mathbf{a}_k - \sum_{j<k} \mathbf{a}_j\)</button>
+        <button data-choice="d" aria-pressed="false">\(\mathbf{A}_k = \mathbf{a}_k - \mathbf{q}_k\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！A=QR 中 Q 列标准正交，R 是上三角矩阵。" data-incorrect="再想想。QR 分解的 Q 有标准正交列，R 是上三角。">
+      <p><strong>问题 2：</strong>在 \(A=QR\) 分解中，\(Q\) 和 \(R\) 分别具有什么性质？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(Q\) 上三角，\(R\) 列标准正交</button>
+        <button data-choice="b" aria-pressed="false">\(Q\) 对角，\(R\) 正交</button>
+        <button data-choice="c" aria-pressed="false">\(Q\) 列标准正交，\(R\) 上三角</button>
+        <button data-choice="d" aria-pressed="false">\(Q\) 下三角，\(R\) 列标准正交</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！代入 A=QR 后法方程简化为 R x̂ = Q^T b，避免了计算 A^T A。" data-incorrect="再想想。利用 Q^T Q = I，A^T A = R^T R，化简后得到什么？">
+      <p><strong>问题 3：</strong>把 \(A=QR\) 代入法方程 \(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\)，化简后得到什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(R\hat{\mathbf{x}} = Q^T\mathbf{b}\)</button>
+        <button data-choice="b" aria-pressed="false">\(Q\hat{\mathbf{x}} = R^T\mathbf{b}\)</button>
+        <button data-choice="c" aria-pressed="false">\(R^T\hat{\mathbf{x}} = Q\mathbf{b}\)</button>
+        <button data-choice="d" aria-pressed="false">\(Q^T R\hat{\mathbf{x}} = \mathbf{b}\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d" data-correct="正确！QR 分解的条件数与 A 相同，避免了 A^T A 的条件数平方恶化。" data-incorrect="再想想。QR 分解避免了计算 A^T A，而 A^T A 的条件数是 A 条件数的平方。">
+      <p><strong>问题 4：</strong>用 QR 分解解最小二乘的主要数值优势是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">它不需要矩阵乘法</button>
+        <button data-choice="b" aria-pressed="false">它消除了所有误差</button>
+        <button data-choice="c" aria-pressed="false">它使 \(R\) 成为对角矩阵</button>
+        <button data-choice="d" aria-pressed="false">它避免了条件数恶化（\(\kappa(R)=\kappa(A)\) 而非 \(\kappa(A)^2\)）</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>Gram-Schmidt 正交化</h3>
+        <p>逐次减去在已有方向上的投影，得到标准正交基 \(\mathbf{q}_1,\dots,\mathbf{q}_n\)。</p>
+      </article>
+      <article>
+        <h3>A=QR 分解</h3>
+        <p>\(Q\) 列标准正交，\(R\) 上三角——Gram-Schmidt 的矩阵语言。</p>
+      </article>
+      <article>
+        <h3>简化法方程</h3>
+        <p>\(R\hat{\mathbf{x}}=Q^T\mathbf{b}\)，回代即可求解，条件数保持最优。</p>
+      </article>
+      <article>
+        <h3>数值最小二乘的标准工具</h3>
+        <p>QR 分解避免了 \(A^TA\) 的条件数平方，是实际应用的首选方法。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>G. Strang, <em>Introduction to Linear Algebra</em>, 第 4.4 节：Gram-Schmidt 与 QR。</li>
+      <li>MIT OCW 18.06 课程主页：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_17.pdf</code></li>
+      <li><code>lecture_summaries/lecture_2_2_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0015-least-squares-approximations.html">← 最小二乘逼近</a>
+      <a href="0017-properties-of-determinants.html">行列式的性质 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 16</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

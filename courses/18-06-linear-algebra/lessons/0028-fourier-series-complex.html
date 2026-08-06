@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fourier 级数、FFT 与复矩阵 — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 28 课</p>
+    <h1>Fourier 级数、FFT 与复矩阵</h1>
+    <p class="lede">信号是向量，频率是特征值。进入复数域后，Fourier 矩阵作为酉矩阵（unitary matrix）统一了级数展开与快速算法——这是线性代数在信号处理中的辉煌应用。</p>
+    <div class="meta"><span>授课：Prof. Gilbert Strang</span><span>日期：2010-04-16</span><span>难度：较难</span></div>
+
+    <hr class="rule">
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>定义复向量空间上的 Hermitian 内积与酉矩阵</li>
+      <li>写出 Fourier 矩阵并证明它是酉矩阵</li>
+      <li>理解 FFT 如何将 \(O(n^2)\) 的矩阵-向量乘法降到 \(O(n \log n)\)</li>
+      <li>将 Fourier 级数解释为复向量空间中的正交展开</li>
+      <li>认识线性代数与信号处理的深层联系</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="complex-vectors">复向量与 Hermitian 内积</h2>
+    <p>在复向量空间 \(\mathbb{C}^n\) 中，<strong>内积</strong>需要修改。对 \(\mathbf{x}, \mathbf{y} \in \mathbb{C}^n\)，定义 <strong>Hermitian 内积</strong>（Hermitian inner product）：</p>
+
+    \[\langle \mathbf{x}, \mathbf{y} \rangle = \mathbf{y}^* \mathbf{x} = \sum_{i=1}^{n} \overline{y_i}\, x_i\]
+
+    <p>其中 \(\mathbf{y}^* = \overline{\mathbf{y}}^T\) 是共轭转置（conjugate transpose）。注意顺序：内积对第一个变量是线性的，对第二个变量是共轭线性的：</p>
+
+    \[\langle \mathbf{x}, c \mathbf{y} \rangle = \overline{c}\, \langle \mathbf{x}, \mathbf{y} \rangle\]
+
+    <p>向量的<strong>长度</strong>（norm）为 \(\|\mathbf{x}\| = \sqrt{\mathbf{x}^* \mathbf{x}}\)。两个向量<strong>正交</strong>当且仅当 \(\mathbf{y}^* \mathbf{x} = 0\)。</p>
+
+    <div class="card warning">
+      <p><strong>注意：</strong>复内积不满足交换律。\(\langle \mathbf{x}, \mathbf{y} \rangle = \overline{\langle \mathbf{y}, \mathbf{x} \rangle}\)。顺序至关重要！</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="unitary">酉矩阵</h2>
+    <p>在复矩阵的类比中，正交矩阵被<strong>酉矩阵</strong>（unitary matrix）取代。矩阵 \(Q\) 是酉矩阵当且仅当：</p>
+
+    \[Q^* Q = I \quad \text{即} \quad Q^{-1} = Q^*\]
+
+    <p>酉矩阵的列构成 \(\mathbb{C}^n\) 的一组<strong>标准正交基</strong>（orthonormal basis）。它保持内积和长度不变：\(\|Q \mathbf{x}\| = \|\mathbf{x}\|\)。</p>
+
+    <p>实酉矩阵就是正交矩阵——酉矩阵是正交矩阵在复数域的推广。</p>
+
+    <hr class="rule">
+    <h2 id="fourier-matrix">Fourier 矩阵</h2>
+    <p>\(n \times n\) <strong>Fourier 矩阵</strong>（Fourier matrix）\(F_n\) 定义为：</p>
+
+    \[(F_n)_{jk} = \omega^{jk}, \quad \omega = e^{-2\pi i / n}, \quad j,k = 0,1,\dots,n-1\]
+
+    <p>例如 \(n=4\) 时，\(\omega = e^{-2\pi i/4} = -i\)：</p>
+
+    \[F_4 = \begin{pmatrix}
+    1 & 1 & 1 & 1 \\
+    1 & -i & (-i)^2 & (-i)^3 \\
+    1 & (-i)^2 & (-i)^4 & (-i)^6 \\
+    1 & (-i)^3 & (-i)^6 & (-i)^9
+    \end{pmatrix}
+    =
+    \begin{pmatrix}
+    1 & 1 & 1 & 1 \\
+    1 & -i & -1 & i \\
+    1 & -1 & 1 & -1 \\
+    1 & i & -1 & -i
+    \end{pmatrix}\]
+
+    <p>Fourier 矩阵是酉矩阵（在适当归一化之后）。具体地：</p>
+
+    \[F_n^* F_n = n I \quad \Longrightarrow \quad \frac{1}{\sqrt{n}} F_n \text{ 是酉矩阵}\]
+
+    <div class="card idea">
+      <p><strong>核心联系：</strong>离散 Fourier 变换（DFT）就是乘以 Fourier 矩阵。信号 \(\mathbf{x}\) 的 Fourier 系数 \(\hat{\mathbf{x}} = F_n \mathbf{x}\) ——这正是信号在复指数正交基下的坐标。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="fft">快速 Fourier 变换（FFT）</h2>
+    <p>直接计算 \(\hat{\mathbf{x}} = F_n \mathbf{x}\) 需要 \(O(n^2)\) 次运算。当 \(n\) 是 2 的幂时，<strong>快速 Fourier 变换</strong>（FFT）利用 \(F_n\) 的对称性将复杂度降到 \(O(n \log n)\)。</p>
+
+    <p>FFT 的关键是<strong>分治</strong>：把 \(F_n\) 分解为两个 \(n/2\) 规模的 Fourier 矩阵，加上一个对角"旋转因子"矩阵。递归下去，总运算量为 \(O(n \log_2 n)\)。</p>
+
+    <p>FFT 是二十世纪最重要的算法之一。没有它，数字通信、医学成像、音频压缩都不可能实现。</p>
+
+    <hr class="rule">
+    <h2 id="fourier-series">Fourier 级数作为正交展开</h2>
+    <p>连续版本的 Fourier 级数是同一思想的无穷维推广。周期为 \(2\pi\) 的函数 \(f(x)\) 可以展开为：</p>
+
+    \[f(x) = \sum_{k=-\infty}^{\infty} c_k e^{i k x}\]
+
+    <p>复指数函数 \(\{e^{ikx}\}_{k \in \mathbb{Z}}\) 在 \(L^2([-\pi,\pi])\) 中构成一组正交基：</p>
+
+    \[\langle e^{imx}, e^{inx} \rangle = \int_{-\pi}^{\pi} e^{-imx} e^{inx}\, dx = 2\pi\, \delta_{mn}\]
+
+    <p>系数由内积给出：\(c_k = \frac{1}{2\pi} \langle f, e^{ikx} \rangle\)。这正是有限维正交展开的无穷维版本。</p>
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！酉矩阵满足 \(Q^* Q = I\)，即逆等于共轭转置。" data-incorrect="再想想。酉矩阵的逆是什么？">
+      <p><strong>问题 1：</strong>复矩阵 \(Q\) 是酉矩阵的条件是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(Q^T Q = I\)</button>
+        <button data-choice="b" aria-pressed="false">\(Q^* Q = I\)</button>
+        <button data-choice="c" aria-pressed="false">\(Q^2 = I\)</button>
+        <button data-choice="d" aria-pressed="false">\(Q = Q^*\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！FFT 将 \(O(n^2)\) 降到 \(O(n \log n)\)。" data-incorrect="再想想。FFT 的核心改进是什么？">
+      <p><strong>问题 2：</strong>FFT 算法的核心改进是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">将矩阵乘法从 \(O(n^3)\) 降到 \(O(n^2)\)</button>
+        <button data-choice="b" aria-pressed="false">将求逆从 \(O(n^3)\) 降到 \(O(n^2)\)</button>
+        <button data-choice="c" aria-pressed="false">将离散 Fourier 变换从 \(O(n^2)\) 降到 \(O(n \log n)\)</button>
+        <button data-choice="d" aria-pressed="false">将特征值计算从 \(O(n^3)\) 降到 \(O(n^2)\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！\(\frac{1}{\sqrt{n}}F_n\) 是酉矩阵。" data-incorrect="再想想。Fourier 矩阵的归一化因子是什么？">
+      <p><strong>问题 3：</strong>关于 Fourier 矩阵 \(F_n\)，下列哪项正确？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\frac{1}{\sqrt{n}} F_n\) 是酉矩阵</button>
+        <button data-choice="b" aria-pressed="false">\(F_n\) 是实矩阵</button>
+        <button data-choice="c" aria-pressed="false">\(F_n\) 是对称矩阵</button>
+        <button data-choice="d" aria-pressed="false">\(F_n\) 是奇异矩阵</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d" data-correct="正确！DFT 是在复指数正交基下的坐标变换。" data-incorrect="再想想。DFT 的几何/代数含义是什么？">
+      <p><strong>问题 4：</strong>离散 Fourier 变换（DFT）的几何含义是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">把信号投影到多项式基上</button>
+        <button data-choice="b" aria-pressed="false">对信号做旋转</button>
+        <button data-choice="c" aria-pressed="false">对信号做压缩</button>
+        <button data-choice="d" aria-pressed="false">把信号在复指数正交基下展开</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>复内积 = 共轭转置</h3>
+        <p>Hermitian 内积 \(\mathbf{y}^* \mathbf{x}\) 是复向量空间的标准内积，注意共轭和顺序。</p>
+      </article>
+      <article>
+        <h3>Fourier 矩阵是酉矩阵</h3>
+        <p>归一化的 Fourier 矩阵 \(\frac{1}{\sqrt{n}}F_n\) 是酉矩阵，其列构成 \(\mathbb{C}^n\) 的标准正交基。</p>
+      </article>
+      <article>
+        <h3>FFT = 分治的矩阵乘法</h3>
+        <p>利用对称性，FFT 把 DFT 从 \(O(n^2)\) 降到 \(O(n \log n)\)，是算法设计的经典范例。</p>
+      </article>
+      <article>
+        <h3>Fourier 级数 = 无穷维正交展开</h3>
+        <p>连续 Fourier 级数是函数空间中的正交基展开，与有限维线性代数完全平行。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>G. Strang, <em>Introduction to Linear Algebra</em>, 第 10 章（复矩阵与 Fourier 变换）</li>
+      <li>MIT OCW 18.06 第 28 课视频与讲义：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>G. Strang, <em>Computational Science and Engineering</em>, 第 2 章（FFT 的推导与应用）</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_26.pdf</code></li>
+      <li><code>lecture_slides/lecture_32.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0027-singular-value-decomposition.html">← 奇异值分解</a>
+      <a href="0029-linear-transformations.html">线性变换 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 28</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

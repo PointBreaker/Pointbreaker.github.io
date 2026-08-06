@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>投影与子空间 — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 14 课</p>
+    <h1>投影与子空间</h1>
+    <p class="lede">投影（projection）是把向量"垂直地影子"到一个子空间上。投影矩阵 \(P\) 满足 \(P^2=P=P^T\)，它把 \(\mathbf{b}\) 映到列空间中离 \(\mathbf{b}\) 最近的点 \(A\hat{\mathbf{x}}\)——这个"最近"就是下一课最小二乘的核心。</p>
+    <div class="meta"><span>授课：Prof. Gilbert Strang</span><span>日期：2010-03-08</span><span>难度：中等→较难</span></div>
+
+    <hr class="rule">
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>推导向量到直线的投影公式 \(\mathbf{p} = \frac{\mathbf{a}^T\mathbf{b}}{\mathbf{a}^T\mathbf{a}}\,\mathbf{a}\) 及投影矩阵 \(P=\frac{\mathbf{a}\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}}\)。</li>
+      <li>验证投影矩阵的性质 \(P^2=P\) 且 \(P^T=P\)。</li>
+      <li>推导投影到子空间的法方程（normal equations）\(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\)。</li>
+      <li>写出子空间的投影矩阵 \(P=A(A^TA)^{-1}A^T\)，并理解 \(\mathbf{b}-\mathbf{p}\) 与子空间正交。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="line-projection">向量到直线的投影</h2>
+    <p>设 \(\mathbf{a}\in\mathbb{R}^m\) 是一条过原点直线的方向向量，\(\mathbf{b}\in\mathbb{R}^m\) 是要投影的向量。投影 \(\mathbf{p}\) 是直线上离 \(\mathbf{b}\) 最近的点，等价于<strong>误差 \(\mathbf{e}=\mathbf{b}-\mathbf{p}\) 与 \(\mathbf{a}\) 正交</strong>：</p>
+    \[\mathbf{p} = \hat{x}\,\mathbf{a}, \qquad \mathbf{a}^T(\mathbf{b}-\hat{x}\mathbf{a}) = 0.\]
+    <p>解出标量系数 \(\hat{x}\)：</p>
+    \[\hat{x} = \frac{\mathbf{a}^T\mathbf{b}}{\mathbf{a}^T\mathbf{a}}.\]
+    <p>于是投影向量为</p>
+    \[\mathbf{p} = \frac{\mathbf{a}^T\mathbf{b}}{\mathbf{a}^T\mathbf{a}}\,\mathbf{a}
+             = \frac{\mathbf{a}\,\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}}\,\mathbf{b}.\]
+    <p><strong>投影矩阵</strong>（projection matrix）为</p>
+    \[P = \frac{\mathbf{a}\,\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}} \quad (m\times m).\]
+    <p>它把任意 \(\mathbf{b}\) 映到直线上的投影：\(\mathbf{p}=P\mathbf{b}\)。</p>
+
+    <div class="card idea">
+      <p><strong>投影矩阵的两个关键性质。</strong>\(P^2=P\)（投影两次等于投影一次）且 \(P^T=P\)（对称）。对称性反映正交投影：误差垂直于子空间。</p>
+    </div>
+
+    <p>验证 \(P^2=P\)：</p>
+    \[P^2 = \frac{\mathbf{a}\,\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}}\cdot\frac{\mathbf{a}\,\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}}
+         = \frac{\mathbf{a}\,(\mathbf{a}^T\mathbf{a})\,\mathbf{a}^T}{(\mathbf{a}^T\mathbf{a})^2}
+         = \frac{\mathbf{a}\,\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}} = P.\]
+    <p>这里用到 \(\mathbf{a}^T\mathbf{a}\) 是一个标量，可以提到前面。</p>
+
+    <hr class="rule">
+    <h2 id="subspace-projection">投影到子空间</h2>
+    <p>设 \(A\) 是 \(m\times n\) 矩阵，列满秩（\(n\) 列线性无关）。把 \(\mathbf{b}\in\mathbb{R}^m\) 投影到列空间 \(C(A)\) 上，投影为 \(\mathbf{p}=A\hat{\mathbf{x}}\)，误差 \(\mathbf{e}=\mathbf{b}-A\hat{\mathbf{x}}\) 必须与 \(C(A)\) 正交——即与 \(A\) 的每一列正交：</p>
+    \[A^T(\mathbf{b}-A\hat{\mathbf{x}}) = \mathbf{0}.\]
+    <p>整理得到<strong>法方程</strong>（normal equations）：</p>
+    \[A^T A\,\hat{\mathbf{x}} = A^T \mathbf{b}.\]
+    <p>因为 \(A\) 列满秩，\(A^TA\) 是可逆的 \(n\times n\) 对称正定矩阵，于是</p>
+    \[\hat{\mathbf{x}} = (A^T A)^{-1}A^T\mathbf{b}, \qquad
+      \mathbf{p} = A\hat{\mathbf{x}} = A(A^T A)^{-1}A^T\mathbf{b}.\]
+    <p><strong>子空间的投影矩阵</strong>为</p>
+    <div class="card idea">
+      <p>\[P = A(A^T A)^{-1}A^T \quad (m\times m).\]</p>
+      <p>它把 \(\mathbf{b}\) 映到列空间 \(C(A)\) 中离 \(\mathbf{b}\) 最近的点。误差 \(\mathbf{b}-\mathbf{p}=(I-P)\mathbf{b}\) 属于左零空间 \(N(A^T)\)。</p>
+    </div>
+
+    <p>验证 \(P\) 的性质：</p>
+    \[P^2 = A(A^TA)^{-1}A^T\cdot A(A^TA)^{-1}A^T = A(A^TA)^{-1}A^T = P,\]
+    \[P^T = \left(A(A^TA)^{-1}A^T\right)^T = A(A^TA)^{-1}A^T = P.\]
+    <p>注意 \(P\) 的秩等于 \(A\) 的秩 \(n\)，即列空间的维数。</p>
+
+    <div class="card warning">
+      <p><strong>列满秩假设很重要。</strong>如果 \(A\) 的列线性相关，\(A^TA\) 不可逆，法方程有无穷多解。此时需要用 \(A^+=(A^TA)^{-1}A^T\) 的推广——伪逆（pseudo-inverse）。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="geometry">投影的几何</h2>
+    <p>投影 \(\mathbf{p}=P\mathbf{b}\) 是列空间中唯一使 \(\|\mathbf{b}-\mathbf{p}\|\) 最小的向量。这是因为误差 \(\mathbf{e}=\mathbf{b}-\mathbf{p}\) 与列空间正交：</p>
+    \[\|\mathbf{b}-\mathbf{p}\|^2 = \|\mathbf{e}\|^2 \le \|\mathbf{e} + \mathbf{q}\|^2 \quad \forall\,\mathbf{q}\in C(A),\]
+    <p>由勾股定理，\(\|\mathbf{e}+\mathbf{q}\|^2 = \|\mathbf{e}\|^2+\|\mathbf{q}\|^2 \ge \|\mathbf{e}\|^2\)。</p>
+
+    <p>当 \(\mathbf{b}\) 本身在列空间中时，\(\mathbf{p}=\mathbf{b}\)，\(P\mathbf{b}=\mathbf{b}\)；当 \(\mathbf{b}\) 与列空间正交（\(\mathbf{b}\in N(A^T)\)）时，\(\mathbf{p}=\mathbf{0}\)，\(P\mathbf{b}=\mathbf{0}\)。所以 \(P\) 的特征值是 1（对应列空间中的向量）和 0（对应左零空间中的向量）。</p>
+
+    <hr class="rule">
+    <h2 id="example">算例</h2>
+    <p>设 \(A=\begin{bmatrix}1\\1\\1\end{bmatrix}\)，\(\mathbf{b}=\begin{bmatrix}1\\2\\3\end{bmatrix}\)。把 \(\mathbf{b}\) 投影到 \(A\) 的列空间（过原点、方向 \(\mathbf{a}=[1,1,1]^T\) 的直线）：</p>
+    \[A^TA = \begin{bmatrix}1&1&1\end{bmatrix}\begin{bmatrix}1\\1\\1\end{bmatrix} = 3,\qquad
+      A^T\mathbf{b} = \begin{bmatrix}1&1&1\end{bmatrix}\begin{bmatrix}1\\2\\3\end{bmatrix} = 6.\]
+    <p>法方程 \(3\hat{x}=6\)，解得 \(\hat{x}=2\)。投影为</p>
+    \[\mathbf{p} = A\hat{\mathbf{x}} = \begin{bmatrix}2\\2\\2\end{bmatrix},\qquad
+      \mathbf{e} = \mathbf{b}-\mathbf{p} = \begin{bmatrix}-1\\0\\1\end{bmatrix}.\]
+    <p>验证正交：\(\mathbf{a}^T\mathbf{e}=(-1)+0+1=0\)。投影矩阵</p>
+    \[P = \frac{1}{3}\begin{bmatrix}1\\1\\1\end{bmatrix}\begin{bmatrix}1&1&1\end{bmatrix}
+        = \frac{1}{3}\begin{bmatrix}1&1&1\\1&1&1\\1&1&1\end{bmatrix}.\]
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！投影到由 a 张成的直线，矩阵是 P = a a^T / a^T a。" data-incorrect="再想想。投影到直线时，投影矩阵由方向向量 a 决定。">
+      <p><strong>问题 1：</strong>向量到由 \(\mathbf{a}\) 张成的直线上的投影矩阵是哪个？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\displaystyle\frac{\mathbf{a}^T\mathbf{a}}{\mathbf{a}\mathbf{a}^T}\)</button>
+        <button data-choice="b" aria-pressed="false">\(\displaystyle\frac{\mathbf{a}\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}}\)</button>
+        <button data-choice="c" aria-pressed="false">\(\mathbf{a}^T\mathbf{a}\,\mathbf{a}\mathbf{a}^T\)</button>
+        <button data-choice="d" aria-pressed="false">\(\displaystyle\frac{\mathbf{a}^T\mathbf{b}}{\mathbf{a}^T\mathbf{a}}\,I\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！投影矩阵必须满足 P^2 = P（幂等）和 P^T = P（对称）。" data-incorrect="再想想。投影矩阵的两个基本性质是幂等性和对称性。">
+      <p><strong>问题 2：</strong>投影矩阵 \(P\) 必须满足哪两个性质？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(P^2=I\) 且 \(P^T=-P\)</button>
+        <button data-choice="b" aria-pressed="false">\(P^2=0\) 且 \(P^T=P\)</button>
+        <button data-choice="c" aria-pressed="false">\(P^2=P\) 且 \(P^T=P\)</button>
+        <button data-choice="d" aria-pressed="false">\(P^2=P\) 且 \(P^T=-P\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！法方程是 A^T A x̂ = A^T b，由误差与列空间正交推导而来。" data-incorrect="再想想。法方程来自误差向量与 A 的每一列正交的条件。">
+      <p><strong>问题 3：</strong>把 \(\mathbf{b}\) 投影到 \(A\) 的列空间时，法方程是哪个？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A^TA\hat{\mathbf{x}} = A^T\mathbf{b}\)</button>
+        <button data-choice="b" aria-pressed="false">\(AA^T\hat{\mathbf{x}} = A\mathbf{b}\)</button>
+        <button data-choice="c" aria-pressed="false">\(A\hat{\mathbf{x}} = \mathbf{b}\)</button>
+        <button data-choice="d" aria-pressed="false">\(A^T\hat{\mathbf{x}} = \mathbf{b}\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d" data-correct="正确！误差 b − p 属于左零空间 N(A^T)，与列空间正交。" data-incorrect="再想想。误差向量必须与列空间正交，而列空间的正交补是左零空间。">
+      <p><strong>问题 4：</strong>投影误差 \(\mathbf{b}-P\mathbf{b}\) 属于哪个子空间？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">列空间 \(C(A)\)</button>
+        <button data-choice="b" aria-pressed="false">行空间 \(C(A^T)\)</button>
+        <button data-choice="c" aria-pressed="false">零空间 \(N(A)\)</button>
+        <button data-choice="d" aria-pressed="false">左零空间 \(N(A^T)\)</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>直线投影</h3>
+        <p>\(\mathbf{p}=\frac{\mathbf{a}^T\mathbf{b}}{\mathbf{a}^T\mathbf{a}}\,\mathbf{a}\)，投影矩阵 \(P=\frac{\mathbf{a}\mathbf{a}^T}{\mathbf{a}^T\mathbf{a}}\)。</p>
+      </article>
+      <article>
+        <h3>子空间投影</h3>
+        <p>法方程 \(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\)，投影矩阵 \(P=A(A^TA)^{-1}A^T\)。</p>
+      </article>
+      <article>
+        <h3>幂等 + 对称</h3>
+        <p>\(P^2=P=P^T\) 是投影矩阵的标志；对称性对应正交投影。</p>
+      </article>
+      <article>
+        <h3>误差正交于子空间</h3>
+        <p>\(\mathbf{b}-\mathbf{p}\in N(A^T)\)，投影是列空间中离 \(\mathbf{b}\) 最近的点。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>G. Strang, <em>Introduction to Linear Algebra</em>, 第 4.2 节：投影矩阵。</li>
+      <li>MIT OCW 18.06 课程主页：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_15.pdf</code></li>
+      <li><code>lecture_summaries/lecture_1_14_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0013-orthogonality.html">← 正交性</a>
+      <a href="0015-least-squares-approximations.html">最小二乘逼近 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 14</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

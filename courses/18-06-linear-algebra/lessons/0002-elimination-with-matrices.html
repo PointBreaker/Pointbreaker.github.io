@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>矩阵消元法 — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 2 课</p>
+    <h1>矩阵消元法</h1>
+    <p class="lede">高斯消元 (Gaussian elimination) 是求解线性方程组的系统代数方法。通过一系列行变换把矩阵化为上三角形式，求解便迎刃而解。消元的过程同时揭示了矩阵的秩、可逆性和 LU 分解结构，是整门课的算法基石。</p>
+    <div class="meta">
+      <span>授课：Prof. Gilbert Strang</span>
+      <span>日期：2010-02-05</span>
+      <span>难度：入门→中等</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>用高斯消元法把矩阵化为上三角矩阵</li>
+      <li>识别主元 (pivot) 和乘子 (multiplier)，理解消元的代数本质</li>
+      <li>解释消元何时失败（奇异矩阵），以及行交换的作用</li>
+      <li>理解行变换等价于左乘初等矩阵</li>
+      <li>了解消元法的运算量约为 \(\frac23 n^3\)</li>
+    </ul>
+
+    <h2 id="elimination">高斯消元三步走</h2>
+    <p>我们从上一课的 \(3\times 3\) 例子开始：</p>
+    \[
+    \begin{bmatrix} 2 & 1 & -1 \\ -3 & -1 & 2 \\ -2 & 1 & 2 \end{bmatrix}
+    \begin{bmatrix} x \\ y \\ z \end{bmatrix}
+    =
+    \begin{bmatrix} 8 \\ -11 \\ -3 \end{bmatrix}.
+    \]
+
+    <p><strong>第一步：</strong>以 \(a_{11} = 2\) 为主元，消去它下方的两个元素。</p>
+    <ul>
+      <li>第 2 行加上 \(\frac32\) 倍的第 1 行：\(-3 + \frac32 \cdot 2 = 0\)，\(-1 + \frac32 \cdot 1 = \frac12\)，\(2 + \frac32 \cdot (-1) = \frac12\)，右端 \(-11 + \frac32 \cdot 8 = 1\)。</li>
+      <li>第 3 行加上 \(1\) 倍的第 1 行：\(-2 + 2 = 0\)，\(1 + 1 = 2\)，\(2 + (-1) = 1\)，右端 \(-3 + 8 = 5\)。</li>
+    </ul>
+
+    \[
+    \begin{bmatrix} 2 & 1 & -1 \\ 0 & \frac12 & \frac12 \\ 0 & 2 & 1 \end{bmatrix}
+    \begin{bmatrix} x \\ y \\ z \end{bmatrix}
+    =
+    \begin{bmatrix} 8 \\ 1 \\ 5 \end{bmatrix}.
+    \]
+
+    <p><strong>第二步：</strong>以 \(a_{22} = \frac12\) 为第二个主元，消去它下方的元素。第 3 行减去 \(4\) 倍的第 2 行：\(2 - 4 \cdot \frac12 = 0\)，\(1 - 4 \cdot \frac12 = -1\)，右端 \(5 - 4 \cdot 1 = 1\)。</p>
+
+    \[
+    \begin{bmatrix} 2 & 1 & -1 \\ 0 & \frac12 & \frac12 \\ 0 & 0 & -1 \end{bmatrix}
+    \begin{bmatrix} x \\ y \\ z \end{bmatrix}
+    =
+    \begin{bmatrix} 8 \\ 1 \\ 1 \end{bmatrix}.
+    \]
+
+    <p><strong>第三步：回代 (back substitution)</strong>从下往上求解：</p>
+    <ul>
+      <li>第 3 行：\(-z = 1 \Rightarrow z = -1\)。</li>
+      <li>第 2 行：\(\frac12 y + \frac12(-1) = 1 \Rightarrow \frac12 y = \frac32 \Rightarrow y = 3\)。</li>
+      <li>第 1 行：\(2x + 3 - (-1) = 8 \Rightarrow 2x = 4 \Rightarrow x = 2\)。</li>
+    </ul>
+    <p>得到解 \(\mathbf{x} = (2, 3, -1)^T\)，与第 1 课列视角的答案一致。</p>
+
+    <h2 id="pivots">主元与乘子</h2>
+    <p>消元过程中有两个主角：</p>
+    <ul>
+      <li><strong>主元 (pivot)：</strong>每步用来消去下方元素的对角线元素。上例中三个主元是 \(2, \frac12, -1\)。</li>
+      <li><strong>乘子 (multiplier)：</strong>消元时使用的系数 \(l_{ij} = \frac{a_{ij}}{a_{jj}}\)。上例中 \(l_{21} = \frac{-3}{2} = -\frac32\)，\(l_{31} = \frac{-2}{2} = -1\)，\(l_{32} = \frac{2}{1/2} = 4\)。</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>主元的意义。</strong> 主元非零意味着该列与之前的列线性无关。如果主元为零且无法通过行交换补救，矩阵就是奇异的 (singular)——列向量线性相关，列空间退化。</p>
+    </div>
+
+    <h2 id="failure">消元何时失败</h2>
+    <p>考虑矩阵
+    \(A = \begin{bmatrix} 1 & 2 & 3 \\ 2 & 4 & 5 \\ 3 & 5 & 8 \end{bmatrix}\)。
+    第一步以 \(a_{11}=1\) 为主元，第 2 行减去 \(2\) 倍第 1 行，第 3 行减去 \(3\) 倍第 1 行，得到：</p>
+    \[
+    \begin{bmatrix} 1 & 2 & 3 \\ 0 & 0 & -1 \\ 0 & -1 & -1 \end{bmatrix}.
+    \]
+    <p>第二个主元位置 \(a_{22} = 0\)！但第 3 行第 2 列是 \(-1\)，非零。<strong>行交换</strong> (row swap) 可以救命：交换第 2、3 行后得到非零主元 \(-1\)，消元继续。</p>
+
+    <div class="card warning">
+      <p><strong>行交换不可省。</strong> 有些矩阵在某个主元位置为零，且该列下方所有元素都为零。此时无论怎么行交换都无法得到非零主元——矩阵奇异，消元彻底失败。第 4 课的 LU 分解会系统地处理行交换。</p>
+    </div>
+
+    <h2 id="elementary">初等矩阵：行变换的代数语言</h2>
+    <p>每个行变换都可以表示为左乘一个<strong>初等矩阵</strong> (elementary matrix)。例如，把第 2 行减去 \(\frac32\) 倍第 1 行：</p>
+    \[
+    E_{21} = \begin{bmatrix} 1 & 0 & 0 \\ -\frac32 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix},
+    \quad
+    E_{21} A =
+    \begin{bmatrix} 2 & 1 & -1 \\ 0 & \frac12 & \frac12 \\ -2 & 1 & 2 \end{bmatrix}.
+    \]
+    <p>三个消元矩阵依次作用：\(E_{32} E_{31} E_{21} A = U\)。把这些矩阵的逆相乘，就得到 \(A = LU\)——我们将在第 4 课展开。</p>
+
+    <h2 id="cost">运算量</h2>
+    <p>对 \(n\times n\) 矩阵，消元的运算量约为 \(\frac23 n^3\) 次浮点运算（加法和乘法合计）。回代的运算量约为 \(n^2\)，相比消元可忽略。当 \(n\) 很大时，\(\frac23 n^3\) 主导一切。</p>
+
+    <div class="card idea">
+      <p><strong>消元是线性代数的"心脏"。</strong> 从求解方程组到计算行列式、求逆矩阵、LU 分解——几乎所有数值线性代数的核心算法都以消元为基础。</p>
+    </div>
+
+    <figure class="course-interactive"
+            data-interactive-src="../interactives/elimination-3x3-stepper.json"
+            aria-busy="true">
+      <img class="course-interactive-fallback"
+           src="../figures/elimination-3x3-stepper-fallback.svg"
+           alt="3x3 高斯消元逐步演示：主元、乘子与行变换如何得到上三角 U">
+    </figure>
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b"
+         data-correct="正确！主元是对角线上用来消去下方元素的关键元素，主元为零是消元失败的直接信号。"
+         data-incorrect="再想想。主元在消元过程中扮演什么角色？">
+      <p><strong>问题 1：</strong> 高斯消元的"主元"是指：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">矩阵的左上角元素</button>
+        <button data-choice="b" aria-pressed="false">每步消元时对角线上用来消去下方元素的非零元素</button>
+        <button data-choice="c" aria-pressed="false">矩阵行列式的值</button>
+        <button data-choice="d" aria-pressed="false">方程组的右端向量 \(\mathbf{b}\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c"
+         data-correct="正确！行交换对应置换矩阵，可以解决主元为零但下方有非零元素的情形。"
+         data-incorrect="再想想。主元位置为零时，什么操作可能挽救消元？">
+      <p><strong>问题 2：</strong> 消元过程中发现主元位置 \(a_{kk} = 0\)，但下方某行在该列非零，应该：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">停止，宣布矩阵奇异</button>
+        <button data-choice="b" aria-pressed="false">把整个第 \(k\) 列置零</button>
+        <button data-choice="c" aria-pressed="false">进行行交换，把非零元素换到主元位置</button>
+        <button data-choice="d" aria-pressed="false">跳过该列，直接进入下一列</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a"
+         data-correct="正确！消元的运算量约为 \(\frac23 n^3\)，回代约为 \(n^2\)，前者主导。"
+         data-incorrect="再想想。消元是三重循环的操作，回代是双重循环。">
+      <p><strong>问题 3：</strong> 对 \(n\times n\) 方程组，高斯消元的运算量约为：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\frac23 n^3\)</button>
+        <button data-choice="b" aria-pressed="false">\(n^2\)</button>
+        <button data-choice="c" aria-pressed="false">\(n\)</button>
+        <button data-choice="d" aria-pressed="false">\(n^4\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确！初等矩阵左乘 \(A\) 执行行变换，右乘则执行列变换。"
+         data-incorrect="再想想。矩阵左乘和右乘分别影响行还是列？">
+      <p><strong>问题 4：</strong> 初等矩阵左乘矩阵 \(A\) 的效果是：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">对 \(A\) 做列变换</button>
+        <button data-choice="b" aria-pressed="false">对 \(A\) 做转置</button>
+        <button data-choice="c" aria-pressed="false">把 \(A\) 化为对角矩阵</button>
+        <button data-choice="d" aria-pressed="false">对 \(A\) 做行变换</button>
+      </div>
+    </div>
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>消元是系统化的代入</h3>
+        <p>高斯消元通过行变换把方程组化为上三角形式，然后回代求解。它是手工求解和计算机求解的共同基础。</p>
+      </article>
+      <article>
+        <h3>主元决定命运</h3>
+        <p>主元的个数和位置决定了矩阵的秩和可逆性。主元为零且无法补救时，矩阵奇异，消元失败。</p>
+      </article>
+      <article>
+        <h3>行变换 = 左乘初等矩阵</h3>
+        <p>每个行变换对应一个初等矩阵，整个消元过程对应一系列初等矩阵的乘积，这为 LU 分解埋下伏笔。</p>
+      </article>
+      <article>
+        <h3>运算量 \(\frac23 n^3\)</h3>
+        <p>消元的计算成本随 \(n\) 三次增长，这是数值线性代数中所有后续复杂度分析的基准。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Gilbert Strang, <em>Introduction to Linear Algebra</em>, 第 5 版, §1.2 "Elimination" 与 §2.2 "The Elimination Matrix"。</li>
+      <li>MIT OCW 18.06 官方页面：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>Trefethen &amp; Bau, <em>Numerical Linear Algebra</em>, Lecture 20 "LU Factorization"，从数值角度讨论选主元 (pivoting)。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_02.pdf</code></li>
+      <li><code>lecture_summaries/lecture_1_2_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0001-geometry-of-linear-equations.html">← 方程组的几何图像</a>
+      <a href="0003-matrix-operations-and-inverses.html">矩阵运算与逆矩阵 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 2</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

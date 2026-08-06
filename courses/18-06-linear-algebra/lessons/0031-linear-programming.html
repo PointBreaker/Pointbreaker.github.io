@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>线性规划 — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 31 课</p>
+    <h1>线性规划</h1>
+    <p class="lede">在线性约束下求线性目标的最优值——这就是线性规划（linear programming）。可行域是凸多面体，最优解在顶点达到。对偶理论与 Farkas 引理揭示了约束与目标之间的深层对称。</p>
+    <div class="meta"><span>授课：Prof. Gilbert Strang</span><span>日期：2010-04-23</span><span>难度：中等</span></div>
+
+    <hr class="rule">
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>写出线性规划的标准形式（目标函数 + 不等式约束）</li>
+      <li>从几何角度理解可行域为凸多面体</li>
+      <li>解释为什么最优解在顶点达到</li>
+      <li>陈述 Farkas 引理并理解其对偶含义</li>
+      <li>认识线性规划与线性代数的联系</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="lp-form">线性规划的标准形式</h2>
+    <p>线性规划问题由三部分组成：</p>
+
+    <ul>
+      <li><strong>决策变量</strong>：\(\mathbf{x} = (x_1, \dots, x_n)^T\)，通常要求 \(\mathbf{x} \ge \mathbf{0}\)</li>
+      <li><strong>目标函数</strong>：最小化 \(\mathbf{c}^T \mathbf{x}\)（或最大化）</li>
+      <li><strong>约束条件</strong>：\(A \mathbf{x} \le \mathbf{b}\)</li>
+    </ul>
+
+    <p>完整写出来：</p>
+
+    \[\begin{aligned}
+    \min_{\mathbf{x}} \quad & \mathbf{c}^T \mathbf{x} \\
+    \text{s.t.} \quad & A \mathbf{x} \le \mathbf{b} \\
+    & \mathbf{x} \ge \mathbf{0}
+    \end{aligned}\]
+
+    <p>其中 \(A\) 是 \(m \times n\) 矩阵，\(\mathbf{b} \in \mathbb{R}^m\)，\(\mathbf{c} \in \mathbb{R}^n\)。</p>
+
+    <hr class="rule">
+    <h2 id="feasible-region">可行域 = 凸多面体</h2>
+    <p>满足所有约束的 \(\mathbf{x}\) 构成<strong>可行域</strong>（feasible region）。每个不等式约束定义一个半空间，多个半空间的交集是一个<strong>凸多面体</strong>（convex polyhedron）。</p>
+
+    <p>凸性意味着：如果 \(\mathbf{x}\) 和 \(\mathbf{y}\) 都可行，则它们的任意凸组合 \(t\mathbf{x} + (1-t)\mathbf{y}\)（\(0 \le t \le 1\)）也可行。</p>
+
+    <div class="card idea">
+      <p><strong>关键定理：</strong>线性规划的最优解（如果存在）一定在多面体的某个<strong>顶点</strong>（vertex）处达到。这是单纯形法（simplex method）的理论基础——只需在顶点之间搜索。</p>
+    </div>
+
+    <p><strong>顶点</strong>的代数描述：顶点是 \(n\) 个约束取等号（active constraints）的交点，且该点满足其余所有约束。每个顶点对应一个<strong>基可行解</strong>（basic feasible solution）。</p>
+
+    <hr class="rule">
+    <h2 id="duality">对偶性</h2>
+    <p>每个线性规划问题（称为<strong>原问题</strong>，primal）对应一个<strong>对偶问题</strong>（dual）。对偶问题从约束中构造新的变量，给出原问题最优值的界。</p>
+
+    <p>原问题（最小化）：</p>
+    \[\min \{\mathbf{c}^T \mathbf{x} : A\mathbf{x} \ge \mathbf{b},\; \mathbf{x} \ge \mathbf{0}\}\]
+
+    <p>对偶问题（最大化）：</p>
+    \[\max \{\mathbf{b}^T \mathbf{y} : A^T \mathbf{y} \le \mathbf{c},\; \mathbf{y} \ge \mathbf{0}\}\]
+
+    <p><strong>弱对偶定理</strong>：对偶问题的任何可行解 \(\mathbf{y}\) 给出原问题最优值的下界：\(\mathbf{c}^T \mathbf{x} \ge \mathbf{b}^T \mathbf{y}\)。</p>
+
+    <p><strong>强对偶定理</strong>：如果原问题和对偶问题都有可行解，则它们的最优值相等。</p>
+
+    <hr class="rule">
+    <h2 id="farkas">Farkas 引理</h2>
+    <p><strong>Farkas 引理</strong>（Farkas' lemma）是线性规划对偶理论的基石。它给出一个线性系统有解的充要条件：</p>
+
+    <div class="card idea">
+      <p><strong>Farkas 引理：</strong>恰好下列两个命题之一成立：</p>
+      <ol>
+        <li>存在 \(\mathbf{x} \ge \mathbf{0}\) 使得 \(A \mathbf{x} = \mathbf{b}\)</li>
+        <li>存在 \(\mathbf{y}\) 使得 \(A^T \mathbf{y} \ge \mathbf{0}\) 且 \(\mathbf{b}^T \mathbf{y} &lt; 0\)</li>
+      </ol>
+    </div>
+
+    <p>几何含义：要么 \(\mathbf{b}\) 在 \(A\) 的列向量生成的锥（cone）内，要么存在一个超平面严格分离 \(\mathbf{b}\) 与该锥——两者必居其一。</p>
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！线性规划的最优解在可行多面体的顶点处达到。" data-incorrect="再想想。线性目标在凸多面上的极值在哪里取到？">
+      <p><strong>问题 1：</strong>线性规划的最优解（如果存在）一定在哪里达到？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">可行域的内部</button>
+        <button data-choice="b" aria-pressed="false">可行多面体的顶点</button>
+        <button data-choice="c" aria-pressed="false">可行域边界的任意点</button>
+        <button data-choice="d" aria-pressed="false">坐标原点</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！每个不等式约束定义一个半空间，交集为凸多面体。" data-incorrect="再想想。线性不等式定义了什么几何对象？">
+      <p><strong>问题 2：</strong>线性规划的可行域是什么几何对象？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">球体</button>
+        <button data-choice="b" aria-pressed="false">非凸多面体</button>
+        <button data-choice="c" aria-pressed="false">凸多面体（半空间交集）</button>
+        <button data-choice="d" aria-pressed="false">抛物面</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！强对偶定理：若两者都有可行解，则最优值相等。" data-incorrect="再想想。强对偶定理说了什么？">
+      <p><strong>问题 3：</strong>关于线性规划的对偶性，下列哪项正确？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">若原问题和对偶问题都有可行解，则最优值相等</button>
+        <button data-choice="b" aria-pressed="false">对偶问题总是无界</button>
+        <button data-choice="c" aria-pressed="false">原问题不可行则对偶问题也不可行</button>
+        <button data-choice="d" aria-pressed="false">对偶问题的变量个数与原问题相同</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d" data-correct="正确！Farkas 引理断言：要么 \(\mathbf{b}\) 在列锥内，要么存在分离超平面。" data-incorrect="再想想。Farkas 引理的两个互斥选项是什么？">
+      <p><strong>问题 4：</strong>Farkas 引理的核心内容是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">任何线性系统都有解</button>
+        <button data-choice="b" aria-pressed="false">任何线性系统都无解</button>
+        <button data-choice="c" aria-pressed="false">可行域总是有界的</button>
+        <button data-choice="d" aria-pressed="false">要么 \(A\mathbf{x}=\mathbf{b}\) 有非负解，要么存在严格分离超平面——两者必居其一</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>LP = 线性目标 + 线性约束</h3>
+        <p>标准形式：在 \(A\mathbf{x} \le \mathbf{b}\)、\(\mathbf{x} \ge \mathbf{0}\) 的约束下最小化 \(\mathbf{c}^T\mathbf{x}\)。</p>
+      </article>
+      <article>
+        <h3>可行域是凸多面体</h3>
+        <p>半空间的交集构成凸多面体，最优解在顶点（基可行解）处达到。</p>
+      </article>
+      <article>
+        <h3>对偶给出最优值的界</h3>
+        <p>弱对偶：对偶可行解给出下界；强对偶：若两者都可行则最优值相等。</p>
+      </article>
+      <article>
+        <h3>Farkas 引理是存在性判据</h3>
+        <p>要么线性系统有非负解，要么存在分离超平面——这是对偶理论的基石。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>G. Strang, <em>Introduction to Linear Algebra</em>, 第 9 章 §3（线性规划初步）</li>
+      <li>MIT OCW 18.06 第 31 课视频与讲义：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>D. Bertsimas & J. Tsitsiklis, <em>Introduction to Linear Optimization</em>, 第 1–4 章</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_34.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0030-choice-of-basis.html">← 基的选择与矩阵表示</a>
+      <a href="0032-exam-1-review.html">第一次阶段复习 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 31</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

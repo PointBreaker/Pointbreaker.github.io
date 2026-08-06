@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>矩阵运算与逆矩阵 — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 3 课</p>
+    <h1>矩阵运算与逆矩阵</h1>
+    <p class="lede">矩阵不仅仅是方程组的紧凑记号——它们构成一个代数系统。矩阵乘法、逆矩阵和转置是这套代数的基本运算。理解它们的规则和几何含义，是掌握线性代数"语法"的关键一步。</p>
+    <div class="meta">
+      <span>授课：Prof. Gilbert Strang</span>
+      <span>日期：2010-02-08</span>
+      <span>难度：中等</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>用列视角、行视角、外积和分块四种方式理解矩阵乘法</li>
+      <li>区分矩阵代数与实数代数：结合律和分配律成立，交换律不成立</li>
+      <li>定义逆矩阵，并用高斯-若尔当消元法计算 \(A^{-1}\)</li>
+      <li>刻画可逆矩阵的等价条件：满秩、无零主元、行列式非零</li>
+    </ul>
+
+    <h2 id="matrix-mult">矩阵乘法：四种看法</h2>
+    <p>设 \(A\) 是 \(m\times n\) 矩阵，\(B\) 是 \(n\times p\) 矩阵，则乘积 \(C = AB\) 是 \(m\times p\) 矩阵，其中</p>
+    \[
+    c_{ij} = \sum_{k=1}^{n} a_{ik} b_{kj}.
+    \]
+
+    <h3>看法 1：列</h3>
+    <p>\(C\) 的第 \(j\) 列等于 \(A\) 乘以 \(B\) 的第 \(j\) 列：</p>
+    \[
+    C_{:,j} = A \cdot B_{:,j}.
+    \]
+    <p>这意味着 \(C\) 的每一列都是 \(A\) 的列向量的线性组合，组合系数来自 \(B\) 的对应列。</p>
+
+    <h3>看法 2：行</h3>
+    <p>\(C\) 的第 \(i\) 行等于 \(A\) 的第 \(i\) 行乘以 \(B\)：</p>
+    \[
+    C_{i,:} = A_{i,:} \cdot B.
+    \]
+    <p>这意味着 \(C\) 的每一行都是 \(B\) 的行向量的线性组合。</p>
+
+    <h3>看法 3：外积 (outer product)</h3>
+    <p>把 \(A\) 按列拆分、\(B\) 按行拆分，乘积等于外积之和：</p>
+    \[
+    AB = \sum_{k=1}^{n} A_{:,k} B_{k,:}.
+    \]
+    <p>每一项 \(A_{:,k} B_{k,:}\) 是一个 \(m\times p\) 矩阵，秩为 1。这种看法在信号处理和数据分析中极为有用。</p>
+
+    <h3>看法 4：分块</h3>
+    <p>把 \(A\) 和 \(B\) 切成子矩阵块，只要块的尺寸匹配，就可以像普通矩阵一样相乘：</p>
+    \[
+    \begin{bmatrix} A_{11} & A_{12} \\ A_{21} & A_{22} \end{bmatrix}
+    \begin{bmatrix} B_{11} & B_{12} \\ B_{21} & B_{22} \end{bmatrix}
+    =
+    \begin{bmatrix} A_{11}B_{11}+A_{12}B_{21} & \dots \\ \dots & \dots \end{bmatrix}.
+    \]
+    <p>分块乘法是并行计算和理论推导的基础工具。</p>
+
+    <div class="card idea">
+      <p><strong>列看法最重要。</strong> 在 Strang 的体系中，列看法是首选：它把 \(AB\) 的每一列看作 \(A\) 的列的线性组合，直接呼应第 1 课的列视角。</p>
+    </div>
+
+    <h2 id="algebra-rules">矩阵代数的规则</h2>
+    <p>矩阵代数与实数代数有很多相似之处，但也有致命差异：</p>
+    <ul>
+      <li><strong>结合律成立：</strong>\((AB)C = A(BC)\)。可以放心地写 \(ABC\) 而无需括号。</li>
+      <li><strong>分配律成立：</strong>\(A(B+C) = AB + AC\) 且 \((A+B)C = AC + BC\)。</li>
+      <li><strong>交换律一般不成立：</strong>\(AB \neq BA\)，甚至其中一个有意义而另一个无意义。</li>
+    </ul>
+
+    <div class="card warning">
+      <p><strong>警惕交换律。</strong> 从实数世界带来的直觉常常欺骗我们。\(AB = 0\) 不能推出 \(A=0\) 或 \(B=0\)；\((A+B)^2 = A^2 + 2AB + B^2\) 仅在 \(AB=BA\) 时成立。矩阵代数中最常见的错误就是偷偷使用交换律。</p>
+    </div>
+
+    <h2 id="inverse">逆矩阵</h2>
+    <p>如果存在矩阵 \(A^{-1}\) 使得</p>
+    \[
+    A^{-1} A = I \quad\text{且}\quad A A^{-1} = I,
+    \]
+    <p>则称 \(A\) 可逆 (invertible)，\(A^{-1}\) 为其逆矩阵。可逆矩阵必须是方阵，但并非所有方阵都可逆。</p>
+
+    <h3>高斯-若尔当消元法求逆</h3>
+    <p>把 \(A\) 和单位矩阵 \(I\) 并排写出增广矩阵 \([A \mid I]\)，对 \(A\) 部分做消元，目标是把 \(A\) 化为 \(I\)。当 \(A\) 部分变成 \(I\) 时，右边的 \(I\) 就自动变成了 \(A^{-1}\)：</p>
+    \[
+    [A \mid I] \;\xrightarrow{\text{行变换}}\; [I \mid A^{-1}].
+    \]
+
+    <p>例子：对
+    \(A = \begin{bmatrix} 2 & 1 \\ 5 & 3 \end{bmatrix}\)，</p>
+    \[
+    \left[\begin{array}{cc|cc} 2 & 1 & 1 & 0 \\ 5 & 3 & 0 & 1 \end{array}\right]
+    \to
+    \left[\begin{array}{cc|cc} 2 & 1 & 1 & 0 \\ 0 & \frac12 & -\frac52 & 1 \end{array}\right]
+    \to
+    \left[\begin{array}{cc|cc} 1 & 0 & 3 & -1 \\ 0 & 1 & -5 & 2 \end{array}\right].
+    \]
+    <p>于是
+    \(A^{-1} = \begin{bmatrix} 3 & -1 \\ -5 & 2 \end{bmatrix}\)。
+    验证：
+    \(\begin{bmatrix} 2 & 1 \\ 5 & 3 \end{bmatrix} \begin{bmatrix} 3 & -1 \\ -5 & 2 \end{bmatrix} = \begin{bmatrix} 1 & 0 \\ 0 & 1 \end{bmatrix}\)。</p>
+
+    <h2 id="invertible-conditions">可逆的等价条件</h2>
+    <p>以下命题互相等价（对 \(n\times n\) 矩阵 \(A\)）：</p>
+    <ul>
+      <li>\(A\) 可逆。</li>
+      <li>\(A\) 的 \(n\) 个主元全部非零（满秩）。</li>
+      <li>\(A\) 的行（列）向量线性无关。</li>
+      <li>\(\det(A) \neq 0\)。</li>
+      <li>方程 \(A\mathbf{x} = \mathbf{0}\) 只有零解。</li>
+    </ul>
+    <p>任何一个条件成立，其余全部成立。任何一个条件不成立，\(A\) 就是奇异的 (singular)。</p>
+
+    <div class="card idea">
+      <p><strong>逆矩阵的几何含义。</strong> 线性变换 \(\mathbf{x} \mapsto A\mathbf{x}\) 把空间拉伸、旋转、剪切。逆变换 \(\mathbf{x} \mapsto A^{-1}\mathbf{x}\) 把这些操作全部撤销。奇异矩阵把空间压缩到低维，信息丢失，无法撤销——就像把一张纸揉成团，无法无损展开。</p>
+    </div>
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b"
+         data-correct="正确！结合律 \((AB)C = A(BC)\) 是矩阵代数中最基本的定律，允许我们省略括号。"
+         data-incorrect="再想想。哪条定律在矩阵运算中和实数运算中一样成立？">
+      <p><strong>问题 1：</strong> 以下哪条定律在矩阵乘法中<strong>不</strong>成立：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">结合律 \((AB)C = A(BC)\)</button>
+        <button data-choice="b" aria-pressed="false">交换律 \(AB = BA\)</button>
+        <button data-choice="c" aria-pressed="false">分配律 \(A(B+C) = AB+AC\)</button>
+        <button data-choice="d" aria-pressed="false">标量结合 \(k(AB) = (kA)B\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c"
+         data-correct="正确！高斯-若尔当法把 \([A|I]\) 变换为 \([I|A^{-1}]\)。"
+         data-incorrect="再想想。增广矩阵的右边初始是什么，最终变成什么？">
+      <p><strong>问题 2：</strong> 高斯-若尔当消元法求逆矩阵的目标是把增广矩阵 \([A \mid I]\) 变换为：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\([A^{-1} \mid 0]\)</button>
+        <button data-choice="b" aria-pressed="false">\([U \mid L]\)</button>
+        <button data-choice="c" aria-pressed="false">\([I \mid A^{-1}]\)</button>
+        <button data-choice="d" aria-pressed="false">\([0 \mid A]\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a"
+         data-correct="正确！可逆矩阵的行列式非零，奇异矩阵的行列式为零。"
+         data-incorrect="再想想。行列式为零意味着空间被压缩，不可逆。">
+      <p><strong>问题 3：</strong> 若 \(n\times n\) 矩阵 \(A\) 的行列式 \(\det(A) = 0\)，则：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A\) 不可逆</button>
+        <button data-choice="b" aria-pressed="false">\(A\) 是单位矩阵</button>
+        <button data-choice="c" aria-pressed="false">\(A\) 的秩为 \(n\)</button>
+        <button data-choice="d" aria-pressed="false">\(A\) 的行向量线性无关</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确！\(AB=0\) 不能推出 \(A=0\) 或 \(B=0\)，这是矩阵代数与实数代数的重要区别。"
+         data-incorrect="再想想。矩阵代数中哪些实数直觉会失效？">
+      <p><strong>问题 4：</strong> 以下哪个命题在矩阵代数中<strong>不一定</strong>成立：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\((AB)C = A(BC)\)</button>
+        <button data-choice="b" aria-pressed="false">\(A+B = B+A\)</button>
+        <button data-choice="c" aria-pressed="false">若 \(A\) 可逆，则 \(A^{-1}\) 唯一</button>
+        <button data-choice="d" aria-pressed="false">若 \(AB = 0\)，则 \(A=0\) 或 \(B=0\)</button>
+      </div>
+    </div>
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>矩阵乘法四看法</h3>
+        <p>列看法、行看法、外积看法和分块看法各有用途。列看法是 Strang 体系的核心，直接呼应列空间的概念。</p>
+      </article>
+      <article>
+        <h3>矩阵代数 ≠ 实数代数</h3>
+        <p>结合律和分配律成立，但交换律一般不成立。矩阵代数中最常见的错误是偷偷使用交换律。</p>
+      </article>
+      <article>
+        <h3>逆矩阵是变换的撤销</h3>
+        <p>\(A^{-1}\) 撤销 \(A\) 的作用。高斯-若尔当法 \([A|I] \to [I|A^{-1}]\) 是求逆的标准算法。</p>
+      </article>
+      <article>
+        <h3>可逆的等价刻画</h3>
+        <p>可逆 ⇔ 满秩 ⇔ 无零主元 ⇔ 行列式非零 ⇔ 零空间只有零向量。这些等价条件从不同角度刻画同一个概念。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Gilbert Strang, <em>Introduction to Linear Algebra</em>, 第 5 版, §2.4 "Rules for Matrix Operations" 与 §2.5 "Inverse Matrices"。</li>
+      <li>MIT OCW 18.06 官方页面：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>Sheldon Axler, <em>Linear Algebra Done Right</em>, Chapter 3，从线性映射的角度重新审视矩阵运算。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_03.pdf</code></li>
+      <li><code>lecture_summaries/lecture_1_3_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0002-elimination-with-matrices.html">← 矩阵消元法</a>
+      <a href="0004-lu-factorization.html">LU 分解 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 3</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>
