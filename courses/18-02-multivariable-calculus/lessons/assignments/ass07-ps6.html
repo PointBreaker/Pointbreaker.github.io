@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Problem Set 6: Extrema &amp; Least Squares — MIT 18.02</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <div class="guide-banner">
+      <p class="guide-eyebrow">MIT 18.02 · Problem Set 6</p>
+      <h1>Problem Set 6: Extrema &amp; Least Squares (极值与最小二乘)</h1>
+      <p class="guide-lede">多元函数的<strong>极大极小</strong>问题：找临界点、用二阶导数检验判定类型、在闭区域上检查边界。以及<strong>最小二乘法</strong>——把实验数据拟合为最佳直线，化为多元极值。</p>
+      <div class="guide-meta">
+        <span>发布：2007-09-27</span>
+        <span>截止：2007-10-11</span>
+        <span>范围：Lectures 9, 10</span>
+        <span>难度：中等</span>
+      </div>
+    </div>
+
+    <!-- 目标 -->
+    <h2 id="objectives">目标</h2>
+    <p>本次习题训练三类能力：(1) 求多元函数的<strong>临界点</strong>（critical points）并分类；(2) 在<strong>闭区域</strong>上求绝对极值——既要看内部临界点，也要检查边界；(3) 建立<strong>最小二乘</strong>问题并通过求偏导得到法方程。</p>
+
+    <div class="card idea">
+      <p><strong>核心思想：</strong>局部极值只可能出现在<strong>内部临界点</strong>或<strong>边界</strong>上。Auroux 在第 10 讲反复强调："全局最小值不一定在临界点！必须检查边界和无穷远。" 二阶导数检验 \( D=AC-B^2 \) 是判定临界点类型的系统工具，但<strong>闭区域上的绝对极值问题，边界检查才是丢分的重灾区</strong>。</p>
+    </div>
+
+    <!-- 覆盖范围 -->
+    <h2 id="coverage">覆盖范围</h2>
+    <table class="component-table">
+      <thead>
+        <tr><th>主题</th><th>讲次</th><th>关键工具</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="comp-name">临界点</td><td class="comp-lec">Lec 9</td><td>\( f_x=0,\; f_y=0 \)；局部极大、极小、鞍点 (saddle)</td></tr>
+        <tr><td class="comp-name">二阶导数检验</td><td class="comp-lec">Lec 10</td><td>\( A=f_{xx},\; B=f_{xy},\; C=f_{yy},\; D=AC-B^2 \)</td></tr>
+        <tr><td class="comp-name">闭区域上的绝对极值</td><td class="comp-lec">Lec 10</td><td>内部临界点 vs 边界 vs 无穷远</td></tr>
+        <tr><td class="comp-name">最小二乘法</td><td class="comp-lec">Lec 9</td><td>最小化偏差平方和 \( D=\sum(y_i-(ax_i+b))^2 \)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- 核心知识要点 -->
+    <h2 id="core">核心知识要点</h2>
+
+    <h3 id="critical">1. 临界点 (critical points)</h3>
+    <p>若 \( f \) 在 \( (x_0,y_0) \) 有局部极值，则 \( f_x(x_0,y_0)=0 \) 且 \( f_y(x_0,y_0)=0 \)（因为该点是两个方向切片的极值点，从而切平面水平）。</p>
+    <p><strong>定义：</strong>满足 \( f_x=f_y=0 \) 的点叫临界点。它可能是局部极大、局部极小或<strong>鞍点</strong>（saddle point，有的方向上升、有的方向下降）。</p>
+
+    <h3 id="second-derivative-test">2. 二阶导数检验 (second derivative test)</h3>
+    <p>设 \( (x_0,y_0) \) 是临界点，令 \( A=f_{xx} \)，\( B=f_{xy} \)，\( C=f_{yy} \)，判别式 \( D=AC-B^2 \)：</p>
+    \[ D>0:\ \text{若 }A>0\text{ 则为局部极小，若 }A<0\text{ 为局部极大};\qquad D<0:\ \text{鞍点};\qquad D=0:\ \text{无法判定}. \]
+    <p>Auroux 的推导思路：在临界点处，</p>
+    \[ \Delta f \approx \frac12\bigl[A(x-x_0)^2 + 2B(x-x_0)(y-y_0) + C(y-y_0)^2\bigr], \]
+    <p>即一个关于 \( (x-x_0),(y-y_0) \) 的二次型。\( D=AC-B^2>0 \) 意味着该二次型定号（同号），\( D<0 \) 意味着不定号（鞍点）。</p>
+
+    <div class="card idea">
+      <p><strong>核心思想：</strong>二阶导数检验的本质是<strong>二次近似</strong>——用二次型代替函数在临界点附近的行为。\( D \) 的符号决定二次型的"形状"：正定/负定 → 碗形（极值）；不定 → 马鞍形。</p>
+    </div>
+
+    <h3 id="boundary">3. 闭区域上的绝对极值</h3>
+    <p>全局最小值或最大值出现在以下三处之一：</p>
+    <ul>
+      <li><strong>内部临界点</strong>（\( f_x=f_y=0 \) 在区域内部）；</li>
+      <li><strong>边界上的极值</strong>（把边界代入 \( f \)，化为单变量或用 Lagrange 乘子）；</li>
+      <li><strong>无穷远处</strong>（若区域无界）。</li>
+    </ul>
+    <p>Auroux 的经典例子：\( f(x,y)=x+y+\dfrac1xy \)（\( x&gt;0,y&gt;0 \)）。唯一临界点 \( (1,1) \) 是局部极小，但<strong>无最大值</strong>——靠近边界 \( x\to0 \) 或 \( y\to0 \) 时 \( f\to\infty \)。</p>
+
+    <h3 id="least-squares">4. 最小二乘法 (least squares)</h3>
+    <p>问题：给定数据点 \( (x_i,y_i) \)，\( i=1,\dots,n \)，找最佳拟合直线 \( y=ax+b \)。未知量是 \( a,b \)（不是 \( x,y \)！）。最小化总平方偏差：</p>
+    \[ D(a,b)=\sum_{i=1}^n\bigl(y_i-(ax_i+b)\bigr)^2. \]
+    <p>令 \( \partial D/\partial a=0 \)，\( \partial D/\partial b=0 \)，得到关于 \( a,b \) 的二元<strong>线性方程组</strong>（法方程）：</p>
+    \[ \Bigl(\sum x_i^2\Bigr)a + \Bigl(\sum x_i\Bigr)b = \sum x_i y_i,\qquad \Bigl(\sum x_i\Bigr)a + nb = \sum y_i. \]
+    <p>此方法可推广：指数律 \( y=ce^{ax} \) 取对数化为线性；二次律 \( y=ax^2+bx+c \) 导出三元线性方程组。Auroux 以摩尔定律（晶体管数随时间指数增长）为例，在半对数坐标上画拟合直线。</p>
+
+    <!-- 典型题型与解题策略 -->
+    <h2 id="strategies">典型题型与解题策略</h2>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>找临界点并分类</h3>
+      <p><strong>策略：</strong>解方程组 \( f_x=0,\; f_y=0 \)。对每个临界点算 \( A,B,C,D \)。<strong>务必先判断点是否在区域内</strong>——题目常给限定定义域（如第一象限），要舍去域外的临界点。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>闭区域上的绝对极值</h3>
+      <p><strong>策略：</strong>三步——(1) 找内部临界点；(2) 沿每条边界把 \( f \) 化为一元函数，求极值（包括边界端点）；(3) 比较所有候选值。<strong>不要漏边界</strong>。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>最小二乘拟合</h3>
+      <p><strong>策略：</strong>写出 \( D(a,b) \)，对 \( a,b \) 求偏导得法方程，解线性方程组。非线性模型先取对数/变量替换化为线性。</p>
+    </div>
+
+    <!-- 常见错误 -->
+    <h2 id="pitfalls">常见错误</h2>
+
+    <div class="pitfall">
+      <p><strong>只找临界点就下结论：</strong>绝对极值必须检查边界。很多题目故意让内部临界点是局部极小但最大值在边界，或反过来。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>\( D=0 \) 时乱下结论：</strong>\( D=0 \) 意味着二阶导数检验<strong>失效</strong>，需要更高阶项才能判定。不能直接说"是极值"或"是鞍点"。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>最小二乘中混淆变量：</strong>未知量是拟合参数 \( a,b \)，不是数据坐标 \( x,y \)。对 \( a,b \) 求偏导，不是对 \( x,y \)。</p>
+    </div>
+
+    <!-- 知识检查 -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b"
+         data-correct="正确！\( D=AC-B^2=3\cdot3-2^2=5>0 \)，且 \( A=3>0 \)，故为局部极小。"
+         data-incorrect="提示：先算 \( D=f_{xx}f_{yy}-(f_{xy})^2 \)，再看 \( A=f_{xx} \) 的符号。">
+      <p><strong>问题 1：</strong>Auroux 课上例子 \( f(x,y)=x^2-2xy+3y^2+2x-2y \)，在临界点 \( (-1,0) \) 处的 \( A,B,C \) 分别为 \( 2,-2,3 \)，则该点是：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">局部极大</button>
+        <button data-choice="b" aria-pressed="false">局部极小</button>
+        <button data-choice="c" aria-pressed="false">鞍点</button>
+        <button data-choice="d" aria-pressed="false">无法判定</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c"
+         data-correct="正确！\( f(x,y)=xy(1-x^2-y^2) \) 在第一象限内，边界 \( x=0 \) 或 \( y=0 \) 上 \( f=0 \)，无穷远处 \( f\to-\infty \)，故最大值在内部临界点 \( (1/2,1/2) \) 处，值为 \( 1/8 \)。"
+         data-incorrect="提示：分别考察内部临界点、边界 \( x=0 \) 或 \( y=0 \) 、以及 \( x,y\to\infty \) 时 \( f \) 的取值。">
+      <p><strong>问题 2：</strong>Practice 2A Problem 4 中 \( f(x,y)=xy-x^3y-xy^3 \)（\( x,y&gt;0 \)）的最大值出现在：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">边界 \( x=0 \) 上</button>
+        <button data-choice="b" aria-pressed="false">\( x,y\to\infty \) 的无穷远处</button>
+        <button data-choice="c" aria-pressed="false">内部临界点 \( (1/2,1/2) \)</button>
+        <button data-choice="d" aria-pressed="false">原点 \( (0,0) \)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a"
+         data-correct="正确！最小二乘中 \( a,b \) 是未知参数，对 \( a,b \) 求偏导，而非对数据坐标 \( x,y \)。"
+         data-incorrect="提示：最小二乘要最小化的量 \( D \) 是谁的函数？">
+      <p><strong>问题 3：</strong>最小二乘拟合 \( y=ax+b \) 时，令 \( \partial D/\partial a=0,\ \partial D/\partial b=0 \) 中的偏导数是对哪些变量取的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">对拟合参数 \( a,b \)</button>
+        <button data-choice="b" aria-pressed="false">对数据坐标 \( x,y \)</button>
+        <button data-choice="c" aria-pressed="false">对 \( x \) 和 \( a \)</button>
+        <button data-choice="d" aria-pressed="false">对 \( y \) 和 \( b \)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确！\( D=0 \) 时二阶导数检验无法给出结论，需更高阶信息。"
+         data-incorrect="提示：\( D=AC-B^2 \) 为零时，二次型是退化的，无法判断符号。">
+      <p><strong>问题 4：</strong>若临界点处判别式 \( D=AC-B^2=0 \)，则下列说法正确的是：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">该点必为局部极值</button>
+        <button data-choice="b" aria-pressed="false">该点必为鞍点</button>
+        <button data-choice="c" aria-pressed="false">该点不是临界点</button>
+        <button data-choice="d" aria-pressed="false">二阶导数检验无法判定</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <!-- 一手资料 -->
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>study_materials/ps6.pdf</code> — Problem Set 6 题面</li>
+      <li><code>study_materials/least_sq_intrpol.pdf</code> — 最小二乘与插值笔记</li>
+      <li>官方课程主页：<a href="https://ocw.mit.edu/courses/18-02-multivariable-calculus-fall-2007/">MIT OCW 18.02</a></li>
+    </ul>
+
+    <footer>
+      <p>MIT 18.02 Multivariable Calculus · Fall 2007 · Prof. Denis Auroux · 本习题指南依据官方讲义与习题整理</p>
+    </footer>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

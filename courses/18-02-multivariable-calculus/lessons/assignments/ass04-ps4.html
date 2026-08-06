@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Problem Set 4: Velocity, Acceleration &amp; Kepler — MIT 18.02</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 18.02 · Problem Set 4</p>
+    <h1>Problem Set 4: Velocity, Acceleration &amp; Kepler (速度、加速度与 Kepler 定律)</h1>
+    <p class="lede">用最小二乘法拟合 iPod 销量，求三角形的极值面积，并用链式法则连接直角坐标与极坐标下的偏导数。</p>
+
+    <div class="meta">
+      <span>发布：2007-09-20</span>
+      <span>截止：2007-10-04</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="overview">学习导读</h2>
+    <p>这份作业跨越了三个主题：最小二乘拟合（线性代数在数据分析中的应用）、三角形的极值面积（多变量极值问题）、以及直角坐标与极坐标之间的链式法则（非独立变量的偏导数计算）。它们共同构成第一单元核心工具的综合演练，也为即将到来的 Exam 1 做最后准备。</p>
+
+    <div class="card idea"><p><strong>目标：</strong>掌握最小二乘法推导正规方程组（矩阵形式 \(A^TA\vec{z}=A^T\vec{y}\)），能用 Matlab 实现线性与指数拟合；熟练运用链式法则在直角坐标与极坐标之间转换偏导数；理解二阶导数检验 (second derivative test) 对临界点的分类。</p></div>
+
+    <h3>与课程的关系</h3>
+    <ul>
+      <li><strong>Lecture 5 (2007-09-14) — 参数方程：</strong>参数曲线的速度、加速度向量，由位置向量求导。</li>
+      <li><strong>Lecture 6 (2007-09-18) — 速度与加速度、Kepler 第二定律：</strong>切向/法向分解、\( \vec{r}\times\vec{v}=\text{const} \) 与面积速度。</li>
+      <li><strong>Lecture 10 (2007-09-27) — 极值与最小二乘：</strong>正规方程组、矩阵形式的最小二乘解。</li>
+      <li><strong>Lecture 11 (2007-09-28) — 二阶导数检验：</strong>判别临界点类型。</li>
+      <li><strong>Lecture 12 (2007-10-02) — 微分与链式法则：</strong>非独立变量的链式法则、坐标变换下的偏导数。</li>
+    </ul>
+    <p>Part A 覆盖 Notes LS、2F–2H、13.6、13.10 的配套练习；Part B 三道题分别对应最小二乘、极值、链式法则。</p>
+
+    <hr class="rule">
+
+    <h2 id="key-ideas">知识要点回顾</h2>
+
+    <h3>最小二乘法 (Least Squares)</h3>
+    <p>对数据点 \((x_i,y_i)\) 拟合直线 \(y=ax+b\)，定义误差平方和：</p>
+    \[E(a,b)=\sum_{i=1}^n (ax_i+b-y_i)^2.\]
+    <p>令 \(\partial E/\partial a=0\)，\(\partial E/\partial b=0\)，得到<strong>正规方程组 (normal equations)</strong>：</p>
+    \[\begin{pmatrix}\sum x_i^2 & \sum x_i\\ \sum x_i & n\end{pmatrix}\begin{pmatrix}a\\ b\end{pmatrix}=\begin{pmatrix}\sum x_iy_i\\ \sum y_i\end{pmatrix}.\]
+    <p>矩阵形式：\(A^TA\vec{z}=A^T\vec{y}\)，其中 \(A\) 为设计矩阵，\(\vec{z}=(a,b)^T\)。</p>
+
+    <div class="card"><p><strong>矩阵形式：</strong>设设计矩阵 \(A=\begin{pmatrix}x_1&1\\ \vdots&\vdots\\ x_n&1\end{pmatrix}\)，\(\vec{y}=(y_1,\dots,y_n)^T\)，则最小二乘解为 \(\vec{z}=(A^TA)^{-1}A^T\vec{y}\)。</p></div>
+
+    <h3>链式法则（坐标变换）</h3>
+    <p>设 \(w=f(x,y)\)，\(x=r\cos\theta\)，\(y=r\sin\theta\)。链式法则给出：</p>
+    \[\begin{pmatrix}w_r\\ w_\theta\end{pmatrix}=
+    \begin{pmatrix}x_x & y_r\\ x_\theta & y_\theta\end{pmatrix}
+    \begin{pmatrix}w_x\\ w_y\end{pmatrix}=
+    \begin{pmatrix}\cos\theta & \sin\theta\\ -r\sin\theta & r\cos\theta\end{pmatrix}
+    \begin{pmatrix}w_x\\ w_y\end{pmatrix}.\]
+    <p>逆变换的矩阵是原矩阵的逆：\(B=A^{-1}\)。</p>
+
+    <div class="card idea"><p><strong>核心思想：</strong>坐标变换下的偏导数计算，本质是矩阵乘法。链式法则的矩阵形式 \(A\) 正好是变换的 Jacobian 矩阵，其逆给出反方向的变化率关系。</p></div>
+
+    <h3>二阶导数检验</h3>
+    <p>设 \((a,b)\) 为 \(f(x,y)\) 的临界点（\(f_x=f_y=0\)），记 \(D=f_{xx}f_{yy}-(f_{xy})^2\)：</p>
+    <ul>
+      <li>\(D>0,f_{xx}>0\) ⇒ 局部极小；</li>
+      <li>\(D>0,f_{xx}<0\) ⇒ 局部极大；</li>
+      <li>\(D<0\) ⇒ 鞍点；</li>
+      <li>\(D=0\) ⇒ 无法判断。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="problems">题目概览与解题策略</h2>
+
+    <h3>Problem 1：最小二乘与 iPod 销量 (Thursday, 11 pts)</h3>
+    <p>根据 2001–2005 年 iPod 销量数据，求最佳拟合直线与指数曲线，并预测未来销量。</p>
+    <ul>
+      <li>(a) 把 Notes LS 的公式 (4) 写成 \(A\vec{z}=\vec{r}\) 的形式，用向量点积（如 \(\vec{x}\cdot\vec{u}=\sum x_i\)）表达。</li>
+      <li>(b) 画散点图。</li>
+      <li>(c) 用 Matlab 计算 \(a,b\)，报告最大误差。</li>
+      <li>(d) 对 \(\ln y = a_1x+b_1\) 做线性拟合，再反推指数模型。</li>
+      <li>(e) 在同一张图上画出散点、直线拟合、指数拟合。</li>
+      <li>(f) 用指数模型预测 2006、2015 年销量，与事实对比，讨论指数增长的局限。</li>
+    </ul>
+    <div class="card warning"><p><strong>注意：</strong>题目明确要求不能直接调用 Matlab 内置的统计函数（如 <code>polyfit</code> 仅用于验证），必须手动实现最小二乘公式。</p></div>
+
+    <h3>Problem 2：单位圆内接三角形的极值面积 (Friday, 8 pts)</h3>
+    <p>三角形一顶点在 \((1,0)\)，另两个顶点在单位圆上，极角分别为 \(\theta_1,\theta_2\)（逆时针排列）。</p>
+    <ul>
+      <li>(a) 用正弦定理写出面积公式：\(A=\frac12|\sin\theta_1||\sin(\theta_2-\theta_1)|\)（取绝对值后化简）。</li>
+      <li>(b) 求临界点：令 \(\partial A/\partial\theta_1=0\)，\(\partial A/\partial\theta_2=0\)。</li>
+      <li>(c) 比较临界点与边界上的函数值，得到最大、最小面积。</li>
+      <li>(d) 用二阶导数检验确认临界点类型。</li>
+    </ul>
+    <div class="card idea"><p><strong>核心思想：</strong>极值问题三步走：找临界点 → 检查边界 → 比较函数值。几何上，最大面积对应正三角形，最小面积对应退化三角形。</p></div>
+
+    <h3>Problem 3：坐标变换下的链式法则 (Tuesday, 6 pts)</h3>
+    <p>设 \(w=f(x,y)\)，\(x=r\cos\theta\)，\(y=r\sin\theta\)。</p>
+    <ul>
+      <li>(a) 用链式法则推导 \(\begin{pmatrix}w_r\\w_\theta\end{pmatrix}=A\begin{pmatrix}w_x\\w_y\end{pmatrix}\)，写出 \(A\) 的四个元素。</li>
+      <li>(b) 用 \(r=\sqrt{x^2+y^2}\)，\(\theta=\tan^{-1}(y/x)\) 推导逆变换 \(B\)。</li>
+      <li>(c) 验证 \(B=A^{-1}\)。</li>
+      <li>(d) 已知 \(w_r=2\)，\(w_\theta=10\) 在 \((r,\theta)=(5,\pi/2)\) 处，求 \(w_x,w_y\)。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="common-mistakes">常见错误</h2>
+    <ul>
+      <li><strong>最小二乘矩阵维度错误：</strong>设计矩阵 \(A\) 是 \(n\times2\)（\(n\) 为数据点数），不要误写成 \(2\times n\)。</li>
+      <li><strong>指数拟合忘记取对数：</strong>拟合 \(\ln y = a_1x+b_1\) 而非直接拟合 \(y=e^{a_1x+b_1}\)。</li>
+      <li><strong>极值问题忘记检查边界：</strong>临界点只是候选，边界上的值可能更大或更小。</li>
+      <li><strong>链式法则矩阵方向混淆：</strong>\(w_r = w_x\cos\theta + w_y\sin\theta\)，注意 Jacobian 矩阵的行对应新变量、列对应旧变量。</li>
+      <li><strong>二阶导数检验公式写错：</strong>\(D=f_{xx}f_{yy}-(f_{xy})^2\)，不是 \(f_{xx}f_{yy}-f_{xy}\)。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="a"
+         data-correct="正确。最小二乘解满足正规方程组 \(A^TA\vec{z}=A^T\vec{y}\)。"
+         data-incorrect="提示：最小二乘通过最小化误差平方和推导出正规方程组 \(A^TA\vec{z}=A^T\vec{y}\)。">
+      <p><strong>问题 1：</strong>最小二乘拟合 \(y=ax+b\) 的正规方程组是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A^TA\vec{z}=A^T\vec{y}\)</button>
+        <button data-choice="b" aria-pressed="false">\(A\vec{z}=\vec{y}\)</button>
+        <button data-choice="c" aria-pressed="false">\(A^T\vec{z}=A\vec{y}\)</button>
+        <button data-choice="d" aria-pressed="false">\((A^T+A)\vec{z}=\vec{y}\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b"
+         data-correct="正确。极值可能出现在临界点或边界上，必须比较两者才能确定全局最值。"
+         data-incorrect="提示：连续函数在紧集上的最值可能出现在临界点或边界，缺一不可。">
+      <p><strong>问题 2：</strong>求连续函数在有界闭区域上的最大值，必须检查？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">所有临界点</button>
+        <button data-choice="b" aria-pressed="false">临界点与边界上的值</button>
+        <button data-choice="c" aria-pressed="false">所有二阶偏导数为零的点</button>
+        <button data-choice="d" aria-pressed="false">原点和边界上的值</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="c"
+         data-correct="正确。从极坐标到直角坐标的变换矩阵，是直角坐标到极坐标变换矩阵的逆。"
+         data-incorrect="提示：链式法则中的变换矩阵 \(A\) 与逆变换矩阵 \(B\) 满足 \(B=A^{-1}\)。">
+      <p><strong>问题 3：</strong>设 \(x=r\cos\theta\)，\(y=r\sin\theta\)。\(\begin{pmatrix}w_x\\w_y\end{pmatrix}\) 与 \(\begin{pmatrix}w_r\\w_\theta\end{pmatrix}\) 的关系矩阵是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\begin{pmatrix}\cos\theta & \sin\theta\\ -r\sin\theta & r\cos\theta\end{pmatrix}\)</button>
+        <button data-choice="b" aria-pressed="false">\(\begin{pmatrix}r\cos\theta & -r\sin\theta\\ r\sin\theta & r\cos\theta\end{pmatrix}\)</button>
+        <button data-choice="c" aria-pressed="false">\(\begin{pmatrix}\cos\theta & -\frac{\sin\theta}{r}\\ \sin\theta & \frac{\cos\theta}{r}\end{pmatrix}\)</button>
+        <button data-choice="d" aria-pressed="false">\(\begin{pmatrix}\cos\theta & -\sin\theta\\ \sin\theta & \cos\theta\end{pmatrix}\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确。\(D=f_{xx}f_{yy}-(f_{xy})^2<0\) 时，临界点为鞍点。"
+         data-incorrect="提示：判别式 \(D=f_{xx}f_{yy}-(f_{xy})^2\) 的符号决定了临界点类型。">
+      <p><strong>问题 4：</strong>若临界点处 \(D=f_{xx}f_{yy}-(f_{xy})^2<0\)，则该点是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">局部极大值</button>
+        <button data-choice="b" aria-pressed="false">局部极小值</button>
+        <button data-choice="c" aria-pressed="false">全局极值</button>
+        <button data-choice="d" aria-pressed="false">鞍点</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本作业要点</h2>
+    <div class="loop">
+      <article><h3>最小二乘</h3><p>正规方程组 \(A^TA\vec{z}=A^T\vec{y}\) 是数据拟合的通用框架。</p></article>
+      <article><h3>指数拟合</h3><p>取对数把指数模型线性化，拟合后再取指数还原。</p></article>
+      <article><h3>极值问题</h3><p>临界点 + 边界 = 完整的候选集。</p></article>
+      <article><h3>链式法则矩阵</h3><p>坐标变换下的偏导数关系由 Jacobian 矩阵及其逆给出。</p></article>
+      <article><h3>二阶导数检验</h3><p>\(D\) 的符号决定临界点类型：正为极值，负为鞍点。</p></article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">一手资料</h2>
+    <ul>
+      <li><code>study_materials/ps4.pdf</code> — Problem Set 4 官方题目</li>
+      <li><code>lecture_notes/notes_LS.pdf</code> — 最小二乘笔记</li>
+      <li><code>lecture_notes/notes_SD.pdf</code> — 二阶导数检验笔记</li>
+      <li><code>book/13.6.pdf</code> — 微分与链式法则</li>
+      <li><code>book/13.10.pdf</code> — 极值与二阶导数检验</li>
+      <li>官方课程主页：<a href="https://ocw.mit.edu/courses/18-02-multivariable-calculus-fall-2007/">MIT OCW 18.02</a></li>
+    </ul>
+
+    <footer>
+      <p>MIT 18.02 Multivariable Calculus · Fall 2007 · Prof. Denis Auroux · 本页依据官方作业与讲义整理</p>
+    </footer>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

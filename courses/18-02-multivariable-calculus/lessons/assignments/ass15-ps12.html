@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Problem Set 12: Divergence &amp; Curl — MIT 18.02</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <div class="guide-banner">
+      <p class="guide-eyebrow">MIT 18.02 · Problem Set 12</p>
+      <h1>Problem Set 12: Divergence &amp; Curl (散度与旋度)</h1>
+      <p class="guide-lede">三大定理的收官：<strong>散度定理</strong> (Divergence Theorem)、<strong>散度</strong> \(\nabla\cdot\vec{F}\) 与<strong>旋度</strong> \(\nabla\times\vec{F}\) 的计算与物理意义、空间中的<strong>梯度场</strong>与<strong>线积分</strong>，以及<strong>扩散方程</strong>的推导。<strong>这是 Unit IIIb 通向 Maxwell 方程的最后一块拼图。</strong></p>
+      <div class="guide-meta">
+        <span>发布：2007-11-16</span>
+        <span>截止：2007-11-29</span>
+        <span>范围：Lectures 29, 30</span>
+        <span>难度：较难</span>
+      </div>
+    </div>
+
+    <!-- 目标 -->
+    <h2 id="objectives">目标</h2>
+    <p>完成本次习题后，你应该能够：计算向量场 \(\vec{F}=\langle P,Q,R\rangle\) 的<strong>散度</strong> \(\nabla\cdot\vec{F}=P_x+Q_y+R_z\) 与<strong>旋度</strong> \(\nabla\times\vec{F}\)；用<strong>散度定理</strong>把闭曲面通量积分化为三重积分；在空间中判断梯度场（准则 \(P_y=Q_x,\ P_z=R_x,\ Q_z=R_y\)）并求势函数；理解散度与旋度的<strong>物理意义</strong>（源密度与旋转强度）。</p>
+
+    <div class="card idea">
+      <p><strong>核心思想：</strong>散度定理 \(\displaystyle\iint_S \vec{F}\cdot\hat{n}\,dS = \iiint_D \nabla\cdot\vec{F}\,dV\) 是 Green 通量形式在三维的推广。Auroux 在第 29 讲用"烟雾扩散"的类比解释：散度 = 源密度（单位体积产生的流量），散度定理说"流出闭曲面的净流量 = 内部总源强"。</p>
+    </div>
+
+    <!-- 覆盖范围 -->
+    <h2 id="coverage">覆盖范围</h2>
+    <table class="component-table">
+      <thead>
+        <tr><th>主题</th><th>讲次</th><th>关键公式</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="comp-name">散度定理</td><td class="comp-lec">Lec 27, 29</td><td>\(\displaystyle\iint_S \vec{F}\cdot\hat{n}\,dS=\iiint_D \nabla\cdot\vec{F}\,dV\)</td></tr>
+        <tr><td class="comp-name">del 算子</td><td class="comp-lec">Lec 29 (Tue 11/20)</td><td>\(\nabla=\langle\partial_x,\partial_y,\partial_z\rangle\)</td></tr>
+        <tr><td class="comp-name">散度</td><td class="comp-lec">Lec 29</td><td>\(\nabla\cdot\vec{F}=P_x+Q_y+R_z\)</td></tr>
+        <tr><td class="comp-name">散度的物理意义</td><td class="comp-lec">Lec 29</td><td>\(\nabla\cdot\vec{F}\) = 源密度（单位体积产生的流量）</td></tr>
+        <tr><td class="comp-name">空间线积分</td><td class="comp-lec">Lec 30 (Tue 11/27)</td><td>\(\int_C \vec{F}\cdot d\vec{r}=\int_C P\,dx+Q\,dy+R\,dz\)</td></tr>
+        <tr><td class="comp-name">空间梯度场判定</td><td class="comp-lec">Lec 30</td><td>\(P_y=Q_x,\ P_z=R_x,\ Q_z=R_y\) ⇔ 梯度场</td></tr>
+        <tr><td class="comp-name">求空间势函数</td><td class="comp-lec">Lec 30</td><td>反导数法（逐分量积分、比较）</td></tr>
+        <tr><td class="comp-name">三维旋度</td><td class="comp-lec">Lec 29–30</td><td>\(\nabla\times\vec{F}=\langle R_y-Q_z,\ P_z-R_x,\ Q_x-P_y\rangle\)</td></tr>
+        <tr><td class="comp-name">旋度的物理意义</td><td class="comp-lec">Lec 30</td><td>\(\nabla\times\vec{F}=2\times\) 角速度（对速度场）</td></tr>
+        <tr><td class="comp-name">扩散方程</td><td class class="comp-lec">Lec 29–30</td><td>\(\partial u/\partial t = k\nabla^2 u\)</td></tr>
+      </tbody>
+    </table>
+
+    <!-- 核心知识要点 -->
+    <h2 id="core">核心知识要点</h2>
+
+    <h3 id="del-operator">1. del 算子</h3>
+    <p>符号算子 \(\nabla=\bigl\langle\frac{\partial}{\partial x},\frac{\partial}{\partial y},\frac{\partial}{\partial z}\bigr\rangle\)。三种用法：</p>
+    <ul>
+      <li><strong>梯度</strong>：\(\nabla f = \langle f_x,f_y,f_z\rangle\)</li>
+      <li><strong>散度</strong>：\(\nabla\cdot\vec{F} = P_x+Q_y+R_z\)（点乘）</li>
+      <li><strong>旋度</strong>：\(\nabla\times\vec{F} = \det\begin{pmatrix}\hat{\imath}&\hat{\jmath}&\hat{k}\\\partial_x&\partial_y&\partial_z\\P&amp;Q&amp;R\end{pmatrix}\)（叉乘）</li>
+    </ul>
+
+    <h3 id="divergence">2. 散度 (divergence)</h3>
+    <p>\(\displaystyle \nabla\cdot\vec{F} = \frac{\partial P}{\partial x}+\frac{\partial Q}{\partial y}+\frac{\partial R}{\partial z}\)。</p>
+    <p><strong>物理意义</strong>：对不可压缩流体的速度场 \(\vec{F}\)，\(\nabla\cdot\vec{F}\) 等于<strong>源密度</strong>——单位时间、单位体积内产生的流体体积。正散度 = 源（冒出），负散度 = 汇（吸入），零散度 = 无源。</p>
+
+    <h3 id="div-theorem">3. 散度定理 (Divergence Theorem)</h3>
+    <p>设 \(S\) 是闭曲面，围成空间区域 \(D\)，外法向 \(\hat{n}\)。向量场 \(\vec{F}\) 在 \(D\) 上连续可微，则：</p>
+    \[ \iint_S \vec{F}\cdot\hat{n}\,dS = \iiint_D \nabla\cdot\vec{F}\,dV. \]
+    <p>证明思路（Auroux）：对竖直简单区域先证 \(\displaystyle\iint_S R\hat{k}\cdot\hat{n}\,dS=\iiint_D R_z\,dV\)（顶面 + 底面 + 侧面 = 0），再分解为一般区域。</p>
+    <p>例子：\(\vec{F}=z\hat{k}\) 沿半径 \(a\) 的球面通量。\(\nabla\cdot\vec{F}=1\)，故通量 = \(\iiint_D 1\,dV = \frac43\pi a^3\)。</p>
+
+    <div class="card idea">
+      <p><strong>核心思想：</strong>散度定理说"流出闭曲面的净流量 = 内部总源强"。Auroux 的烟雾类比：烟雾浓度 \(u\)，流速 \(\vec{F}=-k\nabla u\)（从浓到稀），则浓度变化率 \(\partial u/\partial t = -\nabla\cdot\vec{F} = k\nabla^2 u\)——这就是<strong>扩散方程</strong>。</p>
+    </div>
+
+    <h3 id="curl-3d">4. 三维旋度 (curl)</h3>
+    <p>\(\displaystyle \nabla\times\vec{F} = \bigl\langle R_y-Q_z,\ P_z-R_x,\ Q_x-P_y\bigr\rangle\)。</p>
+    <p><strong>记忆法</strong>：\(\nabla\times\vec{F}=\det\begin{pmatrix}\hat{\imath}&\hat{\jmath}&\hat{k}\\\partial_x&\partial_y&\partial_z\\P&amp;Q&amp;R\end{pmatrix}\)。</p>
+    <p><strong>物理意义</strong>：对速度场 \(\vec{v}\)，\(\nabla\times\vec{v} = 2\omega\)，其中 \(\omega\) 是流体微团的<strong>角速度向量</strong>。例子：绕 \(z\) 轴以角速度 \(\omega\) 旋转的速度场 \(\vec{v}=\langle -\omega y,\omega x,0\rangle\)，则 \(\nabla\times\vec{v}=\langle 0,0,2\omega\rangle\)。</p>
+
+    <h3 id="line-space">5. 空间中的线积分与梯度场</h3>
+    <p>空间线积分 \(\displaystyle\int_C \vec{F}\cdot d\vec{r}=\int_C P\,dx+Q\,dy+R\,dz\)，计算方法同二维：参数化后代入。</p>
+    <p><strong>空间梯度场判定</strong>：\(\vec{F}=\langle P,Q,R\rangle\) 是梯度场 ⇔（在单连通区域上）</p>
+    \[ \frac{\partial P}{\partial y}=\frac{\partial Q}{\partial x},\quad \frac{\partial P}{\partial z}=\frac{\partial R}{\partial x},\quad \frac{\partial Q}{\partial z}=\frac{\partial R}{\partial y}. \]
+    <p>等价地：\(\nabla\times\vec{F}=\vec{0}\)。</p>
+    <p><strong>求势函数的反导数法</strong>：对 \(f_x=P\) 关于 \(x\) 积分 → 对 \(y\) 求偏与 \(Q\) 比较 → 对 \(z\) 求偏与 \(R\) 比较。</p>
+    <p>例子：\(\vec{F}=\langle 2xy,\ x^2+z^3,\ 3yz^2-4z^3\rangle\) 是梯度场，势函数 \(f=x^2y+yz^3-z^4+C\)。</p>
+
+    <h3 id="diffusion">6. 扩散方程</h3>
+    <p>Auroux 在第 29–30 讲推导扩散方程（也是热方程）。设 \(u(x,y,z,t)\) 是烟雾浓度，\(\vec{F}\) 是烟雾流速：</p>
+    <ol>
+      <li>物理：\(\vec{F}=-k\nabla u\)（流速正比于浓度负梯度——从浓到稀）</li>
+      <li>质量守恒 + 散度定理：\(\displaystyle\frac{\partial u}{\partial t}=-\nabla\cdot\vec{F}\)</li>
+    </ol>
+    <p>合并得：</p>
+    \[ \frac{\partial u}{\partial t} = -\nabla\cdot(-k\nabla u) = k\nabla^2 u = k\left(\frac{\partial^2 u}{\partial x^2}+\frac{\partial^2 u}{\partial y^2}+\frac{\partial^2 u}{\partial z^2}\right). \]
+
+    <!-- 典型题型与解题策略 -->
+    <h2 id="strategies">典型题型与解题策略</h2>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>散度与旋度的计算</h3>
+      <p><strong>代表：</strong>PS12 中直接计算 \(\nabla\cdot\vec{F}\) 或 \(\nabla\times\vec{F}\) 的题目。</p>
+      <p><strong>策略：</strong>散度 = 三个偏导之和；旋度 = 用行列式展开。注意旋度的每个分量是<strong>两个</strong>偏导之差。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>散度定理应用</h3>
+      <p><strong>代表：</strong>PS12 中闭曲面通量题；复杂曲面用散度定理简化。</p>
+      <p><strong>策略：</strong>闭曲面通量 → 考虑散度定理 → 算 \(\nabla\cdot\vec{F}\) → 化为三重积分。当 \(\nabla\cdot\vec{F}\) 简单（如常数、零）时特别有效。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>空间梯度场判定与求势</h3>
+      <p><strong>代表：</strong>含参向量场题（哪些参数使 \(\vec{F}\) 为梯度场）；求空间势函数。</p>
+      <p><strong>策略：</strong>令三个偏导等式成立，解参数。求势用反导数法逐分量积分、逐分量比较。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">4</div>
+      <h3>空间线积分</h3>
+      <p><strong>代表：</strong>给定参数化的空间曲线；分段路径。</p>
+      <p><strong>策略：</strong>参数化 → 代入 \(\vec{F}\) 与 \(d\vec{r}\) → 单变量积分。若场是梯度场，用 FTC 简化。</p>
+    </div>
+
+    <!-- 常见错误 -->
+    <h2 id="pitfalls">常见错误</h2>
+
+    <div class="pitfall">
+      <p><strong>旋度分量符号出错：</strong>\(\nabla\times\vec{F}=\langle R_y-Q_z,\ P_z-R_x,\ Q_x-P_y\rangle\)。中间分量 \(P_z-R_x\) 是<strong>减</strong>，不是加。用行列式记忆可避免。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>散度定理用于非闭曲面：</strong>散度定理只对<strong>闭曲面</strong>成立。若曲面不封闭，需要补面后再用定理，减去补面的通量。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>空间梯度场判据漏条件：</strong>需要三个等式 \(P_y=Q_x,\ P_z=R_x,\ Q_z=R_y\) 都成立。只验证一个或两个是不够的。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>混淆散度与旋度的物理意义：</strong>散度衡量<strong>源/汇</strong>（流出 vs 流入）；旋度衡量<strong>旋转</strong>。不可压缩流体 \(\nabla\cdot\vec{v}=0\)；无旋流动 \(\nabla\times\vec{v}=\vec{0}\)。两者独立。</p>
+    </div>
+
+    <!-- 知识检查 -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c"
+         data-correct="正确！\(\nabla\cdot\vec{F}=P_x+Q_y+R_z\)，散度是标量（点乘的结果）。"
+         data-incorrect="提示：\(\nabla\cdot\vec{F}\) 中 \(\nabla\) 与 \(\vec{F}\) 做的是什么运算？">
+      <p><strong>问题 1：</strong>向量场 \(\vec{F}=\langle P,Q,R\rangle\) 的散度 \(\nabla\cdot\vec{F}\) 等于：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\langle P_x,Q_y,R_z\rangle\)</button>
+        <button data-choice="b" aria-pressed="false">\(\langle R_y-Q_z,\ P_z-R_x,\ Q_x-P_y\rangle\)</button>
+        <button data-choice="c" aria-pressed="false">\(P_x+Q_y+R_z\)</button>
+        <button data-choice="d" aria-pressed="false">\(P_x\cdot Q_y\cdot R_z\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="a"
+         data-correct="正确！散度定理：\(\displaystyle\iint_S \vec{F}\cdot\hat{n}\,dS=\iiint_D \nabla\cdot\vec{F}\,dV\)，要求 \(S\) 是闭曲面。"
+         data-incorrect="提示：Auroux 在第 29 讲把散度定理类比 Green 通量形式。">
+      <p><strong>问题 2：</strong>散度定理的正确表述是：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\displaystyle\iint_S \vec{F}\cdot\hat{n}\,dS=\iiint_D \nabla\cdot\vec{F}\,dV\)（\(S\) 为闭曲面）</button>
+        <button data-choice="b" aria-pressed="false">\(\displaystyle\oint_C \vec{F}\cdot d\vec{r}=\iint_R \nabla\cdot\vec{F}\,dA\)</button>
+        <button data-choice="c" aria-pressed="false">\(\displaystyle\iint_S \vec{F}\cdot\hat{n}\,dS=\oint_C \nabla\cdot\vec{F}\,dr\)</button>
+        <button data-choice="d" aria-pressed="false">\(\displaystyle\iiint_D \vec{F}\,dV=\iint_S \nabla\cdot\vec{F}\,dS\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="b"
+         data-correct="正确！\(\nabla\times\vec{v}=\det\begin{pmatrix}\hat{\imath}&\hat{\jmath}&\hat{k}\\\partial_x&\partial_y&\partial_z\\-\omega y&\omega x&0\end{pmatrix}=\langle 0,0,\omega+\omega\rangle=\langle 0,0,2\omega\rangle\)。"
+         data-incorrect="提示：用行列式展开 \(\nabla\times\vec{v}\)。">
+      <p><strong>问题 3：</strong>绕 \(z\) 轴以角速度 \(\omega\) 旋转的速度场 \(\vec{v}=\langle -\omega y,\omega x,0\rangle\) 的旋度等于：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\langle 0,0,\omega\rangle\)</button>
+        <button data-choice="b" aria-pressed="false">\(\langle 0,0,2\omega\rangle\)</button>
+        <button data-choice="c" aria-pressed="false">\(\langle -\omega,\omega,0\rangle\)</button>
+        <button data-choice="d" aria-pressed="false">\(\vec{0}\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确！三个等式 \(P_y=Q_x,\ P_z=R_x,\ Q_z=R_y\) 都成立 ⇔ \(\nabla\times\vec{F}=\vec{0}\) ⇔ 梯度场（在单连通区域上）。"
+         data-incorrect="提示：这三个等式等价于什么？">
+      <p><strong>问题 4：</strong>空间向量场 \(\vec{F}=\langle P,Q,R\rangle\) 是梯度场的充要条件（在单连通区域上）：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\nabla\cdot\vec{F}=0\)</button>
+        <button data-choice="b" aria-pressed="false">\(\nabla\cdot\vec{F}\neq0\)</button>
+        <button data-choice="c" aria-pressed="false">\(\nabla\times\vec{F}=\vec{0}\) 且 \(\nabla\cdot\vec{F}=0\)</button>
+        <button data-choice="d" aria-pressed="false">\(\nabla\times\vec{F}=\vec{0}\)（即 \(P_y=Q_x,\ P_z=R_x,\ Q_z=R_y\)）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <!-- 一手资料 -->
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>study_materials/ps12.pdf</code> — Problem Set 12 题面</li>
+      <li><code>study_materials/part_diff_eqn.pdf</code> — 偏微分方程/扩散方程笔记</li>
+      <li>官方课程主页：<a href="https://ocw.mit.edu/courses/18-02-multivariable-calculus-fall-2007/">MIT OCW 18.02</a></li>
+    </ul>
+
+    <footer>
+      <p>MIT 18.02 Multivariable Calculus · Fall 2007 · Prof. Denis Auroux · 本习题指南依据官方讲义与习题整理</p>
+    </footer>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>
