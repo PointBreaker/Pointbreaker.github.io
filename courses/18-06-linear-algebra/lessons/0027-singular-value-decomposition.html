@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>奇异值分解 SVD — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 27 课</p>
+    <h1>奇异值分解 SVD</h1>
+    <p class="lede">每个矩阵都可以分解为 \(A = U \Sigma V^T\)——这是线性代数的"瑞士军刀"。SVD 揭示了矩阵的几何本质：把单位球映为椭球，奇异值就是半轴长度。</p>
+    <div class="meta"><span>授课：Prof. Gilbert Strang</span><span>日期：2010-04-14</span><span>难度：较难</span></div>
+
+    <hr class="rule">
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>写出 SVD 的分解形式 \(A = U \Sigma V^T\) 并说明各因子的性质</li>
+      <li>从几何角度理解 SVD：旋转-拉伸-旋转</li>
+      <li>将奇异值与 \(A^T A\) 的特征值联系起来</li>
+      <li>应用 SVD 做低秩近似与伪逆</li>
+      <li>理解 SVD 在数据压缩和最小二乘中的威力</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="svd-theorem">SVD 定理</h2>
+    <p>对于任意 \(m \times n\) 实矩阵 \(A\)，存在分解：</p>
+
+    \[A = U \Sigma V^T\]
+
+    <p>其中：</p>
+    <ul>
+      <li>\(U\) 是 \(m \times m\) <strong>正交矩阵</strong>（orthogonal），列向量 \(\mathbf{u}_i\) 称为左奇异向量</li>
+      <li>\(\Sigma\) 是 \(m \times n\) <strong>对角矩阵</strong>，对角元 \(\sigma_1 \ge \sigma_2 \ge \cdots \ge 0\) 称为奇异值</li>
+      <li>\(V\) 是 \(n \times n\) <strong>正交矩阵</strong>，列向量 \(\mathbf{v}_i\) 称为右奇异向量</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>几何图像：</strong>线性变换 \(A\) 可以分解为三步：先做旋转/反射 \(V^T\)，再做沿坐标轴的拉伸 \(\Sigma\)，最后再做旋转/反射 \(U\)。SVD 告诉我们：<strong>任何线性变换都是旋转-拉伸-旋转</strong>。</p>
+    </div>
+
+    <p>当 \(A\) 把 \(\mathbb{R}^n\) 中的单位球面映到 \(\mathbb{R}^m\) 中时，像是一个<strong>椭球面</strong>（ellipsoid），其半轴长度恰好是奇异值 \(\sigma_i\)，方向由 \(\mathbf{u}_i\) 给出。</p>
+
+    <hr class="rule">
+    <h2 id="singular-values">奇异值与 \(A^T A\) 的特征值</h2>
+    <p>奇异值有一个简洁的代数刻画。计算：</p>
+
+    \[A^T A = (V \Sigma^T U^T)(U \Sigma V^T) = V (\Sigma^T \Sigma) V^T\]
+
+    <p>这是 \(A^T A\) 的特征值分解！因此：</p>
+    <ul>
+      <li>\(V\) 的列是 \(A^T A\) 的特征向量</li>
+      <li>\(\sigma_i^2\) 是 \(A^T A\) 的特征值</li>
+    </ul>
+
+    \[\sigma_i = \sqrt{\lambda_i(A^T A)}\]
+
+    <p>类似地，\(U\) 的列是 \(A A^T\) 的特征向量。</p>
+
+    <div class="card warning">
+      <p><strong>数值提醒：</strong>实际计算 SVD 时，一般不通过 \(A^T A\) 来求奇异值——平方根运算会损失数值精度。现代算法（如 Golub-Kahan）直接对 \(A\) 做双对角化再迭代。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="compact-svd">紧 SVD 与经济 SVD</h2>
+    <p>设 \(A\) 的秩为 \(r\)，则只有 \(r\) 个非零奇异值。此时可以只保留非零部分，得到<strong>紧 SVD</strong>（compact SVD）：</p>
+
+    \[A = U_r \Sigma_r V_r^T\]
+
+    <p>其中 \(U_r\) 是 \(m \times r\)，\(\Sigma_r\) 是 \(r \times r\)，\(V_r\) 是 \(n \times r\)。这给出了 \(A\) 的<strong>四个基本子空间</strong>的正交基：</p>
+    <ul>
+      <li>\(U_r\) 的列：列空间 \(C(A)\) 的标准正交基</li>
+      <li>\(U_{m-r}\) 的列：左零空间 \(N(A^T)\) 的标准正交基</li>
+      <li>\(V_r\) 的列：行空间 \(C(A^T)\) 的标准正交基</li>
+      <li>\(V_{n-r}\) 的列：零空间 \(N(A)\) 的标准正交基</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="low-rank">低秩近似</h2>
+    <p>SVD 的一个核心应用是<strong>低秩近似</strong>（low-rank approximation）。Eckart-Young 定理告诉我们，在 Frobenius 范数下，\(A\) 的最佳秩-\(k\) 近似为：</p>
+
+    \[A_k = \sum_{i=1}^{k} \sigma_i \mathbf{u}_i \mathbf{v}_i^T = U_k \Sigma_k V_k^T\]
+
+    <p>近似误差为：</p>
+
+    \[\|A - A_k\|_F = \sqrt{\sigma_{k+1}^2 + \cdots + \sigma_r^2}\]
+
+    <p>这在数据压缩中有直接应用：若奇异值衰减很快，只需存储前几项就能很好地近似原矩阵。</p>
+
+    <div class="card idea">
+      <p><strong>图像压缩直觉：</strong>一张照片作为像素矩阵，其 SVD 奇异值通常快速衰减。取前 50 个奇异值就能重建出视觉上几乎无损的图片——存储量从 \(mn\) 降到 \(k(m+n+1)\)。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="pseudoinverse">伪逆</h2>
+    <p>SVD 自然地给出矩阵的<strong>伪逆</strong>（pseudoinverse）\(A^+\)：</p>
+
+    \[A^+ = V \Sigma^+ U^T, \quad \Sigma^+_{ii} = \begin{cases} 1/\sigma_i & \sigma_i &gt; 0 \\ 0 & \sigma_i = 0 \end{cases}\]
+
+    <p>伪逆是解决不一致最小二乘问题 \(\min \|A\mathbf{x} - \mathbf{b}\|_2\) 的最佳工具。最小范数最小二乘解为：</p>
+
+    \[\mathbf{x}^* = A^+ \mathbf{b}\]
+
+    <hr class="rule">
+    <figure class="course-interactive"
+            data-interactive-src="../interactives/svd-image-compression.json"
+            aria-busy="true">
+      <img class="course-interactive-fallback"
+           src="../figures/svd-image-compression-fallback.svg"
+           alt="SVD 秩-k 逼近效果对比：不同秩下矩阵信息的保留程度">
+    </figure>
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！奇异值是 \(A^T A\) 特征值的平方根。" data-incorrect="再想想。奇异值与哪个对称矩阵的特征值有关？">
+      <p><strong>问题 1：</strong>矩阵 \(A\) 的奇异值与下列哪项直接相关？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A\) 的特征值的绝对值</button>
+        <button data-choice="b" aria-pressed="false">\(A + A^T\) 的特征值</button>
+        <button data-choice="c" aria-pressed="false">\(A^T A\) 的特征值的平方根</button>
+        <button data-choice="d" aria-pressed="false">\(A\) 的行列式的平方根</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！SVD 的几何含义是旋转-拉伸-旋转，把单位球映为椭球。" data-incorrect="再想想。SVD 分解的三步各是什么几何操作？">
+      <p><strong>问题 2：</strong>SVD \(A = U\Sigma V^T\) 的几何含义是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">把椭球映为单位球</button>
+        <button data-choice="b" aria-pressed="false">旋转-拉伸-旋转，把单位球映为椭球</button>
+        <button data-choice="c" aria-pressed="false">把立方体映为球</button>
+        <button data-choice="d" aria-pressed="false">在特征方向上做投影</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！Eckart-Young 定理：最佳秩-k 近似由前 k 个奇异值/向量给出。" data-incorrect="再想想。低秩近似保留了哪些分量？">
+      <p><strong>问题 3：</strong>在 Frobenius 范数下，矩阵 \(A\) 的最佳秩-\(k\) 近似由什么给出？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">前 \(k\) 个奇异值与对应奇异向量的外积之和</button>
+        <button data-choice="b" aria-pressed="false">后 \(k\) 个奇异值与对应奇异向量的外积之和</button>
+        <button data-choice="c" aria-pressed="false">\(A\) 的前 \(k\) 列</button>
+        <button data-choice="d" aria-pressed="false">\(A\) 的前 \(k\) 行</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d" data-correct="正确！伪逆将非零奇异值取零，零奇异值保持为零。" data-incorrect="再想想。伪逆如何处理零奇异值？">
+      <p><strong>问题 4：</strong>关于伪逆 \(A^+\)，下列哪项正确？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">对所有矩阵都存在且唯一</button>
+        <button data-choice="b" aria-pressed="false">等于 \((A^T A)^{-1} A^T\) 对所有矩阵成立</button>
+        <button data-choice="c" aria-pressed="false">不适用于方阵</button>
+        <button data-choice="d" aria-pressed="false">给出最小二乘问题的最小范数解</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>SVD 是普适的分解</h3>
+        <p>任意矩阵 \(A = U\Sigma V^T\)，三个因子都有明确的正交或对角结构，无需任何条件。</p>
+      </article>
+      <article>
+        <h3>几何 = 旋转-拉伸-旋转</h3>
+        <p>奇异值是单位球映为椭球后的半轴长度，左右奇异向量给出椭球的轴方向。</p>
+      </article>
+      <article>
+        <h3>低秩近似的最优性</h3>
+        <p>Eckart-Young 定理保证：保留前 \(k\) 个奇异值即得最佳秩-\(k\) 近似。</p>
+      </article>
+      <article>
+        <h3>伪逆统一求解</h3>
+        <p>\(A^+\) 给出最小二乘问题的最小范数解，无论 \(A\) 是否可逆、是否方阵。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>G. Strang, <em>Introduction to Linear Algebra</em>, 第 7 章 §1–§4（SVD 理论与应用）</li>
+      <li>MIT OCW 18.06 第 27 课视频与讲义：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>G. Golub & C. Van Loan, <em>Matrix Computations</em>, 第 2 章、第 8 章（SVD 的数值算法）</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_29.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0026-similar-matrices.html">← 相似矩阵</a>
+      <a href="0028-fourier-series-complex.html">Fourier 级数与复矩阵 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 27</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

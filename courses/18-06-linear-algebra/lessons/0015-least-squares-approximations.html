@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>最小二乘逼近 — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 15 课</p>
+    <h1>最小二乘逼近</h1>
+    <p class="lede">超定方程组 \(A\mathbf{x}=\mathbf{b}\)（方程个数 > 未知数个数）通常无解。最小二乘法（least squares）找 \(\hat{\mathbf{x}}\) 使 \(\|A\mathbf{x}-\mathbf{b}\|^2\) 最小——几何上就是把 \(\mathbf{b}\) 投影到列空间，应用上就是线性回归。</p>
+    <div class="meta"><span>授课：Prof. Gilbert Strang</span><span>日期：2010-03-10</span><span>难度：较难</span></div>
+
+    <hr class="rule">
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>解释为什么超定方程组 \(A\mathbf{x}=\mathbf{b}\) 通常无解（\(\mathbf{b}\notin C(A)\)）。</li>
+      <li>从 \(\min\|A\mathbf{x}-\mathbf{b}\|^2\) 推导法方程 \(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\)。</li>
+      <li>把最小二乘解几何解释为 \(\mathbf{p}=A\hat{\mathbf{x}}\) 是 \(\mathbf{b}\) 在列空间上的投影。</li>
+      <li>应用最小二乘做数据拟合（线性回归）。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="overdetermined">超定方程组</h2>
+    <p>设 \(A\) 是 \(m\times n\) 矩阵且 \(m>n\)（方程多于未知数）。方程 \(A\mathbf{x}=\mathbf{b}\) 有解当且仅当 \(\mathbf{b}\in C(A)\)。一般 \(\mathbf{b}\) 不在列空间中，所以<strong>精确解不存在</strong>。</p>
+    <p>例子：用一条直线 \(b=C+Dt\) 拟合三个数据点 \((t_1,b_1),(t_2,b_2),(t_3,b_3)\)。方程组</p>
+    \[\begin{bmatrix}1&t_1\\1&t_2\\1&t_3\end{bmatrix}\begin{bmatrix}C\\D\end{bmatrix}=\begin{bmatrix}b_1\\b_2\\b_3\end{bmatrix}\]
+    <p>通常无解，因为三点一般不在一条直线上。</p>
+
+    <div class="card idea">
+      <p><strong>最小二乘 = 最小化误差平方和。</strong>既然不能使误差为零，就找使 \(\|A\mathbf{x}-\mathbf{b}\|^2\) 最小的 \(\hat{\mathbf{x}}\)。这是统计学、数据科学和工程中最常用的拟合方法。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="normal">法方程</h2>
+    <p>最小化 \(f(\mathbf{x})=\|A\mathbf{x}-\mathbf{b}\|^2\)。展开：</p>
+    \[f(\mathbf{x}) = (A\mathbf{x}-\mathbf{b})^T(A\mathbf{x}-\mathbf{b})
+                   = \mathbf{x}^TA^TA\mathbf{x} - 2\mathbf{b}^TA\mathbf{x} + \mathbf{b}^T\mathbf{b}.\]
+    <p>对 \(\mathbf{x}\) 求梯度并令为零：</p>
+    \[\nabla f = 2A^TA\mathbf{x} - 2A^T\mathbf{b} = \mathbf{0}.\]
+    <p>得到<strong>法方程</strong>（normal equations）：</p>
+    \[A^T A\,\hat{\mathbf{x}} = A^T \mathbf{b}.\]
+    <p>这与第 14 课投影的法方程完全相同！几何解释：\(A\hat{\mathbf{x}}=\mathbf{p}\) 是 \(\mathbf{b}\) 在列空间上的投影，误差 \(\mathbf{e}=\mathbf{b}-A\hat{\mathbf{x}}\in N(A^T)\)。</p>
+
+    <hr class="rule">
+    <h2 id="geometry-ls">几何视角</h2>
+    <p>最小二乘解的三种等价表述：</p>
+    <ol>
+      <li><strong>代数</strong>：解法方程 \(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\)；</li>
+      <li><strong>几何</strong>：\(\mathbf{p}=A\hat{\mathbf{x}}\) 是 \(\mathbf{b}\) 在 \(C(A)\) 上的投影；</li>
+      <li><strong>优化</strong>：\(\hat{\mathbf{x}} = \arg\min_{\mathbf{x}}\|A\mathbf{x}-\mathbf{b}\|^2\)。</li>
+    </ol>
+    <p>投影矩阵 \(P=A(A^TA)^{-1}A^T\) 把 \(\mathbf{b}\) 映到 \(\mathbf{p}=P\mathbf{b}\)，误差 \(\mathbf{b}-\mathbf{p}=(I-P)\mathbf{b}\) 与列空间正交。</p>
+
+    <div class="card warning">
+      <p><strong>条件数问题。</strong>解法方程涉及 \(A^TA\)，其条件数是 \(A\) 条件数的平方。数值计算中常用 QR 分解或 SVD 代替直接解法方程。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="fitting">数据拟合算例</h2>
+    <p>用直线 \(b=C+Dt\) 拟合三个点 \((1,1),(2,2),(3,2)\)：</p>
+    \[A = \begin{bmatrix}1&1\\1&2\\1&3\end{bmatrix},\quad \mathbf{b}=\begin{bmatrix}1\\2\\2\end{bmatrix}.\]
+    <p>计算</p>
+    \[A^TA = \begin{bmatrix}3&6\\6&14\end{bmatrix},\qquad A^T\mathbf{b} = \begin{bmatrix}5\\11\end{bmatrix}.\]
+    <p>法方程 \(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\) 即</p>
+    \[\begin{cases}
+      3C + 6D = 5,\\
+      6C + 14D = 11.
+    \end{cases}\]
+    <p>解得 \(C=\dfrac{2}{3},\ D=\dfrac{1}{2}\)。最佳拟合直线为 \(b=\dfrac{2}{3}+\dfrac{1}{2}t\)。</p>
+    <p>投影 \(\mathbf{p}=A\hat{\mathbf{x}}=\begin{bmatrix}7/6\\5/3\\13/6\end{bmatrix}\)，误差 \(\mathbf{e}=\mathbf{b}-\mathbf{p}=\begin{bmatrix}-1/6\\1/3\\-1/6\end{bmatrix}\)，验证 \(A^T\mathbf{e}=\mathbf{0}\)：</p>
+    \[A^T\mathbf{e} = \begin{bmatrix}1&1&1\\1&2&3\end{bmatrix}\begin{bmatrix}-1/6\\1/3\\-1/6\end{bmatrix} = \begin{bmatrix}0\\0\end{bmatrix}.\]
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！超定方程组通常无解，因为 b 一般不在 A 的列空间中。" data-incorrect="再想想。当方程个数大于未知数个数时，b 通常不在列空间中。">
+      <p><strong>问题 1：</strong>超定方程组 \(A\mathbf{x}=\mathbf{b}\)（\(m>n\)）通常无解的原因是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A\) 不可逆</button>
+        <button data-choice="b" aria-pressed="false">\(\mathbf{b}\) 一般不在 \(A\) 的列空间中</button>
+        <button data-choice="c" aria-pressed="false">\(A\) 的行线性相关</button>
+        <button data-choice="d" aria-pressed="false">方程个数太少</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="a" data-correct="正确！最小二乘的法方程是 A^T A x̂ = A^T b。" data-incorrect="再想想。最小化 ||Ax−b||^2 对 x 求导得到的就是这个方程。">
+      <p><strong>问题 2：</strong>最小二乘法方程是哪个？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A^TA\hat{\mathbf{x}} = A^T\mathbf{b}\)</button>
+        <button data-choice="b" aria-pressed="false">\(AA^T\hat{\mathbf{x}} = A\mathbf{b}\)</button>
+        <button data-choice="c" aria-pressed="false">\(A\hat{\mathbf{x}} = P\mathbf{b}\)</button>
+        <button data-choice="d" aria-pressed="false">\((A^TA)^{-1}\hat{\mathbf{x}} = \mathbf{b}\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="c" data-correct="正确！A x̂ = p 是 b 在列空间上的投影，误差 e = b − p 与列空间正交。" data-incorrect="再想想。最小二乘解的几何意义是投影。">
+      <p><strong>问题 3：</strong>最小二乘解 \(\hat{\mathbf{x}}\) 的几何意义是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A\hat{\mathbf{x}}\) 是 \(\mathbf{b}\) 在左零空间上的投影</button>
+        <button data-choice="b" aria-pressed="false">\(\hat{\mathbf{x}}\) 是 \(\mathbf{b}\) 在行空间上的投影</button>
+        <button data-choice="c" aria-pressed="false">\(A\hat{\mathbf{x}}\) 是 \(\mathbf{b}\) 在列空间上的投影</button>
+        <button data-choice="d" aria-pressed="false">\(\hat{\mathbf{x}}\) 是 \(\mathbf{b}\) 的精确解</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d" data-correct="正确！误差 e = b − A x̂ 属于左零空间 N(A^T)，与列空间正交。" data-incorrect="再想想。误差向量必须与列空间正交，而列空间的正交补是左零空间。">
+      <p><strong>问题 4：</strong>最小二乘误差 \(\mathbf{e}=\mathbf{b}-A\hat{\mathbf{x}}\) 属于哪个子空间？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">列空间 \(C(A)\)</button>
+        <button data-choice="b" aria-pressed="false">行空间 \(C(A^T)\)</button>
+        <button data-choice="c" aria-pressed="false">零空间 \(N(A)\)</button>
+        <button data-choice="d" aria-pressed="false">左零空间 \(N(A^T)\)</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>超定方程组无解</h3>
+        <p>\(m>n\) 时 \(\mathbf{b}\notin C(A)\)，精确解不存在，转而最小化误差。</p>
+      </article>
+      <article>
+        <h3>法方程</h3>
+        <p>\(A^TA\hat{\mathbf{x}}=A^T\mathbf{b}\)——最小二乘与投影共享同一个方程。</p>
+      </article>
+      <article>
+        <h3>投影解释</h3>
+        <p>\(A\hat{\mathbf{x}}\) 是 \(\mathbf{b}\) 在列空间上的投影，误差与列空间正交。</p>
+      </article>
+      <article>
+        <h3>应用：线性回归</h3>
+        <p>数据拟合、参数估计、信号处理——最小二乘法无处不在。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>G. Strang, <em>Introduction to Linear Algebra</em>, 第 4.3 节：最小二乘。</li>
+      <li>MIT OCW 18.06 课程主页：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_16.pdf</code></li>
+      <li><code>lecture_summaries/lecture_2_1_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0014-projections-and-subspaces.html">← 投影与子空间</a>
+      <a href="0016-gram-schmidt-qr.html">Gram-Schmidt 与 A=QR →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 15</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

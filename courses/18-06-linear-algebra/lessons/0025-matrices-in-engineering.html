@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>工程中的矩阵（弹簧与质量）— 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 25 课</p>
+    <h1>工程中的矩阵（弹簧与质量）</h1>
+    <p class="lede">对称矩阵与正定矩阵并非凭空而来——它们在结构力学中自然出现。通过弹簧-质量系统，我们看到了刚度矩阵（stiffness matrix）和特征值如何描述真实世界的振动。</p>
+    <div class="meta"><span>授课：Prof. Gilbert Strang</span><span>日期：2010-04-09</span><span>难度：中等</span></div>
+
+    <hr class="rule">
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>写出弹簧-质量系统的平衡方程 \(K \mathbf{u} = \mathbf{f}\)</li>
+      <li>理解刚度矩阵 \(K\) 对称且正定的物理来源</li>
+      <li>将特征值解释为系统固有频率的平方</li>
+      <li>区分刚度矩阵 \(K\) 与质量矩阵 \(M\) 在振动问题中的作用</li>
+      <li>把工程问题映射回已学的对称/正定矩阵理论</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="spring-system">弹簧-质量系统</h2>
+    <p>考虑一排由弹簧连接的质点。每个质点只能沿水平方向滑动，第 \(i\) 个质点的位移记为 \(u_i\)。胡克定律（Hooke's law）告诉我们，弹簧施加的力正比于两端位移之差。把所有质点的平衡条件写在一起，就得到一个线性系统：</p>
+
+    \[K \mathbf{u} = \mathbf{f}\]
+
+    <p>其中 \(\mathbf{f}\) 是外力向量，\(\mathbf{u}\) 是位移向量，\(K\) 是<strong>刚度矩阵</strong>（stiffness matrix）。</p>
+
+    <div class="card idea">
+      <p><strong>物理直觉：</strong>刚度矩阵的每一行对应一个质点的力平衡。对角元 \(K_{ii}\) 是连接到质点 \(i\) 的所有弹簧刚度之和，非对角元 \(K_{ij}\)（\(i \neq j\)）是连接质点 \(i\) 与 \(j\) 的弹簧刚度的相反数。</p>
+    </div>
+
+    <p>以一个三质点、两端固定的系统为例，弹簧刚度分别为 \(k_1, k_2, k_3, k_4\)：</p>
+
+    \[K = \begin{pmatrix}
+    k_1 + k_2 & -k_2 & 0 \\
+    -k_2 & k_2 + k_3 & -k_3 \\
+    0 & -k_3 & k_3 + k_4
+    \end{pmatrix}\]
+
+    <p>观察这个矩阵：它是<strong>对称</strong>的，对角元为正，非对角元为负或零。这正是我们上一课讨论过的矩阵类型。</p>
+
+    <hr class="rule">
+    <h2 id="why-symmetric">为什么刚度矩阵是对称的？</h2>
+    <p>对称性 \(K = K^T\) 并非巧合，它来自力学中的互易原理（Betti's reciprocal theorem）：质点 \(i\) 在质点 \(j\) 上产生的力，等于质点 \(j\) 在质点 \(i\) 上产生的力。</p>
+
+    <p>更形式地，我们可以从能量角度理解。系统的弹性势能是一个二次型：</p>
+
+    \[V = \frac{1}{2} \mathbf{u}^T K \mathbf{u}\]
+
+    <p>外力 \(\mathbf{f}\) 做的功等于势能的变分，即 \(f_i = \partial V / \partial u_i\)。由于混合偏导数与次序无关，\(\partial^2 V / \partial u_i \partial u_j = \partial^2 V / \partial u_j \partial u_i\)，这直接给出 \(K_{ij} = K_{ji}\)。</p>
+
+    <div class="card warning">
+      <p><strong>注意：</strong>并非所有工程矩阵都对称。当系统存在非保守力（如追随力 follower force）或旋转效应时，可能会出现非对称的刚度矩阵。本课程讨论的是最常见、最对称的理想情况。</p>
+    </div>
+
+    <hr class="rule">
+    <h2 id="why-positive-definite">为什么刚度矩阵是正定的？</h2>
+    <p>要使结构稳定，任何非零位移 \(\mathbf{u} \neq \mathbf{0}\) 都必须储存正的弹性势能。也就是说：</p>
+
+    \[\mathbf{u}^T K \mathbf{u} &gt; 0 \quad \text{对所有 } \mathbf{u} \neq \mathbf{0}\]
+
+    <p>这正是正定矩阵的定义。如果 \(K\) 不是正定的，意味着存在某个位移模式不消耗能量——结构会在这个方向上"垮掉"（mechanism mode），即几何可变。</p>
+
+    <p>对于两端固定的弹簧-质量系统，\(K\) 总是正定的。但如果系统未被充分约束（例如一端自由），则 \(K\) 会是半正定的（positive semidefinite），此时存在刚体位移模式使得 \(\mathbf{u}^T K \mathbf{u} = 0\)。</p>
+
+    <hr class="rule">
+    <h2 id="eigenvalues-frequencies">特征值 = 固有频率的平方</h2>
+    <p>现在让系统振动。忽略阻尼，运动方程为：</p>
+
+    \[M \ddot{\mathbf{u}} + K \mathbf{u} = \mathbf{0}\]
+
+    <p>其中 \(M\) 是<strong>质量矩阵</strong>（mass matrix），通常是对角矩阵。假设简谐解 \(\mathbf{u}(t) = \mathbf{x} e^{i \omega t}\)，代入得：</p>
+
+    \[K \mathbf{x} = \omega^2 M \mathbf{x}\]
+
+    <p>这是一个<strong>广义特征值问题</strong>（generalized eigenvalue problem）。特征值 \(\lambda = \omega^2\) 的平方根给出系统的固有频率（natural frequencies），特征向量 \(\mathbf{x}\) 给出振型（mode shapes）。</p>
+
+    <div class="card idea">
+      <p><strong>物理图像：</strong>每个特征向量描述系统的一种"纯"振动模式——所有质点以同一频率同步振动，按固定比例运动。最低频率对应最"柔软"的振型，最高频率对应最"刚硬"的振型。</p>
+    </div>
+
+    <p>由于 \(K\) 和 \(M\) 都对称正定，所有特征值都是正实数，且特征向量关于 \(M\) 正交：</p>
+
+    \[\mathbf{x}_i^T M \mathbf{x}_j = 0 \quad (i \neq j)\]
+
+    <hr class="rule">
+    <h2 id="finite-element">与有限元方法的联系</h2>
+    <p>弹簧-质量系统是有限元方法（finite element method, FEM）的最简原型。在真实结构分析中，连续体被离散为大量单元，每个单元贡献一个小的刚度矩阵，组装成全局刚度矩阵 \(K\)。</p>
+
+    <p>无论网格多细，全局 \(K\) 仍然对称正定（在充分约束下）。这使得我们可以使用 Cholesky 分解 \(K = L L^T\) 高效求解——这正是第 24 课讨论的内容。</p>
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！势能是位移的二次函数，非零位移必储存正能量，故正定。" data-incorrect="再想想。什么情况下势能为零？">
+      <p><strong>问题 1：</strong>为什么两端固定的弹簧-质量系统，其刚度矩阵 \(K\) 是正定的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 \(K\) 的所有元素都为正</button>
+        <button data-choice="b" aria-pressed="false">因为任何非零位移都会储存正的弹性势能</button>
+        <button data-choice="c" aria-pressed="false">因为外力 \(\mathbf{f}\) 总是正的</button>
+        <button data-choice="d" aria-pressed="false">因为质点的质量都为正</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！广义特征值问题 \(K\mathbf{x} = \omega^2 M\mathbf{x}\) 的特征值是固有频率的平方。" data-incorrect="再想想。振动方程中出现了哪个算子？">
+      <p><strong>问题 2：</strong>在振动方程 \(M\ddot{\mathbf{u}} + K\mathbf{u} = \mathbf{0}\) 中，固有频率 \(\omega\) 与什么直接相关？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(K\) 的特征值</button>
+        <button data-choice="b" aria-pressed="false">\(M\) 的特征值</button>
+        <button data-choice="c" aria-pressed="false">广义特征值问题 \(K\mathbf{x} = \omega^2 M\mathbf{x}\) 的特征值</button>
+        <button data-choice="d" aria-pressed="false">\(K + M\) 的特征值</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！对称性来源于能量是位移的二阶可微函数，混合偏导数与次序无关。" data-incorrect="再想想。能量观点如何给出对称性？">
+      <p><strong>问题 3：</strong>刚度矩阵的对称性 \(K = K^T\) 最根本的来源是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">弹性势能是位移的二阶可微函数</button>
+        <button data-choice="b" aria-pressed="false">弹簧的串联公式</button>
+        <button data-choice="c" aria-pressed="false">质点的运动方程</button>
+        <button data-choice="d" aria-pressed="false">胡克定律的线性性</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d" data-correct="正确！半正定意味着存在非零位移使得势能为零，即刚体模式。" data-incorrect="再想想。半正定允许什么？">
+      <p><strong>问题 4：</strong>如果刚度矩阵 \(K\) 只是半正定而非正定，这意味着结构有什么特性？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">结构刚度太大</button>
+        <button data-choice="b" aria-pressed="false">结构处于共振状态</button>
+        <button data-choice="c" aria-pressed="false">外力必须为零</button>
+        <button data-choice="d" aria-pressed="false">存在不消耗势能的刚体位移模式</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>刚度矩阵自然对称正定</h3>
+        <p>在保守的弹簧-质量系统中，刚度矩阵 \(K\) 对称且正定，这源于能量守恒和稳定性要求，而非人为假设。</p>
+      </article>
+      <article>
+        <h3>特征值 = 固有频率²</h3>
+        <p>广义特征值问题 \(K\mathbf{x} = \omega^2 M \mathbf{x}\) 将线性代数与振动物理直接联系起来，特征值给出固有频率。</p>
+      </article>
+      <article>
+        <h3>工程问题的矩阵结构</h3>
+        <p>对角元为连接刚度之和，非对角元为连接刚度的相反数——这种模式在有限元分析中反复出现。</p>
+      </article>
+      <article>
+        <h3>半正定 = 几何可变</h3>
+        <p>当 \(K\) 半正定时，存在零能量位移模式，结构在该方向上缺乏约束，这是工程失稳的代数信号。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>G. Strang, <em>Introduction to Linear Algebra</em>, 第 6 章 §1–§3（对称矩阵与正定矩阵在物理中的应用）</li>
+      <li>MIT OCW 18.06 第 25 课视频与讲义：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>K. Bathe, <em>Finite Element Procedures</em>, 第 3 章（刚度矩阵的组装与性质）</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_29.pdf</code></li>
+      <li><code>lecture_summaries/lecture_2_11_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0024-positive-definite-matrices.html">← 正定矩阵</a>
+      <a href="0026-similar-matrices.html">相似矩阵 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 25</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

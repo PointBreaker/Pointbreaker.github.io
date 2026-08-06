@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>长方阵 PA=LU 与 Ax=b — 18.06</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">18.06 · 第 8 课</p>
+    <h1>长方阵 \(PA = LU\) 与 \(Ax = b\)</h1>
+    <p class="lede">课程前半段的收官：把消元、LU 分解、列空间、零空间统一到 \(A\mathbf{x} = \mathbf{b}\) 的完整图景中。秩定理 \(r + \operatorname{nullity} = n\) 把列空间和零空间联系在一起，而解的结构 \(\mathbf{x} = \mathbf{x}_p + \mathbf{x}_n\) 给出了所有解的显式描述。</p>
+    <div class="meta">
+      <span>授课：Prof. Gilbert Strang</span>
+      <span>日期：2010-02-22</span>
+      <span>难度：中等→较难</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="objectives">学习目标</h2>
+    <ul class="checklist">
+      <li>判断 \(A\mathbf{x} = \mathbf{b}\) 何时有解（\(\mathbf{b}\) 在列空间中）</li>
+      <li>描述解的结构：\(\mathbf{x} = \mathbf{x}_p + \mathbf{x}_n\)（特解 + 零空间）</li>
+      <li>用 RREF 判断解的存在性、唯一性，并写出通解</li>
+      <li>理解秩定理：\(r + \operatorname{nullity} = n\)</li>
+      <li>掌握长方阵 \(PA = LU\) 分解的形式</li>
+    </ul>
+
+    <h2 id="when-solvable">\(A\mathbf{x} = \mathbf{b}\) 何时有解</h2>
+    <p>方程 \(A\mathbf{x} = \mathbf{b}\) 有解当且仅当 \(\mathbf{b}\) 属于 \(A\) 的列空间 \(C(A)\)。等价地，\(\mathbf{b}\) 可以表示为 \(A\) 的列向量的线性组合。</p>
+
+    <p>用 RREF 判断：对增广矩阵 \([A \mid \mathbf{b}]\) 做行变换。如果某行出现 \([0 \; 0 \; \dots \; 0 \mid c]\) 且 \(c \neq 0\)，则方程组无解——\(\mathbf{b}\) 不在列空间中。</p>
+
+    <p>例子：</p>
+    \[
+    [A \mid \mathbf{b}] = \begin{bmatrix} 1 & 2 & 2 & 2 & \mid & b_1 \\ 2 & 4 & 6 & 8 & \mid & b_2 \\ 3 & 6 & 8 & 10 & \mid & b_3 \end{bmatrix}.
+    \]
+    <p>消元后得到：</p>
+    \[
+    \begin{bmatrix} 1 & 2 & 2 & 2 & \mid & b_1 \\ 0 & 0 & 2 & 4 & \mid & b_2 - 2b_1 \\ 0 & 0 & 0 & 0 & \mid & b_3 - b_2 - b_1 \end{bmatrix}.
+    \]
+    <p>有解的条件是 \(b_3 - b_2 - b_1 = 0\)，即 \(\mathbf{b}\) 必须满足这个线性约束。</p>
+
+    <div class="card idea">
+      <p><strong>可解性 = 列空间的成员资格。</strong> 判断 \(A\mathbf{x} = \mathbf{b}\) 是否有解，等价于判断 \(\mathbf{b}\) 是否在 \(C(A)\) 中。这个观点把"解方程"转化为"判断向量归属"，是线性代数空间思维的精髓。</p>
+    </div>
+
+    <h2 id="solution-structure">解的结构：\(\mathbf{x} = \mathbf{x}_p + \mathbf{x}_n\)</h2>
+    <p>假设 \(\mathbf{x}_p\) 是 \(A\mathbf{x} = \mathbf{b}\) 的一个<strong>特解</strong> (particular solution)，即 \(A\mathbf{x}_p = \mathbf{b}\)。设 \(\mathbf{x}_n\) 是零空间中的任意向量，即 \(A\mathbf{x}_n = \mathbf{0}\)。则</p>
+    \[
+    A(\mathbf{x}_p + \mathbf{x}_n) = A\mathbf{x}_p + A\mathbf{x}_n = \mathbf{b} + \mathbf{0} = \mathbf{b}.
+    \]
+    <p>因此 \(\mathbf{x}_p + \mathbf{x}_n\) 也是解。反过来，任意两个解之差都属于零空间。</p>
+
+    <p><strong>通解公式：</strong></p>
+    \[
+    \mathbf{x} = \mathbf{x}_p + \mathbf{x}_n, \quad \mathbf{x}_n \in N(A).
+    \]
+
+    <p>几何含义：解集是零空间的一个"平移"——把整个零空间子空间移动 \(\mathbf{x}_p\) 的距离。如果零空间是 \(\mathbb{R}^4\) 中的 2 维平面，解集就是与该平面平行的另一个平面（不过原点）。</p>
+
+    <h2 id="rref-solution">用 RREF 写出通解</h2>
+    <p>对增广矩阵 \([A \mid \mathbf{b}]\) 做行变换到 RREF。令所有自由变量为 0，解出主变量，得到特解 \(\mathbf{x}_p\)。然后令每个自由变量依次为 1（其余为 0），得到零空间的基向量 \(\mathbf{x}_{n1}, \mathbf{x}_{n2}, \dots\)。通解为：</p>
+    \[
+    \mathbf{x} = \mathbf{x}_p + c_1 \mathbf{x}_{n1} + c_2 \mathbf{x}_{n2} + \cdots
+    \]
+
+    <p>例子：设 RREF 为</p>
+    \[
+    [R \mid \mathbf{d}] = \begin{bmatrix} 1 & 2 & 0 & -2 & \mid & 4 \\ 0 & 0 & 1 & 2 & \mid & 3 \\ 0 & 0 & 0 & 0 & \mid & 0 \end{bmatrix}.
+    \]
+    <p>主变量 \(x_1, x_3\)；自由变量 \(x_2, x_4\)。</p>
+    <ul>
+      <li>令 \(x_2 = 0, x_4 = 0\)：\(x_1 = 4, x_3 = 3\)，特解 \(\mathbf{x}_p = (4, 0, 3, 0)^T\)。</li>
+      <li>令 \(x_2 = 1, x_4 = 0\)：\(x_1 = -2, x_3 = 0\)，零空间向量 \(\mathbf{x}_{n1} = (-2, 1, 0, 0)^T\)。</li>
+      <li>令 \(x_2 = 0, x_4 = 1\)：\(x_1 = 2, x_3 = -2\)，零空间向量 \(\mathbf{x}_{n2} = (2, 0, -2, 1)^T\)。</li>
+    </ul>
+    <p>通解：\(\mathbf{x} = (4, 0, 3, 0)^T + c_1(-2, 1, 0, 0)^T + c_2(2, 0, -2, 1)^T\)。</p>
+
+    <h2 id="rank-theorem">秩定理</h2>
+    <p>对 \(m\times n\) 矩阵 \(A\)，设秩为 \(r\)，零化度为 \(\operatorname{nullity}(A)\)，则</p>
+    \[
+    r + \operatorname{nullity}(A) = n.
+    \]
+
+    <p>这是线性代数中最重要的维度公式之一。它告诉我们：</p>
+    <ul>
+      <li>列空间的维度（秩 \(r\)）+ 零空间的维度（零化度 \(n-r\)）= 总维度 \(n\)。</li>
+      <li>主元列数 + 自由列数 = 总列数。</li>
+      <li>列空间和零空间"瓜分"了 \(\mathbb{R}^n\)。</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>四个子空间的维度。</strong> 秩定理统一了四个基本子空间的维度：</p>
+      <ul>
+        <li>\(\dim C(A) = r\)（列空间，\(\mathbb{R}^m\) 中）</li>
+        <li>\(\dim N(A) = n - r\)（零空间，\(\mathbb{R}^n\) 中）</li>
+        <li>\(\dim C(A^T) = r\)（行空间，\(\mathbb{R}^n\) 中）</li>
+        <li>\(\dim N(A^T) = m - r\)（左零空间，\(\mathbb{R}^m\) 中）</li>
+      </ul>
+    </div>
+
+    <h2 id="rectangular-lu">长方阵的 \(PA = LU\)</h2>
+    <p>当 \(A\) 不是方阵时，\(PA = LU\) 分解仍然成立，但 \(L\) 和 \(U\) 的形状需要调整：</p>
+    <ul>
+      <li>\(m = n\)：\(L\) 是 \(n\times n\) 下三角，\(U\) 是 \(n\times n\) 上三角。</li>
+      <li>\(m &gt; n\)（高矩阵，方程多于未知数）：\(L\) 是 \(m\times n\) 下梯形，\(U\) 是 \(n\times n\) 上三角。</li>
+      <li>\(m &lt; n\)（宽矩阵，未知数多于方程）：\(L\) 是 \(m\times m\) 下三角，\(U\) 是 \(m\times n\) 上梯形。</li>
+    </ul>
+
+    <p>无论哪种形状，\(L\) 的对角线都是 1，\(U\) 的对角线是主元。行交换仍然由置换矩阵 \(P\) 处理。</p>
+
+    <h2 id="summary-table">解的情况总结</h2>
+    <p>对 \(m\times n\) 矩阵 \(A\)，\(A\mathbf{x} = \mathbf{b}\) 的解的情况：</p>
+
+    <table style="width:100%; border-collapse: collapse;">
+      <thead>
+        <tr><th>条件</th><th>解的情况</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>\(r = m = n\)</td><td>唯一解（对任意 \(\mathbf{b}\)）</td></tr>
+        <tr><td>\(r = n &lt; m\)</td><td>0 或 1 个解（\(\mathbf{b}\) 必须在列空间中）</td></tr>
+        <tr><td>\(r = m &lt; n\)</td><td>无穷多解（对任意 \(\mathbf{b}\)）</td></tr>
+        <tr><td>\(r &lt; m\) 且 \(r &lt; n\)</td><td>0 或无穷多解</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <p><strong>满秩方阵是特例。</strong> 只有当 \(r = m = n\) 时，方程组对每个 \(\mathbf{b}\) 都有唯一解。工程中的大多数矩阵是长方阵，解的存在性和唯一性需要分别判断。</p>
+    </div>
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b"
+         data-correct="正确！\(\mathbf{b}\) 必须属于列空间，方程组才有解。"
+         data-incorrect="再想想。列空间 \(C(A)\) 的定义是什么？">
+      <p><strong>问题 1：</strong> 方程 \(A\mathbf{x} = \mathbf{b}\) 有解的充要条件是：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\mathbf{b}\) 与 \(A\) 的行向量正交</button>
+        <button data-choice="b" aria-pressed="false">\(\mathbf{b} \in C(A)\)</button>
+        <button data-choice="c" aria-pressed="false">\(A\) 可逆</button>
+        <button data-choice="d" aria-pressed="false">\(m = n\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c"
+         data-correct="正确！通解 = 特解 + 零空间中的任意向量。"
+         data-incorrect="再想想。齐次解和特解如何组合？">
+      <p><strong>问题 2：</strong> 若 \(\mathbf{x}_p\) 是 \(A\mathbf{x} = \mathbf{b}\) 的一个特解，则通解为：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\mathbf{x} = \mathbf{x}_p\)</button>
+        <button data-choice="b" aria-pressed="false">\(\mathbf{x} = \mathbf{x}_n\)（\(\mathbf{x}_n \in N(A)\)）</button>
+        <button data-choice="c" aria-pressed="false">\(\mathbf{x} = \mathbf{x}_p + \mathbf{x}_n\)（\(\mathbf{x}_n \in N(A)\)）</button>
+        <button data-choice="d" aria-pressed="false">\(\mathbf{x} = A^{-1} \mathbf{b}\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a"
+         data-correct="正确！秩定理：\(r + \operatorname{nullity} = n\)。"
+         data-incorrect="再想想。秩定理联系了哪两个量？">
+      <p><strong>问题 3：</strong> \(m\times n\) 矩阵 \(A\) 的秩定理表明：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\operatorname{rank}(A) + \operatorname{nullity}(A) = n\)</button>
+        <button data-choice="b" aria-pressed="false">\(\operatorname{rank}(A) + \operatorname{nullity}(A) = m\)</button>
+        <button data-choice="c" aria-pressed="false">\(\operatorname{rank}(A) = \operatorname{nullity}(A)\)</button>
+        <button data-choice="d" aria-pressed="false">\(\operatorname{rank}(A) = m + n\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确！\(r < m\) 且 \(r < n\) 时，\(\mathbf{b}\) 可能不在列空间（无解），也可能在列空间（无穷多解）。"
+         data-incorrect="再想想。秩不足时解的可能情况？">
+      <p><strong>问题 4：</strong> 若 \(r &lt; m\) 且 \(r &lt; n\)，则 \(A\mathbf{x} = \mathbf{b}\)：</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">必有唯一解</button>
+        <button data-choice="b" aria-pressed="false">必有无穷多解</button>
+        <button data-choice="c" aria-pressed="false">必无解</button>
+        <button data-choice="d" aria-pressed="false">可能无解，也可能有无穷多解</button>
+      </div>
+    </div>
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>可解性 = 列空间成员资格</h3>
+        <p>\(A\mathbf{x} = \mathbf{b}\) 有解当且仅当 \(\mathbf{b} \in C(A)\)。RREF 可以判断这一点。</p>
+      </article>
+      <article>
+        <h3>解 = 特解 + 零空间</h3>
+        <p>通解 \(\mathbf{x} = \mathbf{x}_p + \mathbf{x}_n\)。解集是零空间的平移。</p>
+      </article>
+      <article>
+        <h3>秩定理 \(r + \operatorname{nullity} = n\)</h3>
+        <p>列空间和零空间的维度之和等于总维度。四个基本子空间的维度由秩完全决定。</p>
+      </article>
+      <article>
+        <h3>长方阵的 \(PA = LU\)</h3>
+        <p>消元和 LU 分解对任意 \(m\times n\) 矩阵成立，形状相应调整。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Gilbert Strang, <em>Introduction to Linear Algebra</em>, 第 5 版, §3.3 "The Complete Solution to Ax = b" 与 §3.4 "Independence, Basis, and Dimension"。</li>
+      <li>MIT OCW 18.06 官方页面：<a href="https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/">https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/</a></li>
+      <li>Trefethen &amp; Bau, <em>Numerical Linear Algebra</em>, Lecture 8-10，从数值角度讨论最小二乘和投影。</li>
+    </ul>
+
+    <hr class="rule">
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>lecture_slides/lecture_08.pdf</code></li>
+      <li><code>lecture_summaries/lecture_1_8_summary.pdf</code></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <a href="0007-nullspace-solving-ax-equals-0.html">← 零空间：解 Ax = 0</a>
+      <a href="0009-rref-independence-basis.html">RREF、无关性与基 →</a>
+    </div>
+    <footer><p>MIT 18.06 Linear Algebra · Spring 2010 · 本课覆盖 Lecture 8</p></footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>
