@@ -1,356 +1,600 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PointBreaker</title>
+  <meta name="description" content="PointBreaker — 深入语言模型、并行计算、操作系统与计算机体系结构的课程学习档案。">
+  <meta name="theme-color" content="#0b0e0c">
+  <title>PointBreaker — Systems &amp; Machine Learning Courses</title>
   <style>
     :root {
-      --bg: #0a0f0d;
-      --fg: #e7f8ea;
-      --muted: #7a9e84;
-      --accent: #22c55e;
-      --accent-glow: rgba(34, 197, 94, 0.3);
-      --card: rgba(255, 255, 255, 0.03);
-      --border: rgba(255, 255, 255, 0.08);
+      color-scheme: dark;
+      --bg: #0b0e0c;
+      --surface: #101411;
+      --surface-strong: #151a16;
+      --ink: #f1f5f0;
+      --muted: #99a49b;
+      --quiet: #687169;
+      --accent: #62e58b;
+      --accent-ink: #071109;
+      --line: #262d27;
+      --line-strong: #394239;
+      --max-width: 1180px;
+      --radius: 18px;
     }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
 
     body {
+      margin: 0;
+      min-width: 320px;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      font-family: 'SF Mono', 'Fira Code', monospace;
       background: var(--bg);
-      color: var(--fg);
-      overflow: hidden;
-      position: relative;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Animated background grid */
-    .bg-grid {
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(34, 197, 94, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(34, 197, 94, 0.03) 1px, transparent 1px);
-      background-size: 60px 60px;
-      animation: grid-move 20s linear infinite;
-      pointer-events: none;
+    a {
+      color: inherit;
     }
 
-    @keyframes grid-move {
-      0% { transform: translate(0, 0); }
-      100% { transform: translate(60px, 60px); }
+    .shell {
+      width: min(calc(100% - 48px), var(--max-width));
+      margin: 0 auto;
     }
 
-    /* Floating orbs */
-    .orb {
-      position: fixed;
-      border-radius: 50%;
-      filter: blur(80px);
-      pointer-events: none;
-      animation: float 8s ease-in-out infinite;
+    .site-header {
+      border-bottom: 1px solid var(--line);
     }
 
-    .orb-1 {
-      width: 300px;
-      height: 300px;
-      background: radial-gradient(circle, rgba(34, 197, 94, 0.15), transparent);
-      top: 10%;
-      left: 10%;
-      animation-delay: 0s;
-    }
-
-    .orb-2 {
-      width: 200px;
-      height: 200px;
-      background: radial-gradient(circle, rgba(59, 130, 246, 0.1), transparent);
-      bottom: 20%;
-      right: 15%;
-      animation-delay: -3s;
-    }
-
-    .orb-3 {
-      width: 150px;
-      height: 150px;
-      background: radial-gradient(circle, rgba(168, 85, 247, 0.08), transparent);
-      top: 50%;
-      right: 30%;
-      animation-delay: -5s;
-    }
-
-    @keyframes float {
-      0%, 100% { transform: translate(0, 0) scale(1); }
-      33% { transform: translate(20px, -30px) scale(1.05); }
-      66% { transform: translate(-15px, 20px) scale(0.95); }
-    }
-
-    /* Main content */
-    .container {
-      position: relative;
-      z-index: 1;
-      text-align: center;
-      padding: 2rem;
-    }
-
-    /* Glitch title */
-    .title {
-      font-size: clamp(2.5rem, 8vw, 5rem);
-      font-weight: 700;
-      letter-spacing: -0.04em;
-      margin-bottom: 1rem;
-      position: relative;
-      animation: fade-in-up 1s ease-out;
-    }
-
-    .title .char {
-      display: inline-block;
-      animation: char-glow 4s ease-in-out infinite;
-    }
-
-    .title .char:nth-child(1) { animation-delay: 0s; }
-    .title .char:nth-child(2) { animation-delay: 0.1s; }
-    .title .char:nth-child(3) { animation-delay: 0.2s; }
-    .title .char:nth-child(4) { animation-delay: 0.3s; }
-    .title .char:nth-child(5) { animation-delay: 0.4s; }
-    .title .char:nth-child(6) { animation-delay: 0.5s; }
-    .title .char:nth-child(7) { animation-delay: 0.6s; }
-    .title .char:nth-child(8) { animation-delay: 0.7s; }
-    .title .char:nth-child(9) { animation-delay: 0.8s; }
-    .title .char:nth-child(10) { animation-delay: 0.9s; }
-    .title .char:nth-child(11) { animation-delay: 1.0s; }
-
-    @keyframes char-glow {
-      0%, 100% { color: var(--fg); text-shadow: none; }
-      50% { color: var(--accent); text-shadow: 0 0 20px var(--accent-glow); }
-    }
-
-    @keyframes fade-in-up {
-      from { opacity: 0; transform: translateY(30px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Typing subtitle */
-    .subtitle {
-      font-size: clamp(0.9rem, 2vw, 1.1rem);
-      color: var(--muted);
-      margin-bottom: 3rem;
-      overflow: hidden;
-      white-space: nowrap;
-      border-right: 2px solid var(--accent);
-      animation:
-        typing 3s steps(40) 1s forwards,
-        blink 0.8s step-end infinite;
-      width: 0;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    @keyframes typing {
-      from { width: 0; }
-      to { width: 100%; }
-    }
-
-    @keyframes blink {
-      50% { border-color: transparent; }
-    }
-
-    /* Status card */
-    .status-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.5rem 2rem;
-      backdrop-filter: blur(10px);
-      animation: fade-in-up 1s ease-out 0.5s both;
-    }
-
-    .status-line {
+    .site-header .shell {
+      min-height: 82px;
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      padding: 0.5rem 0;
-      font-size: 0.85rem;
+      justify-content: space-between;
+      gap: 32px;
     }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
+    .brand {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .brand-name {
+      font-size: 1.08rem;
+      font-weight: 750;
+      letter-spacing: -0.035em;
+    }
+
+    .brand-index {
+      color: var(--accent);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+    }
+
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      color: var(--muted);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .availability {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--ink);
+    }
+
+    .availability::before {
+      content: "";
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: var(--accent);
-      box-shadow: 0 0 8px var(--accent-glow);
-      animation: pulse 2s ease-in-out infinite;
+      box-shadow: 0 0 0 4px rgba(98, 229, 139, 0.1);
     }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.8); }
+    main {
+      padding: 72px 0 88px;
     }
 
-    .status-key {
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.75fr);
+      gap: clamp(48px, 8vw, 112px);
+      align-items: end;
+      padding-bottom: 76px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow,
+    .section-kicker,
+    .course-domain,
+    .library-label {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.72rem;
+      font-weight: 650;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow,
+    .section-kicker,
+    .course-domain {
+      color: var(--accent);
+    }
+
+    .hero h1 {
+      max-width: 880px;
+      margin: 20px 0 24px;
+      font-size: clamp(3.35rem, 8vw, 6.9rem);
+      font-weight: 690;
+      line-height: 0.94;
+      letter-spacing: -0.072em;
+    }
+
+    .hero-lede {
+      max-width: 660px;
+      margin: 0;
       color: var(--muted);
-      min-width: 80px;
+      font-size: clamp(1rem, 1.6vw, 1.18rem);
+      line-height: 1.75;
     }
 
-    .status-value {
-      color: var(--fg);
-    }
-
-    /* Course links */
-    .courses {
-      margin-top: 2rem;
+    .hero-actions {
       display: flex;
-      flex-direction: column;
-      gap: 8px;
-      animation: fade-in-up 1s ease-out 1.5s both;
+      align-items: center;
+      gap: 20px;
+      margin-top: 34px;
+    }
+
+    .primary-link,
+    .secondary-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 48px;
+      padding: 0 19px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+
+    .primary-link {
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    .primary-link:hover {
+      background: #7bed9c;
+      transform: translateY(-2px);
+    }
+
+    .secondary-link {
+      border: 1px solid var(--line-strong);
+      color: var(--muted);
+    }
+
+    .secondary-link:hover {
+      border-color: var(--muted);
+      color: var(--ink);
+    }
+
+    .library-note {
+      border-top: 3px solid var(--accent);
+      padding-top: 24px;
+    }
+
+    .library-label {
+      color: var(--quiet);
+    }
+
+    .library-note h2 {
+      margin: 18px 0 14px;
+      font-size: clamp(1.5rem, 3vw, 2.15rem);
+      font-weight: 620;
+      line-height: 1.15;
+      letter-spacing: -0.045em;
+    }
+
+    .library-note p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .library-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 26px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .library-fact {
+      padding: 17px 18px;
+      background: var(--surface);
+    }
+
+    .library-fact strong {
+      display: block;
+      font-size: 1.35rem;
+      line-height: 1.1;
+    }
+
+    .library-fact span {
+      display: block;
+      margin-top: 5px;
+      color: var(--quiet);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .course-library {
+      padding-top: 70px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 26px;
+    }
+
+    .section-header h2 {
+      margin: 9px 0 0;
+      font-size: clamp(2rem, 4vw, 3.1rem);
+      line-height: 1.05;
+      letter-spacing: -0.055em;
+    }
+
+    .section-note {
+      max-width: 420px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: right;
+    }
+
+    .courses {
+      border-top: 1px solid var(--line-strong);
     }
 
     .course-link {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) minmax(180px, 0.45fr) 135px;
+      gap: 24px;
+      align-items: center;
+      min-height: 128px;
+      padding: 23px 18px;
+      border-bottom: 1px solid var(--line);
+      text-decoration: none;
+      transition: background-color 180ms ease, padding 180ms ease;
+    }
+
+    .course-link:hover,
+    .course-link:focus-visible {
+      background: var(--surface-strong);
+      padding-left: 26px;
+      padding-right: 26px;
+      outline: none;
+    }
+
+    .course-num {
+      color: var(--accent);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.88rem;
+      font-weight: 720;
+      letter-spacing: -0.02em;
+    }
+
+    .course-copy {
+      min-width: 0;
+    }
+
+    .course-name {
+      display: block;
+      font-size: clamp(1.18rem, 2vw, 1.55rem);
+      font-weight: 620;
+      line-height: 1.28;
+      letter-spacing: -0.035em;
+    }
+
+    .course-domain {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--quiet);
+      font-size: 0.64rem;
+    }
+
+    .course-description {
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.55;
+    }
+
+    .course-action {
+      justify-self: end;
+      color: var(--ink);
+      font-size: 0.8rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .course-count {
+      display: block;
+      margin-top: 4px;
+      color: var(--quiet);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.68rem;
+      font-weight: 500;
+    }
+
+    .site-footer {
+      border-top: 1px solid var(--line);
+    }
+
+    .site-footer .shell {
+      min-height: 110px;
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px 20px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      text-decoration: none;
-      color: var(--fg);
-      font-size: 0.85rem;
-      transition: border-color 0.2s, transform 0.2s;
+      justify-content: space-between;
+      gap: 24px;
+      color: var(--quiet);
+      font-size: 0.76rem;
     }
 
-    .course-link:hover {
-      border-color: var(--accent);
-      transform: translateX(4px);
-    }
-
-    .course-link .course-num {
-      color: var(--accent);
-      font-weight: 700;
-      min-width: 70px;
-    }
-
-    .course-link .course-name {
-      flex: 1;
-    }
-
-    .course-link .course-count {
+    .footer-mark {
       color: var(--muted);
-      font-size: 0.75rem;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
-    /* Terminal cursor at bottom */
-    .prompt {
-      position: fixed;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 0.8rem;
-      color: var(--muted);
-      animation: fade-in-up 1s ease-out 2s both;
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 4px;
     }
 
-    .prompt .cursor {
-      display: inline-block;
-      width: 8px;
-      height: 16px;
-      background: var(--accent);
-      vertical-align: middle;
-      margin-left: 4px;
-      animation: cursor-blink 1s step-end infinite;
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 54px;
+      }
+
+      .library-note {
+        max-width: 620px;
+      }
+
+      .course-link {
+        grid-template-columns: 86px minmax(0, 1fr) 130px;
+      }
+
+      .course-description {
+        display: none;
+      }
     }
 
-    @keyframes cursor-blink {
-      50% { opacity: 0; }
+    @media (max-width: 640px) {
+      .shell {
+        width: min(calc(100% - 32px), var(--max-width));
+      }
+
+      .site-header .shell {
+        min-height: 72px;
+      }
+
+      .header-meta > span:not(.availability) {
+        display: none;
+      }
+
+      main {
+        padding: 48px 0 64px;
+      }
+
+      .hero {
+        padding-bottom: 54px;
+      }
+
+      .hero h1 {
+        margin-top: 16px;
+        font-size: clamp(3rem, 17vw, 4.8rem);
+      }
+
+      .hero-actions {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .section-header {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .section-note {
+        text-align: left;
+      }
+
+      .course-link {
+        grid-template-columns: 1fr auto;
+        gap: 10px 20px;
+        min-height: 0;
+        padding: 24px 4px;
+      }
+
+      .course-link:hover,
+      .course-link:focus-visible {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .course-num {
+        grid-column: 1;
+      }
+
+      .course-copy {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+
+      .course-action {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .site-footer .shell {
+        min-height: 96px;
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+        gap: 5px;
+      }
     }
 
-    /* Scanline effect */
-    .scanline {
-      position: fixed;
-      inset: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0, 0, 0, 0.03) 2px,
-        rgba(0, 0, 0, 0.03) 4px
-      );
-      pointer-events: none;
-      z-index: 2;
-    }
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
 
-    /* Responsive */
-    @media (max-width: 600px) {
-      .status-card { padding: 1rem 1.5rem; }
-      .subtitle { font-size: 0.8rem; }
+      *,
+      *::before,
+      *::after {
+        transition-duration: 0.01ms !important;
+      }
     }
   </style>
 </head>
 <body>
-  <!-- Background effects -->
-  <div class="bg-grid"></div>
-  <div class="orb orb-1"></div>
-  <div class="orb orb-2"></div>
-  <div class="orb orb-3"></div>
-  <div class="scanline"></div>
-
-  <!-- Main content -->
-  <div class="container">
-    <h1 class="title">
-      <span class="char">P</span><span class="char">o</span><span class="char">i</span><span class="char">n</span><span class="char">t</span><span class="char">B</span><span class="char">r</span><span class="char">e</span><span class="char">a</span><span class="char">k</span><span class="char">e</span><span class="char">r</span>
-    </h1>
-
-    <p class="subtitle">building things that matter_</p>
-
-    <div class="status-card">
-      <div class="status-line">
-        <span class="status-dot"></span>
-        <span class="status-key">status</span>
-        <span class="status-value">online</span>
-      </div>
-      <div class="status-line">
-        <span class="status-dot" style="animation-delay: 0.3s"></span>
-        <span class="status-key">focus</span>
-        <span class="status-value">systems & ml</span>
-      </div>
-      <div class="status-line">
-        <span class="status-dot" style="animation-delay: 0.6s"></span>
-        <span class="status-key">location</span>
-        <span class="status-value">earth</span>
+  <header class="site-header">
+    <div class="shell">
+      <a class="brand" href="./" aria-label="PointBreaker 首页">
+        <span class="brand-name">PointBreaker</span>
+        <span class="brand-index">PB / 01</span>
+      </a>
+      <div class="header-meta" aria-label="站点信息">
+        <span>Systems · ML · Architecture</span>
+        <span class="availability">Library online</span>
       </div>
     </div>
+  </header>
 
-    <div class="courses">
-      <a href="cs336/index.html" class="course-link">
-        <span class="course-num">CS336</span>
-        <span class="course-name">Language Modeling from Scratch</span>
-        <span class="course-count">19 lectures</span>
-      </a>
-      <a href="cs267/index.html" class="course-link">
-        <span class="course-num">CS267</span>
-        <span class="course-name">Applications of Parallel Computers</span>
-        <span class="course-count">25 lectures</span>
-      </a>
-      <a href="6.1810/index.html" class="course-link">
-        <span class="course-num">6.1810</span>
-        <span class="course-name">Operating Systems Engineering</span>
-        <span class="course-count">23 节课 + 9 个 Lab</span>
-      </a>
-      <a href="cs152/index.html" class="course-link">
-        <span class="course-num">CS152</span>
-        <span class="course-name">计算机体系结构与工程 (CS152)</span>
-        <span class="course-count">26 节课 + 11 个作业/Lab</span>
-      </a>
+  <main>
+    <div class="shell">
+      <section class="hero" aria-labelledby="hero-title">
+        <div>
+          <p class="eyebrow">Independent learning archive</p>
+          <h1 id="hero-title">Understand what runs beneath.</h1>
+          <p class="hero-lede">
+            从语言模型、并行计算到操作系统与计算机体系结构。PointBreaker 将高质量课程资料整理成可阅读、可验证、可持续迭代的中文学习档案。
+          </p>
+          <div class="hero-actions">
+            <a class="primary-link" href="#courses">浏览课程</a>
+            <a class="secondary-link" href="cs336/index.html">从 CS336 开始</a>
+          </div>
+        </div>
+
+        <aside class="library-note" aria-label="课程库概览">
+          <span class="library-label">The collection</span>
+          <h2>A working library for serious technical study.</h2>
+          <p>围绕一手课程材料构建，强调推导、实现、系统直觉与事实核验，而不是把幻灯片简单翻译一遍。</p>
+          <div class="library-facts" aria-label="课程库统计">
+            <div class="library-fact">
+              <strong>04</strong>
+              <span>Courses</span>
+            </div>
+            <div class="library-fact">
+              <strong>93</strong>
+              <span>Lectures</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="course-library" id="courses" aria-labelledby="courses-title">
+        <div class="section-header">
+          <div>
+            <span class="section-kicker">Course library</span>
+            <h2 id="courses-title">Choose a system to explore.</h2>
+          </div>
+          <p class="section-note">每门课程包含结构化导读、关键概念、公式与代码示例，以及可交互的理解检查。</p>
+        </div>
+
+        <div class="courses">
+          <a href="cs336/index.html" class="course-link">
+            <span class="course-num">CS336</span>
+            <span class="course-copy">
+              <span class="course-domain">Model systems</span>
+              <span class="course-name">Language Modeling from Scratch</span>
+            </span>
+            <span class="course-description">从 tokenizer 和 Transformer 到训练系统、scaling laws、数据与对齐。</span>
+            <span class="course-action">打开课程<span class="course-count">19 lectures</span></span>
+          </a>
+
+          <a href="cs267/index.html" class="course-link">
+            <span class="course-num">CS267</span>
+            <span class="course-copy">
+              <span class="course-domain">Parallel computing</span>
+              <span class="course-name">Applications of Parallel Computers</span>
+            </span>
+            <span class="course-description">理解现代并行机器、通信成本、数值算法与高性能计算方法。</span>
+            <span class="course-action">打开课程<span class="course-count">25 lectures</span></span>
+          </a>
+
+          <a href="6.1810/index.html" class="course-link">
+            <span class="course-num">6.1810</span>
+            <span class="course-copy">
+              <span class="course-domain">Operating systems</span>
+              <span class="course-name">Operating Systems Engineering</span>
+            </span>
+            <span class="course-description">以 xv6 为主线，贯穿系统调用、页表、并发、文件系统与网络。</span>
+            <span class="course-action">打开课程<span class="course-count">23 课 · 9 Labs</span></span>
+          </a>
+
+          <a href="cs152/index.html" class="course-link">
+            <span class="course-num">CS152</span>
+            <span class="course-copy">
+              <span class="course-domain">Computer architecture</span>
+              <span class="course-name">计算机体系结构与工程</span>
+            </span>
+            <span class="course-description">从指令集与流水线走向缓存、虚拟内存、并行处理与系统权衡。</span>
+            <span class="course-action">打开课程<span class="course-count">26 课 · 11 Guides</span></span>
+          </a>
+        </div>
+      </section>
     </div>
-  </div>
+  </main>
 
-  <!-- Terminal prompt -->
-  <div class="prompt">
-    └── <span class="cursor"></span>
-  </div>
+  <footer class="site-footer">
+    <div class="shell">
+      <span class="footer-mark">PointBreaker / Learning in public</span>
+      <span>Built around primary sources, careful explanations, and working examples.</span>
+    </div>
+  </footer>
 </body>
 </html>
