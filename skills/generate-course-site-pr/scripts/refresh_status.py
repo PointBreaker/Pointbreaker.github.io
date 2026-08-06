@@ -10,6 +10,7 @@ import sys
 
 
 TODO_MARKER = "COURSE_CONTENT_TODO"
+COURSES_ROOT = "courses"
 
 
 def is_complete(path: Path) -> bool:
@@ -22,7 +23,15 @@ def main() -> int:
     parser.add_argument("--slug", required=True)
     args = parser.parse_args()
 
-    course = Path(args.repo).expanduser().resolve() / args.slug
+    repo = Path(args.repo).expanduser().resolve()
+    platform_path = repo / "site-platform.json"
+    if not platform_path.is_file():
+        parser.error(f"missing site-platform.json: {platform_path}")
+    platform = json.loads(platform_path.read_text(encoding="utf-8"))
+    courses_root = platform.get("coursesRoot", COURSES_ROOT)
+    if courses_root != COURSES_ROOT:
+        parser.error(f"expected coursesRoot={COURSES_ROOT!r}, got {courses_root!r}")
+    course = repo / courses_root / args.slug
     info_path = course / "course-info.json"
     if not info_path.is_file():
         parser.error(f"missing course-info.json: {info_path}")

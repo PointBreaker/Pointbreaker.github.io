@@ -6,10 +6,10 @@
 
 优先使用仓库内的 [`generate-course-site-pr`](skills/generate-course-site-pr/SKILL.md) Skill。正常的新课程 PR 只修改：
 
-- 新的 `<slug>/` 课程目录
+- 新的 `courses/<slug>/` 课程目录
 - `courses.json` 中的一条课程记录
 
-不要复制其他课程的 vendor 资源；页面应使用根目录 `assets/course/` 与 `assets/vendor/` 的共享资源。
+不要在仓库根目录创建课程文件夹，也不要复制其他课程的 vendor 资源；页面应使用根目录 `assets/course/` 与 `assets/vendor/` 的共享资源。
 
 不要在课程目录复制评论脚本；讲义与实践页面通过共享 `lesson-ui.js` 和根目录 `site-comments.json` 接入 GitHub Discussions。
 
@@ -37,6 +37,7 @@ python3 skills/generate-course-site-pr/scripts/build_update_manifest.py
 
 ```bash
 git diff --check
+python3 tools/check-course-layout.py
 python3 tools/check-table-columns.py .
 python skills/generate-course-site-pr/scripts/refresh_status.py --repo . --slug <slug>
 python skills/generate-course-site-pr/scripts/validate_course.py --repo . --slug <slug> --plan <plan> --inventory <inventory> --strict-resources

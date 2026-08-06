@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW2: Memory Hierarchy — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Homework 2 导读</p>
+    <h1>HW2: Memory Hierarchy</h1>
+    <p class="lede">这份导读帮你理解 HW2 在考什么、需要哪些前置知识。它<strong>不包含完整解答</strong>——答案需要你自己动手推导，官方解答会在截止日期后发布。</p>
+
+    <div class="meta">
+      <span>发布：2023-02-07（随第 7 课）</span>
+      <span>截止：2023-02-21</span>
+      <span>前置：第 6、7 课</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="what">这份作业在考什么？</h2>
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>用一份类似 CACTI 的电路延迟建模手册，亲手计算直接映射缓存和组相联缓存的关键路径延迟，从而确定它们各自需要几个时钟周期才能完成一次访问——把第 6、7 课"相联度如何影响命中时间"这条抽象权衡，变成具体的门延迟数字。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem1">Problem 1：缓存电路延迟建模</h2>
+    <p>配套的 handout 给出了译码器、存储阵列、比较器、多路选择器等各个电路模块的延迟公式（形如 <code>delay = k₁·log₂(行数) + k₂·⌈log₂(每行位数)⌉ + k₃</code>），以及一个 2.5GHz（400ps/周期）的目标时钟频率。</p>
+    <ul>
+      <li><strong>1.A</strong>：为一个 256KB 直接映射缓存（32 字节行）算出标签译码器、标签存储阵列、比较器、数据路径等每个模块各自的延迟，找出关键路径，换算成需要多少个时钟周期</li>
+      <li><strong>1.B</strong>：同样容量、但改成 4 路组相联的缓存，重新计算——注意地址拆分方式（索引位数、标签位数）会因为相联度提高而改变，标签存储阵列每行现在要存 4 路的标签+状态位，比较器数量也变成 4 个并行工作</li>
+      <li><strong>1.C</strong>：给定一个 8 行、32 字节/行的直接映射缓存和一段 13 次访问的地址序列，逐一算出每次访问的标签/索引/偏移，判定命中还是缺失</li>
+    </ul>
+    <div class="card">
+      <p><strong>解题的关键提醒：</strong>1.A 和 1.B 的关键路径不一定是同一条电路路径——直接映射缓存的关键路径通常经过标签比较那一侧，而更高相联度的设计里，多路选择器和比较器数量的增加可能会让另一条路径变成瓶颈。<strong>一定要分别算出"标签检查侧"和"数据读出侧"两条候选路径，取较长的那条</strong>，而不是想当然地假设某一侧总是更长。这正是第 7 课"提高相联度可能增加命中时间"这条权衡在电路层面的具体体现。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem3">Problem 3：基线缓存 vs. "微标签（microtagged）"缓存对比</h2>
+    <p>题目直接给出两种缓存设计各个电路模块的延迟数值（不需要你自己套用第 1 题的公式推导），要求你：</p>
+    <ul>
+      <li>找出基线缓存和"微标签"缓存各自真正的关键路径（同样要在多条候选路径里找最长的那条）</li>
+      <li>用给定的、简化过的整数周期时间（不是从 1.A/1.B 推导出的周期时间，是题目单独给出的一组"更干净"的数字），计算 AMAT 在两种设计下的差异</li>
+      <li>给定一系列缓存参数改动，计算 AMAT 的净变化量</li>
+    </ul>
+    <div class="card idea">
+      <p><strong>这道题直接呼应第 7 课的 AMAT 公式</strong>：<code>AMAT = Hit Time + Miss Rate × Miss Penalty</code>。解题时应该把"周期时间变化"和"缺失率/缺失代价变化"分开核算，再代入公式一次性得出总的 AMAT 变化——不要把两种效应混在一起直觉估算。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！1.A 和 1.B 的关键路径不一定相同——必须分别算出'标签检查侧'和'数据读出侧'两条候选路径，取较长的那条，而不是假设某一侧总是更长。" data-incorrect="重新看上方 Problem 1 的'解题的关键提醒'卡片。">
+      <p><strong>问题 1：</strong>为什么在计算 1.A（直接映射）和 1.B（4 路组相联）的关键路径延迟时，不能直接假设关键路径一定经过同一侧电路？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为组相联缓存不需要标签比较</button>
+        <button data-choice="b" aria-pressed="false">因为相联度提高会改变标签存储阵列和比较器数量，必须分别算出'标签检查侧'与'数据读出侧'两条候选路径，取较长者</button>
+        <button data-choice="c" aria-pressed="false">因为直接映射缓存没有关键路径</button>
+        <button data-choice="d" aria-pressed="false">因为时钟频率固定为 2.5GHz，关键路径与相联度无关</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="a" data-correct="正确！AMAT = Hit Time + Miss Rate × Miss Penalty——解题时应分别核算'周期时间变化'和'缺失率/缺失代价变化'，再代入公式一次性得出总变化，而不是把两种效应混在一起直觉估算。" data-incorrect="重新看 Problem 3 呼应第 7 课 AMAT 公式的卡片。">
+      <p><strong>问题 2：</strong>Problem 3 要求对比基线缓存与"微标签"缓存的 AMAT，解题时应遵循的公式是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">AMAT = Hit Time + Miss Rate × Miss Penalty，且应把周期时间变化与缺失率/缺失代价变化分开核算</button>
+        <button data-choice="b" aria-pressed="false">AMAT = Hit Time × Miss Rate</button>
+        <button data-choice="c" aria-pressed="false">AMAT 只取决于缺失率，与命中时间无关</button>
+        <button data-choice="d" aria-pressed="false">AMAT = Miss Penalty − Hit Time</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="logistics">提交与评分说明</h2>
+    <ul>
+      <li>鼓励讨论，但每位同学必须独立提交自己的解答</li>
+      <li>提交平台为 Gradescope；除填图/填表题外，答案须用方框圈出</li>
+      <li>评分主要依据完成度，但习题集是期中/期末考试的核心背景材料</li>
+      <li>官方解答在截止日期次日发布</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>本作业原始 PDF：<code>sp23/hw02.pdf</code>、<code>sp23/hw02-handout.pdf</code>（UC Berkeley CS152, Spring 2023）</li>
+      <li>课程依赖内容：第 6 课（缓存结构、放置策略）、第 7 课（AMAT、3C 模型）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>📝 Homework 2</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

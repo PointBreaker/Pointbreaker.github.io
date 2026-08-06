@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Machine Implementations, Microcoding — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 2 课</p>
+    <h1>Simple Machine Implementations, Microcoding</h1>
+    <p class="lede">上一课讲完 IBM 360 如何用统一的 ISA 隐藏了 8 位到 64 位数据通路的差异。这一课深入其中一种关键的实现风格——<strong>微编码（microcoding）</strong>——并用一台微编码的 RISC-V 机器作为具体例子，讲清楚"控制"与"数据通路"到底是如何分离、又如何协作的。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：50 分钟</span>
+      <span>难度：入门 → 中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="recap">回顾第 1 课</h2>
+    <ul>
+      <li>体系结构 &gt;&gt; ISA 和 RTL：CS152 关心硬件与软件的交互，以及抽象层的设计</li>
+      <li>技术和应用共同塑造体系结构；历史给未来提供教训</li>
+      <li>从 Babbage 到 IBM 360：从"计算器"（没有条件分支）到完全可编程的机器</li>
+      <li>软件开发的成本成为体系结构设计的重要约束——这催生了对<strong>兼容性</strong>的需求</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="isa-contract">ISA：软硬件之间的契约</h2>
+    <p>指令集架构（ISA）是<strong>软件和硬件之间的契约</strong>：它通过列出所有程序员可见的状态（寄存器 + 内存）以及作用在这些状态上的指令语义来定义。IBM 360 是历史上第一条把 ISA 与实现（即微架构）彻底分离的产品线。</p>
+
+    <p>同一个 ISA 可以有很多种不同的实现：</p>
+    <ul>
+      <li>苏联曾制造与 IBM 360 代码兼容的克隆机；Amdahl 离开 IBM 后创立的公司也是如此</li>
+      <li>AMD、Intel、VIA 的处理器都运行 AMD64 ISA</li>
+      <li>许多手机使用 ARM ISA，但实现来自 Apple、Qualcomm、Samsung、Huawei 等完全不同的公司</li>
+      <li>本课程使用 <strong>RISC-V</strong>（<a href="https://www.riscv.org">riscv.org</a>）作为标准 ISA，它是加州大学伯克利分校设计的新一代精简开源 ISA</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="isa-microarch-mapping">ISA 与微架构风格的（非强制）对应关系</h2>
+    <p>ISA 设计时常常带有某种特定的微架构风格作为默认预期：</p>
+    <table>
+      <tr><th>ISA 风格</th><th>典型对应的微架构风格</th></tr>
+      <tr><td>Accumulator（累加器型）</td><td>硬连线、不流水（hardwired, unpipelined）</td></tr>
+      <tr><td>CISC</td><td>微编码（microcoded）</td></tr>
+      <tr><td>RISC</td><td>硬连线、流水线（hardwired, pipelined）</td></tr>
+      <tr><td>VLIW</td><td>定长延迟的顺序并行流水线</td></tr>
+    </table>
+    <p>但这只是"典型对应"，并非强制规则——同一个 ISA 完全可以用任何微架构风格实现：</p>
+    <ul>
+      <li>Intel Ivy Bridge：硬连线流水线化的 CISC（x86）机器（同时保留部分微码支持）</li>
+      <li>Apple M1：原生 ARM ISA，通过软件模拟运行 x86</li>
+      <li>Spike：纯软件解释执行的 RISC-V 模拟器</li>
+      <li><strong>本课：一台微编码的 RISC-V 机器</strong>——刻意打破"RISC=硬连线流水线"的刻板印象，用来教学控制与数据通路分离的基本原理</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>为什么要学微编码？</strong></p>
+      <ul>
+        <li>展示如何用很小的处理器实现复杂的 ISA</li>
+        <li>理解 CISC 机器的历史来源</li>
+        <li>至今仍在真实机器中使用（x86、IBM 360、PowerPC 都有微码支持）</li>
+        <li>作为理解"机器结构"的温和入门</li>
+        <li>帮助理解技术条件如何推动了后来向 RISC 的转变——这条线索第 3 课会展开</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="control-datapath">控制与数据通路的分离</h2>
+    <p>处理器设计可以分成两部分：</p>
+    <ul>
+      <li><strong>数据通路（datapath）</strong>：存储数字、计算算术运算的部分——寄存器、ALU、内存</li>
+      <li><strong>控制（control）</strong>：给数据通路的操作排序的部分——决定"现在做什么、下一步做什么"</li>
+    </ul>
+    <p>早期计算机设计者面临的最大挑战，是把控制电路设计正确。<strong>Maurice Wilkes</strong>（EDSAC 的设计者）在 1958 年为 EDSAC-II 发明了"微编程"（microprogramming）的思想来设计控制单元——这个想法其实早已被 Babbage 分析机中的"the Barrel"（滚筒）以及更早的可编程计算器所预示。</p>
+
+    <hr class="rule">
+
+    <h2 id="tech-influence">技术条件如何决定"硬连线 vs. 微编码"</h2>
+    <p>微码在 1950 年代出现时，三种关键存储/逻辑技术的相对成本是：</p>
+    <ul>
+      <li><strong>Logic（逻辑门）</strong>：真空管实现，非常昂贵</li>
+      <li><strong>Main Memory（主存/RAM）</strong>：磁芯（magnetic core）实现</li>
+      <li><strong>Read-Only Memory（ROM）</strong>：二极管矩阵（diode matrix）、打孔金属卡片等实现</li>
+    </ul>
+    <p>关键的成本/速度关系是：<strong>逻辑门远比 ROM 或 RAM 贵；ROM 比 RAM 便宜；ROM 比 RAM 快得多。</strong></p>
+    <div class="card">
+      <p><strong>这就直接解释了 IBM 360 Model 30 的设计选择</strong>（第 1 课）：与其为每条复杂指令都设计一套专用的硬连线逻辑（很贵），不如把"如何执行每条指令"编码成一系列存储在 ROM 里的微指令（更便宜、更快），再用一个通用的译码器去执行这些微指令——这正是微编码机器的核心思想。而 Model 70 定位高端、性能优先，直接用专用电路（硬连线）实现控制逻辑。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="riscv-isa">RISC-V ISA 速览</h2>
+    <p>本课程使用 RISC-V（RV32I 基础整数指令集）作为教学 ISA。它是伯克利设计的"第五代"RISC 指令集：现实、完整，但开源且精简；不为某一种特定实现风格过度设计；同时支持 32 位（RV32）和 64 位（RV64）地址空间；为多处理器设计；指令编码高效；便于教学/研究中的裁剪与扩展。</p>
+
+    <p><strong>处理器状态：</strong></p>
+    <ul>
+      <li>程序计数器 <code>pc</code></li>
+      <li>32 个 32 位整数寄存器 <code>x0</code>–<code>x31</code>（<code>x0</code> 恒为 0）</li>
+      <li>32 个浮点寄存器 <code>f0</code>–<code>f31</code>（可存 32 位或 64 位 IEEE 浮点值）</li>
+      <li>浮点状态寄存器 <code>fcsr</code>（舍入模式与异常报告）</li>
+    </ul>
+
+    <p><strong>指令编码：</strong>RV32 基础指令集固定为 32 位，最低两位恒为 <code>11</code>（为将来扩展变长指令预留）。指令共有 6 种格式：</p>
+    <table>
+      <tr><th>格式</th><th>用途</th><th>关键字段</th></tr>
+      <tr><td>R-type</td><td>寄存器-寄存器运算</td><td>funct7, rs2, rs1, funct3, rd, opcode</td></tr>
+      <tr><td>I-type</td><td>立即数运算、load</td><td>imm[11:0], rs1, funct3, rd, opcode</td></tr>
+      <tr><td>S-type</td><td>store</td><td>imm[11:5]+imm[4:0], rs2, rs1, funct3, opcode</td></tr>
+      <tr><td>B-type</td><td>分支（branch）</td><td>imm 拆分编码, rs2, rs1, funct3, opcode</td></tr>
+      <tr><td>U-type</td><td>高位立即数</td><td>imm[31:12], rd, opcode</td></tr>
+      <tr><td>J-type</td><td>跳转（jump，如 JAL）</td><td>imm 拆分编码, rd, opcode</td></tr>
+    </table>
+    <p>无论基础指令是否定长 32 位，所有分支/跳转的目标地址都以 16 位为最小单位对齐。</p>
+
+    <hr class="rule">
+
+    <h2 id="single-bus-datapath">单总线微编码数据通路</h2>
+    <p>本课用一个简化的"单总线"（single-bus）数据通路来实现微编码的 RISC-V 机器：指令寄存器（Instruction Reg.）、PC、寄存器堆（Registers，含 PC 作为可寻址的一员）、两个锁存器 <code>A</code>/<code>B</code>、ALU、主存（Main Memory）都挂在同一条总线上，每个部件的读写由控制信号（如 <code>RegEn</code>、<code>RegW</code>、<code>ALUEn</code>、<code>MemEn</code>、<code>MALd</code> 等）逐拍触发。</p>
+
+    <p>微指令用<strong>寄存器传输（register-transfer）</strong>记号书写，每一行对应一组具体的控制信号：</p>
+    <ul>
+      <li><code>MA:=PC</code> 意味着 <code>RegSel=PC; RegW=0; RegEn=1; MALd=1</code>（把 PC 的值放上总线，锁存进内存地址寄存器 MA）</li>
+      <li><code>B:=Reg[rs2]</code> 意味着 <code>RegSel=rs2; RegW=0; RegEn=1; BLd=1</code>（把 rs2 寄存器的值放上总线，锁存进 B）</li>
+      <li><code>Reg[rd]:=A+B</code> 意味着 <code>ALUop=Add; ALUEn=1; RegSel=rd; RegW=1</code>（ALU 计算 A+B 放上总线，写回 rd 寄存器）</li>
+    </ul>
+    <p>一条 RISC-V 指令的完整执行被拆分成几个阶段：取指（Instruction Fetch）→ 译码（Instruction Decode）→ 寄存器读取（Register Fetch）→ ALU 运算 → <em>可选的</em>内存操作 → <em>可选的</em>寄存器写回 → 计算下一条指令地址。每个阶段对应一到多条微指令，由 Microcode ROM 中固化的微程序驱动。</p>
+
+    <hr class="rule">
+
+    <h2 id="microcode-walkthrough">微代码实例：从取指到几类典型指令</h2>
+
+    <p><strong>取指（Instruction Fetch）</strong>——所有指令共享的第一步：</p>
+    <pre><code class="language-text">Instruction Fetch:  MA,A := PC
+                     PC := A+4
+                     (等待内存)
+                     IR := Mem
+                     (根据 opcode 跳转分派)</code></pre>
+    <p>关键细节：取指同时把 <strong>当前指令的 PC</strong> 锁存进 <code>A</code>，并立即把 <code>PC</code> 更新为 <code>PC+4</code>（下一条顺序指令的地址）。这意味着分派到具体指令的微码时，<code>A</code> 中保存的是"这条指令自己的地址"，而 <code>PC</code> 已经指向"下一条指令"——这个先后关系是后面 <code>JAL</code>/<code>Branch</code> 需要正确处理 PC 相对寻址的关键。</p>
+
+    <p><strong>ALU 型指令（R-type）</strong>与<strong>立即数 ALU 型指令（I-type）</strong>：</p>
+    <pre><code class="language-text">ALU:   A := Reg[rs1]
+       B := Reg[rs2]
+       Reg[rd] := ALUOp(A,B)
+       goto 取指
+
+ALUI:  A := Reg[rs1]
+       B := ImmI          // 12 位立即数符号扩展
+       Reg[rd] := ALUOp(A,B)
+       goto 取指</code></pre>
+
+    <p><strong>Load 指令（LW）</strong>：</p>
+    <pre><code class="language-text">LW:    A := Reg[rs1]
+       B := ImmI          // 12 位立即数符号扩展
+       MA := A+B
+       (等待内存)
+       Reg[rd] := Mem
+       goto 取指</code></pre>
+
+    <p><strong>JAL 与 Branch</strong>——需要利用取指阶段保存在 <code>A</code> 中的"本指令 PC"来计算 PC 相对跳转目标：</p>
+    <pre><code class="language-text">JAL:      Reg[rd] := A     // A 中是取指时保存的本指令 PC
+          A := A-4         // 恢复到"取指前"的 PC（因为取指阶段已 +4）
+          B := ImmJ        // 跳转型立即数
+          PC := A+B
+          goto 取指
+
+Branch:   A := Reg[rs1]
+          B := Reg[rs2]
+          if (!ALUOp(A,B)) goto 取指   // 不跳转：条件不成立
+          A := PC                      // 跳转：取当前 PC 重新计算
+          A := A-4
+          B := ImmB                    // 分支型立即数
+          PC := A+B
+          goto 取指</code></pre>
+
+    <div class="card warning">
+      <p><strong>这是一份简化的教学"草图"（microcode sketch），不是可直接综合的 RTL。</strong> 原始幻灯片对 <code>JAL</code> 中 <code>A</code> 的处理方式给出了两种略有出入的写法（含一条"备选"写法的注释），这提示我们：<strong>PC 相对寻址在寄存器传输级别很容易出现"多减一次 4"或"少减一次 4"这类差一错误（off-by-one）</strong>。真正精确的行为，要以 Sodor 微编码核心的 <code>microcode.scala</code> 源码为准——这也是 Lab 1 中要求大家去阅读真实 RTL、而不是只信任幻灯片伪代码的原因之一。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：微编码只是历史遗留，早已过时。</strong>事实上 x86、IBM 360、PowerPC 等至今仍在使用微码来实现部分复杂指令。</li>
+      <li><strong>误区：RISC 就一定是硬连线的，CISC 就一定是微编码的。</strong>这只是"典型对应"，如 Intel Ivy Bridge（硬连线流水线化的 CISC）和本课演示的"微编码 RISC-V"都是反例。</li>
+      <li><strong>误区：微码"草图"中的每一行伪代码都可以直接当作正确的 RTL 来理解。</strong>正如 JAL 的例子所示，教学幻灯片上的简化伪代码可能存在需要用真实源码澄清的细节。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！ROM 比 RAM 更便宜也更快，而逻辑门（当时是真空管）远比二者都贵——这正是微编码机制能省钱的技术根源。" data-incorrect="重新看技术条件一节：三者的相对成本关系是逻辑门 > RAM > ROM（且 ROM 比 RAM 更快）。">
+      <p><strong>问题 1：</strong>1950 年代，为什么用 ROM 存储微指令、用通用译码器执行，比为每条复杂指令直接设计专用硬连线逻辑更划算？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 ROM 比逻辑门更贵，能体现"高价高质量"</button>
+        <button data-choice="b" aria-pressed="false">因为当时逻辑门（真空管）远比 ROM/RAM 昂贵，而 ROM 又比 RAM 便宜且更快</button>
+        <button data-choice="c" aria-pressed="false">因为 ROM 可以在运行时被程序修改，更灵活</button>
+        <button data-choice="d" aria-pressed="false">因为微指令必须存储在磁芯存储器中</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！Intel Ivy Bridge 是硬连线流水线化的 CISC 机器（带部分微码支持），Apple M1 是原生 ARM 却能模拟 x86——这些都说明 ISA 风格和微架构实现风格并非一一对应。" data-incorrect="再看 ISA 与微架构映射表下方的反例列表：Ivy Bridge、Apple M1、Spike，以及本课自己演示的"微编码 RISC-V"。">
+      <p><strong>问题 2：</strong>下列哪个例子最能说明"ISA 风格并不强制决定微架构实现风格"？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">所有 RISC 机器都必须是硬连线流水线的</button>
+        <button data-choice="b" aria-pressed="false">所有 CISC 机器都必须是微编码的，没有例外</button>
+        <button data-choice="c" aria-pressed="false">Intel Ivy Bridge 是硬连线流水线化的 x86（CISC）机器；本课演示的却是一台微编码的 RISC-V 机器</button>
+        <button data-choice="d" aria-pressed="false">RISC-V 规范强制要求微编码实现</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！取指阶段执行 MA,A:=PC 之后紧接着 PC:=A+4——所以进入具体指令的微码时，A 保存的是本指令自己的地址，而 PC 已经指向下一条顺序指令。" data-incorrect="重新看取指微码：MA,A:=PC 把当前 PC 存入 A，紧接着 PC:=A+4 才把 PC 推进——两步的顺序决定了 A 和 PC 在此刻分别代表什么。">
+      <p><strong>问题 3：</strong>在取指微码 <code>MA,A:=PC; PC:=A+4</code> 执行完毕、跳转到具体指令的微码之后，寄存器 <code>A</code> 和 <code>PC</code> 分别保存着什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A 保存本条指令自己的地址；PC 已经指向下一条顺序指令的地址</button>
+        <button data-choice="b" aria-pressed="false">A 和 PC 都保存下一条顺序指令的地址</button>
+        <button data-choice="c" aria-pressed="false">A 保存下一条指令地址；PC 保存本条指令自己的地址</button>
+        <button data-choice="d" aria-pressed="false">A 和 PC 都保存本条指令自己的地址</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>ISA 是契约</h3>
+        <p>ISA 规定语义，微架构风格是实现选择，二者并非绑死</p>
+      </article>
+      <article>
+        <h3>控制 vs. 数据通路</h3>
+        <p>数据通路存数算数，控制给数据通路的操作排序</p>
+      </article>
+      <article>
+        <h3>微编码的技术根源</h3>
+        <p>逻辑贵、ROM 比 RAM 便宜又快，催生了微编码机制</p>
+      </article>
+      <article>
+        <h3>寄存器传输记号</h3>
+        <p>微指令就是一组具体的控制信号，如 <code>MA:=PC</code></p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Appendix A, Chapter 1</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L02_Simple_Machine_Implementations_Microcoding.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>RISC-V ISA 手册与规范：<a href="https://riscv.org">riscv.org</a></li>
+      <li>RISC-V 基础复习：<a href="https://cs61c.org/">UC Berkeley CS61C</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>🎓 第 2 课</span>
+      <a href="0003-microcoding.html">第 3 课：Microcoding →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

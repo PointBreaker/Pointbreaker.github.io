@@ -19,6 +19,7 @@
 - Homepage loads four records from `courses.json`; collection totals resolve to 4 courses, 95 lectures, and 32 practice guides.
 - Search for `MPI` reduces the catalog to CS267 and updates the live result count.
 - All four Dashboards load from `course-info.json` and `api/status.json` with the expected title, progress, and learning units.
+- All published course content lives under `courses/<slug>/`; legacy root-level course URLs redirect through the shared 404 migration page.
 - Dashboard and homepage filters are keyboard-addressable and preserve visible focus states.
 - CS267 formula-heavy lecture renders 80 KaTeX expressions with zero KaTeX errors and zero console warnings/errors.
 - Reading pages add course navigation, reading progress, automatic page TOC, code-copy controls, and previous/next navigation.

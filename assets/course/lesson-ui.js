@@ -8,9 +8,11 @@
   const siteBase = markerIndex >= 0 ? `${scriptUrl.pathname.slice(0, markerIndex)}/` : '/';
   const relativePagePath = location.pathname.startsWith(siteBase) ? location.pathname.slice(siteBase.length) : location.pathname.replace(/^\//, '');
   const segments = relativePagePath.split('/').filter(Boolean);
-  const courseId = segments[0];
+  const courseRootSegment = 'courses';
+  const courseIndex = segments[0] === courseRootSegment ? 1 : 0;
+  const courseId = segments[courseIndex];
   if (!courseId) return;
-  const courseBase = `${siteBase}${courseId}/`;
+  const courseBase = `${siteBase}${courseIndex ? `${courseRootSegment}/` : ''}${courseId}/`;
   const homeBase = siteBase;
   const currentRelative = decodeURIComponent(location.pathname.slice(courseBase.length));
 

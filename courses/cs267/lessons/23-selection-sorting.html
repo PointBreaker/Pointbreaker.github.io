@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 23 课：选择与排序 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 23 课</p>
+    <h1>选择与排序</h1>
+    <p class="lede">从递归式的 Master Method 出发，深入探讨并行选择问题（Median of Medians）、并行归并排序以及分布式内存上的 Sample Sort，理解 Work-Span 模型下的复杂度分析。</p>
+
+    <div class="meta">
+      <span>授课：Aydin Buluc（部分 slides 来自 Charles Leiserson 与《Introduction to Parallel Computing》）</span>
+      <span>日期：2025-04-15</span>
+      <span>预计用时：75 分钟</span>
+      <span>难度：困难</span>
+      <span>视频：<a href="https://youtu.be/0LedE1cGwQQ" target="_blank" rel="noopener">Lecture 23 Video</a></span>
+    </div>
+
+    <hr class="rule">
+
+    <h2>课程大纲</h2>
+    <ul class="checklist">
+      <li>Master Method（主方法）——求解分治递归式的万能工具</li>
+      <li>选择问题（Selection Problem）——找第 k 小元素</li>
+      <li>Median of Medians 算法——最坏情况线性时间选择</li>
+      <li>并行选择——Weighted Median of the Medians</li>
+      <li>归并排序（MergeSort）——串行与并行实现</li>
+      <li>并行归并（Parallel Merge）——P_Merge 算法</li>
+      <li>桶排序与 Sample Sort——分布式排序</li>
+      <li>大规模 Sample Sort 的挑战</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2>Master Method（主方法）</h2>
+    <p>Master Method 是求解形如 <em>T(n) = aT(n/b) + f(n)</em> 递归式的系统方法，其中 <em>a ≥ 1</em>、<em>b &gt; 1</em>，且 <em>f(n)</em> 渐近为正。这个框架在分析分治算法时无处不在。</p>
+
+    <div class="card idea">
+      <h3>核心思想</h3>
+      <p>比较 <em>f(n)</em> 与 <em>n<sup>log<sub>b</sub>a</sup></em> 的增长率。递归树的总工作量取决于叶节点（由 <em>n<sup>log<sub>b</sub>a</sup></em> 决定）与每层合并开销（由 <em>f(n)</em> 决定）之间的"竞争"。</p>
+    </div>
+
+    <h3>情况 1：叶节点主导</h3>
+    <p>若 <em>f(n) = O(n<sup>log<sub>b</sub>a-ε</sup>)</em> 对某个常数 <em>ε &gt; 0</em> 成立，则递归树的工作量主要集中在叶节点层，解为：</p>
+    <pre><code>T(n) = Θ(n^(log_b a))</code></pre>
+    <p>这意味着合并开销比叶节点工作量增长得更快，叶节点决定了总体复杂度。</p>
+
+    <h3>情况 2：均衡情况</h3>
+    <p>若 <em>f(n) = Θ(n<sup>log<sub>b</sub>a</sup> lg<sup>k</sup>n)</em> 对某个常数 <em>k ≥ 0</em> 成立，则每一层的工作量大致相等，解为：</p>
+    <pre><code>T(n) = Θ(n^(log_b a) lg^(k+1) n)</code></pre>
+    <p><strong>经典例子：</strong>归并排序中 <em>a = 2, b = 2, k = 0</em>，故 <em>T(n) = Θ(n lg n)</em>。</p>
+
+    <h3>情况 3：根节点主导</h3>
+    <p>若 <em>f(n) = Ω(n<sup>log<sub>b</sub>a+ε</sup>)</em> 对某个常数 <em>ε &gt; 0</em> 成立，且满足正则条件 <em>a·f(n/b) ≤ c·f(n)</em>（其中 <em>c &lt; 1</em>），则：</p>
+    <pre><code>T(n) = Θ(f(n))</code></pre>
+    <p>正则条件保证了递归过程中工作量几何级数衰减，根节点的开销主导整个过程。</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>情况</th>
+          <th>条件</th>
+          <th>解</th>
+          <th>直觉</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Case 1</td>
+          <td><em>f(n) = O(n<sup>log<sub>b</sub>a-ε</sup>)</em></td>
+          <td><em>Θ(n<sup>log<sub>b</sub>a</sup>)</em></td>
+          <td>叶节点主导</td>
+        </tr>
+        <tr>
+          <td>Case 2</td>
+          <td><em>f(n) = Θ(n<sup>log<sub>b</sub>a</sup> lg<sup>k</sup>n)</em></td>
+          <td><em>Θ(n<sup>log<sub>b</sub>a</sup> lg<sup>k+1</sup>n)</em></td>
+          <td>各层均衡</td>
+        </tr>
+        <tr>
+          <td>Case 3</td>
+          <td><em>f(n) = Ω(n<sup>log<sub>b</sub>a+ε</sup>)</em> + 正则条件</td>
+          <td><em>Θ(f(n))</em></td>
+          <td>根节点主导</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <h2>选择问题（Selection Problem）</h2>
+    <p>选择问题是指：<strong>在包含 N 个元素的列表中找到第 k 小的元素</strong>。这是一个基础构建块，在统计学（中位数、四分位数）、图算法（MCL 聚类）和负载均衡中频繁出现。</p>
+
+    <h3>Quickselect 算法</h3>
+    <p>由 Tony Hoare 设计，类似于快速排序，但只向一侧递归。选择一个 pivot 后将数组分为"小于 pivot"和"大于 pivot"两部分，然后只在包含第 k 元素的那一侧继续递归。</p>
+    <ul>
+      <li><strong>平均时间：</strong><em>O(N)</em></li>
+      <li><strong>最坏时间：</strong><em>O(N²)</em>（当 pivot 选择极度不平衡时）</li>
+    </ul>
+
+    <div class="card warning">
+      <h3>Median of Medians 的必要性</h3>
+      <p>Quickselect 的最坏情况 <em>O(N²)</em> 在某些应用场景下不可接受。Blum、Floyd、Pratt、Rivest 和 Tarjan 在 1973 年提出的 Median of Medians 算法保证了<strong>最坏情况线性时间</strong>。有趣的是，六位作者中有四位是图灵奖得主！</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>Median of Medians 算法（串行）</h2>
+    <p>Median of Medians 的核心思想是<strong>精心选择 pivot</strong>，保证每次递归都能丢弃一定比例的元素，从而保证线性时间复杂度。</p>
+
+    <h3>算法步骤</h3>
+    <ol>
+      <li>将列表划分为约 <em>N/5</em> 个子列表，每个子列表至少 5 个元素</li>
+      <li>对每个子列表排序并找出中位数，得到"中位数列表" <em>M</em></li>
+      <li>递归地在 <em>M</em> 上调用 SELECT，找到"中位数的中位数" <em>mm</em></li>
+      <li>使用 <em>mm</em> 作为 pivot 对整个列表进行划分，得到三个集合 <em>A</em>（小于）、<em>B</em>（等于）、<em>C</em>（大于）</li>
+      <li>根据 k 落入哪个集合，要么返回 <em>mm</em>，要么在 <em>A</em> 或 <em>C</em> 上递归</li>
+    </ol>
+
+    <pre><code class="language-cpp">// SELECT(S, k): 在集合 S 中找第 k 小元素
+SELECT(S, k) {
+    M = DIVIDE_AND_SORT(S, 5);   // O(N)，将 S 分为 N/5 组并排序
+    mm = SELECT(M, |M|/2);       // 递归找中位数的中位数，T(N/5)
+    [A, B, C] = PARTITION(S, mm); // O(N)，按 mm 划分
+
+    if (k > |A| && k <= |A| + |B|)
+        return mm;                // mm 就是答案
+    else if (k <= |A|)
+        return SELECT(A, k);      // 在较小的一半递归
+    else
+        return SELECT(C, k - |A| - |B|); // 在较大的一半递归
+}</code></pre>
+
+    <h3>为什么是 7N/10？</h3>
+    <p>关键在于确定递归调用时集合大小的上界。设 <em>A'</em> 是 <em>M</em> 中所有小于 <em>mm</em> 的中位数对应的完整组，<em>C'</em> 是大于 <em>mm</em> 的那些：</p>
+    <ul>
+      <li><em>|A'| ≥ 3N/10</em>：每组 5 个中至少有 3 个小于其对应中位数，而这些中位数又小于 <em>mm</em></li>
+      <li><em>|C'| ≥ 3N/10</em>：对称地，至少有 3N/10 个元素大于 <em>mm</em></li>
+    </ul>
+    <p>因此，无论递归进入 <em>A</em> 还是 <em>C</em>，最多只有 <em>N - 3N/10 = 7N/10</em> 个元素。</p>
+
+    <h3>复杂度分析</h3>
+    <p>递归式为：</p>
+    <pre><code>T(n) ≤ T(n/5) + T(7n/10) + O(n)</code></pre>
+    <p>展开递归树：每层工作量以 <em>9/10</em> 的比率递减：</p>
+    <pre><code>T(n) = c(n + 9n/10 + 81n/100 + ...)
+     = cn · (1 + 9/10 + (9/10)² + ...)
+     = cn · 1/(1 - 9/10)
+     = O(n)</code></pre>
+
+    <div class="card idea">
+      <h3>为什么选择 5 个一组？</h3>
+      <p>若选择 3 个一组，递归式变为 <em>T(n) ≤ T(n/3) + T(2n/3) + O(n)</em>，其解为 <em>O(n lg n)</em>。若选择 7 个或更多一组，虽然仍为 <em>O(n)</em>，但常数因子更大。<strong>5 是保证线性时间的最小分组大小</strong>。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>并行选择（Parallel Selection）</h2>
+    <p>在分布式内存系统中，每个处理器持有一部分数据。朴素的并行 Median of Medians 存在<strong>负载不均衡</strong>问题：随着递归深入，数据分布变得不均匀，需要频繁的数据重分布和通信。</p>
+
+    <h3>Weighted Median of the Medians 算法</h3>
+    <p>核心洞察：<strong>与其费力处理负载不均衡，不如直接忽略它！</strong></p>
+
+    <p>给定 <em>p</em> 个不同元素 <em>m₁, m₂, ..., mₚ</em> 及其对应正权重 <em>w₁, w₂, ..., wₚ</em>（满足 <em>Σwᵢ = 1</em>），加权中位数 <em>M</em> 满足：</p>
+    <pre><code>Σ_{mᵢ &lt; M} wᵢ ≤ 1/2  且  Σ_{mᵢ &gt; M} wᵢ ≤ 1/2</code></pre>
+
+    <pre><code class="language-cpp">// 并行选择：在分布式内存中找第 k 小元素
+PARALLEL_SELECT(S, k) {
+    lm = SELECT(S, |S|/2);          // 每个处理器找本地中位数
+    LMS = MPI_Allgather(lm);         // 交换所有本地中位数
+    wmm = WeightedMedian(LMS);       // 计算加权中位数（冗余计算）
+
+    [A, B, C] = PARTITION(S, wmm);   // 本地划分
+    ls = MPI_Allreduce(|A|, SUM);    // 全局小于 wmm 的元素数
+    eq = MPI_Allreduce(|B|, SUM);    // 全局等于 wmm 的元素数
+
+    if (k > ls && k <= ls + eq)
+        return wmm;
+    else if (k <= ls)
+        return PARALLEL_SELECT(A, k);        // 递归，最多 3N/4
+    else
+        return PARALLEL_SELECT(C, k - ls - eq); // 递归，最多 3N/4
+}</code></pre>
+
+    <h3>为什么是 3N/4？</h3>
+    <p>根据加权中位数定义，权重和 ≤ 1/2 意味着至少一半的元素在 <em>M</em> 的"两侧"。将权重替换为各处理器的元素数 <em>nᵢ</em>：</p>
+    <ul>
+      <li>对处理器 <em>i</em>，小于等于本地中位数 <em>mᵢ</em> 的元素至少有 <em>nᵢ/2</em> 个</li>
+      <li>所有满足 <em>mᵢ ≤ M</em> 的处理器，其"下半部分"元素总数 ≥ <em>N/4</em></li>
+      <li>同理，"上半部分"元素总数也 ≥ <em>N/4</em></li>
+    </ul>
+    <p>因此，每次递归至少丢弃 <em>N/4</em> 个元素，最多保留 <em>3N/4</em>。</p>
+
+    <h3>复杂度分析</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>指标</th>
+          <th>复杂度</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><em>T<sub>comm</sub>(n)</em></td>
+          <td><em>O(α log²p + β(p log p + n/p))</em></td>
+          <td>粗化基本情况：O(log p) 轮递归 + 最终本地排序</td>
+        </tr>
+        <tr>
+          <td><em>T<sub>comp</sub>(n)</em></td>
+          <td><em>O((n/p) · log n)</em></td>
+          <td>本地列表不保证收缩，最终需要本地排序</td>
+        </tr>
+        <tr>
+          <td>递归深度</td>
+          <td><em>O(log n)</em> → 粗化后 <em>O(log p)</em></td>
+          <td>每轮至少丢弃 1/4 元素</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>并行选择的挑战</h3>
+      <p>存在更快的随机化算法，但近年来缺乏系统的实验研究。对于课程项目而言，评估不同并行选择算法的变体是一个潜在的研究方向。相关文献包括 Bader & JáJá (1996) 和 Bader (2004) 的工作。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>归并排序（MergeSort）</h2>
+    <p>归并排序是基于分治范式的经典递归排序算法，其核心操作是<strong>合并（merge）</strong>：将两个已排序序列合并为一个有序序列。</p>
+
+    <h3>串行合并操作</h3>
+    <pre><code class="language-cpp">// 合并两个已排序数组 A[na] 和 B[nb] 到 C[]
+void Merge(T *C, T *A, T *B, int na, int nb) {
+    while (na > 0 && nb > 0) {
+        if (*A <= *B) { *C++ = *A++; na--; }
+        else          { *C++ = *B++; nb--; }
+    }
+    while (na > 0) { *C++ = *A++; na--; }
+    while (nb > 0) { *C++ = *B++; nb--; }
+}
+// 时间复杂度：Θ(n)，其中 n = na + nb</code></pre>
+
+    <h3>并行归并排序框架</h3>
+    <pre><code class="language-cpp">// 并行归并排序：将 A[0..n-1] 排序到 B[0..n-1]
+void MergeSort(T *B, T *A, int n) {
+    if (n == 1) {
+        B[0] = A[0];
+    } else {
+        T *C = new T[n];         // 临时数组
+        #pragma omp parallel
+        {
+            #pragma omp single
+            {
+                #pragma omp task
+                MergeSort(C, A, n / 2);             // 排序左半
+                #pragma omp task
+                MergeSort(C + n/2, A + n/2, n - n/2); // 排序右半
+            }
+        }
+        Merge(B, C, C + n/2, n/2, n - n/2);  // 串行合并
+        delete[] C;
+    }
+}</code></pre>
+
+    <h3>Work-Span 分析（朴素并行版本）</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>指标</th>
+          <th>递归式</th>
+          <th>解</th>
+          <th>Master Method 情况</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Work T₁(n)</strong></td>
+          <td><em>2T₁(n/2) + Θ(n)</em></td>
+          <td><em>Θ(n lg n)</em></td>
+          <td>Case 2：<em>n<sup>log₂2</sup> = n</em></td>
+        </tr>
+        <tr>
+          <td><strong>Span T<sub>∞</sub>(n)</strong></td>
+          <td><em>T<sub>∞</sub>(n/2) + Θ(n)</em></td>
+          <td><em>Θ(n)</em></td>
+          <td>Case 3：合并步骤是串行的</td>
+        </tr>
+        <tr>
+          <td><strong>Parallelism</strong></td>
+          <td><em>T₁ / T<sub>∞</sub></em></td>
+          <td><em>Θ(lg n)</em></td>
+          <td>太弱了！</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>瓶颈：串行合并</h3>
+      <p>朴素并行版本的并行度仅为 <em>Θ(lg n)</em>——非常"可怜"（PUNY！）。原因在于合并步骤 <em>Merge()</em> 是串行的，其 <em>Θ(n)</em> 的 Span 主导了整个算法。<strong>必须并行化合并操作！</strong></p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>并行归并（Parallel Merge）</h2>
+    <p>P_Merge 算法的关键洞察是：<strong>通过二分搜索在两个数组之间"交替分割"</strong>，使得每次递归至少丢弃 1/4 的元素。</p>
+
+    <h3>算法思想</h3>
+    <p>假设 <em>na ≥ nb</em>（A 是较大的数组），取 A 的中点 <em>A[mₐ]</em>，在 B 中二分搜索 <em>A[mₐ]</em> 的位置 <em>m<sub>b</sub></em>。那么：</p>
+    <ul>
+      <li>所有 <em>A[0..mₐ-1]</em> 和 <em>B[0..m<sub>b</sub>-1]</em> 都小于 <em>A[mₐ]</em></li>
+      <li>总共 <em>mₐ + m<sub>b</sub></em> 个元素已确定位置</li>
+      <li>两个递归子问题各自不超过原问题的 3/4</li>
+    </ul>
+
+    <pre><code class="language-cpp">// 并行合并：将 A[na] 和 B[nb] 合并到 C[]
+void P_Merge(T *C, T *A, T *B, int na, int nb) {
+    if (na < nb) { P_Merge(C, B, A, nb, na); return; } // 确保 na ≥ nb
+    if (na == 0) return;
+
+    int ma = na / 2;
+    int mb = BinarySearch(A[ma], B, nb);  // 在 B 中找 A[ma] 的位置
+    C[ma + mb] = A[ma];                    // 放置 A[ma]
+
+    #pragma omp parallel
+    {
+        #pragma omp single
+        {
+            #pragma omp task
+            P_Merge(C, A, B, ma, mb);  // 左半部分
+            #pragma omp task
+            P_Merge(C + ma + mb + 1, A + ma + 1, B + mb,
+                    na - ma - 1, nb - mb);  // 右半部分
+        }
+    }
+    // 隐式 taskwait
+}</code></pre>
+
+    <h3>Span 分析</h3>
+    <p>递归式为 <em>T<sub>∞</sub>(n) = T<sub>∞</sub>(3n/4) + Θ(lg n)</em>：</p>
+    <pre><code>T_∞(n) = T_∞(3n/4) + Θ(lg n)
+Case 2: n^(log_{4/3} 1) = 1, f(n) = Θ(lg n) = Θ(lg¹ n)
+=> T_∞(n) = Θ(lg² n)</code></pre>
+
+    <h3>Work 分析（复杂但优美）</h3>
+    <p>Work 的递归式为 <em>T₁(n) = T₁(αn) + T₁((1-α)n) + Θ(lg n)</em>，其中 1/4 ≤ α ≤ 3/4。使用代入法证明 <em>T₁(n) = Θ(n)</em>：</p>
+
+    <pre><code>归纳假设：T₁(k) ≤ c₁k - c₂lg k，对任意 k < n 成立
+
+T₁(n) ≤ c₁(αn) - c₂lg(αn) + c₁(1-α)n - c₂lg((1-α)n) + Θ(lg n)
+     = c₁n - c₂[lg(αn) + lg((1-α)n)] + Θ(lg n)
+     = c₁n - c₂[lg(α(1-α)) + 2lg n] + Θ(lg n)
+     = c₁n - c₂lg n - (c₂(lg n + lg(α(1-α))) - Θ(lg n))
+     ≤ c₁n - c₂lg n    （选取足够大的 c₂）</code></pre>
+
+    <div class="card idea">
+      <h3>P_Merge 的性能指标</h3>
+      <table>
+        <thead>
+          <tr><th>指标</th><th>值</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Work</td><td><em>Θ(n)</em></td></tr>
+          <tr><td>Span</td><td><em>Θ(lg² n)</em></td></tr>
+          <tr><td>Parallelism</td><td><em>Θ(n / lg² n)</em></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <hr class="rule">
+
+    <h2>并行归并排序（P_MergeSort）</h2>
+    <p>将 P_Merge 替换串行 Merge，得到完全并行的归并排序：</p>
+
+    <pre><code class="language-cpp">// 并行归并排序（使用并行合并）
+void P_MergeSort(T *B, T *A, int n) {
+    if (n == 1) {
+        B[0] = A[0];
+    } else {
+        T C[n];
+        #pragma omp parallel
+        {
+            #pragma omp single
+            {
+                #pragma omp task
+                P_MergeSort(C, A, n / 2);
+                #pragma omp task
+                P_MergeSort(C + n/2, A + n/2, n - n/2);
+            }
+        }
+        P_Merge(B, C, C + n/2, n/2, n - n/2);  // 并行合并！
+    }
+}</code></pre>
+
+    <h3>复杂度分析</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>指标</th>
+          <th>递归式</th>
+          <th>解</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Work T₁(n)</strong></td>
+          <td><em>2T₁(n/2) + Θ(n)</em></td>
+          <td><em>Θ(n lg n)</em></td>
+          <td>与串行相同，Case 2</td>
+        </tr>
+        <tr>
+          <td><strong>Span T<sub>∞</sub>(n)</strong></td>
+          <td><em>T<sub>∞</sub>(n/2) + Θ(lg² n)</em></td>
+          <td><em>Θ(lg³ n)</em></td>
+          <td>Case 2：<em>n<sup>log₂1</sup> = 1</em></td>
+        </tr>
+        <tr>
+          <td><strong>Parallelism</strong></td>
+          <td><em>T₁ / T<sub>∞</sub></em></td>
+          <td><em>Θ(n / lg² n)</em></td>
+          <td>大幅提升！</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>并行度对比</h3>
+      <table>
+        <thead>
+          <tr><th>版本</th><th>Span</th><th>Parallelism</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>朴素并行（串行合并）</td><td><em>Θ(n)</em></td><td><em>Θ(lg n)</em></td></tr>
+          <tr><td>P_MergeSort</td><td><em>Θ(lg³ n)</em></td><td><em>Θ(n / lg² n)</em></td></tr>
+        </tbody>
+      </table>
+      <p>并行化合并使并行度从对数级提升到接近线性！</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>桶排序（Bucket Sort）</h2>
+    <p>桶排序假设输入数据在区间 <em>[a, b]</em> 上均匀分布。算法将区间划分为 <em>m</em> 个等宽的桶，每个元素放入对应桶中，各桶内局部排序后连接。若数据确实均匀分布，每个桶大约包含 <em>n/m</em> 个元素，总运行时间 <em>Θ(n lg(n/m))</em>。</p>
+
+    <h3>并行桶排序</h3>
+    <p>并行化非常直接：选择 <em>m = p</em>（处理器数），每个处理器负责一个值域区间。每个处理器扫描本地列表，通过 all-to-all 通信将元素发送到目标处理器，最后各处理器对收到的元素排序。</p>
+
+    <div class="card warning">
+      <h3>负载不均衡问题</h3>
+      <p>桶排序的核心假设——输入在 <em>[a, b]</em> 上均匀分布——在实际中往往不成立。真实数据可能高度偏斜，导致某些桶过载、某些桶空闲，严重影响并行效率。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>样本排序（Sample Sort）</h2>
+    <p>Sample Sort 是 Quicksort 的自然推广：从单个 pivot 扩展到 <em>p</em> 个 pivot（splitters），将数据划分为 <em>p+1</em> 个桶，分配给 <em>p</em> 个处理器并行排序。</p>
+
+    <h3>Regular Sampling 方法</h3>
+    <p>为了保证负载平衡，采用<strong>规则采样（regular sampling）</strong>策略：</p>
+    <ol>
+      <li>将 <em>n</em> 个元素分为 <em>p</em> 个块，每个块 <em>n/p</em> 个元素，本地排序</li>
+      <li>从每个排序后的块中等间距选取 <em>p-1</em> 个样本</li>
+      <li>将 <em>p(p-1)</em> 个样本收集到一个处理器，排序得到 <em>Y</em></li>
+      <li>从 <em>Y</em> 中等间距选取 <em>p-1</em> 个 splitters：<em>S = {s₁, s₂, ..., s<sub>p-1</sub>}</em></li>
+      <li>广播 splitters，每个处理器按 splitters 划分本地数据</li>
+      <li>All-to-all 交换后各处理器本地排序</li>
+    </ol>
+
+    <h3>负载平衡保证</h3>
+    <p>Regular sampling 保证每个桶的元素数 <strong>&lt; 2n/p</strong>（即最坏负载不均衡为 2 倍）。证明思路：</p>
+    <ul>
+      <li>每个样本 <em>y<sub>i</sub></em> 至少大于 <em>n/p²</em> 个本地元素</li>
+      <li><em>s<sub>i-1</sub></em> 至少大于 <em>((i-2)p + p/2) · n/p²</em> 个元素</li>
+      <li><em>s<sub>i</sub></em> 至多多于 <em>((p-i)p - p/2) · n/p²</em> 个元素</li>
+      <li>桶 <em>i</em> 的元素数 ≤ <em>n - (lb + ub) = 2n/p</em></li>
+    </ul>
+
+    <h3>复杂度分析</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>步骤</th>
+          <th>时间复杂度</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>本地排序</td>
+          <td><em>Θ((n/p) lg(n/p))</em></td>
+          <td>对 n/p 个元素排序</td>
+        </tr>
+        <tr>
+          <td>样本收集（gather）</td>
+          <td><em>Θ(p²)</em></td>
+          <td>收集 p(p-1) 个样本</td>
+        </tr>
+        <tr>
+          <td>样本排序</td>
+          <td><em>Θ(p² lg p)</em></td>
+          <td>对 p(p-1) 个样本排序</td>
+        </tr>
+        <tr>
+          <td>选择 splitters</td>
+          <td><em>Θ(p)</em></td>
+          <td>等间距选取 p-1 个</td>
+        </tr>
+        <tr>
+          <td>本地二分插入</td>
+          <td><em>Θ(p lg(n/p))</em></td>
+          <td>p-1 次二分搜索</td>
+        </tr>
+        <tr>
+          <td>数据重分布</td>
+          <td><em>O(n/p)</em></td>
+          <td>all-to-all 通信</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>实践中的负载平衡</h3>
+      <p>虽然理论上最坏情况是 2 倍负载不均衡，但<strong>实践中 Sample Sort 的负载平衡远优于理论界</strong>。这是因为理论证明使用的是最坏情况分析，而实际数据分布通常比最坏情况好得多。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>大规模 Sample Sort 的挑战</h2>
+    <p>当 Sample Sort 扩展到数万核心时，样本收集阶段会遇到严重的内存问题：</p>
+
+    <h3>内存爆炸问题</h3>
+    <p>在 20,000 核心上运行 Sample Sort，每个样本至少 12 字节（4 字节值 + 8 字节全局索引）。<em>p(p-1)</em> 个样本共需：</p>
+    <pre><code>20,000 × 19,999 × 12 bytes ≈ 4.8 GB per core!</code></pre>
+    <p>这甚至还未开始排序，仅样本就已占用每核心数 GB 内存。</p>
+
+    <h3>解决方案</h3>
+    <ul>
+      <li><strong>快速方案（Hack）：</strong>使用并行选择找中位数，交换数据后，在 <em>p/2</em> 个处理器上递归</li>
+      <li><strong>Exact Splitters：</strong>将并行选择算法泛化，直接找到能均匀划分数据的 splitters（Cheng, Shah, Gilbert, Edelman）</li>
+      <li><strong>潜在创新：</strong>并行化样本 <em>Y</em> 的合并过程，降低每处理器内存占用</li>
+    </ul>
+
+    <div class="card warning">
+      <h3>扩展性瓶颈</h3>
+      <p>Sample Sort 的瓶颈已从计算转移到<strong>通信和内存</strong>。在百亿亿次（Exascale）系统上，如何高效地收集和处理样本是排序算法设计的关键挑战。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>Master Method 情况 2 适用于以下哪种条件的递归式？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="情况 1 要求 f(n) 多项式地小于 n^(log_b a)。">A. <em>f(n) = O(n<sup>log<sub>b</sub>a-ε</sup>)</em></button>
+        <button data-answer="correct" data-correct="正确！情况 2 要求 f(n) = Θ(n^(log_b a) lg^k n)，解为 Θ(n^(log_b a) lg^(k+1) n)。">B. <em>f(n) = Θ(n<sup>log<sub>b</sub>a</sup> lg<sup>k</sup>n)</em></button>
+        <button data-answer="wrong" data-incorrect="情况 3 要求 f(n) 多项式地大于 n^(log_b a)。">C. <em>f(n) = Ω(n<sup>log<sub>b</sub>a+ε</sup>)</em></button>
+        <button data-answer="wrong" data-incorrect="这不是 Master Method 的三种标准情况之一。">D. <em>f(n) = o(n<sup>log<sub>b</sub>a</sup>)</em></button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>Median of Medians 算法选择 5 个元素一组，而非 3 个，原因是？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="5 个一组的时间复杂度是 O(n)，不是 O(n lg n)。">A. 因为 5 个一组能得到 O(n lg n) 时间</button>
+        <button data-answer="correct" data-correct="正确！3 个一组时递归式 T(n) = T(n/3) + T(2n/3) + O(n) 的解为 O(n lg n)。5 个一组才能保证线性时间。">B. 因为 3 个一组无法保证线性时间</button>
+        <button data-answer="wrong" data-incorrect="5 个一组是 O(n)，但 7 个一组也是 O(n)，只是常数更大。">C. 因为 5 个一组是唯一能得到 O(n) 的选择</button>
+        <button data-answer="wrong" data-incorrect="分组大小与内存对齐无关，这是算法复杂度的考量。">D. 因为 5 个元素恰好填满一个缓存行</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>并行归并排序 P_MergeSort 的 Span 是多少？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="Θ(lg² n) 是 P_Merge 的 Span，但 P_MergeSort 还需考虑递归。">A. <em>Θ(lg² n)</em></button>
+        <button data-answer="correct" data-correct="正确！T_∞(n) = T_∞(n/2) + Θ(lg² n) = Θ(lg³ n)。">B. <em>Θ(lg³ n)</em></button>
+        <button data-answer="wrong" data-incorrect="Θ(n) 是朴素并行版本的 Span（串行合并导致）。">C. <em>Θ(n)</em></button>
+        <button data-answer="wrong" data-incorrect="Work 才是 Θ(n lg n)，Span 更小。">D. <em>Θ(n lg n)</em></button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>Sample Sort 中 regular sampling 保证每个桶的元素数少于？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="若能达到 n/p 则完美平衡，但这是理想情况，regular sampling 无法保证。">A. <em>n/p</em></button>
+        <button data-answer="correct" data-correct="正确！Regular sampling 保证每个桶 < 2n/p，即最坏负载不均衡为 2 倍。">B. <em>2n/p</em></button>
+        <button data-answer="wrong" data-incorrect="这个界太松了，regular sampling 能提供更强的保证。">C. <em>n</em></button>
+        <button data-answer="wrong" data-incorrect="n/p² 是样本数量相关的量，与桶大小无关。">D. <em>n/p²</em></button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>在大规模系统上运行 Sample Sort 时，为什么样本收集会成为瓶颈？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="样本收集是 O(p²) 时间，虽然不小但不是主要瓶颈。">A. 因为收集样本需要 O(p³) 时间</button>
+        <button data-answer="wrong" data-incorrect="瓶颈不在排序样本，而是内存占用。">C. 因为 p(p-1) 个样本无法被有效排序</button>
+        <button data-answer="wrong" data-incorrect="瓶颈不在通信带宽，而是总内存占用。">D. 因为 all-to-all 通信带宽不足</button>
+        <button data-answer="correct" data-correct="正确！p(p-1) 个样本在 p=20000 时占用约 4.8 GB/core，是主要瓶颈。">B. 因为样本总数 p(p-1) 在 p 很大时占用巨大内存</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>Master Method 的三种情况</h3>
+        <p>通过比较 f(n) 与 n^(log_b a) 的增长率，快速判断分治递归式的解：叶节点主导、均衡、或根节点主导。</p>
+      </article>
+      <article>
+        <h3>Median of Medians 的线性保证</h3>
+        <p>通过精心选择 pivot（中位数的中位数），保证每次递归至少丢弃 3n/10 元素，实现最坏情况 O(n) 时间选择。</p>
+      </article>
+      <article>
+        <h3>并行合并的关键性</h3>
+        <p>归并排序的并行度瓶颈在合并操作。P_Merge 通过二分搜索分割将 Span 降至 Θ(lg² n)，使整体并行度从 Θ(lg n) 提升到 Θ(n/lg² n)。</p>
+      </article>
+      <article>
+        <h3>Sample Sort 的负载平衡</h3>
+        <p>Regular sampling 以 O(p²) 的额外开销保证最坏 2 倍负载不均衡。在大规模系统上，样本收集的内存占用成为新瓶颈。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li>Blum, Floyd, Pratt, Rivest, Tarjan. <a href="https://doi.org/10.1016/0022-0000(73)90033-9" target="_blank" rel="noopener">"Time bounds for selection"</a>, J. Comput. System Sci., 1973</li>
+      <li>Shi & Schaeffer. <a href="https://doi.org/10.1006/jpdc.1996.0028" target="_blank" rel="noopener">"Parallel Sorting by Regular Sampling"</a>, J. Parallel Distrib. Comput., 1996</li>
+      <li>Bader & JáJá. <a href="https://doi.org/10.1006/jpdc.1996.0028" target="_blank" rel="noopener">"Practical parallel algorithms for dynamic data redistribution, median finding, and selection"</a>, 1996</li>
+      <li>Solomonik & Kalé. <a href="https://doi.org/10.1109/IPDPS.2010.5470411" target="_blank" rel="noopener">"Highly scalable parallel sorting"</a>, IPDPS 2010</li>
+      <li>Sundar, Malhotra, Biros. <a href="https://doi.org/10.1145/2535629" target="_blank" rel="noopener">"Hyksort: a new variant of hypercube quicksort on distributed memory architectures"</a>, 2013</li>
+      <li>Cormen, Leiserson, Rivest, Stein. <em>Introduction to Algorithms</em>, Chapter 9 (Medians and Order Statistics)</li>
+      <li>Cheng, Shah, Gilbert, Edelman. <a href="https://doi.org/10.1137/14096628X" target="_blank" rel="noopener">"A novel parallel sorting algorithm for contemporary architectures"</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="22-graph-algorithms.html">← 第 22 课</a>
+      <span>第 23 课</span>
+      <a href="24-comp-biology.html">第 24 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley · 本课完全覆盖 Lecture 23 内容</p>
+    </footer>
+  </div>
+
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

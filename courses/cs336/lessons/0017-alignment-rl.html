@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 17 课：Alignment — RL 深入 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 17 课</p>
+    <h1>强化学习深入：Policy Gradient、PPO、DPO、GRPO</h1>
+    <p class="lede">第 15-16 课介绍了 RLHF 和 RLVR 的宏观图景。这一课深入底层数学：policy gradient 如何推导？PPO 的 clip 机制为什么有效？DPO 如何绕过 reward model？GRPO 如何简化 PPO？</p>
+
+    <div class="meta">
+      <span>授课：Sida Wang & Kangwook Lee</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：较高</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="rl-setup">RL 在语言模型中的设置</h2>
+
+    <p>将语言建模为 RL 问题：</p>
+    <table>
+      <tr><th>RL 概念</th><th>语言模型对应</th></tr>
+      <tr><td>State (s)</td><td>prompt + 已生成的 response</td></tr>
+      <tr><td>Action (a)</td><td>下一个 token</td></tr>
+      <tr><td>Policy (π)</td><td>语言模型 p(next_token | context)</td></tr>
+      <tr><td>Reward (R)</td><td>response 质量（outcome reward）</td></tr>
+      <tr><td>Transition</td><td>确定性：s' = s + a</td></tr>
+      <tr><td>Episode</td><td>s → a → ... → a → R（完整 response）</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>关键简化</strong>：与机器人不同，语言模型的 transition 是确定性的（给定 state 和 action，下一个 state 完全确定）。而且我们使用 outcome reward（整个 response 的奖励），而非 per-token reward。这大大简化了问题。</p>
+    </div>
+
+    <h3>目标函数</h3>
+    <pre><code class="language-python"># 目标: 最大化期望奖励
+# J(θ) = E[R(s, a)]
+#       = ∫ p(s) π(a|s) R(s, a) ds da
+
+# 其中:
+# - p(s): prompt 的分布（数据集）
+# - π(a|s): 语言模型（参数 θ）
+# - R(s, a): response a 在 prompt s 下的奖励
+
+# 对于语言模型，"action a" 是整个 response（token 序列）
+# 所以 π(a|s) = Π_t π(a_t | s, a_&lt;t)</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="policy-gradient">Policy Gradient</h2>
+
+    <h3>推导</h3>
+    <p>目标函数 J(θ) = E[R(s, a)]，我们需要计算梯度：</p>
+    <pre><code class="language-python"># ∇_θ J(θ) = ∇_θ E[R(s, a)]
+#           = ∇_θ ∫ p(s) π(a|s) R(s, a) ds da
+#           = ∫ p(s) ∇_θ π(a|s) R(s, a) ds da
+
+# 技巧: ∇π = π × ∇log π (log-derivative trick)
+# ∇_θ π(a|s) = π(a|s) × ∇_θ log π(a|s)
+
+# 代入:
+# ∇_θ J(θ) = ∫ p(s) π(a|s) ∇_θ log π(a|s) R(s, a) ds da
+#           = E[∇_θ log π(a|s) × R(s, a)]
+
+# 最终形式:
+# ∇_θ J(θ) = E[∇_θ log π(a|s) × R(s, a)]</code></pre>
+
+    <h3>直觉解释</h3>
+    <pre><code class="language-python"># ∇_θ log π(a|s) × R(s, a) 的含义:
+#
+# - ∇_θ log π(a|s): 让 action a 概率增加的方向
+# - R(s, a): 这个 action 有多好
+#
+# 如果 R > 0（好）: 沿着 ∇logπ 方向更新 → 增加 a 的概率
+# 如果 R < 0（差）: 沿着 -∇logπ 方向更新 → 减少 a 的概率
+# 如果 R = 0: 不更新</code></pre>
+
+    <h3>朴素 Policy Gradient 的问题</h3>
+    <p>当 R ∈ {0, 1}（正确/错误）时：</p>
+    <pre><code class="language-python"># 只有 R=1 的样本产生梯度
+# R=0 的样本: gradient = 0 → 不更新
+
+# 这类似于 SFT，但:
+# - SFT 的数据是固定的
+# - PG 的数据是模型自己生成的（随 policy 变化）
+
+# 问题:
+# 1. 高方差: 只有一小部分样本有非零梯度
+# 2. 稀疏信号: 大多数 response 没有奖励
+# 3. 探索不足: 模型可能只探索少数几种回答</code></pre>
+
+    <div class="card warning">
+      <p><strong>关键问题</strong>：朴素 policy gradient 的方差很高。同一个 prompt，两次采样可能得到完全不同的 reward（一个对、一个错），导致梯度估计不稳定。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="baselines">Baseline：降低方差</h2>
+
+    <h3>核心思想</h3>
+    <p>从 reward 中减去一个 baseline b(s)：</p>
+    <pre><code class="language-python"># 原始: ∇J = E[∇log π(a|s) × R(s, a)]
+# Baseline: ∇J = E[∇log π(a|s) × (R(s, a) - b(s))]
+
+# 为什么可以减去 baseline?
+# E[∇log π(a|s) × b(s)] = b(s) × E[∇log π(a|s)]
+#                       = b(s) × ∇ ∫ π(a|s) da
+#                       = b(s) × ∇ 1 = 0
+# 所以减去 baseline 不改变梯度的期望值，但降低了方差</code></pre>
+
+    <h3>选择 Baseline</h3>
+    <p>最优 baseline 的推导（最小化方差）：</p>
+    <pre><code class="language-python"># 最优 baseline:
+# b*(s) = E[(∇π(a|s))^2 × R | s] / E[(∇π(a|s))^2 | s]
+
+# 对于单参数模型，这可以简化为:
+# b*(s) = E[R | s] = V(s)
+
+# 直觉: baseline = 这个 state 下的平均 reward</code></pre>
+
+    <h3>Advantage Function</h3>
+    <pre><code class="language-python"># 当 baseline = V(s) = E[R|s] 时:
+# A(s, a) = R(s, a) - V(s) = Q(s, a) - V(s)
+
+# Advantage 的含义:
+# "action a 比这个 state 的平均水平好多少？"
+
+# A > 0: action a 比平均好 → 增加概率
+# A < 0: action a 比平均差 → 减少概率
+# A = 0: action a 就是平均水平 → 不更新</code></pre>
+
+    <h3>降低方差的效果</h3>
+    <pre><code class="language-python"># 例: 两个 states
+# s1: a1 → reward 11, a2 → reward 9
+# s2: a1 → reward 0, a2 → reward 2
+
+# 没有 baseline:
+# gradients = [∇π1 × 11, ∇π2 × 9, ∇π3 × 0, ∇π4 × 2]
+# std = 4.92
+
+# 有 baseline (b(s1)=10, b(s2)=1):
+# gradients = [∇π1 × 1, ∇π2 × (-1), ∇π3 × (-1), ∇π4 × 1]
+# std = 1.00
+
+# 方差降低了 5 倍！</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="ppo">PPO：Proximal Policy Optimization</h2>
+
+    <h3>核心问题</h3>
+    <p>Policy gradient 更新后，旧的采样数据不能用。PPO 解决这个问题：</p>
+
+    <h3>Importance Sampling Ratio</h3>
+    <pre><code class="language-python"># 更新后，想用旧数据继续训练
+# 需要 importance sampling 修正:
+
+# ratio = π_new(a|s) / π_old(a|s)
+
+# 如果 ratio ≈ 1: 新旧 policy 相似，旧数据仍然有效
+# 如果 ratio >> 1: 新 policy 比旧 policy 更倾向于 a
+# 如果 ratio << 1: 新 policy 比旧 policy 更不倾向于 a</code></pre>
+
+    <h3>Clipped Objective</h3>
+    <pre><code class="language-python"># PPO 的核心创新: clip ratio 防止过大更新
+
+# Unclipped loss:
+# L_unclipped = ratio × Advantage
+
+# Clipped loss:
+# L_clipped = clip(ratio, 1-ε, 1+ε) × Advantage
+
+# PPO loss:
+# L_PPO = -min(L_unclipped, L_clipped)
+
+# 直觉:
+# - 当 Advantage > 0（好 action）:
+#   - ratio 增大 → loss 增大（鼓励增加概率）
+#   - 但 ratio > 1+ε 时，loss 不再增大（防止过度更新）
+# - 当 Advantage < 0（差 action）:
+#   - ratio 减小 → loss 增大（鼓励减少概率）
+#   - 但 ratio < 1-ε 时，loss 不再增大</code></pre>
+
+    <h3>PPO 完整算法</h3>
+    <pre><code class="language-python"># PPO 训练循环:
+
+for iteration in range(num_iterations):
+    # 1. 用当前 policy 收集数据
+    for prompt in batch:
+        response = policy_old.generate(prompt)
+        log_prob_old = policy_old.log_prob(prompt, response)
+        reward = reward_model(prompt, response)
+        value = value_model(prompt, response)
+        advantage = compute_gae(reward, value)
+
+    # 2. 用收集的数据更新 policy（多轮）
+    for epoch in range(ppo_epochs):
+        log_prob_new = policy_new.log_prob(prompt, response)
+        ratio = exp(log_prob_new - log_prob_old)
+
+        # Clipped surrogate loss
+        L1 = ratio * advantage
+        L2 = clip(ratio, 1 - epsilon, 1 + epsilon) * advantage
+        loss = -min(L1, L2).mean()
+
+        # Value function loss
+        value_pred = value_model(prompt)
+        value_target = reward  # 或 GAE target
+        value_loss = (value_pred - value_target).pow(2).mean()
+
+        # 总 loss
+        total_loss = loss + c1 * value_loss - c2 * entropy_bonus
+        total_loss.backward()
+        optimizer.step()</code></pre>
+
+    <h3>GAE：Generalized Advantage Estimation</h3>
+    <pre><code class="language-python"># GAE 是 advantage 估计的一种方法
+# 平衡偏差和方差
+
+# TD residual: δ_t = r_t + γV(s_{t+1}) - V(s_t)
+# Advantage: A_t = Σ (γλ)^l × δ_{t+l}
+
+# λ = 0: 纯 TD（低方差，高偏差）
+# λ = 1: 纯 Monte Carlo（高方差，低偏差）
+# λ ∈ (0,1): 折中</code></pre>
+
+    <div class="card idea">
+      <p><strong>PPO 成功的关键</strong>：</p>
+      <ul>
+        <li><strong>Clip</strong>：防止 policy 变化过大</li>
+        <li><strong>多轮更新</strong>：同一批数据用多次，提高样本效率</li>
+        <li><strong>Value function</strong>：降低 advantage 估计的方差</li>
+        <li><strong>Entropy bonus</strong>：鼓励探索，防止模式崩塌</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="dpo">DPO：Direct Preference Optimization</h2>
+
+    <h3>动机</h3>
+    <p>PPO 很复杂——需要同时维护 4 个 model（policy、reference、reward、value）。DPO 提出一个更简单的方法：<strong>直接从偏好数据优化 policy，不需要 reward model</strong>。</p>
+
+    <h3>推导</h3>
+    <pre><code class="language-python"># 起点: PPO 的最优 policy 有闭式解:
+# π*(a|s) ∝ π_ref(a|s) × exp(R(s,a) / β)
+
+# 反解 reward:
+# R(s, a) = β × log(π*(a|s) / π_ref(a|s)) + β × log Z(s)
+# 其中 Z(s) = Σ_a π_ref(a|s) exp(R(s,a)/β) 是 partition function
+
+# 代入 Bradley-Terry 偏好模型:
+# P(a_w > a_l) = σ(R(s, a_w) - R(s, a_l))
+
+# 神奇的事情发生了: Z(s) 被消掉了！
+# P(a_w > a_l) = σ(β × log(π*(a_w|s)/π_ref(a_w|s))
+#                  - β × log(π*(a_l|s)/π_ref(a_l|l)))
+
+# DPO loss:
+# L_DPO = -E[log σ(β × log(π_θ(a_w|s)/π_ref(a_w|s))
+#                 - β × log(π_θ(a_l|s)/π_ref(a_l|s)))]</code></pre>
+
+    <h3>DPO 的直觉</h3>
+    <pre><code class="language-python"># DPO loss 的含义:
+#
+# 如果 π_θ(a_w|s)/π_ref(a_w|s) > π_θ(a_l|s)/π_ref(a_l|s):
+#   → 模型相比 ref 更偏好 chosen
+#   → σ 接近 1，loss 接近 0 ✓
+#
+# 如果 π_θ(a_w|s)/π_ref(a_w|s) < π_θ(a_l|s)/π_ref(a_l|s):
+#   → 模型相比 ref 更偏好 rejected
+#   → σ 接近 0，loss 很大 ✗
+#
+# 直觉: DPO 让模型对 chosen 的"提升"大于对 rejected 的"提升"</code></pre>
+
+    <h3>DPO vs PPO 对比</h3>
+    <table>
+      <tr><th>维度</th><th>PPO</th><th>DPO</th></tr>
+      <tr><td>需要 Reward Model</td><td>是</td><td>否</td></tr>
+      <tr><td>需要 Value Model</td><td>是</td><td>否</td></tr>
+      <tr><td>训练模型数</td><td>4（policy, ref, reward, value）</td><td>2（policy, ref）</td></tr>
+      <tr><td>数据</td><td>需要 rollout（在线生成）</td><td>离线偏好数据</td></tr>
+      <tr><td>实现复杂度</td><td>高</td><td>低</td></tr>
+      <tr><td>探索能力</td><td>强（在线采样）</td><td>弱（受限于数据分布）</td></tr>
+      <tr><td>Reward hacking</td><td>有风险</td><td>风险较低</td></tr>
+    </table>
+
+    <div class="card warning">
+      <p><strong>DPO 的局限</strong>：</p>
+      <ul>
+        <li><strong>离线</strong>：不能探索训练数据之外的区域</li>
+        <li><strong>分布偏移</strong>：如果 policy 偏离 ref 太远，DPO 可能不稳定</li>
+        <li><strong>对 ref 敏感</strong>：ref model 的质量直接影响 DPO 效果</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="grpo-deep">GRPO 深入</h2>
+
+    <h3>GRPO 的推导</h3>
+    <p>GRPO 是 PPO 在语言模型设置下的简化：</p>
+    <pre><code class="language-python"># PPO 的 advantage: A(s, a) = R(s, a) - V(s)
+# 其中 V(s) 需要单独训练 value model
+
+# GRPO 的 insight:
+# 对同一个 prompt，生成 G 个 responses
+# 用 G 个 rewards 的均值作为 V(s) 的估计
+
+# V(s) ≈ (1/G) × Σ_i R(s, a_i)
+# A(s, a_i) = R(s, a_i) - V(s)
+
+# 为什么这是合理的?
+# E[R(s, a) | s] = V(s) 的定义
+# G 个样本的均值是 V(s) 的无偏估计</code></pre>
+
+    <h3>GRPO 的 Loss</h3>
+    <pre><code class="language-python"># GRPO 的完整 loss:
+
+# 对每个 prompt q:
+# 1. 生成 G 个 responses: {o_1, ..., o_G}
+# 2. 计算 rewards: {r_1, ..., r_G}
+# 3. 计算 baseline: b = mean(r_1, ..., r_G)
+# 4. 标准化 advantage: A_i = (r_i - b) / (std(r) + ε)
+# 5. 计算 ratio: ρ_i = π_θ(o_i|q) / π_old(o_i|q)
+# 6. Clipped loss:
+#    L = -1/G × Σ_i min(ρ_i × A_i, clip(ρ_i, 1-ε, 1+ε) × A_i)
+# 7. 加 KL 惩罚:
+#    L_total = L + β × KL(π_θ || π_ref)</code></pre>
+
+    <h3>GRPO 中的 KL 估计</h3>
+    <pre><code class="language-python"># GRPO 使用的 KL 估计器（非负）:
+
+# KL(p || q) = E_p[log(p/q)]
+#            = E_p[q/p - log(q/p) - 1]  （因为 E_p[q/p] = 1）
+
+def kl_penalty(log_probs, ref_log_probs):
+    """计算 KL(π || π_ref) 的估计"""
+    # ratio = exp(ref_log_probs - log_probs)
+    # kl = ratio - (ref_log_probs - log_probs) - 1
+    return (torch.exp(ref_log_probs - log_probs)
+            - (ref_log_probs - log_probs) - 1).sum(dim=-1).mean()
+
+# 这个估计器保证 KL ≥ 0（由 Jensen 不等式）</code></pre>
+
+    <h3>冻结参数的重要性</h3>
+    <pre><code class="language-python"># 在计算 ratio = π_θ / π_old 时
+# 必须对 π_old 使用 torch.no_grad() 或 detach()
+
+# 错误做法:
+ratio = torch.exp(log_probs_new - log_probs_old)
+ratio.backward()
+# 这会对 log_probs_old 也计算梯度！
+
+# 正确做法:
+with torch.no_grad():
+    log_probs_old = model(prompts)  # 冻结
+ratio = torch.exp(log_probs_new - log_probs_old)
+ratio.backward()
+# 只对 log_probs_new 计算梯度</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="algo-comparison">算法对比总结</h2>
+
+    <table>
+      <tr><th>算法</th><th>类型</th><th>需要 RM</th><th>需要 VM</th><th>在线/离线</th><th>复杂度</th></tr>
+      <tr><td>SFT</td><td>监督</td><td>否</td><td>否</td><td>N/A</td><td>低</td></tr>
+      <tr><td>PPO</td><td>RL</td><td>是</td><td>是</td><td>在线</td><td>高</td></tr>
+      <tr><td>DPO</td><td>监督</td><td>否</td><td>否</td><td>离线</td><td>中</td></tr>
+      <tr><td>GRPO</td><td>RL</td><td>是</td><td>否</td><td>在线</td><td>中</td></tr>
+    </table>
+
+    <h3>如何选择？</h3>
+    <ul>
+      <li><strong>SFT</strong>：快速入门，让模型能遵循指令</li>
+      <li><strong>DPO</strong>：有大量偏好数据，想要简单稳定的训练</li>
+      <li><strong>PPO</strong>：需要在线探索，有 reward model</li>
+      <li><strong>GRPO</strong>：RLVR 场景（数学/代码），需要在线生成</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！∇_θ J(θ) = E[∇_θ log π(a|s) × R(s, a)]，这是 REINFORCE 算法的基础。" data-incorrect="Policy gradient 使用 log-derivative trick 将 ∇π 转为 π × ∇log π。">
+      <p><strong>问题 1：</strong>Policy gradient 的正确形式是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">E[∇_θ log π(a|s) × R(s, a)]</button>
+        <button data-choice="b" aria-pressed="false">E[∇_θ π(a|s) × R(s, a)]</button>
+        <button data-choice="c" aria-pressed="false">E[log π(a|s) × R(s, a)]</button>
+        <button data-choice="d" aria-pressed="false">E[π(a|s) × ∇_θ R(s, a)]</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！PPO 的 clip 机制限制 ratio 在 [1-ε, 1+ε]，防止 policy 更新过大。" data-incorrect="PPO clip 防止 ratio 过大，限制 policy 更新幅度。">
+      <p><strong>问题 2：</strong>PPO 中 clip 机制的作用是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">提高 reward</button>
+        <button data-choice="b" aria-pressed="false">防止 policy 更新过大，限制 ratio 在 [1-ε, 1+ε]</button>
+        <button data-choice="c" aria-pressed="false">加速收敛</button>
+        <button data-choice="d" aria-pressed="false">减少内存使用</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！DPO 通过解析推导消去了 reward model，直接用偏好数据优化 policy。" data-incorrect="DPO 通过数学推导消去了 reward model，直接用偏好数据优化。">
+      <p><strong>问题 3：</strong>DPO 如何绕过 reward model？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">用 value model 替代</button>
+        <button data-choice="b" aria-pressed="false">通过解析推导消去 reward，直接用偏好数据优化</button>
+        <button data-choice="c" aria-pressed="false">不需要 reward</button>
+        <button data-choice="d" aria-pressed="false">用预训练 loss 替代</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！GRPO 用同一 prompt 的多个 response 的 reward 均值作为 baseline，去掉了 value model。" data-incorrect="GRPO 用组内均值作为 baseline，去掉 value model。">
+      <p><strong>问题 4：</strong>GRPO 如何估计 baseline？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">用单独的 value model</button>
+        <button data-choice="b" aria-pressed="false">用同一 prompt 的多个 response 的 reward 均值</button>
+        <button data-choice="c" aria-pressed="false">用固定常数</button>
+        <button data-choice="d" aria-pressed="false">不需要 baseline</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！DPO 是离线的，不能探索训练数据之外的区域，这是它的主要局限。" data-incorrect="DPO 是离线算法，不能探索数据之外的区域。">
+      <p><strong>问题 5：</strong>DPO 相比 PPO 的主要局限是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">效果更差</button>
+        <button data-choice="b" aria-pressed="false">是离线算法，不能探索训练数据之外的区域</button>
+        <button data-choice="c" aria-pressed="false">需要更多 GPU</button>
+        <button data-choice="d" aria-pressed="false">训练更慢</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>Policy Gradient</h3>
+        <p>∇J = E[∇log π × R]，高方差需要 baseline</p>
+      </article>
+      <article>
+        <h3>PPO</h3>
+        <p>Clip + Value model + 多轮更新</p>
+      </article>
+      <article>
+        <h3>DPO</h3>
+        <p>解析推导消去 RM，简单稳定</p>
+      </article>
+      <article>
+        <h3>GRPO</h3>
+        <p>组内均值作为 baseline，RLVR 首选</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Schulman et al. (2017): <a href="https://arxiv.org/abs/1707.06347">PPO</a> — PPO 原始论文</li>
+      <li>Rafailov et al. (2023): <a href="https://arxiv.org/abs/2305.18290">DPO</a> — DPO 原始论文</li>
+      <li>Shao et al. (2024): <a href="https://arxiv.org/abs/2402.03300">DeepSeekMath (GRPO)</a> — GRPO 原始论文</li>
+      <li>Sutton & Barto (2018): <a href="http://incompleteideas.net/book/the-book-2nd.html">Reinforcement Learning: An Introduction</a> — RL 教材</li>
+      <li>CS224R (Stanford): <a href="https://cs224r.stanford.edu/slides/03_cs224r_policy_gradients_2025.pdf">Policy Gradient 讲义</a> — Stanford RL 课程</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0016-alignment-rlvr.html">← 第 16 课</a>
+      <a href="0018-guest-daniel-selsam.html">第 18 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课深入 RL 算法机制</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

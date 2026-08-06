@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab: 页表 — MIT 6.1810</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.1810 · Lab pgtbl · 页表</p>
+    <h1>Lab: 页表</h1>
+    <p class="lede">在本实验中，你将探索页表并修改它们以实现常见的操作系统功能。</p>
+
+    <div class="meta">
+      <p><strong>难度：</strong>中等/困难</p>
+      <p><strong>分支：</strong>pgtbl</p>
+      <p><strong>实验日期：</strong>2026 秋季</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="lab-prereq">
+      <p>在开始编码之前，阅读<a href="https://pdos.csail.mit.edu/6.828/2025/xv6/book-riscv-rev5.pdf" target="_blank" rel="noopener">xv6 手册</a>的第 3 章，以及相关文件：</p>
+      <ul>
+        <li><tt>kernel/memlayout.h</tt>——内存布局</li>
+        <li><tt>kernel/vm.c</tt>——大多数虚拟内存代码</li>
+        <li><tt>kernel/kalloc.c</tt>——物理内存分配和释放代码</li>
+      </ul>
+    </div>
+
+    <pre><code class="language-bash">$ git fetch
+$ git checkout pgtbl
+$ make clean</code></pre>
+
+    <h2>检查用户进程页表 <span class="badge easy">简单</span></h2>
+
+    <p>运行 <tt>make qemu</tt> 并运行用户程序 <tt>pgtbltest</tt>。<tt>print_pgtbl</tt> 函数使用我们为本实验添加到 xv6 的 <tt>pgpte</tt> 系统调用打印 <tt>pgtbltest</tt> 进程的前 10 页和后 10 页的页表项。</p>
+
+    <pre><code>va 0 pte 0x21FCF45B pa 0x87F3D000 perm 0x5B
+va 1000 pte 0x21FCE85B pa 0x87F3A000 perm 0x5B
+...
+va 0xFFFFD000 pte 0x0 pa 0x0 perm 0x0
+va 0xFFFFE000 pte 0x21FD80C7 pa 0x87F60000 perm 0xC7
+va 0xFFFFF000 pte 0x20001C4B pa 0x80007000 perm 0x4B</code></pre>
+
+    <div class="lab-question">
+      <p>对于 <tt>print_pgtbl</tt> 输出中的每个页表项，解释它逻辑上包含什么以及它的权限位是什么。教材中的图 3.4 可能有帮助。</p>
+    </div>
+
+    <h2>加速系统调用 <span class="badge easy">简单</span></h2>
+
+    <div class="lab-required">
+      <p>创建每个进程时，在 USYSCALL（在 <tt>memlayout.h</tt> 中定义的虚拟地址）映射一个只读页。在此页的开头存储一个 <tt>struct usyscall</tt>（也在 <tt>memlayout.h</tt> 中定义），并将其初始化为存储当前进程的 PID。</p>
+    </div>
+
+    <p>一些提示：</p>
+    <ul>
+      <li>选择允许用户空间只读的权限位</li>
+      <li>查看 <tt>kernel/proc.c</tt> 中的 trapframe 处理了解新页生命周期需要做什么</li>
+    </ul>
+
+    <div class="lab-question">
+      <p>哪些其他 xv6 系统调用可以使用这个共享页变得更快？解释如何做到。</p>
+    </div>
+
+    <h2>打印页表 <span class="badge easy">简单</span></h2>
+
+    <div class="lab-required">
+      <p>我们添加了一个系统调用 <tt>kpgtbl()</tt>，它调用 <tt>vm.c</tt> 中的 <tt>vmprint()</tt>。你的工作是以描述的格式打印该页表。</p>
+    </div>
+
+    <pre><code>page table 0x0000000087f22000
+ ..0x0000000000000000: pte 0x0000000021fc7801 pa 0x0000000087f1e000
+ .. ..0x0000000000000000: pte 0x0000000021fc7401 pa 0x0000000087f1d000
+ .. .. ..0x0000000000000000: pte 0x0000000021fc7c5b pa 0x0000000087f1f000</code></pre>
+
+    <p>一些提示：</p>
+    <ul>
+      <li>使用 kernel/riscv.h 文件末尾的宏</li>
+      <li><tt>freewalk</tt> 函数可能有启发性</li>
+      <li>在 printf 调用中使用 <tt>%p</tt> 打印完整的 64 位十六进制 PTE 和地址</li>
+    </ul>
+
+    <h2>使用超级页 <span class="badge moderate">中等</span>/<span class="badge hard">困难</span></h2>
+
+    <p>RISC-V 分页硬件支持两兆字节页以及普通的 4096 字节页。大页的一般概念称为超级页，2M 页称为兆页。</p>
+
+    <div class="lab-required">
+      <p>你的工作是修改 xv6 内核以使用超级页。特别是，如果用户程序使用 2 兆字节或更大的大小调用 sbrk()，并且新创建的地址范围包括一个或多个两兆字节对齐且至少两兆字节的区域，内核应该使用单个超级页。</p>
+    </div>
+
+    <p>一些提示：</p>
+    <ul>
+      <li>阅读 <tt>user/pgtbltest.c</tt> 中的 <tt>superpg_fork</tt> 和 <tt>superpg_free</tt></li>
+      <li>从 <tt>sys_sbrk</tt>（在 <tt>kernel/sysproc.c</tt> 中）开始</li>
+      <li>修改 kalloc.c 预留几个两兆字节区域，创建 superalloc() 和 superfree()</li>
+      <li>超级页必须在有超级页的进程 fork 时分配，在退出时释放</li>
+      <li>当 sbrk 部分释放超级页时，需要将超级页"降级"为普通页</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>提交实验</h2>
+
+    <h3>时间花费</h3>
+    <p>创建一个新文件 <tt>time.txt</tt>，放入一个整数，表示你花在实验上的小时数。</p>
+
+    <h3>答案</h3>
+    <p>将你的答案写在 <tt>answers-pgtbl.txt</tt> 中。</p>
+
+    <h3>提交</h3>
+    <p>运行 <kbd>make zipball</kbd>，上传到 Gradescope。</p>
+
+    <div class="card warning">
+      <ul>
+        <li>请运行 <kbd>make grade</kbd> 确保代码通过所有测试</li>
+        <li>在运行 <kbd>make zipball</kbd> 之前提交任何修改的源代码</li>
+      </ul>
+    </div>
+
+    <h2>可选挑战练习</h2>
+    <ul>
+      <li>实现参考论文中的一些想法，使你的超级页设计更真实</li>
+      <li>取消映射用户进程的第一页，以便解引用空指针会产生 fault</li>
+      <li>添加一个系统调用，使用 <tt>PTE_D</tt> 报告脏页</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="syscall.html">← 上一个实验：系统调用</a>
+      <a href="traps.html">下一个实验：陷阱 →</a>
+    </div>
+    <footer>
+      <p>MIT 6.1810 (6.1810): Operating System Engineering · Lab: 页表</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

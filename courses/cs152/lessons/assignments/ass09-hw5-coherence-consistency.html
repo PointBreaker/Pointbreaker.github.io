@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW5: Cache Coherence and Memory Consistency — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Homework 5 导读</p>
+    <h1>HW5: Cache Coherence and Memory Consistency</h1>
+    <p class="lede">这份导读帮你理解 HW5 在考什么、需要哪些前置知识。它<strong>不包含完整解答</strong>——答案需要你自己动手推导。</p>
+
+    <div class="meta">
+      <span>发布：2023-04-04（随第 21 课）</span>
+      <span>截止：2023-04-27</span>
+      <span>前置：第 21-23 课</span>
+    </div>
+
+    <div class="card warning">
+      <p><strong>资料来源说明：</strong>2023 年春季的官方课程网站没有为这份作业发布解答文件。本页参考了 2026 年春季同名课程的解答（<code>sp26_hw/hw05-sols.pdf</code>）——经逐题核对，<strong>sp26 的 6 道题里有 4 道（相合性 fence 插入、锁性能、目录式更新协议、Snoopy 一致性）与 sp23 版本的题目文字完全一致</strong>，可以直接作为学习参考；但 sp23 独有的两道题——<strong>顺序相合性（Problem 1）</strong>和<strong>同步原语 LR/SC 概念题</strong>——在 sp26 的问题集里<strong>根本不存在</strong>，因此对这两道题没有任何官方解答可以参考。本页会诚实标注这两道题目前没有权威答案可查这一事实，而不是假装有。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="what">这份作业在考什么？</h2>
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>用一个三线程共享变量 X 的例子，判断在顺序相合性下哪些最终值是可能/不可能的；分析 LR/SC 同步原语的实现细节；给一个 seqlock 实现插入最少数量的内存栅栏；在目录协议下计算锁竞争产生的失效消息数量；填写真实的 Snoopy 一致性协议状态转移表。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem1">Problem 1：顺序相合性（无官方答案，需要自主推导）</h2>
+    <p>三个线程 A、B、C 各自执行几条指令，都会读写共享变量 X（初始为 0）。题目问：在严格的顺序相合性（SC）下，X 最终能否等于 8、9、10？如果一个处理器只按<strong>寄存器（本地数据）依赖</strong>重排指令、却不保证访存顺序，能否产生一个在 SC 下不可能出现的结果？</p>
+    <div class="card">
+      <p><strong>解题思路（不是答案，是方法）</strong>：这类题目最可靠的做法是<strong>枚举法</strong>——像第 22 课那道"P1/P2 各写一个变量再读另一个变量"的例子一样，把每个线程内部的程序顺序约束写清楚，然后枚举所有满足这些约束的全局交错顺序，逐一推演每种顺序下 X 的最终值，看目标值是否出现在可达集合里。<strong>如果要证明某个值"不可能"，光靠"我试了几种交错都没找到"是不够的——需要找到一个通用的结构性论证</strong>（例如：如果所有线程各自的最后一条指令都必然产生某种奇偶性的值，而"最后写入 X 的那条指令"在 SC 下必然是某个线程自己的最后一条指令，就可以从奇偶性论证某个目标值永远不可达）。第 22 课"Store 缓冲会打破 SC"的讨论，对 1.D 那道"寄存器依赖 vs. 访存顺序"的题目也有直接参考价值——关键是找到一对<strong>没有寄存器依赖、但有访存顺序关系</strong>的指令（例如一次 store 后面紧跟一次读同一地址的 load，但 load 的目的寄存器不是从 store 的源寄存器算出来的），这正是"store→load 重排序"这一经典冒险的具体体现。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem2">Problem 2：同步原语（LdR/StC，无官方答案）</h2>
+    <p>几道概念题：Load-Reserve/Store-Conditional 的预约标记应该在什么情况下被清除？能否在内存总线完全不知情的情况下实现 LR/SC？为什么 LR/SC 通常被认为优于 Test-and-Set 这类原子读-改-写指令？这几道题直接对应第 23 课"LR/SC vs. CAS 的权衡"一节——回答时应该扣住"LR/SC 天然免疫 ABA 问题""任何对该地址的访问都会清除预约"这两条核心机制。</p>
+
+    <hr class="rule">
+
+    <h2 id="problem3">Problem 3：Seqlock 的内存栅栏（有 sp26 参考答案）</h2>
+    <p>给定一个写者/读者 seqlock 的实现，要求在完全放松的内存模型下插入<strong>最少数量</strong>的内存栅栏（<code>Membar_LL/LS/SL/SS</code>），使其重新保证正确性。这是第 22 课"fence 指令"内容最直接的实践——先确定哪些操作顺序是算法正确性真正依赖的，再只在这些地方插入对应类型的栅栏，而不是每两条指令之间都插一个（那样虽然"安全"但会显著损害性能，也不是本题想要的答案）。</p>
+
+    <hr class="rule">
+
+    <h2 id="problem4">Problem 4：锁竞争下的失效消息数量（有 sp26 参考答案）</h2>
+    <p>对比 Test&amp;Set 和 Test&amp;Test&amp;Set 两种自旋锁实现，在目录协议下分别计算：1000 个线程同时争抢一把锁时产生多少条失效消息；某个线程持锁期间，其余线程自旋等待会产生多少条消息；锁被释放时又会产生多少条消息。这道题直观展示了第 21 课"目录式一致性只与真正持有副本的节点通信"这条机制，在高竞争场景下如何决定性地影响消息数量的量级差异。</p>
+
+    <hr class="rule">
+
+    <h2 id="problem56">Problem 5-6：目录式更新协议 与 Snoopy 一致性（有 sp26 参考答案）</h2>
+    <p>Problem 5 分析一个假想的、基于更新（而非失效）且允许"静默丢弃"的目录协议，诊断它为什么会违反 SC、为什么会导致失效请求泛滥、以及一个 FIFO 顺序假设失效的反例。Problem 6 需要填写一个真实的 5 状态 MBus 风格 Snoopy 一致性协议（I/CE/OE/CS/OS）的状态转移表——这是第 21 课 MSI/MESI 状态机内容在一个更复杂真实协议上的直接应用。</p>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！仅凭'我试了几种交错都没找到'不足以证明某个值不可能出现——需要找到通用的结构性论证（例如奇偶性论证），才能严格排除某个目标值。" data-incorrect="重新看 Problem 1 的'解题思路'卡片：如何严格证明某个最终值'不可能'出现。">
+      <p><strong>问题 1：</strong>Problem 1 中，如果要证明在顺序相合性下某个值（如 X=10）"不可能"出现，仅仅枚举几种交错顺序都没找到这个值，是否足够？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">足够，枚举几种交错顺序找不到就可以下结论</button>
+        <button data-choice="b" aria-pressed="false">不够，需要找到一个通用的结构性论证（例如基于奇偶性）才能严格排除该值</button>
+        <button data-choice="c" aria-pressed="false">不需要证明，直接假设所有值都可能出现</button>
+        <button data-choice="d" aria-pressed="false">只有硬件厂商能证明这类问题</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="a" data-correct="正确！目录式一致性协议只与真正持有该数据副本的节点通信，而不是像总线 Snoopy 那样广播给所有节点——这正是它在高竞争、多节点场景下消息数量远低于广播式协议的原因。" data-incorrect="重新看 Problem 4 段落：目录式一致性的核心机制是什么。">
+      <p><strong>问题 2：</strong>Problem 4 计算目录协议下锁竞争产生的失效消息数量时，依赖第 21 课的哪条核心机制？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">目录式一致性只与真正持有该数据副本的节点通信，而不是广播给所有节点</button>
+        <button data-choice="b" aria-pressed="false">目录协议下所有节点永远同时收到失效消息</button>
+        <button data-choice="c" aria-pressed="false">锁的实现与一致性协议完全无关</button>
+        <button data-choice="d" aria-pressed="false">Test&amp;Set 和 Test&amp;Test&amp;Set 产生的消息数量总是相同</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="logistics">提交与评分说明</h2>
+    <ul>
+      <li>鼓励讨论，但每位同学必须独立提交自己的解答</li>
+      <li>提交平台为 Gradescope；除填图/填表题外，答案须用方框圈出</li>
+      <li>评分主要依据完成度，但习题集是期末考试的核心背景材料</li>
+      <li><strong>本次作业没有 sp23 官方解答发布</strong>——如需核对答案，建议携带自己的推导去讨论课或答疑时间与助教确认</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>本作业原始 PDF：<code>sp23/hw05.pdf</code>、<code>sp23/hw05-handout.pdf</code>、<code>sp23/hw05-handout2.pdf</code>（UC Berkeley CS152, Spring 2023）</li>
+      <li>课程依赖内容：第 21 课（MSI/MESI、假共享、目录协议）、第 22 课（顺序相合性、TSO、fence）、第 23 课（LR/SC、CAS）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>📝 Homework 5</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

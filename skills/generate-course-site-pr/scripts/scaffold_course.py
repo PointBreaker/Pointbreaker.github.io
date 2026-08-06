@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scaffold a CourseStack v2 course from a reviewed course-plan JSON file."""
+"""Scaffold a CourseStack v3 course from a reviewed course-plan JSON file."""
 
 from __future__ import annotations
 
@@ -12,9 +12,10 @@ import sys
 
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
-PLATFORM_VERSION = 2
+PLATFORM_VERSION = 3
+COURSES_ROOT = "courses"
 TODO_MARKER = "COURSE_CONTENT_TODO"
-LESSON_STYLE_VERSION = "20260806b"
+SHARED_ASSET_VERSION = "20260806c"
 
 
 def load_json(path: Path) -> dict:
@@ -78,10 +79,14 @@ def check_platform(repo: Path) -> dict:
     platform_path = repo / "site-platform.json"
     catalog_path = repo / "courses.json"
     if not platform_path.is_file() or not catalog_path.is_file():
-        raise RuntimeError("target repository is missing CourseStack v2 platform files")
+        raise RuntimeError("target repository is missing CourseStack v3 platform files")
     platform = load_json(platform_path)
     if int(platform.get("version", 0)) < PLATFORM_VERSION:
         raise RuntimeError(f"CourseStack platform v{PLATFORM_VERSION}+ is required")
+    if platform.get("coursesRoot") != COURSES_ROOT:
+        raise RuntimeError(f"CourseStack platform must use coursesRoot={COURSES_ROOT!r}")
+    if not (repo / COURSES_ROOT).is_dir():
+        raise RuntimeError(f"target repository is missing the shared {COURSES_ROOT}/ directory")
     for relative in platform.get("sharedAssets", {}).values():
         if not (repo / relative).is_file():
             raise RuntimeError(f"missing shared platform asset: {relative}")
@@ -102,7 +107,12 @@ def work_filename(item: dict) -> str:
     return f"ass{number:02d}-{slug}.html"
 
 
-def dashboard_page(plan: dict) -> str:
+def relative_asset_prefix(path: Path, repo: Path) -> str:
+    depth = len(path.relative_to(repo).parts) - 1
+    return "../" * depth
+
+
+def dashboard_page(plan: dict, root_prefix: str) -> str:
     code = html.escape(plan["courseCode"])
     description = html.escape(plan.get("summary", plan["course"]))
     return f'''<!DOCTYPE html>
@@ -112,8 +122,8 @@ def dashboard_page(plan: dict) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{description}">
   <title>{code} — CourseStack 课栈</title>
-  <link rel="stylesheet" href="../assets/course/dashboard.css">
-  <script defer src="../assets/course/dashboard.js"></script>
+  <link rel="stylesheet" href="{root_prefix}assets/course/dashboard.css?v={SHARED_ASSET_VERSION}">
+  <script defer src="{root_prefix}assets/course/dashboard.js?v={SHARED_ASSET_VERSION}"></script>
 </head>
 <body><div id="course-app"></div></body>
 </html>
@@ -134,7 +144,7 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
   <link rel="stylesheet" href="{root_prefix}assets/course/base.css">
 {guide_css}  <link rel="stylesheet" href="{root_prefix}assets/vendor/prism.css">
   <link rel="stylesheet" href="{root_prefix}assets/vendor/katex.min.css">
-  <link rel="stylesheet" href="{root_prefix}assets/course/lesson.css?v={LESSON_STYLE_VERSION}">
+  <link rel="stylesheet" href="{root_prefix}assets/course/lesson.css?v={SHARED_ASSET_VERSION}">
   <script defer src="{root_prefix}assets/vendor/katex.min.js"></script>
   <script defer src="{root_prefix}assets/vendor/katex-auto-render.min.js"></script>
   <script defer src="{root_prefix}assets/course/math-render.js"></script>
@@ -154,7 +164,7 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
   <script src="{root_prefix}assets/vendor/prism-python.js"></script>
   <script src="{root_prefix}assets/vendor/prism-bash.js"></script>
   <script src="{root_prefix}assets/course/quiz.js"></script>
-  <script defer src="{root_prefix}assets/course/lesson-ui.js"></script>
+  <script defer src="{root_prefix}assets/course/lesson-ui.js?v={SHARED_ASSET_VERSION}"></script>
 </body>
 </html>
 '''
@@ -164,11 +174,12 @@ def add_catalog_entry(repo: Path, plan: dict) -> None:
     catalog_path = repo / "courses.json"
     catalog = load_json(catalog_path)
     courses = catalog.setdefault("courses", [])
-    if any(item.get("id") == plan["slug"] or item.get("path") == f"{plan['slug']}/" for item in courses):
+    course_path = f"{COURSES_ROOT}/{plan['slug']}/"
+    if any(item.get("id") == plan["slug"] or item.get("path") == course_path for item in courses):
         raise RuntimeError(f"course catalog already contains {plan['slug']}")
     courses.append({
         "id": plan["slug"],
-        "path": f"{plan['slug']}/",
+        "path": course_path,
         "code": plan["courseCode"],
         "title": plan["shortTitle"],
         "titleZh": plan.get("titleZh", ""),
@@ -201,7 +212,7 @@ def main() -> int:
     plan = load_json(plan_path)
     validate_plan(plan)
 
-    course_dir = repo / plan["slug"]
+    course_dir = repo / COURSES_ROOT / plan["slug"]
     if course_dir.exists():
         raise RuntimeError(f"course directory already exists: {course_dir}")
     (course_dir / "lessons" / "assignments").mkdir(parents=True)
@@ -212,8 +223,9 @@ def main() -> int:
         record = dict(lecture)
         record["lessonFile"] = f"lessons/{filename}"
         lecture_records.append(record)
-        page = stub_page(plan["courseCode"], lecture["number"], lecture["title"], "第", "../../", lecture.get("sourceFiles", []), False)
-        (course_dir / "lessons" / filename).write_text(page, encoding="utf-8")
+        page_path = course_dir / "lessons" / filename
+        page = stub_page(plan["courseCode"], lecture["number"], lecture["title"], "第", relative_asset_prefix(page_path, repo), lecture.get("sourceFiles", []), False)
+        page_path.write_text(page, encoding="utf-8")
 
     assignment_records = []
     for item in sorted(plan["workItems"], key=lambda value: value["number"]):
@@ -221,8 +233,9 @@ def main() -> int:
         record = dict(item)
         record["assGuideFile"] = f"lessons/assignments/{filename}"
         assignment_records.append(record)
-        page = stub_page(plan["courseCode"], item["number"], item["title"], item.get("kind", "Assignment"), "../../../", item.get("sourceFiles", []), True)
-        (course_dir / "lessons" / "assignments" / filename).write_text(page, encoding="utf-8")
+        page_path = course_dir / "lessons" / "assignments" / filename
+        page = stub_page(plan["courseCode"], item["number"], item["title"], item.get("kind", "Assignment"), relative_asset_prefix(page_path, repo), item.get("sourceFiles", []), True)
+        page_path.write_text(page, encoding="utf-8")
 
     course_info = {
         "id": plan["slug"],
@@ -253,7 +266,8 @@ def main() -> int:
         "generatedCount": 0,
         "totalLectures": len(lecture_records),
     })
-    (course_dir / "index.html").write_text(dashboard_page(plan), encoding="utf-8")
+    dashboard_path = course_dir / "index.html"
+    dashboard_path.write_text(dashboard_page(plan, relative_asset_prefix(dashboard_path, repo)), encoding="utf-8")
     add_catalog_entry(repo, plan)
     print(json.dumps({"course": str(course_dir), "lectures": len(lecture_records), "workItems": len(assignment_records)}, ensure_ascii=False))
     return 0

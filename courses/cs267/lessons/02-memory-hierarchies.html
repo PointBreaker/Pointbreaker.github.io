@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 2 课：内存层次结构与矩阵乘法 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 2 课 · Jim Demmel</p>
+    <h1>内存层次结构与矩阵乘法</h1>
+    <p class="lede">大多数应用程序只发挥了峰值性能的不到 10%——损失的性能主要花在数据移动上。理解内存层次结构是释放硬件潜力的关键。</p>
+
+    <div class="meta">
+      <p><strong>授课教师：</strong>Jim Demmel</p>
+      <p><strong>日期：</strong>2025-01-23</p>
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>视频：</strong><a href="https://youtu.be/FKm4rRCYJnM" target="_blank" rel="noopener">Lecture 2 Video</a></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>为什么关注串行性能？</h2>
+    <div class="card warning">
+      <p><strong>核心观点：</strong>并行化慢速串行代码只会产生慢速并行代码。</p>
+      <p>矩阵乘法的例子：通过串行优化（向量化、缓存优化等）可以在单核上获得 131x 加速。10 倍的串行优化收益很常见。</p>
+    </div>
+
+    <h2>现代处理器的成本模型</h2>
+    <h3>理想化单处理器模型</h3>
+    <p>最初的理想化假设：</p>
+    <ul>
+      <li>每个操作（+, *, 等）的开销大致相同</li>
+      <li>读写变量是"免费"的</li>
+    </ul>
+
+    <h3>更真实的模型</h3>
+    <p>实际上，内存访问有两个成本：</p>
+    <ul>
+      <li><strong>延迟 (Latency, α)：</strong>加载/存储 1 个字的时间</li>
+      <li><strong>带宽 (Bandwidth, β)：</strong>加载/存储大块的速率（时间/字节）</li>
+    </ul>
+    <p>移动 \(n\) 个连续字的时间：\(\alpha + n\beta\)</p>
+
+    <div class="card idea">
+      <p><strong>关键数值：</strong></p>
+      <pre><code>处理器频率: 1 GHz → 1 周期 = 1 ns
+内存延迟:    ~100 ns（加载/存储 1 个字）
+Load/Store ≈ 100x 算术操作的开销</code></pre>
+    </div>
+
+    <h3>编译器的角色</h3>
+    <p>编译器执行的关键优化：</p>
+    <ul class="checklist">
+      <li><strong>寄存器分配 (Register Allocation)：</strong>决定何时加载/存储 vs 重用寄存器（使用图着色算法）</li>
+      <li><strong>循环展开 (Loop Unrolling)：</strong>减少控制开销</li>
+      <li><strong>循环融合/交换/分块 (Fusion/Interchange/Tiling)</strong></li>
+      <li><strong>强度削减 (Strength Reduction)：</strong>如用左移代替乘以 2</li>
+      <li><strong>死代码消除 (Dead Code Elimination)</strong></li>
+    </ul>
+
+    <h2>内存层次结构</h2>
+    <h3>局部性原理</h3>
+    <p>程序具有高度的局部性：</p>
+    <ul>
+      <li><strong>时间局部性 (Temporal Locality)：</strong>重用最近访问过的数据</li>
+      <li><strong>空间局部性 (Spatial Locality)：</strong>访问相邻的数据</li>
+    </ul>
+
+    <h3>缓存层次</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>层级</th>
+          <th>速度</th>
+          <th>大小</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Registers</td><td>1 ns</td><td>~1000 bytes</td></tr>
+        <tr><td>L1 Cache</td><td>1-2 ns</td><td>32-64 KB</td></tr>
+        <tr><td>L2 Cache</td><td>3-10 ns</td><td>256 KB - 1 MB</td></tr>
+        <tr><td>L3 Cache</td><td>10-30 ns</td><td>数 MB - 数十 MB</td></tr>
+        <tr><td>Main Memory (DRAM)</td><td>100 ns</td><td>数 GB - 数 TB</td></tr>
+        <tr><td>Disk/SSD</td><td>10 ms / 100 μs</td><td>数 TB</td></tr>
+      </tbody>
+    </table>
+
+    <h3>缓存基础概念</h3>
+    <ul>
+      <li><strong>Cache Line：</strong>一次加载的字节数（通常 64 字节）</li>
+      <li><strong>Cache Hit：</strong>数据在缓存中 —— 快速</li>
+      <li><strong>Cache Miss：</strong>数据不在缓存中 —— 需访问下一级</li>
+      <li><strong>Associativity：</strong>直接映射 vs n-way 组相联</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>Little 定律与并行</h3>
+      <p>来自排队论：\(\text{concurrency} = \text{latency} \times \text{bandwidth}\)</p>
+      <p><strong>示例：</strong>延迟 = 10 ns，带宽 = 2 GB/s → 需要 20 字节在途才能达到带宽速度</p>
+      <p>这意味着需要找到 20 个独立操作来隐藏延迟。</p>
+    </div>
+
+    <h2>单处理器中的并行性</h2>
+    <h3>指令级并行 (ILP) 与流水线</h3>
+    <p>以 Patterson 的"洗衣服"为例：</p>
+    <pre><code>任务: 洗衣服
+  洗衣: 30 min
+  烘干: 40 min
+  折叠: 20 min
+  总延迟: 90 min
+
+4 批衣服:
+  串行: 4 × 90 = 360 min
+  流水线: 30 + 4×40 + 20 = 210 min  (≈ 1.7x 加速)
+  峰值带宽: 1/40 min = 1.5 loads/hour</code></pre>
+
+    <h3>SIMD 单元</h3>
+    <p>单指令多数据：一条指令同时处理多个数据元素。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>SIMD 扩展</th>
+          <th>寄存器宽度</th>
+          <th>双精度数</th>
+          <th>单精度数</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>SSE2</td><td>128 bits</td><td>2</td><td>4</td></tr>
+        <tr><td>AVX</td><td>256 bits</td><td>4</td><td>8</td></tr>
+        <tr><td>AVX-512</td><td>512 bits</td><td>8</td><td>16</td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>使用 SIMD 的要求：</strong></p>
+    <ul class="checklist">
+      <li>向编译器暴露并行性（或使用 intrinsics）</li>
+      <li>数据在内存中连续</li>
+      <li>缓存对齐（通常 64 字节）</li>
+    </ul>
+
+    <h3>FMA：融合乘加</h3>
+    <p>乘加操作 \(x = y + c \times z\) 极其常见。FMA 指令：</p>
+    <ul>
+      <li>以与 + 或 * 相同的吞吐率执行</li>
+      <li>只进行一次舍入：\(x = \text{round}(c \times z + y)\)</li>
+      <li>提高精度和性能</li>
+    </ul>
+
+    <h2>案例研究：矩阵乘法</h2>
+    <h3>为什么研究矩阵乘法？</h3>
+    <ul class="checklist">
+      <li>是许多问题的核心 kernel</li>
+      <li>稠密线性代数是最重要的 motif</li>
+      <li>优化收益的最佳案例</li>
+      <li>HPC 中研究最深入的算法</li>
+    </ul>
+
+    <h3>简单内存模型</h3>
+    <p>假设只有两级内存（快/慢）：</p>
+    <pre><code>m = 在快/慢内存间移动的元素数
+tm = 每次慢内存操作时间
+f = 算术操作数
+tf = 每次算术操作时间 (<< tm)
+CI = f / m = 计算强度 (Computational Intensity)
+
+最小时间 = f × tf（所有数据在快内存）
+实际时间 = f × tf + m × tm = f × tf × (1 + tm/tf × 1/CI)
+</code></pre>
+
+    <p><strong>Machine Balance</strong> = Peak FLOPS / Peak Bandwidth → 典型值 5-10 Flops/Byte</p>
+
+    <h3>热身：矩阵-向量乘法 (Matrix-Vector Multiply)</h3>
+    <pre><code>{实现 y = y + A*x}
+for i = 1:n
+  for j = 1:n
+    y(i) = y(i) + A(i,j)*x(j)</code></pre>
+    <p>分析：</p>
+    <ul>
+      <li>\(f = 2n^2\) 次算术操作</li>
+      <li>\(m = 3n + n^2 \approx n^2\) 次慢内存访问</li>
+      <li>\(CI = f/m \approx 2\)（低计算强度）</li>
+      <li><strong>结论：</strong>受限于内存带宽，无法通过优化改善</li>
+    </ul>
+
+    <h3>朴素矩阵乘法</h3>
+    <pre><code>{实现 C = C + A*B}
+for i = 1 to n
+  for j = 1 to n
+    for k = 1 to n
+      C(i,j) = C(i,j) + A(i,k) * B(k,j)</code></pre>
+    <p>分析：</p>
+    <ul>
+      <li>\(f = 2n^3\) 次算术操作</li>
+      <li>\(m = n^3 + 3n^2\) 次慢内存访问（B 的列被读取 n 次）</li>
+      <li>\(CI = 2n^3 / (n^3 + 3n^2) \approx 2\)（大 n 时）</li>
+      <li><strong>结论：</strong>与矩阵-向量乘法一样受限于带宽！</li>
+    </ul>
+
+    <h3>分块 (Tiled) 矩阵乘法</h3>
+    <p>将 A, B, C 视为 N×N 个 b×b 子块的矩阵，块大小 \(b = n/N\)：</p>
+    <pre><code>for i = 1 to N
+  for j = 1 to N
+    {将 C(i,j) 读入快内存}
+    for k = 1 to N
+      {将 A(i,k) 读入快内存}
+      {将 B(k,j) 读入快内存}
+      C(i,j) = C(i,j) + A(i,k) * B(k,j)  {块矩阵乘法}
+    {将 C(i,j) 写回慢内存}</code></pre>
+
+    <p>分析（假设 3 个 b×b 块能放入快内存）：</p>
+    <ul>
+      <li>\(f = 2n^3\)（不变）</li>
+      <li>\(m = 2n^2 \text{ (C)} + N \cdot n^2 \text{ (A)} + N \cdot n^2 \text{ (B)} = (2N + 2) \cdot n^2\)</li>
+      <li>\(CI = f/m = 2n^3 / ((2N+2) \cdot n^2) \approx n/N = b\)</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>关键洞察：</strong>CI 从 O(2) 提升到 O(b)。若 \(b\) 足够大，CI 可以接近 Machine Balance，使计算受限而非带宽受限。</p>
+    </div>
+
+    <h3>Cache-Oblivious 矩阵乘法</h3>
+    <p>递归矩阵乘法不需要知道缓存大小：</p>
+    <pre><code>C = RMM(A, B, n)
+  if n == 1: C = A * B
+  else:
+    C00 = RMM(A00, B00, n/2) + RMM(A01, B10, n/2)
+    C01 = RMM(A00, B01, n/2) + RMM(A01, B11, n/2)
+    C10 = RMM(A10, B00, n/2) + RMM(A11, B10, n/2)
+    C11 = RMM(A11, B01, n/2) + RMM(A11, B11, n/2)</code></pre>
+
+    <p>内存移动分析：</p>
+    <p>\[W(n) = 8 \cdot W(n/2) + 4 \cdot 3(n/2)^2 \text{ if } 3n^2 > M_{\text{fast}}\]</p>
+    <p>\[W(n) = O(n^3 / M_{\text{fast}}^{1/2} + n^2)\]</p>
+    <p><strong>优点：</strong>不需要知道 \(M_{\text{fast}}\) 即可工作，自动适应任意深度的内存层次。</p>
+
+    <h2>实践中的优化</h2>
+    <h3>自动调优 (Autotuning)</h3>
+    <div class="card idea">
+      <p><strong>ATLAS (Automatically Tuned Linear Algebra Software)：</strong></p>
+      <ul>
+        <li>自动生成大量代码变体</li>
+        <li>通过实验搜索最快的实现</li>
+        <li>在多种平台上超越厂商库</li>
+      </ul>
+    </div>
+
+    <h3>BLAS (Basic Linear Algebra Subroutines)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>BLAS 级别</th>
+          <th>操作</th>
+          <th>CI</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>BLAS1 (1970s)</td><td>向量-向量 (dot, saxpy)</td><td>~1</td></tr>
+        <tr><td>BLAS2 (1980s)</td><td>矩阵-向量 (matvec)</td><td>~2</td></tr>
+        <tr><td>BLAS3 (1980s)</td><td>矩阵-矩阵 (matmul)</td><td>O(n)</td></tr>
+      </tbody>
+    </table>
+    <p><strong>结论：</strong>尽可能使用 BLAS3 操作以获得最佳性能。</p>
+
+    <h3>Strassen 算法</h3>
+    <p>传统算法：\(O(n^3)\) 次乘法。Strassen：\(O(n^{\log_2 7}) \approx O(n^{2.81})\)。</p>
+    <pre><code>2x2 矩阵乘法:
+  传统: 8 次乘法 + 4 次加法
+  Strassen: 7 次乘法 + 18 次加法
+
+p1 = (a12 - a22) * (b21 + b22)
+p2 = (a11 + a22) * (b11 + b22)
+p3 = (a11 - a21) * (b11 + b12)
+p4 = (a11 + a12) * b22
+p5 = a11 * (b12 - b22)
+p6 = a22 * (b21 - b11)
+p7 = (a21 + a22) * b11
+
+m11 = p1 + p2 - p4 + p6
+m12 = p4 + p5
+m21 = p6 + p7
+m22 = p2 - p3 + p5 - p7</code></pre>
+
+    <div class="rule"></div>
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>朴素矩阵乘法的计算强度（CI）约为多少？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="CI = f/m，不是 f。">A. \(2n^3\)</button>
+        <button data-answer="correct" data-correct="正确！CI = 2n³/(n³+3n²) ≈ 2。">B. ~2</button>
+        <button data-answer="wrong" data-incorrect="这是矩阵-向量乘法的 CI。">C. ~n</button>
+        <button data-answer="wrong" data-incorrect="CI 不可能无限。">D. 无限</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>分块矩阵乘法中，若快内存大小为 M，最优块大小 b 是多少？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="b 应该是平方根关系。">A. b = M</button>
+        <button data-answer="correct" data-correct="正确！需要 3 个 b×b 块放入 M，所以 b² = M/3，b = √(M/3)。">B. \(b = \sqrt{M/3}\)</button>
+        <button data-answer="wrong" data-incorrect="这太大了。">C. b = M/3</button>
+        <button data-answer="wrong" data-incorrect="b 不能为 1。">D. b = 1</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>Cache-Oblivious 算法的主要优点是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="correct" data-correct="正确！Cache-Oblivious 算法不需要知道缓存参数，自动适应任意内存层次。">A. 不需要知道缓存大小</button>
+        <button data-answer="wrong" data-incorrect="Cache-Oblivious 不一定更快。">B. 总是比 cache-aware 快</button>
+        <button data-answer="wrong" data-incorrect="递归有开销。">C. 没有递归开销</button>
+        <button data-answer="wrong" data-incorrect="索引计算更复杂。">D. 不需要索引计算</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>根据 Little 定律，若内存延迟为 100ns，带宽为 100 GB/s，需要多少数据在途才能充分利用带宽？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="需要乘法：latency × bandwidth。">A. 100 bytes</button>
+        <button data-answer="wrong" data-incorrect="需要乘法：latency × bandwidth = 100ns × 100 GB/s = 10 KB。">B. 1 KB</button>
+        <button data-answer="correct" data-correct="正确！concurrency = latency × bandwidth = 100ns × 100 GB/s = 10⁻⁷ × 10¹¹ = 10 KB。">C. 10 KB</button>
+        <button data-answer="wrong" data-incorrect="需要乘法：100ns × 100 GB/s = 10 KB。">D. 100 KB</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>为什么 BLAS3 比 BLAS2 更快？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="BLAS3 操作更多（matmul vs matvec）。">A. 因为操作更少</button>
+        <button data-answer="correct" data-incorrect="BLAS3 (matmul) 的 CI 可达 O(n)，而 BLAS2 (matvec) 的 CI 只有 O(2)。">B. 因为计算强度更高</button>
+        <button data-answer="wrong" data-incorrect="BLAS3 使用更多内存。">C. 因为内存使用更少</button>
+        <button data-answer="wrong" data-incorrect="BLAS3 不一定更准确。">D. 因为精度更高</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>数据移动是瓶颈</h3>
+        <p>性能损失主要来自数据移动而非计算。Load/Store 的开销是算术操作的 ~100x。</p>
+      </article>
+      <article>
+        <h3>计算强度是关键</h3>
+        <p>CI = f/m，衡量每次内存访问的算术操作数。CI 越高，越接近计算峰值。</p>
+      </article>
+      <article>
+        <h3>分块提升 CI</h3>
+        <p>矩阵乘法的 CI 从 O(2) 提升到 O(b)，通过分块使 CI 接近 Machine Balance。</p>
+      </article>
+      <article>
+        <h3>使用库！</h3>
+        <p>BLAS/LAPACK 经过高度优化，手写代码很难超越。优先使用库函数。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li>Sourcebook Chapter 3 — 覆盖本课程和 Lecture 3 的内容</li>
+      <li>Stefan Goedecker & Adolfy Hoisie, <em>Performance Optimization of Numerically Intensive Codes</em>, SIAM, 2001</li>
+      <li><a href="https://www.netlib.org/blas" target="_blank" rel="noopener">BLAS 官网</a></li>
+      <li><a href="https://www.netlib.org/lapack" target="_blank" rel="noopener">LAPACK 官网</a></li>
+      <li><a href="https://www.netlib.org/atlas" target="_blank" rel="noopener">ATLAS (自动调优 BLAS)</a></li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="01-introduction.html">← 第 1 课</a>
+      <a href="03-matmul-roofline.html">第 3 课 →</a>
+    </div>
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

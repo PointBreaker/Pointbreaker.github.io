@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 16 课：Alignment — RLVR — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 16 课</p>
+    <h1>RLVR：基于可验证奖励的强化学习</h1>
+    <p class="lede">RLHF 依赖人类主观偏好，成本高且不稳定。RLVR (Reinforcement Learning from Verifiable Rewards) 用客观、可验证的奖励信号替代人类标注，开启了模型自我改进的新范式。</p>
+
+    <div class="meta">
+      <span>授课：Sida Wang & Kangwook Lee</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等 → 较高</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="motivation">动机：RLHF 的局限</h2>
+
+    <p>第 15 课学习的 RLHF 是 alignment 的主流方法，但有几个根本性局限：</p>
+
+    <table>
+      <tr><th>局限</th><th>表现</th><th>影响</th></tr>
+      <tr><td>主观性</td><td>不同标注者有不同偏好</td><td>Reward model 有噪声</td></tr>
+      <tr><td>成本高</td><td>需要大量人类偏好数据</td><td>难以规模化</td></tr>
+      <tr><td>Reward hacking</td><td>模型学会欺骗 reward model</td><td>实际质量未提高</td></tr>
+      <tr><td>不可验证</td><td>无法自动检查 reward 是否正确</td><td>难以调试</td></tr>
+      <tr><td>天花板</td><td>受限于标注者的能力</td><td>无法超越人类水平</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>核心洞察</strong>：如果我们能找到<strong>客观、可自动验证的奖励信号</strong>，就可以绕过人类标注的限制。数学题有标准答案，代码可以执行测试——这些都是"可验证奖励"。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="what-is-rlvr">什么是 RLVR？</h2>
+
+    <h3>定义</h3>
+    <p>RLVR = Reinforcement Learning from Verifiable Rewards。使用可以<strong>程序化验证正确性</strong>的奖励函数，而非人类主观判断。</p>
+
+    <h3>可验证奖励的例子</h3>
+    <table>
+      <tr><th>领域</th><th>任务</th><th>验证方式</th></tr>
+      <tr><td>数学</td><td>解方程</td><td>检查最终答案是否匹配 ground truth</td></tr>
+      <tr><td>代码</td><td>写函数</td><td>运行单元测试</td></tr>
+      <tr><td>逻辑</td><td>推理谜题</td><td>检查推理链条是否符合逻辑规则</td></tr>
+      <tr><td>形式化证明</td><td>证明定理</td><td>Lean/Coq 验证器检查证明</td></tr>
+      <tr><td>算法</td><td>实现算法</td><td>测试输出是否正确</td></tr>
+    </table>
+
+    <pre><code class="language-python"># RLVR 的核心循环:
+
+for prompt in batch:
+    # 1. 模型生成 response（可能包含推理过程 + 答案）
+    response = model.generate(prompt)
+
+    # 2. 从 response 中提取答案
+    answer = extract_answer(response)
+
+    # 3. 用验证器检查答案
+    reward = verifier.check(answer, ground_truth)
+    # reward = 1 if correct, 0 if wrong
+
+    # 4. 用 reward 做 policy gradient 更新
+    loss = -log_prob(response) * reward
+    loss.backward()</code></pre>
+
+    <h3>RLVR vs RLHF 对比</h3>
+    <table>
+      <tr><th>维度</th><th>RLHF</th><th>RLVR</th></tr>
+      <tr><td>奖励来源</td><td>人类偏好</td><td>客观验证</td></tr>
+      <tr><td>奖励性质</td><td>连续、主观</td><td>离散、客观</td></tr>
+      <tr><td>可扩展性</td><td>受限于标注人力</td><td>可自动化、规模化</td></tr>
+      <tr><td>适用任务</td><td>开放式（写作、对话）</td><td>封闭式（数学、代码）</td></tr>
+      <tr><td>Reward hacking</td><td>严重</td><td>几乎不存在</td></tr>
+      <tr><td>天花板</td><td>人类水平</td><td>可以超越人类</td></tr>
+    </table>
+
+    <div class="card warning">
+      <p><strong>RLVR 的局限</strong>：不是所有任务都有可验证的奖励。开放式任务（创意写作、对话、主观问答）仍然需要 RLHF 或其他方法。RLVR 和 RLHF 是互补的，不是替代关系。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="grpo">GRPO：群组相对策略优化</h2>
+
+    <h3>背景</h3>
+    <p>GRPO (Group Relative Policy Optimization) 是 DeepSeek-R1 使用的算法，是 PPO 的简化版本：</p>
+    <ul>
+      <li><strong>去掉了 Critic（Value Function）</strong>——PPO 需要一个额外的 value model 来估计 advantage</li>
+      <li><strong>利用群组结构</strong>——对同一个 prompt 生成多个 response，用组内相对奖励作为 baseline</li>
+      <li><strong>更简单、更稳定</strong>——需要维护的模型更少</li>
+    </ul>
+
+    <h3>核心思想</h3>
+    <pre><code class="language-python"># PPO 的 advantage 估计需要 value model:
+# A(s, a) = R(s, a) - V(s)
+# 其中 V(s) 需要额外训练一个 critic network
+
+# GRPO 的 insight:
+# 对同一个 prompt，生成 G 个 responses
+# 用这 G 个 responses 的平均 reward 作为 baseline
+
+# 例: prompt = "Solve x + 3 = 7"
+# response 1: "x = 4" → reward = 1 (正确)
+# response 2: "x = 5" → reward = 0 (错误)
+# response 3: "x = 4" → reward = 1 (正确)
+# response 4: "x = 3" → reward = 0 (错误)
+
+# baseline = mean(rewards) = (1 + 0 + 1 + 0) / 4 = 0.5
+# advantages = rewards - baseline = [0.5, -0.5, 0.5, -0.5]
+
+# 直觉: 比平均好的 response 被强化，比平均差的被抑制</code></pre>
+
+    <h3>GRPO 的数学形式</h3>
+    <pre><code class="language-python"># GRPO 的 loss 函数:
+
+# 对每个 prompt q:
+# 1. 用旧 policy π_old 生成 G 个 responses: {o_1, o_2, ..., o_G}
+# 2. 计算每个 response 的 reward: {r_1, r_2, ..., r_G}
+# 3. 计算 baseline: b = mean(r_1, ..., r_G)
+# 4. 计算 advantage: A_i = (r_i - b) / std(r)
+# 5. 计算 policy ratio: ρ_i = π_θ(o_i|q) / π_old(o_i|q)
+# 6. 计算 clipped loss:
+
+# L = -1/G × Σ_i min(ρ_i × A_i, clip(ρ_i, 1-ε, 1+ε) × A_i)
+#     + β × KL(π_θ || π_ref)
+
+# 注意:
+# - 与 PPO 类似，但 baseline 来自组内均值而非 value model
+# - KL 惩罚仍然需要 reference model (π_ref)</code></pre>
+
+    <h3>GRPO 的优势</h3>
+    <table>
+      <tr><th>优势</th><th>说明</th></tr>
+      <tr><td>无需 Critic</td><td>减少一个模型的计算和内存</td></tr>
+      <tr><td>自然 baseline</td><td>组内均值是 V(s) 的无偏估计</td></tr>
+      <tr><td>更稳定</td><td>减少了 value model 训练的方差</td></tr>
+      <tr><td>易于实现</td><td>比 PPO 代码更简洁</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="deepseek-r1">DeepSeek-R1 的方法</h2>
+
+    <h3>概述</h3>
+    <p>DeepSeek-R1 是 RLVR 的里程碑工作，展示了纯强化学习可以让模型自发学会推理能力：</p>
+    <ul>
+      <li><strong>DeepSeek-R1-Zero</strong>：纯 RL，无 SFT</li>
+      <li><strong>DeepSeek-R1</strong>: Cold start + RL + 蒸馏</li>
+    </ul>
+
+    <h3>DeepSeek-R1-Zero：纯 RL</h3>
+    <pre><code class="language-python"># DeepSeek-R1-Zero 的训练流程:
+# 1. 从 DeepSeek-V3-Base 开始（纯预训练模型）
+# 2. 使用 GRPO 算法
+# 3. 奖励信号:
+#    - 数学: 检查最终答案是否正确
+#    - 代码: 运行测试用例
+#    - 推理: 格式正确性 + 答案正确性
+# 4. 模型自发学会了:
+#    - Chain-of-thought（链式推理）
+#    - Self-verification（自我验证）
+#    - Reflection（反思和纠错）
+
+# 关键发现:
+# 这些推理行为是 RL 自发涌现的，不是 SFT 教导的！</code></pre>
+
+    <h3>涌现的推理行为</h3>
+    <p>在 RL 训练过程中，研究人员观察到模型自发发展出高级推理策略：</p>
+    <table>
+      <tr><th>行为</th><th>描述</th><th>涌现时间</th></tr>
+      <tr><td>CoT</td><td>生成中间推理步骤</td><td>早期</td></tr>
+      <tr><td>Self-verification</td><td>检查自己的推理过程</td><td>中期</td></tr>
+      <tr><td>Reflection</td><td>发现错误后重新推理</td><td>中期</td></tr>
+      <tr><td>Aha moment</td><td>"Wait, let me reconsider..."</td><td>后期</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>"Aha Moment"</strong>：在 RL 训练到一定阶段时，模型开始出现"Wait, I made a let me recalculate..."这样的反思行为。这完全是自发涌现的——训练数据中没有教过模型这样做。</p>
+    </div>
+
+    <h3>DeepSeek-R1 的完整流程</h3>
+    <pre><code class="language-python"># DeepSeek-R1 (非 Zero) 的训练流程:
+
+# Stage 1: Cold Start
+# - 收集数千个高质量 CoT 样本
+# - SFT DeepSeek-V3-Base
+# - 目的: 给 RL 一个好的初始化
+
+# Stage 2: RL (推理导向)
+# - 用 GRPO 训练
+# - 奖励: 答案正确性 + 格式正确性
+# - 专注数学、代码、推理
+
+# Stage 3: Rejection Sampling + SFT
+# - 用 Stage 2 的模型生成大量样本
+# - 过滤（只保留正确的 + 格式好的）
+# - 混合通用数据做 SFT
+# - 目的: 恢复通用能力
+
+# Stage 4: RL (全场景)
+# - 再次 RL，但奖励包括:
+#   - 推理任务的正确性
+#   - 通用任务的有用性 (reward model)
+# - 目的: 同时提升推理和通用能力</code></pre>
+
+    <h3>奖励设计</h3>
+    <pre><code class="language-python"># DeepSeek-R1 的奖励函数:
+
+def compute_reward(response, ground_truth, task_type):
+    if task_type == "math":
+        # 1. 答案正确性
+        answer = extract_answer(response)
+        correctness = (answer == ground_truth)
+
+        # 2. 格式正确性（是否使用了规定的格式）
+        format_ok = check_format(response)  # e.g., "Answer: XXX"
+
+        reward = float(correctness) + 0.1 * float(format_ok)
+
+    elif task_type == "code":
+        # 运行测试用例
+        code = extract_code(response)
+        tests_pass = run_tests(code, test_cases)
+        reward = float(tests_pass)
+
+    return reward</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="emergent-reasoning">涌现的推理能力</h2>
+
+    <h3>Chain-of-Thought 的涌现</h3>
+    <p>最令人惊讶的发现之一是：<strong>CoT 不是 SFT 教的，而是 RL 涌现的</strong>：</p>
+    <pre><code class="language-python"># 训练初期:
+# Q: "Solve x + 3 = 7"
+# A: "4"  (直接回答，无推理)
+
+# 训练中期:
+# Q: "Solve x + 3 = 7"
+# A: "x + 3 = 7, so x = 7 - 3 = 4"  (开始出现推理)
+
+# 训练后期:
+# Q: "Solve x + 3 = 7"
+# A: "Let me solve this step by step.
+#     We have x + 3 = 7.
+#     Subtract 3 from both sides: x = 7 - 3 = 4.
+#     Let me verify: 4 + 3 = 7. Yes!
+#     Answer: 4"  (完整的 CoT + 验证)</code></pre>
+
+    <h3>为什么 RL 能涌现出 CoT？</h3>
+    <ul>
+      <li><strong>探索</strong>：RL 让模型尝试不同的回答策略</li>
+      <li><strong>选择</strong>：CoT 策略更容易得到正确答案（奖励）</li>
+      <li><strong>强化</strong>：CoT 策略被强化，逐渐成为默认行为</li>
+      <li><strong>自我改进</strong>：CoT 让模型能发现和纠正错误</li>
+    </ul>
+
+    <div class="card">
+      <p><strong>关键洞察</strong>：CoT 不是"让模型推理"的工具，而是"让模型学会推理"的训练结果。通过 RL，模型发现 CoT 是获得高奖励的有效策略，从而自发采用它。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="challenges">RLVR 的挑战</h2>
+
+    <h3>1. 奖励稀疏</h3>
+    <p>在很多任务中，只有最终答案是对/错，中间步骤没有奖励：</p>
+    <pre><code class="language-python"># 问题: 数学题只有最终答案有奖励
+# 模型可能通过"猜"得到正确答案
+# 或者推理过程全错但答案碰巧对
+
+# 缓解:
+# - 加入格式奖励（要求特定格式）
+# - 加入过程奖励（检查中间步骤）
+# - 多次采样取一致答案</code></pre>
+
+    <h3>2. 奖励设计困难</h3>
+    <p>设计一个好的奖励函数并不容易：</p>
+    <ul>
+      <li>代码：单元测试可能不全面</li>
+      <li>数学：等价表达式的匹配（"2+2" vs "4"）</li>
+      <li>推理：格式正确性难以定义</li>
+    </ul>
+
+    <h3>3. 分布偏移</h3>
+    <p>RL 训练可能让模型偏离预训练分布：</p>
+    <ul>
+      <li>过度优化推理格式，丧失通用能力</li>
+      <li>语言风格变化（变得过于正式或机械）</li>
+      <li>遗忘预训练知识</li>
+    </ul>
+
+    <h3>4. 计算成本</h3>
+    <p>RL 训练比 SFT 昂贵得多：</p>
+    <ul>
+      <li>需要多次采样（每个 prompt 生成多个 response）</li>
+      <li>需要多次迭代更新</li>
+      <li>需要维护 reference model（计算 KL）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="future">RLVR 的未来方向</h2>
+
+    <h3>1. 更丰富的奖励信号</h3>
+    <ul>
+      <li><strong>过程奖励模型 (PRM)</strong>：不仅奖励最终答案，还奖励中间步骤</li>
+      <li><strong>多维度奖励</strong>：正确性 + 简洁性 + 可读性</li>
+      <li><strong>自我奖励</strong>：模型自己评估自己的输出</li>
+    </ul>
+
+    <h3>2. 扩展到更多领域</h3>
+    <ul>
+      <li><strong>科学推理</strong>：化学、物理问题的验证</li>
+      <li><strong>形式化证明</strong>：Lean/Coq 验证器</li>
+      <li><strong>多模态</strong>：图像生成的质量评估</li>
+    </ul>
+
+    <h3>3. RLVR + RLHF 结合</h3>
+    <ul>
+      <li>用 RLVR 提升推理能力</li>
+      <li>用 RLHF 提升对话和通用能力</li>
+      <li>两者互补，不是替代</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！RLVR 的核心优势是奖励客观、可自动验证，不需要人类标注。" data-incorrect="RLVR 的核心优势是客观可验证的奖励，无需人类标注。">
+      <p><strong>问题 1：</strong>RLVR 相比 RLHF 的主要优势是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">更容易实现</button>
+        <button data-choice="b" aria-pressed="false">奖励客观、可自动验证、无需人类标注</button>
+        <button data-choice="c" aria-pressed="false">不需要 GPU</button>
+        <button data-choice="d" aria-pressed="false">训练更快</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！GRPO 用组内均值作为 baseline，去掉了 PPO 需要的 value model。" data-incorrect="GRPO 用组内均值作为 baseline，无需单独的 value model。">
+      <p><strong>问题 2：</strong>GRPO 相比 PPO 的主要简化是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">去掉了 policy model</button>
+        <button data-choice="b" aria-pressed="false">用组内均值作为 baseline，去掉 value model</button>
+        <button data-choice="c" aria-pressed="false">去掉了 reference model</button>
+        <button data-choice="d" aria-pressed="false">去掉了 reward model</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！DeepSeek-R1 中，CoT、self-verification、reflection 都是 RL 自发涌现的，不是 SFT 教导的。" data-incorrect="这些推理行为是 RL 自发涌现的，不是 SFT 教导的。">
+      <p><strong>问题 3：</strong>DeepSeek-R1-Zero 中，Chain-of-Thought 是如何产生的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">SFT 数据教的</button>
+        <button data-choice="b" aria-pressed="false">RL 自发涌现的</button>
+        <button data-choice="c" aria-pressed="false">预训练就有的</button>
+        <button data-choice="d" aria-pressed="false">蒸馏来的</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！RLVR 只适用于有可验证奖励的任务，开放式任务仍需 RLHF。" data-incorrect="RLVR 只适用于封闭式任务，开放式任务仍需其他方法。">
+      <p><strong>问题 4：</strong>RLVR 能完全替代 RLHF 吗？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">能，RLVR 更好</button>
+        <button data-choice="b" aria-pressed="false">不能，RLVR 只适用于有可验证奖励的任务</button>
+        <button data-choice="c" aria-pressed="false">能，因为 RLVR 更便宜</button>
+        <button data-choice="d" aria-pressed="false">不能，因为 RLVR 效果更差</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>RLVR</h3>
+        <p>可验证奖励替代人类标注，客观可扩展</p>
+      </article>
+      <article>
+        <h3>GRPO</h3>
+        <p>组内均值作为 baseline，去掉 value model</p>
+      </article>
+      <article>
+        <h3>DeepSeek-R1</h3>
+        <p>纯 RL 涌现推理能力，无需 SFT CoT</p>
+      </article>
+      <article>
+        <h3>局限</h3>
+        <p>只适用于封闭式任务，奖励设计有挑战</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>DeepSeek-AI (2025): <a href="https://arxiv.org/abs/2501.12948">DeepSeek-R1</a> — RLVR 的里程碑</li>
+      <li>Lambert et al. (2024): <a href="https://arxiv.org/abs/2407.21787">The Anatomy of a RLVR Pipeline</a> — RLVR 的系统分析</li>
+      <li>Guo et al. (2025): <a href="https://arxiv.org/abs/2501.12948">DeepSeek-R1 Paper</a> — 完整方法</li>
+      <li>OpenAI (2024): <a href="https://arxiv.org/abs/2408.03314">Let's Verify Step by Step</a> — 过程奖励模型</li>
+      <li>Lightman et al. (2023): <a href="https://arxiv.org/abs/2305.20050">Let's Verify Step by Step</a> — PRM 开创性工作</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0015-alignment-sft-rlhf.html">← 第 15 课</a>
+      <a href="0017-alignment-rl.html">第 17 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课深入 RLVR 与 GRPO</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

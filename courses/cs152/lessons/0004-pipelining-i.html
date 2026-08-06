@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipelining I — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 4 课</p>
+    <h1>Pipelining I：Iron Law 与经典 5 级流水线</h1>
+    <p class="lede">第 3 课已经证明"复杂指令集会阻碍并行和流水线实现"。这一课正式引入贯穿全课程的性能分析框架——Iron Law——然后用经典的 5 级 RISC 流水线（Fetch/Decode/Execute/Memory/Writeback）把它落地成具体电路，并开始讨论指令之间在流水线里如何互相干扰（hazard）。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="recap">回顾第 3 课</h2>
+    <ul>
+      <li>微编码是管理控制单元复杂度的有效技术，诞生于逻辑/主存/ROM 技术路线彼此不同的年代</li>
+      <li>ROM 与 RAM 的速度差异，曾经激励人们添加更多复杂指令</li>
+      <li>技术进步带来快速 SRAM，使原有的技术假设失效</li>
+      <li><strong>复杂指令集会阻碍并行和流水线实现</strong>——这正是本课要展开的下一步</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="iron-law">处理器性能的"铁律"（Iron Law）</h2>
+    <p>本课程反复使用的核心性能分解公式：</p>
+    <p>\[ \frac{\text{Time}}{\text{Program}} = \frac{\text{Instructions}}{\text{Program}} \times \frac{\text{Cycles}}{\text{Instruction}} \times \frac{\text{Time}}{\text{Cycle}} \]</p>
+    <ul>
+      <li><strong>每个程序的指令数</strong>取决于源代码、编译器技术、ISA</li>
+      <li><strong>每条指令的周期数（CPI）</strong>取决于 ISA 和微架构</li>
+      <li><strong>每个周期的时间</strong>取决于微架构和基础工艺技术</li>
+    </ul>
+
+    <table>
+      <tr><th>微架构</th><th>CPI</th><th>时钟周期</th></tr>
+      <tr><td>微编码（Microcoded）</td><td>&gt;1</td><td>短</td></tr>
+      <tr><td>单周期不流水（Single-cycle unpipelined）</td><td>1</td><td>长</td></tr>
+      <tr><td>流水线（Pipelined）</td><td>1</td><td>短</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>这张表正是三种设计风格的"一句话总结"</strong>：微编码用短周期换来了灵活性，但代价是 CPI&gt;1；单周期不流水的机器 CPI=1，但每个周期必须长到能容纳最慢的指令（例如访存），周期时间被拖累；流水线设计的目标，是<strong>同时</strong>拿到"CPI≈1"和"短周期"——这正是它相对前两种风格的根本优势所在。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="cpi-examples">三种机器的 CPI 对比（含数字重新验算）</h2>
+    <p>假设执行 3 条指令：</p>
+    <ul>
+      <li><strong>微编码机器：</strong>三条指令各耗时 7、5、10 个周期（不同指令的微码长度不同）→ 总周期数 = 7+5+10 = 22 → <strong>CPI = 22/3 ≈ 7.33</strong></li>
+      <li><strong>不流水的单周期机器：</strong>三条指令各占 1 个周期 → 总周期数 = 3 → <strong>CPI = 3/3 = 1</strong></li>
+      <li><strong>流水线机器：</strong>三条指令重叠执行，仍然只需要 3 个周期完成发射 → <strong>CPI = 3/3 = 1</strong></li>
+    </ul>
+    <div class="card warning">
+      <p><strong>一个常见的直觉误区：</strong>"5 级流水线的 CPI 是不是等于 5？" ——<strong>不是！</strong>CPI 衡量的是"稳态下平均每条指令消耗多少个周期"，而不是"一条指令要经过多少个流水级"。只要流水线能够每个周期发射一条新指令、没有被打断，CPI 就趋近于 1，无论流水级数是 5 级还是 500 级。这是本课程中最容易混淆、也最重要的一个概念澄清。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="classic-pipeline">经典 5 级 RISC 流水线</h2>
+    <p>把单周期数据通路按功能切成 5 段，每段之间插入流水线寄存器：</p>
+    <table>
+      <tr><th>阶段</th><th>缩写</th><th>主要工作</th></tr>
+      <tr><td>Fetch（取指）</td><td>F</td><td>用 PC 访问指令缓存，取出指令</td></tr>
+      <tr><td>Decode（译码）</td><td>D</td><td>译码指令、从寄存器堆读出操作数 A/B、生成立即数 Imm</td></tr>
+      <tr><td>Execute（执行）</td><td>X</td><td>ALU 计算</td></tr>
+      <tr><td>Memory（访存）</td><td>M</td><td>访问数据缓存（load/store）</td></tr>
+      <tr><td>Writeback（写回）</td><td>W</td><td>把结果写回寄存器堆</td></tr>
+    </table>
+    <p>这一版设计假设寄存器堆/存储器是"同步写、异步读"的：写入在时钟边沿完成，读出则是纯组合逻辑，同一周期内写入的值不能被同一周期的读出直接看到（这个假设直接决定了后面 hazard 的产生方式）。</p>
+
+    <hr class="rule">
+
+    <h2 id="hazards">指令在流水线中会互相干扰：Hazard 分类</h2>
+    <p>当多条指令同时存在于流水线的不同阶段时，可能出现三类冲突（hazard）：</p>
+    <ul>
+      <li><strong>结构冒险（structural hazard）</strong>：流水线中的某条指令需要一个正被另一条指令占用的硬件资源</li>
+      <li><strong>数据冒险（data hazard）</strong>：一条指令依赖于更早指令产生的数据值</li>
+      <li><strong>控制冒险（control hazard）</strong>：一条指令依赖于"下一条指令的地址"应该是什么（分支、异常）</li>
+    </ul>
+    <p><strong>处理这些冒险通常需要在流水线中插入气泡（bubble），使理想情况下 CPI=1 的流水线实际 CPI &gt; 1。</strong></p>
+
+    <div class="card">
+      <p><strong>气泡如何影响实际 CPI（重新验算）：</strong>若 3 条指令原本能在 3 个周期内完成（CPI=1），插入 1 个气泡后变成 4 个周期完成（CPI=4/3≈1.33），插入 2 个气泡后变成 5 个周期完成（CPI=5/3≈1.67）。这里 CPI 的计算方式是：从第一条指令完成的那一刻，到序列中最后一条指令完成的那一刻，所经过的周期数除以指令数。</p>
+    </div>
+
+    <h3>结构冒险的解决</h3>
+    <p>结构冒险发生在两条指令同时需要同一个硬件资源时。硬件上可以通过让较新的指令在原地等待（stall）来解决；也永远可以通过增加硬件资源来彻底避免（例如给内存增加第二个访问端口）。<strong>经典 RISC 5 级整数流水线在设计上没有结构冒险</strong>——但许多真实 RISC 实现在乘法器、除法器、浮点单元等多周期部件上，以及寄存器写回端口上，仍然可能出现结构冒险。</p>
+
+    <h3>数据冒险的三种类型</h3>
+    <p>考虑一串寄存器-寄存器指令 <code>r_k ← r_i op r_j</code>：</p>
+    <table>
+      <tr><th>类型</th><th>例子</th><th>名称</th></tr>
+      <tr><td>数据依赖</td><td><code>r3 ← r1 op r2</code><br><code>r5 ← r3 op r4</code></td><td>写后读（Read-after-Write, RAW）</td></tr>
+      <tr><td>反依赖</td><td><code>r3 ← r1 op r2</code><br><code>r1 ← r4 op r5</code></td><td>读后写（Write-after-Read, WAR）</td></tr>
+      <tr><td>输出依赖</td><td><code>r3 ← r1 op r2</code><br><code>r3 ← r6 op r7</code></td><td>写后写（Write-after-Write, WAW）</td></tr>
+    </table>
+
+    <h3>解决数据冒险的三种策略</h3>
+    <ul>
+      <li><strong>Interlock（互锁/停顿）</strong>：让依赖指令在译码阶段等待，直到冒险消除</li>
+      <li><strong>Bypass（旁路/前递）</strong>：数据一旦产生就立刻直接前递给需要它的阶段，不必等写回完成</li>
+      <li><strong>Speculate（推测）</strong>：先猜一个值，猜错了再纠正</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>Interlock vs. Bypass 的具体对比（<code>add x1,x3,x5</code> 后紧跟 <code>sub x2,x1,x4</code>）：</strong></p>
+      <p>纯用互锁：<code>sub</code> 需要在译码阶段插入 2 个气泡，等到 <code>add</code> 的写回阶段完成、寄存器堆里确实有更新的值之后才能真正译码——五级流水线因此退化成实际上更长的执行时间。</p>
+      <p>加上从 ALU 输出直接到 ALU 输入的旁路路径后：<code>sub</code> 在自己的执行阶段直接拿到 <code>add</code> 刚刚算出、还未写回的结果，<strong>完全不需要气泡</strong>，两条指令背靠背顺畅执行。这正是现代流水线几乎必然采用"全旁路数据通路"（fully bypassed datapath）的原因——把执行、访存、写回阶段的结果都直接接回译码阶段的操作数选择器。</p>
+    </div>
+
+    <p>数据值的推测（value speculation）目前只在少数场景下被证明有效：分支预测、栈指针更新、访存地址消歧——这几个话题会在后续课程（分支预测、乱序执行）中展开。</p>
+
+    <hr class="rule">
+
+    <h2 id="control-hazards">控制冒险：如何计算下一条 PC</h2>
+    <p>不同类型的控制流指令，需要在流水线的不同阶段才能确定下一条指令地址：</p>
+    <table>
+      <tr><th>指令类型</th><th>计算下一个 PC 需要的信息</th></tr>
+      <tr><td>无条件跳转（Unconditional Jump）</td><td>opcode、PC、偏移量——译码阶段即可确定</td></tr>
+      <tr><td>寄存器跳转（Jump Register）</td><td>opcode、寄存器值、偏移量——要等到执行阶段读出寄存器值</td></tr>
+      <tr><td>条件分支（Conditional Branch）</td><td>opcode、（用于判断条件的）寄存器、PC、偏移量——同样要等到执行阶段算出条件</td></tr>
+      <tr><td>其他所有指令</td><td>opcode、PC（还需要确认它不属于以上几类）</td></tr>
+    </table>
+    <p>RISC-V 中，无条件的 PC 相对跳转（如 <code>j target</code>）在<strong>译码阶段</strong>就能确定跳转目标，因此只需要杀掉（kill，转换成气泡）译码阶段之后已经被错误取出的 1 条指令；而条件分支和寄存器跳转要等到<strong>执行阶段</strong>才能确定目标或跳转与否，因此需要杀掉两条已经被取出/译码的指令，产生 2 个气泡。</p>
+
+    <div class="card">
+      <p><strong>三种情形的流水线气泡数（重新核对）：</strong></p>
+      <ul>
+        <li><code>j target</code>（无条件跳转，译码阶段确定）：产生 <strong>1 个气泡</strong></li>
+        <li><code>jr x1</code>（寄存器跳转，执行阶段确定）：产生 <strong>2 个气泡</strong></li>
+        <li><code>beq x1,x2,target</code>（条件分支，执行阶段确定）：产生 <strong>2 个气泡</strong></li>
+      </ul>
+    </div>
+
+    <h3>历史设计：分支延迟槽（Branch Delay Slot）</h3>
+    <p>早期 RISC 借鉴了流水化微码引擎的思路，把 ISA 语义改成"分支/跳转指令<strong>之后</strong>的那条指令，无论分支是否发生，总是会被执行"：</p>
+    <pre><code class="language-text">0x100 j target
+0x104 add x1, x2, x3   // 无论如何都会被执行
+...
+0x205 target: xori x1, x1, 7</code></pre>
+    <p>软件必须用有用的指令填满这个"延迟槽"，或者显式插入一条 NOP。这样一来，硬件就不需要为无条件跳转插入气泡——延迟槽指令本来就该执行。</p>
+    <div class="card warning">
+      <p><strong>1990 年后的 RISC ISA 大多放弃了延迟槽</strong>，原因包括：延迟槽把微架构细节固化进了 ISA 语义（类似 IBM 650 让程序员手动排列磁鼓指令顺序以减少延迟）；当延迟槽被 NOP 填充时会增加指令缓存的压力和缺失率；在更深的流水线（例如 30 级流水、每周期发射 4 条指令）中，"只有 1 个延迟槽"这个假设根本无法维持；更重要的是，后续课程会讲到的<strong>分支预测</strong>大幅降低了对延迟槽的需求。</p>
+    </div>
+
+    <h3>为什么经典 5 级流水线实际上常常 CPI &gt; 1</h3>
+    <ul>
+      <li>完全旁路可能过于昂贵：通常只提供最常用的旁路路径，一些很少用到的旁路路径反而会拉长时钟周期，抵消降低 CPI 带来的好处</li>
+      <li>Load 指令通常有两个周期的延迟——紧跟在 load 后面、依赖其结果的指令无法直接使用该结果。MIPS-I ISA 曾定义"load 延迟槽"这一软件可见的流水线冒险（编译器需要调度独立指令或插入 NOP 来规避），后来 MIPS-II 去掉了这一设计，改由硬件互锁自动处理（"MIPS" 原意正是 "Microprocessor without Interlocked Pipeline Stages"，具有讽刺意味的是后来还是加上了互锁）</li>
+      <li>跳转/条件分支在没有延迟槽时会产生气泡</li>
+    </ul>
+    <p>凡是带有软件可见延迟槽的机器，编译器可能会插入大量 NOP 指令：<strong>NOP 降低了 CPI，却增加了每个程序的指令数</strong>——这正好提醒我们 Iron Law 三项之间常常存在此消彼长的权衡，不能只孤立地优化其中一项。</p>
+
+    <hr class="rule">
+
+    <h2 id="exceptions">异常与中断的术语与历史</h2>
+    <p>本课程采用的术语约定：</p>
+    <ul>
+      <li><strong>异常（Exception）</strong>：程序执行过程中由程序自身引发的不寻常内部事件（如缺页、算术下溢）</li>
+      <li><strong>中断（Interrupt）</strong>：运行程序之外的外部事件</li>
+      <li><strong>陷阱（Trap）</strong>：由异常或中断引发的、强制转移控制权给监管程序的动作（并非所有异常都会触发陷阱，例如 IEEE 754 浮点标准中的某些情形）</li>
+    </ul>
+    <p>历史上，Babbage 的分析机已经有溢出异常；<strong>第一台带陷阱机制的系统是 1951 年的 Univac-I</strong>（算术溢出可以触发一段两条指令的修复例程，或者按程序员的选择直接停机；后续的 Univac 1103 于 1955 年加入了外部中断，用于实时采集风洞数据）；<strong>第一台带 I/O 中断的系统是 1954 年的 DYSEAC</strong>——它有两个程序计数器，I/O 信号会触发两者之间的切换，同时它也是第一台支持 DMA（直接内存访问）的系统，甚至是<strong>第一台"移动"计算机</strong>：整机分装在两辆拖车里（共 20 吨），为美国陆军通信兵团建造。</p>
+
+    <hr class="rule">
+
+    <h2 id="precise-exceptions">流水线中的精确异常与提交点</h2>
+    <p>异步中断的标准处理流程：处理器在指令 <code>I_i</code> 处停止当前程序（完成所有 <code>I_i</code> 之前的指令——这就是<strong>精确中断，precise interrupt</strong>的含义），把 <code>I_i</code> 的 PC 存入专用寄存器 EPC，关闭中断并把控制权转交给运行在监管模式下的中断处理程序。</p>
+    <p>在 5 级流水线中，不同类型的异常可能同时在不同阶段被检测到（Fetch 阶段的 PC 地址异常、Decode 阶段的非法操作码、Execute 阶段的溢出、Memory 阶段的数据地址异常），还要处理来自外部、随时可能到达的异步中断。解决方案：</p>
+    <ul>
+      <li>把异常标志（Exc）和对应 PC 一路随着指令流经流水线携带，直到<strong>提交点（commit point，通常是 Memory 阶段）</strong>才真正处理</li>
+      <li>对同一条指令而言，<strong>更早流水级检测到的异常优先于更晚流水级的异常</strong>（因为按顺序处理指令时，早期异常理应先被响应）</li>
+      <li>异步中断在提交点被注入，并覆盖其他一切异常</li>
+      <li>一旦在提交点确认要触发陷阱：更新 Cause 和 EPC 寄存器，杀掉流水线中所有阶段的指令，把陷阱处理程序的 PC 注入到取指阶段</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>把异常处理看作一种"推测执行"</strong>：预测机制——异常极其罕见，所以简单地"预测不会发生异常"已经非常准确；检查机制——异常在指令执行流水线的末端才被真正检测出来，各类异常各有专门的检测硬件；恢复机制——只有到达提交点才真正写入架构状态，因此提交点之前的部分执行结果可以被直接丢弃，然后清空流水线、跳转到异常处理程序。旁路（bypass）机制则允许后续指令提前使用尚未提交的指令结果，而不必等到它真正写回。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：N 级流水线的 CPI 等于 N。</strong>CPI 描述稳态下平均每条指令消耗的周期数，理想流水线下趋近于 1，与流水级数无关；流水级数影响的是"延迟"（从取指到写回的时间），而不是"吞吐率倒数"（CPI）。</li>
+      <li><strong>误区：只要有 bypass，就永远不需要 stall。</strong>Load 指令的两周期延迟是一个反例：即使有旁路，跟在 load 后面立即使用其结果的指令仍然需要停顿至少一个周期（除非编译器主动重排指令）。</li>
+      <li><strong>误区：分支延迟槽只是一个无关紧要的历史细节。</strong>它实际上是"把微架构实现细节暴露进 ISA 语义"的典型案例，深刻影响了后续几十年 RISC ISA 设计的取舍——1990 年后的主流 RISC ISA 几乎都不再采用。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！CPI 衡量稳态下平均每条指令消耗的周期数，只要流水线能持续每周期发射一条新指令，CPI 就趋近于 1，与流水级数无关。" data-incorrect="重新看"经典5级流水线"一节的警示框：CPI 和流水级数是两个不同的概念，不要把"5 级"直接当成"CPI=5"。">
+      <p><strong>问题 1：</strong>一条经典的 5 级 RISC 流水线，在没有任何冒险的理想情况下，其 CPI 大约是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">5，因为有 5 个流水级</button>
+        <button data-choice="b" aria-pressed="false">0.2，因为吞吐率是流水级数的倒数</button>
+        <button data-choice="c" aria-pressed="false">约等于 1，只要流水线能持续每周期发射一条新指令</button>
+        <button data-choice="d" aria-pressed="false">无法确定，取决于程序的指令数</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！全旁路数据通路把 ALU 的结果直接接回译码阶段的操作数选择器，sub 在自己的执行阶段就能拿到 add 刚算出的结果，完全不需要气泡。" data-incorrect="重新看 Interlock vs. Bypass 一节：纯互锁需要等到写回完成，而旁路是把结果提前直接接到需要它的阶段。">
+      <p><strong>问题 2：</strong><code>add x1,x3,x5</code> 紧跟 <code>sub x2,x1,x4</code>，如果数据通路提供了从 ALU 输出直接到 ALU 输入的旁路路径，需要插入几个气泡？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">2 个气泡</button>
+        <button data-choice="b" aria-pressed="false">0 个气泡，两条指令背靠背顺畅执行</button>
+        <button data-choice="c" aria-pressed="false">1 个气泡</button>
+        <button data-choice="d" aria-pressed="false">3 个气泡</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！提交点通常设在 Memory 阶段：只有到达提交点，指令才真正写入架构状态；之前检测到的异常可以安全地丢弃部分执行结果，再跳转到异常处理程序。" data-incorrect="重新看"流水线中的精确异常与提交点"一节：关键是"哪个阶段之前的写入不算数、可以被安全丢弃"。">
+      <p><strong>问题 3：</strong>在支持精确异常的 5 级流水线中，为什么需要把异常标志一直携带到"提交点"（通常是 Memory 阶段）才处理，而不是检测到异常就立刻处理？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为只有到达提交点，指令才真正写入架构状态，之前的部分执行结果可以被安全丢弃，从而保证精确异常</button>
+        <button data-choice="b" aria-pressed="false">因为提交点是唯一能读取内存的阶段</button>
+        <button data-choice="c" aria-pressed="false">因为只有 Memory 阶段才有足够的晶体管面积容纳异常检测电路</button>
+        <button data-choice="d" aria-pressed="false">这只是历史惯例，没有实质性的技术原因</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>Iron Law</h3>
+        <p>Time/Program = Instructions/Program × CPI × Cycle Time</p>
+      </article>
+      <article>
+        <h3>CPI ≠ 流水级数</h3>
+        <p>理想流水线 CPI 趋近 1，与流水线深度无关</p>
+      </article>
+      <article>
+        <h3>三类 hazard</h3>
+        <p>结构、数据（RAW/WAR/WAW）、控制冒险</p>
+      </article>
+      <article>
+        <h3>精确异常</h3>
+        <p>提交点之前可安全丢弃，之后才写入架构状态</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Appendix C.1-C.4</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L04_Pipelining_I.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Discussion 2 worksheet：Pipelining（sp23 discussions）</li>
+      <li>Reading: <em>Architecture of the IBM System/360</em>；<em>A Characterization of Processor Performance in the VAX-11/780</em></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0003-microcoding.html">← 第 3 课：Microcoding</a>
+      <span>🎓 第 4 课</span>
+      <a href="0005-pipelining-ii.html">第 5 课：Pipelining II →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

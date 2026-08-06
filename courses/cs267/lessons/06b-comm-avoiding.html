@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 6b 课：通信避免算法 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 6b 课 · James Demmel</p>
+    <h1>通信避免矩阵乘法（及更多）</h1>
+    <p class="lede">通信（数据移动）是科学计算中最昂贵的操作。本课探讨如何证明并构造通信最优的算法，涵盖矩阵乘法、线性代数、CNNs 等。</p>
+
+    <div class="meta">
+      <p><strong>授课教师：</strong>James Demmel</p>
+      <p><strong>日期：</strong>2025-02-06</p>
+      <p><strong>难度：</strong>高级</p>
+      <p><strong>视频：</strong><a href="https://youtu.be/DTzQrHUWkn4" target="_blank" rel="noopener">Lecture 6b Video</a></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>通信 = 数据移动</h2>
+    <p>通信是科学计算中最昂贵的操作（时间或能量）：</p>
+    <ul class="checklist">
+      <li>主内存 ↔ 缓存</li>
+      <li>处理器 ↔ 处理器（通过网络）</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>目标：</strong>为形似"嵌套循环访问数组"的算法，证明并构造通信最优算法。</p>
+      <p>包括：矩阵乘法、线性代数（稠密和稀疏）、N-body、CNNs 等。</p>
+    </div>
+
+    <h2>N-body 的通信下界</h2>
+    <h3>简化模型</h3>
+    <pre><code>for i = 0:n
+  for j = 0:n
+    access A(i), B(j)</code></pre>
+
+    <p>若缓存大小为 M，只能访问 M 个 A 和 B 的条目，最多能执行多少循环迭代？</p>
+
+    <h3>直觉分析</h3>
+    <div class="card idea">
+      <p>若缓存中有 M/2 个 A 条目和 M/2 个 B 条目：</p>
+      <ul>
+        <li>可执行 \((M/2) \times (M/2) = M^2/4\) 次迭代</li>
+        <li>总共需要 \(n^2\) 次迭代</li>
+        <li>需要刷新缓存 \(n^2 / (M^2/4) = 4(n/M)^2\) 次</li>
+        <li>每次刷新需要 M 次读</li>
+        <li><strong>总读次数：</strong>\(4(n/M)^2 \cdot M = 4n^2 / M\)</li>
+      </ul>
+    </div>
+
+    <p><strong>通信下界：</strong> \(\Omega(n^2 / M) = \Omega(\text{\#iterations} / M)\)</p>
+
+    <h3>最优分块</h3>
+    <pre><code>// 读 M/5 个 A 的条目: A([0,1,2,...,M/2-1])
+// 读 M/2 个 B 的条目: B([0,1,2,...,M/2-1])
+// 执行 (M/2)² = M²/4 次迭代</code></pre>
+
+    <h2>矩阵乘法的通信下界</h2>
+    <h3>几何证明（Loomis-Whitney 不等式）</h3>
+    <p>将矩阵乘法的迭代表示为 3D 空间中的点 \((i,j,k)\)：</p>
+    <pre><code>for i = 1:n, for j = 1:n, for k = 1:n
+  C(i,j) += A(i,k) * B(k,j)</code></pre>
+
+    <p>每个迭代访问三个"面"上的元素：</p>
+    <ul>
+      <li>A face: \((i,k)\)</li>
+      <li>B face: \((j,k)\)</li>
+      <li>C face: \((i,j)\)</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>Loomis-Whitney 不等式 (1949)：</strong></p>
+      <p>\[\text{\#cubes in 3D set} \leq (\text{area(A shadow)} \cdot \text{area(B shadow)} \cdot \text{area(C shadow)})^{1/2}\]</p>
+    </div>
+
+    <p>若有 M 个数据可用：</p>
+    <ul>
+      <li>每个面最多 M 个方块</li>
+      <li>最多 \(M^{3/2}\) 次迭代</li>
+      <li>需要刷新缓存 \(n^3 / M^{3/2}\) 次</li>
+      <li><strong>通信下界：</strong>\(\Omega(n^3 / M^{1/2}) = \Omega(\text{\#iterations} / M^{1/2})\)</li>
+    </ul>
+
+    <h3>并行情况</h3>
+    <p>对于 P 个处理器：</p>
+    <ul>
+      <li>每处理器迭代数：\(n^3/P\)</li>
+      <li>每处理器数据：\(M = 3n^2/P\)</li>
+      <li><strong>通信下界：</strong>\(\Omega(n^2 / P^{1/2})\)</li>
+    </ul>
+
+    <h3>最优算法</h3>
+    <p>6 层嵌套循环的分块矩阵乘法达到了这个下界：</p>
+    <pre><code>for i = 1 to N step b
+  for j = 1 to N step b
+    for k = 1 to N step b
+      // b×b 的块矩阵乘法，b = O(M^{1/2})
+      C[i:i+b, j:j+b] += A[i:i+b, k:k+b] * B[k:k+b, j:j+b]</code></pre>
+
+    <h2>一般化：嵌套循环的通信下界</h2>
+    <h3>一般形式</h3>
+    <pre><code>for i1 = 1:n, for i2 = i1:m, ..., for ik = i3:i4
+  C(i1+2*i3-i7) = func(A(i2+3*i4, i1, i2, ...), B(...), ...)</code></pre>
+
+    <p>表示为：</p>
+    <ul>
+      <li>迭代空间：\((i_1, i_2, ..., i_k) \in S \subset \mathbb{Z}^k\)</li>
+      <li>数组访问由投影 \(\phi_j\) 定义</li>
+    </ul>
+
+    <h3>一般通信下界</h3>
+    <div class="card idea">
+      <p><strong>定理：</strong></p>
+      <p>\[\text{words\_moved} = \Omega(\#iterations / M^{s_{HBL}-1})\]</p>
+      <p>其中 \(s_{HBL}\) 是一个线性规划的最优值：</p>
+      <p>\[\text{minimize } s_{HBL} = \sum_j e_j \text{ subject to } \text{rank}(H) \leq \sum_j e_j \cdot \text{rank}(\phi_j(H))\]</p>
+    </div>
+
+    <p>证明依赖于纯数学的最新成果：</p>
+    <ul>
+      <li>Christ/Tao/Carbery/Bennett</li>
+      <li>Hölder-Brascamp-Lieb (HBL) 不等式在 Abel 群上的推广</li>
+      <li>HBL 推广了 Cauchy-Schwartz、Loomis-Whitney 等</li>
+    </ul>
+
+    <h3>是否可达？</h3>
+    <p><strong>定理：</strong>总能构造一个最优分块算法达到下界。</p>
+    <p>假设/限制：</p>
+    <ul class="checklist">
+      <li>达到 \(\Omega(\#iterations / M^{s_{HBL}-1})\)（在 O() 意义上）</li>
+      <li>取决于循环依赖（仅 reductions 如 matmul 可任意重排）</li>
+      <li>假设循环边界足够大以容纳分块</li>
+    </ul>
+
+    <div class="card warning">
+      <p><strong>注意：</strong>对于 matrix-vector multiply，同样的下界形式适用，但不可达（因为循环边界不够大）。</p>
+    </div>
+
+    <h2>CNNs 的通信下界</h2>
+    <h3>CNN 计算</h3>
+    <pre><code>for k = 1:K, for h = 1:H, for w = 1:W, for r = 1:R,
+    for s = 1:S, for c = 1:C, for b = 1:B
+  Out(k, h, w, b) += Image(r+w, s+h, c, b) * Filter(k, r, s, c)</code></pre>
+
+    <p>总迭代数 \(N = K \cdot H \cdot W \cdot R \cdot S \cdot C \cdot B\)</p>
+
+    <h3>通信下界</h3>
+    <p>\[\text{words\_moved} = \Omega(\max(\]</p>
+    <ul>
+      <li>\(BKHW\) — 输出大小</li>
+      <li>\(\sigma_H \sigma_W BCWH\) — 图像大小</li>
+      <li>\(CKRS\) — 滤波器大小</li>
+      <li>\(N/M\) — 与 n-body 相同的下界</li>
+      <li>\(N / (M^{1/2} (RS/(\sigma_H \sigma_W))^{1/2})\) — <strong>新下界</strong></li>
+    </ul>
+    <p>\[)\]</p>
+
+    <div class="card idea">
+      <p><strong>新下界的优势：</strong></p>
+      <ul>
+        <li>比 matmul 下界好 \((RS/(\sigma_H \sigma_W))^{1/2}\) 倍</li>
+        <li>适用于数据不 fit in cache 但单个 R×S 滤波器 fit 的情况</li>
+        <li>许多情况下可达（用 Mathematica 求解）</li>
+      </ul>
+    </div>
+
+    <h3>自动化工具</h3>
+    <p><a href="https://iocomplexity.corse.inria.fr/iolb" target="_blank" rel="noopener">iocomplexity.corse.inria.fr/iolb</a> — 自动计算并构造通信最优的分块。</p>
+
+    <h2>一般化分块示例</h2>
+    <h3>"倾斜" N-body</h3>
+    <pre><code>for i = 0:n
+  for j = 0:n
+    access A(i), B(i+j)</code></pre>
+    <p>最优分块：读 A([0,1,2,3,4]) 和 B([4,5,6,7,8])，执行 25 次迭代。</p>
+
+    <h3>"扭曲" N-body</h3>
+    <pre><code>for i = 0:n
+  for j = 0:n
+    access A(3*i-j), B(i-2*j)</code></pre>
+    <p>最优分块：读 A([0,5,10,15,20]) 和 B([0,-5,-10,-15,-20])，执行 25 次迭代。</p>
+
+    <div class="rule"></div>
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>N-body 的通信下界是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="这太高了。">A. \(\Omega(n^2)\)</button>
+        <button data-answer="correct" data-correct="正确！N-body 的通信下界是 \(\Omega(n^2 / M) = \Omega(\#iterations / M)\)。">B. \(\Omega(n^2 / M)\)</button>
+        <button data-answer="wrong" data-incorrect="这太低了。">C. \(\Omega(n)\)</button>
+        <button data-answer="wrong" data-incorrect="这太低了。">D. \(\Omega(n / M)\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>矩阵乘法的通信下界是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="这是朴素算法的通信量。">A. \(\Omega(n^3)\)</button>
+        <button data-answer="wrong" data-incorrect="这是 N-body 的下界。">B. \(\Omega(n^3 / M)\)</button>
+        <button data-answer="correct" data-correct="正确！矩阵乘法的通信下界是 \(\Omega(n^3 / M^{1/2})\)。">C. \(\Omega(n^3 / M^{1/2})\)</button>
+        <button data-answer="wrong" data-incorrect="这太低了。">D. \(\Omega(n^2 / M^{1/2})\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>证明矩阵乘法通信下界使用了什么不等式？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="Cauchy-Schwartz 是 Loomis-Whitney 的特例。">A. Cauchy-Schwartz</button>
+        <button data-answer="correct" data-correct="正确！Loomis-Whitney 不等式将 3D 集合的体积与其三个面的面积联系起来。">B. Loomis-Whitney</button>
+        <button data-answer="wrong">C. Hölder</button>
+        <button data-answer="wrong">D. Jensen</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>为什么 matrix-vector multiply 的通信下界不可达？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="matrix-vector 是简单的。">A. 因为算法太复杂</button>
+        <button data-answer="correct" data-incorrect="因为循环边界不够大以容纳最优分块。">B. 因为循环边界不够大以容纳分块</button>
+        <button data-answer="wrong" data-incorrect="matrix-vector 可以并行。">C. 因为不能并行</button>
+        <button data-answer="wrong" data-incorrect="与内存层次无关。">D. 因为没有内存层次</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>CNNs 的新通信下界比 matmul 好多少倍？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong">A. \(RS/(\sigma_H \sigma_W)\)</button>
+        <button data-answer="correct" data-correct="正确！CNNs 的新下界比 matmul 好 \((RS/(\sigma_H \sigma_W))^{1/2}\) 倍。">B. \((RS/(\sigma_H \sigma_W))^{1/2}\)</button>
+        <button data-answer="wrong">C. \((RS/(\sigma_H \sigma_W))^2\)</button>
+        <button data-answer="wrong">D. \(\sigma_H \sigma_W / RS\)</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>通信下界是理论极限</h3>
+        <p>通过 Loomis-Whitney 不等式和 HBL 不等式，我们可以证明各种算法的通信下界。</p>
+      </article>
+      <article>
+        <h3>分块可以达到最优</h3>
+        <p>对于 matmul 等算法，分块矩阵乘法达到了通信下界。</p>
+      </article>
+      <article>
+        <h3>一般化框架</h3>
+        <p>s_HBL 线性规划框架可以处理任意"嵌套循环访问数组"的算法。</p>
+      </article>
+      <article>
+        <h3>CNNs 有更好的下界</h3>
+        <p>CNNs 的新通信下界比 matmul 好，因为可以利用滤波器的局部性。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li>Ballard, Demmel, Holtz, Schwartz, "Communication-Optimal Parallel Algorithm for Strassen's Matrix Multiplication," SPAA 2011 (Best Paper)</li>
+      <li>Christ, Tao, Carbery, Bennett, "HBL Inequality on Abelian Groups"</li>
+      <li><a href="https://iocomplexity.corse.inria.fr/iolb" target="_blank" rel="noopener">IO Complexity Lower Bounds Tool</a></li>
+      <li>Demmel, "CS267 Lecture Notes on Communication-Avoiding Algorithms"</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="06-locality-2.html">← 第 6 课</a>
+      <a href="07-distributed-memory.html">第 7 课 →</a>
+    </div>
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

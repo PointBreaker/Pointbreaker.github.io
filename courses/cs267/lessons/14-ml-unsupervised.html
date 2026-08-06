@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>机器学习（无监督） — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 14 课</p>
+    <h1>机器学习（无监督）</h1>
+    <p class="lede">从聚类到降维，从图神经网络到分布式 SpMM：Aydin Buluc 深入讲解无监督学习算法的数学原理与大规模并行实现。</p>
+    <div class="meta">
+      <span>授课：Aydin Buluc</span>
+      <span>视频：<a href="https://youtu.be/MC6GPRbyvFk">YouTube</a></span>
+      <span>预计用时：80 分钟</span>
+    </div>
+    <hr class="rule">
+
+    <h2>聚类方法概览</h2>
+    <p>聚类是无监督学习的核心任务：将数据划分为若干组（cluster），使得组内相似度高、组间相似度低。Aydin Buluc 将聚类方法分为五大类：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>方法</th>
+          <th>核心思想</th>
+          <th>代表算法</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Centroid-based</strong></td>
+          <td>用中心点代表簇，迭代优化中心位置</td>
+          <td>K-Means, K-Medoids</td>
+        </tr>
+        <tr>
+          <td><strong>Flow-based</strong></td>
+          <td>基于图流/网络流的最大流最小割</td>
+          <td>MCL (Markov Cluster)</td>
+        </tr>
+        <tr>
+          <td><strong>Spectral</strong></td>
+          <td>利用图拉普拉斯矩阵的特征向量</td>
+          <td>Normalized Cut, NJW</td>
+        </tr>
+        <tr>
+          <td><strong>Density-based</strong></td>
+          <td>高密度区域形成簇，低密度区域为边界</td>
+          <td>DBSCAN, OPTICS</td>
+        </tr>
+        <tr>
+          <td><strong>Agglomerative</strong></td>
+          <td>自底向上合并最近簇</td>
+          <td>单链接、全链接、WARD</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>两大聚类标准：Compactness vs Connectivity</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>标准</th>
+          <th>含义</th>
+          <th>适用方法</th>
+          <th>示意图</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Compactness</strong>（紧凑性）</td>
+          <td>簇内点到中心的距离最小化</td>
+          <td>K-Means, K-Medoids</td>
+          <td>球形簇</td>
+        </tr>
+        <tr>
+          <td><strong>Connectivity</strong>（连通性）</td>
+          <td>簇内点在图中"连通"即可</td>
+          <td>Spectral, DBSCAN, Agglomerative</td>
+          <td>任意形状簇</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card tip">
+      <h3>如何选择聚类标准？</h3>
+      <p>如果数据簇是<strong>凸形/球形</strong>，用 Compactness（K-Means）；如果簇是<strong>任意形状</strong>（如月牙形、环形），必须用 Connectivity（Spectral/DBSCAN）。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>谱聚类（Spectral Clustering）</h2>
+    <p>谱聚类是一类基于图拉普拉斯矩阵（Graph Laplacian）特征分解的强大聚类方法，能够发现任意形状的簇。</p>
+
+    <h3>第一步：构建相似图</h3>
+    <p>将数据点视为图的顶点，点之间的相似度作为边权重。三种经典构图方式：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>方法</th>
+          <th>边的定义</th>
+          <th>特点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>ε-neighborhood</strong></td>
+          <td>距离 < ε 的点对连边</td>
+          <td>图可能不连通</td>
+        </tr>
+        <tr>
+          <td><strong>k-Nearest Neighbor (kNN)</strong></td>
+          <td>每个点连最近的 k 个邻居</td>
+          <td>图稠密，需对称化</td>
+        </tr>
+        <tr>
+          <td><strong>Fully Connected</strong></td>
+          <td>所有点对都连边，权重用高斯核</td>
+          <td>最稠密，\(W_{ij} = \exp(-\|x_i - x_j\|^2 / 2\sigma^2)\)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>第二步：拉普拉斯矩阵</h3>
+    <p>定义相似矩阵 \(W\)（权重矩阵），度矩阵 \(D = \text{diag}(d_i)\)，其中 \(d_i = \sum_j W_{ij}\)：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>矩阵</th>
+          <th>定义</th>
+          <th>性质</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>非归一化拉普拉斯</strong></td>
+          <td>\(L = D - W\)</td>
+          <td>特征值 ≥ 0</td>
+        </tr>
+        <tr>
+          <td><strong>归一化拉普拉斯（对称）</strong></td>
+          <td>\(L_{sym} = D^{-1/2} L D^{-1/2} = I - D^{-1/2} W D^{-1/2}\)</td>
+          <td>特征值 ∈ [0, 2]</td>
+        </tr>
+        <tr>
+          <td><strong>归一化拉普拉斯（随机游走）</strong></td>
+          <td>\(L_{rw} = D^{-1} L = I - D^{-1} W\)</td>
+          <td>与 \(L_{sym}\) 特征值相同</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>第三步：归一化谱聚类算法（Ng et al. 2002）</h3>
+    <div class="card idea">
+      <h3>NJW 算法步骤</h3>
+      <ol>
+        <li>构建相似矩阵 \(W\)（通常用高斯核 + kNN）</li>
+        <li>计算归一化拉普拉斯 \(L_{sym} = I - D^{-1/2} W D^{-1/2}\)</li>
+        <li>求 \(L_{sym}\) 的 <strong>前 k 个最小特征值</strong>对应的特征向量 \(u_1, ..., u_k\)</li>
+        <li>将特征向量组成矩阵 \(U \in \mathbb{R}^{n \times k}\)，对行归一化得到 \(T\)</li>
+        <li>对 \(T\) 的 n 行运行 <strong>K-Means</strong>，得到 k 个簇</li>
+      </ol>
+    </div>
+
+    <h3>特征值求解：大规模并行算法</h3>
+    <p>当 n 达到百万/亿级时，需要高效的大规模特征值求解器：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>算法</th>
+          <th>核心操作</th>
+          <th>适用场景</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Lanczos</strong></td>
+          <td>Krylov 子空间迭代 + SpMV</td>
+          <td>稀疏矩阵，求少量极端特征值</td>
+        </tr>
+        <tr>
+          <td><strong>SpMV</strong></td>
+          <td>稀疏矩阵-向量乘法</td>
+          <td>Lanczos 的底层原语</td>
+        </tr>
+        <tr>
+          <td><strong>LOBPCG</strong></td>
+          <td>Locally Optimal Block Preconditioned CG</td>
+          <td>比 Lanczos 更稳定，可并行</td>
+        </tr>
+        <tr>
+          <td><strong>PARPACK</strong></td>
+          <td>并行 ARPACK</td>
+          <td>分布式内存 SpMV + 隐式重启</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>谱聚类的计算瓶颈</h3>
+      <p>当 n 很大时，特征分解是主要瓶颈。即使使用 Lanczos/LOBPCG，每次迭代仍需一次 SpMV。对于超大规模图，可能需要数百次迭代才能收敛。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>马尔可夫聚类算法（MCL）</h2>
+    <p><strong>MCL</strong>（Markov Cluster Algorithm）是一种基于随机游走的流聚类方法，由 Stijn van Dongen 提出。其核心思想：在随机游走的"流"中，簇内流动强、簇间流动弱。</p>
+
+    <h3>MCL 迭代：Expansion + Inflation</h3>
+    <p>MCL 交替执行两个操作，作用于随机矩阵 \(M\)（列随机矩阵）：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>数学</th>
+          <th>作用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Expansion</strong></td>
+          <td>\(M \leftarrow M \cdot M\)（SpGEMM）</td>
+          <td>模拟随机游走的 k 步传播，增强连通性</td>
+        </tr>
+        <tr>
+          <td><strong>Inflation</strong></td>
+          <td>\(M_{ij} \leftarrow M_{ij}^r / \sum_k M_{kj}^r\)（Hadamard power）</td>
+          <td>强化强边、弱化弱边，参数 r 控制粒度</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>MCL 的图直觉</h3>
+      <ul>
+        <li><strong>Expansion</strong>：随机游走多步后，概率集中在簇内部（簇内路径多）</li>
+        <li><strong>Inflation</strong>：取 r 次幂后放大差异，类似"赢家通吃"</li>
+        <li>收敛后，矩阵变为<strong>分块对角</strong>形式，每块对应一个簇</li>
+      </ul>
+    </div>
+
+    <h3>MCL 实现优化：Pruning + Recovery + Selection</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>技术</th>
+          <th>作用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Pruning</strong></td>
+          <td>将极小元素置零，保持稀疏性，避免稠密化</td>
+        </tr>
+        <tr>
+          <td><strong>Recovery</strong></td>
+          <td>补偿被剪枝的重要元素，控制误差</td>
+        </tr>
+        <tr>
+          <td><strong>Selection</strong></td>
+          <td>每列只保留 top-k 元素，控制每行/列密度</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>HipMCL：分布式 MCL 实现</h3>
+    <p><strong>HipMCL</strong> 是 Aydin Buluc 团队开发的分布式 MCL 实现，使用 <strong>Sparse SUMMA</strong> 算法进行分布式 SpGEMM：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>特性</th>
+          <th>HipMCL 实现</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>SpGEMM 算法</strong></td>
+          <td>Sparse SUMMA（2D 块循环）</td>
+        </tr>
+        <tr>
+          <td><strong>数据结构</strong></td>
+          <td>分布式 CSR 稀疏矩阵</td>
+        </tr>
+        <tr>
+          <td><strong>可扩展性</strong></td>
+          <td>支持百万级顶点、十亿级边</td>
+        </tr>
+        <tr>
+          <td><strong>典型结果</strong></td>
+          <td>1024 节点、10 亿边图上，数分钟内完成聚类</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card tip">
+      <h3>HipMCL 的扩展性结果</h3>
+      <p>在超大规模蛋白质互作网络上，HipMCL 展示了近线性扩展：节点数从 64 增加到 1024 时，运行时间下降约 14x（理想 16x），证明 Sparse SUMMA 在大规模 SpGEMM 上的高效性。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>降维方法</h2>
+    <p>降维是将高维数据投影到低维空间，同时保留尽可能多的信息。两种经典方法：PCA 和 NMF。</p>
+
+    <h3>PCA 通过 SVD</h3>
+    <p><strong>PCA</strong>（主成分分析）通过奇异值分解实现：</p>
+    <ul class="checklist">
+      <li>对数据矩阵 \(X \in \mathbb{R}^{n \times d}\) 中心化</li>
+      <li>计算 SVD：\(X = U \Sigma V^T\)</li>
+      <li>前 k 个右奇异向量 \(V_k\) 即为 k 个主成分方向</li>
+      <li>降维结果：\(X_k = X V_k = U_k \Sigma_k\)</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>大规模 PCA 的实现</h3>
+      <ul>
+        <li><strong>随机化 SVD</strong>（Halko et al.）：先随机投影再精确 SVD，复杂度从 O(nd²) 降到 O(ndk)</li>
+        <li><strong>分布式 SVD</strong>：TSQR（Tall Skinny QR）分解 + 聚合 SVD</li>
+        <li><strong>迭代方法</strong>：幂迭代、Lanczos 双对角化</li>
+      </ul>
+    </div>
+
+    <h3>非负矩阵分解（NMF）</h3>
+    <p><strong>NMF</strong> 要求分解后的矩阵元素非负，适用于图像、文本等天然非负数据：</p>
+    <p>\[X \approx WH, \quad W \geq 0, H \geq 0\]</p>
+    <p>其中 \(X \in \mathbb{R}^{m \times n}\)，\(W \in \mathbb{R}^{m \times k}\)，\(H \in \mathbb{R}^{k \times n}\)。</p>
+
+    <h3>交替更新框架</h3>
+    <p>NMF 是非凸问题，通常使用<strong>交替优化</strong>策略：固定一个矩阵，优化另一个：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>算法</th>
+          <th>更新规则</th>
+          <th>特点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>MU</strong>（Multiplicative Update）</td>
+          <td>\(W \leftarrow W \circ \frac{XH^T}{WHH^T}\)（Hadamard 除法）</td>
+          <td>简单，自动保持非负，收敛慢</td>
+        </tr>
+        <tr>
+          <td><strong>ALS</strong>（Alternating Least Squares）</td>
+          <td>\(W = \arg\min_{W \geq 0} \|X - WH\|_F\)（NNLS）</td>
+          <td>每步解非负最小二乘</td>
+        </tr>
+        <tr>
+          <td><strong>ANLS</strong>（Alternating NNLS）</td>
+          <td>精确求解 NNLS 子问题</td>
+          <td>比 ALS 更稳定，支持正则化</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>NMF 的并行化挑战</h3>
+      <p>NNLS 子问题（Active Set 方法）是串行的。在分布式环境中，需要按行/列分块，每个节点独立求解局部 NNLS，再聚合结果。通信开销与收敛速度需要权衡。</p>
+    </div>
+
+    <h3>MPI-FAUN：分布式 NMF</h3>
+    <p><strong>MPI-FAUN</strong>（Fast and distributed NMF）使用 MPI 实现分布式 NMF：</p>
+    <ul class="checklist">
+      <li>数据按行分块分布在各节点</li>
+      <li>使用 ANLS 算法，每步并行求解局部 NNLS</li>
+      <li>通过 AllReduce 聚合 \(H H^T\) 和 \(X H^T\)</li>
+      <li>支持大规模文本/推荐系统矩阵分解</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2>半监督学习</h2>
+    <p><strong>半监督学习</strong>结合少量标注数据和大量未标注数据，核心假设：</p>
+    <ul class="checklist">
+      <li><strong>Smoothness assumption</strong>：相似点应有相似标签</li>
+      <li><strong>Cluster assumption</strong>：同一簇的点很可能同标签</li>
+      <li><strong>Manifold assumption</strong>：高维数据位于低维流形上</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>图上的半监督学习</h3>
+      <p>将数据构建为图，标签传播（Label Propagation）算法迭代地将标签从标注点传播到未标注点：</p>
+      <p>\[Y^{(t+1)} = D^{-1} W Y^{(t)}\]</p>
+      <p>这与谱聚类的 Expansion 操作本质相同——都是 SpMV！</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2>图神经网络（GNN）</h2>
+    <p><strong>图神经网络</strong>将深度学习推广到图结构数据。最经典的 GCN（Graph Convolutional Network）每一层的计算可以表示为：</p>
+
+    <div class="card idea">
+      <h3>GCN 训练 = SpMM</h3>
+      <p>GCN 的前向传播核心操作是<strong>稀疏矩阵-稠密矩阵乘法</strong>（SpMM）：</p>
+      <p>\[H^{(l+1)} = \sigma(\tilde{D}^{-1/2} \tilde{A} \tilde{D}^{-1/2} H^{(l)} W^{(l)})\]</p>
+      <p>其中 \(\tilde{A}\) 是稀疏邻接矩阵，\(H^{(l)}\) 是稠密节点特征，\(W^{(l)}\) 是权重矩阵。</p>
+    </div>
+
+    <h3>分布式 SpMM 算法</h3>
+    <p>大规模 GNN 训练需要分布式 SpMM。Aydin Buluc 介绍了几种经典并行策略：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>算法</th>
+          <th>数据分布</th>
+          <th>通信模式</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1D SpMM</strong></td>
+          <td>按行分块</td>
+          <td>AllGather 特征矩阵</td>
+        </tr>
+        <tr>
+          <td><strong>1.5D SpMM</strong></td>
+          <td>行分块 + K 副本</td>
+          <td>ReduceScatter + AllGather（K 折通信量）</td>
+        </tr>
+        <tr>
+          <td><strong>2D SpMM</strong></td>
+          <td>2D 块循环</td>
+          <td>行/列 AllGather（Cannon 风格）</td>
+        </tr>
+        <tr>
+          <td><strong>3D SpMM</strong></td>
+          <td>3D 处理器网格</td>
+          <td>K 维度上 Reduce（最小通信）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card tip">
+      <h3>1.5D SpMM 的 trade-off</h3>
+      <p>1.5D SpMM 将稀疏矩阵复制 K 份，每份按行分块。通信量降为 1D 的 1/K，但计算量和内存增加 K 倍。在带宽受限的集群上，K=4~8 通常是最优选择。</p>
+    </div>
+
+    <h3>CAGNET：分布式 GCN 训练</h3>
+    <p><strong>CAGNET</strong>（Communication-Avoiding GNN）是 3D SpMM 的具体实现：</p>
+    <ul class="checklist">
+      <li>将邻接矩阵和特征矩阵分布在 3D 处理器网格上</li>
+      <li>在 K 维度上执行 Reduce-Scatter</li>
+      <li>通信量比 2D 减少 \(O(\sqrt[3]{P})\) 倍</li>
+      <li>在超大规模图上展示近线性扩展</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2>采样方法：GraphSAGE 与 LADIES</h2>
+    <p>全图 SpMM 在大规模图上仍太贵。<strong>采样方法</strong>通过 mini-batch 降低计算量：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>方法</th>
+          <th>采样策略</th>
+          <th>并行实现</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>GraphSAGE</strong></td>
+          <td>每层均匀采样固定数目的邻居</td>
+          <td>采样 = 稀疏矩阵索引（SpGEMM 变体）</td>
+        </tr>
+        <tr>
+          <td><strong>LADIES</strong></td>
+          <td>按权重采样，优先选重要邻居</td>
+          <td>采样 + 稀疏矩阵乘法</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>分布式采样：1.5D SpGEMM</h3>
+    <p>分布式采样可以通过 <strong>1.5D SpGEMM</strong> 高效实现：</p>
+    <ul class="checklist">
+      <li>将采样矩阵复制 K 份，每份按行分块</li>
+      <li>每个节点独立采样本地邻居</li>
+      <li>通过 AllGather 收集邻居特征</li>
+      <li>通信量降为 1D 的 1/K</li>
+    </ul>
+
+    <div class="card idea">
+      <h3>采样与 SpGEMM 的统一视角</h3>
+      <p>GraphSAGE/LADIES 的采样步骤本质上是一种<strong>稀疏矩阵乘法</strong>：采样矩阵（稀疏）× 邻居矩阵（稠密）。因此，所有分布式 SpMM 算法（1D/1.5D/2D/3D）都可以直接应用于采样步骤！</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article><h3>聚类方法谱系</h3><p>Centroid/Flow/Spectral/Density/Agglomerative 五大类，Compactness vs Connectivity 两大标准。</p></article>
+      <article><h3>谱聚类 = 图特征分解</h3><p>构建相似图 → 拉普拉斯矩阵 → 前 k 特征向量 → K-Means。Lanczos/LOBPCG 是核心求解器。</p></article>
+      <article><h3>MCL = 流聚类</h3><p>Expansion（SpGEMM）+ Inflation（Hadamard power）交替迭代，HipMCL 实现大规模分布式。</p></article>
+      <article><h3>NMF 交替优化</h3><p>MU/ALS/ANLS 三种算法，分布式 NNLS 是关键，MPI-FAUN 是典型实现。</p></article>
+      <article><h3>GNN = 分布式 SpMM</h3><p>GCN 训练核心是 SpMM，1.5D/3D 算法避免通信瓶颈；采样方法统一为 SpGEMM。</p></article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！谱聚类的核心是图拉普拉斯矩阵的特征值分解。" data-incorrect="不正确。谱聚类的核心是图拉普拉斯矩阵的特征值分解（Spectral/Eigen decomposition）。">
+      <p><strong>问题 1：</strong>谱聚类（Spectral Clustering）的核心数学工具是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 矩阵的奇异值分解（SVD）</button>
+        <button data-choice="b" aria-pressed="false">B. 图拉普拉斯矩阵的特征值分解</button>
+        <button data-choice="c" aria-pressed="false">C. 随机矩阵的幂迭代</button>
+        <button data-choice="d" aria-pressed="false">D. 非负矩阵分解（NMF）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！MCL 交替执行 Expansion（SpGEMM）和 Inflation（Hadamard power）。" data-incorrect="不正确。MCL 的两个核心操作是 Expansion（矩阵乘法/SpGEMM）和 Inflation（Hadamard power）。">
+      <p><strong>问题 2：</strong>MCL（Markov Cluster Algorithm）的每次迭代包含哪两个操作？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. Expansion 和 Inflation</button>
+        <button data-choice="b" aria-pressed="false">B. Expansion 和 Pruning</button>
+        <button data-choice="c" aria-pressed="false">C. Selection 和 Recovery</button>
+        <button data-choice="d" aria-pressed="false">D. Inflation 和 Normalization</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！HipMCL 使用 Sparse SUMMA 算法进行分布式 SpGEMM。" data-incorrect="不正确。HipMCL 使用 Sparse SUMMA（2D 块循环）算法。">
+      <p><strong>问题 3：</strong>HipMCL 使用哪种分布式 SpGEMM 算法？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 1D Row-wise</button>
+        <button data-choice="b" aria-pressed="false">B. Sparse SUMMA</button>
+        <button data-choice="c" aria-pressed="false">C. Cannon's algorithm</button>
+        <button data-choice="d" aria-pressed="false">D. 3D SpGEMM</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！NMF 是 non-convex，不是 convex。MU/ALS/ANLS 都是凸优化算法。" data-incorrect="不正确。NMF 整体是 non-convex 问题（虽然单个子问题是凸的）。">
+      <p><strong>问题 4：</strong>关于 NMF（非负矩阵分解），以下哪项正确？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. NMF 是凸优化问题</button>
+        <button data-choice="b" aria-pressed="false">B. MU 算法保证全局最优</button>
+        <button data-choice="c" aria-pressed="false">C. ANLS 每步求解非负最小二乘（NNLS）子问题</button>
+        <button data-choice="d" aria-pressed="false">D. NMF 结果唯一</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！GCN 前向传播的核心是 SpMM（稀疏矩阵 × 稠密矩阵）。" data-incorrect="不正确。GCN 的核心计算是 SpMM（稀疏邻接矩阵 × 稠密特征矩阵）。">
+      <p><strong>问题 5：</strong>GCN（Graph Convolutional Network）训练的核心计算操作是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 稀疏矩阵-向量乘法（SpMV）</button>
+        <button data-choice="b" aria-pressed="false">B. 稀疏矩阵-稠密矩阵乘法（SpMM）</button>
+        <button data-choice="c" aria-pressed="false">C. 稠密矩阵乘法（GEMM）</button>
+        <button data-choice="d" aria-pressed="false">D. 稀疏-稀疏矩阵乘法（SpGEMM）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="nav">
+      <a href="13-ray.html">← 第 13 课：Ray 分布式框架</a>
+      <a href="15-parallel-matmul.html">第 15 课：并行矩阵乘法 →</a>
+    </div>
+    <footer>CS267: Applications of Parallel Computers · UC Berkeley · Spring 2025</footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

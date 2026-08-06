@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab: 锁 — MIT 6.1810</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.1810 · Lab lock · 锁</p>
+    <h1>Lab: 锁</h1>
+    <p class="lede">在本实验中，你将获得重新设计代码以提高并行性的经验。多核机器上并行性差的常见症状是高锁竞争。</p>
+
+    <div class="meta">
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>分支：</strong>lock</p>
+      <p><strong>实验日期：</strong>2026 秋季</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="lab-prereq">
+      <p>在编写代码之前，请阅读<a href="https://pdos.csail.mit.edu/6.828/2025/xv6/book-riscv-rev5.pdf" target="_blank" rel="noopener">xv6 手册</a>的以下部分：</p>
+      <ul>
+        <li>第 7 章："锁定"和相应代码</li>
+        <li>第 3.5 节："代码：物理内存分配器"</li>
+      </ul>
+    </div>
+
+    <pre><code class="language-bash">$ git fetch
+$ git checkout lock
+$ make clean</code></pre>
+
+    <h2>内存分配器 <span class="badge moderate">中等</span></h2>
+
+    <p>程序 user/kalloctest 对 xv6 的内存分配器施加压力：三个进程增长和缩小其地址空间，导致对 <tt>kalloc</tt> 和 <tt>kfree</tt> 的许多调用。</p>
+
+    <pre><code class="language-bash">$ kalloctest
+start test1
+test1 results:
+--- lock kmem/bcache stats
+lock: kmem: #test-and-set 18820 #acquire() 433058
+lock: bcache: #test-and-set 0 #acquire() 1744
+--- top 5 contended locks:
+lock: uart: #test-and-set 97375 #acquire() 117
+...
+tot= 18820
+test1 FAIL</code></pre>
+
+    <p>kalloctest 中锁竞争的根因是 <tt>kalloc()</tt> 有一个受单个锁保护的空闲列表。要消除锁竞争，你必须重新设计内存分配器以避免单个锁和列表。</p>
+
+    <div class="card idea">
+      <p>基本思想是维护每个 CPU 的空闲列表，每个列表有自己的锁。不同 CPU 上的分配和释放可以并行运行，因为每个 CPU 将操作不同的列表。主要挑战是处理一个 CPU 的空闲列表为空但另一个 CPU 的列表有空闲内存的情况。</p>
+    </div>
+
+    <div class="lab-required">
+      <p>你的工作是实现每个 CPU 的空闲列表，以及当一个 CPU 的空闲列表为空时进行"窃取"。你必须给所有锁命名以 "kmem" 开头。</p>
+    </div>
+
+    <pre><code class="language-bash">$ kalloctest
+start test1
+test1 results:
+--- lock kmem/bcache stats
+lock: kmem: #test-and-set 0 #acquire() 117911
+lock: kmem: #test-and-set 0 #acquire() 169464
+lock: kmem: #test-and-set 0 #acquire() 145786
+lock: bcache: #test-and-set 0 #acquire() 1744
+...
+tot= 0
+test1 OK
+...
+$ usertests -q
+...
+ALL TESTS PASSED</code></pre>
+
+    <p>一些提示：</p>
+    <ul>
+      <li>你可以使用 kernel/param.h 中的常量 <tt>NCPU</tt></li>
+      <li>让 <tt>freerange</tt> 将所有空闲内存给运行 <tt>freerange</tt> 的 CPU</li>
+      <li><tt>cpuid</tt> 函数返回当前核心编号，但只有在关闭中断时调用它并使用其结果才是安全的。你应该使用 <tt>push_off()</tt> 和 <tt>pop_off()</tt></li>
+      <li>查看 kernel/sprintf.c 中的 <tt>snprintf</tt> 函数了解字符串格式化想法</li>
+      <li>可选择使用 xv6 的 race detector 运行解决方案：<tt>make KCSAN=1 qemu</tt></li>
+    </ul>
+
+    <h2>读写锁 <span class="badge moderate">中等</span></h2>
+
+    <p>这部分任务与前一半独立；你可以完成这部分（并通过测试）无论是否完成前一半。</p>
+
+    <p>考虑 xv6 的 <tt>sys_pause</tt> 和 <tt>sys_uptime</tt> 函数，它们读取全局 <tt>ticks</tt> 变量。由于该变量可能被 <tt>clockintr</tt> 并发更新，这两个函数在读取 <tt>ticks</tt> 之前获取 <tt>tickslock</tt> 自旋锁。这防止了 <tt>clockintr</tt> 并发修改 <tt>ticks</tt>，但也防止了多个核心同时读取 <tt>ticks</tt>，而这本来是可以的。</p>
+
+    <div class="card idea">
+      <p>这个问题的常见解决方案是使用<strong>读写锁</strong>。读写锁引入了两种锁持有者的概念：读者和写者。同一时间最多只能有一个写者（有写者时不能有任何读者），但可以有多个读者（只要没有写者）。</p>
+    </div>
+
+    <pre><code class="language-bash">// API
+void            initrwlock(struct rwspinlock*);
+void            read_acquire(struct rwspinlock*);
+void            read_release(struct rwspinlock*);
+void            write_acquire(struct rwspinlock*);
+void            write_release(struct rwspinlock*);</code></pre>
+
+    <p>读写锁的一个微妙问题是，如果有很多读者，写者可能永远得不到运行机会。为了解决这个问题，读写锁通常实现写者优先级方案：一旦写者尝试获取锁，后续读者必须等待写者成功获取并释放锁。</p>
+
+    <div class="lab-required">
+      <p>在 xv6 中实现读写自旋锁，遵循上述 API 和语义。确保读者不会饿死写者：如果有任何挂起的写者，更多读者不能获取锁。</p>
+      <p>你的 <tt>read_acquire</tt> 实现绝不能等待另一个持有读锁的 CPU，或正在获取或释放读锁的 CPU。（这个性质技术上称为 "wait-free"。）这意味着你的实现不能获取自旋锁来实现读写锁。你应该直接使用原子操作。</p>
+    </div>
+
+    <pre><code class="language-bash">$ rwlktest
+rwspinlock_test: step 1: initrwlock
+rwspinlock_test: step 2: concurrent read_acquire
+...
+rwspinlock_test: step 31: done
+rwspinlock_test(1): 0
+rwspinlock_test(0): 0
+rwspinlock_test(2): 0
+rwspinlock_test(3): 0
+rwlktest: 4/4 CPUs succeeded</code></pre>
+
+    <p>一些提示：</p>
+    <ul>
+      <li>首先查看 kernel/spinlock.c 中的 <tt>sys_rwlktest</tt></li>
+      <li>注意可能的交错。例如，如果读者看到没有挂起的写者并想获取锁，你怎么知道它仍然安全获取锁？</li>
+      <li>阅读 gcc 内置函数了解原子操作</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>提交实验</h2>
+
+    <h3>时间花费</h3>
+    <p>创建一个新文件 <tt>time.txt</tt>，放入一个整数，表示你花在实验上的小时数。</p>
+
+    <h3>答案</h3>
+    <p>如果本实验有问题，将答案写在 <tt>answers-lock.txt</tt> 中。</p>
+
+    <h3>提交</h3>
+    <p>运行 <kbd>make zipball</kbd>，上传到 Gradescope。</p>
+
+    <div class="card warning">
+      <ul>
+        <li>请运行 <kbd>make grade</kbd> 确保代码通过所有测试</li>
+        <li>在运行 <kbd>make zipball</kbd> 之前提交任何修改的源代码</li>
+      </ul>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="net.html">← 上一个实验：网络驱动</a>
+      <a href="fs.html">下一个实验：文件系统 →</a>
+    </div>
+    <footer>
+      <p>MIT 6.1810 (6.1810): Operating System Engineering · Lab: 锁</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

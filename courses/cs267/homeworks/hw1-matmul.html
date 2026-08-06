@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW1 导读 — 矩阵乘法优化</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/guide.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <div class="guide-banner">
+      <p class="guide-eyebrow">CS267 · Homework 1 导读</p>
+      <h1>矩阵乘法优化</h1>
+      <p class="guide-lede">在 NERSC Perlmutter 单核上压榨 <strong>dgemm</strong> 的每一 FLOP——从内存层次到 Roofline，从分块到 AVX 内联函数。</p>
+      <div class="guide-meta">
+        <span>📅 截止：2025-02-11</span>
+        <span>📖 Lecture 1-3</span>
+        <span>💻 C (GCC 12.3)</span>
+        <span>🏆 正确性 + 性能 + 解释</span>
+      </div>
+    </div>
+
+    <!-- 与课程的关系 -->
+    <h2>与课程的关系</h2>
+    <div class="connection-map">
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 1 · 导论</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">并行计算基础、性能度量</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 2 · 内存层次</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">Cache 分块、局部性原理</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 3 · Roofline</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">计算/内存瓶颈分析</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture · SIMD</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">AVX2 向量化指令</div>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 任务概述 -->
+    <h2>任务概述</h2>
+    <p class="lede">你只能修改 <code>dgemm-blocked.c</code> 中的 <code>square_dgemm()</code> 函数，目标是在 Perlmutter 的单核上逼近理论峰值 <strong>56 GFlop/s</strong>。</p>
+
+    <div class="loop">
+      <article>
+        <p><strong>理论峰值</strong><br>3.5 GHz × 4 (FMA) × 2 (FLOP/FMA) × 2 (流水线) = 56 GFlop/s</p>
+      </article>
+      <article>
+        <p><strong>运算下界</strong><br>不能少于 2n³ 次浮点运算（Strassen 可选，但不推荐）</p>
+      </article>
+      <article>
+        <p><strong>存储顺序</strong><br>矩阵按列主序（Column-major）存储，注意遍历顺序</p>
+      </article>
+      <article>
+        <p><strong>正确性验证</strong><br>|square_dgemm(n,A,B,0) − A×B| &lt; ε·n·|A|·|B|</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 组件表 -->
+    <h2>代码组件一览</h2>
+    <table class="component-table">
+      <thead>
+        <tr>
+          <th>文件 / 函数</th>
+          <th>角色</th>
+          <th>可以修改？</th>
+          <th>课程关联</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="comp-name">dgemm-blocked.c → square_dgemm()</td>
+          <td>你唯一的战场：实现优化的矩阵乘法</td>
+          <td>✅ 是</td>
+          <td class="comp-lec">Lec 2, 3</td>
+        </tr>
+        <tr>
+          <td class="comp-name">dgemm-bench.c</td>
+          <td>计时与 Roofline 测量框架</td>
+          <td>❌ 否</td>
+          <td class="comp-lec">Lec 3</td>
+        </tr>
+        <tr>
+          <td class="comp-name">dgemm-ref.c</td>
+          <td>参考实现，用于正确性对比</td>
+          <td>❌ 否</td>
+          <td class="comp-lec">—</td>
+        </tr>
+        <tr>
+          <td class="comp-name">Makefile / CMakeLists.txt</td>
+          <td>编译与打包配置</td>
+          <td>⚠️ 谨慎</td>
+          <td class="comp-lec">工具链</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- 优化路线 -->
+    <h2>优化路线（Step by Step）</h2>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>理解 Roofline 与瓶颈</h3>
+      <p>先用 <code>dgemm-bench</code> 跑参考实现，观察当前 GFlop/s 与 Roofline 的关系。Perlmutter 节点的计算峰值 56 GFlop/s，L1/L2/DRAM 带宽决定了你的上限。问自己：这个矩阵是 <strong>compute-bound</strong> 还是 <strong>memory-bound</strong>？</p>
+      <ul class="checklist">
+        <li>绘制初始 Roofline 点</li>
+        <li>计算运算强度 (Arithmetic Intensity = FLOP / Byte)</li>
+        <li>确定目标分块层级 (L1 / L2 / L3)</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>Cache 分块 (Blocking / Tiling)</h3>
+      <p>把大矩阵切成小块，让数据在 Cache 中驻留。这是从 O(n³) 内存流量 → O(n³/√M) 的关键一步。</p>
+      <ul class="checklist">
+        <li>外层循环按 Block 大小 (MC, NC, KC) 切分</li>
+        <li>注意列主序遍历：内层循环应沿列方向访问</li>
+        <li>尝试不同 Block 大小：64、128、256、512</li>
+      </ul>
+      <div class="pitfall">
+        <strong>⚠️ 常见坑：</strong>不要假设行主序！列主序意味着内层循环应遍历行索引，以获得连续内存访问（stride-1）。
+      </div>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>寄存器分块内核 (Register Blocking)</h3>
+      <p>把每个 Block 再切成 4×4、6×6 的小核，让 CPU 寄存器直接累加。手写 AVX2 内联函数（<code>_mm256_fmadd_pd</code>）或内联汇编。</p>
+      <ul class="checklist">
+        <li>每个内核使用 16+ 个 YMM 寄存器</li>
+        <li>手动展开内层循环以减少循环开销</li>
+        <li>考虑使用 <code>__restrict__</code> 帮助编译器别名分析</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">4</div>
+      <h3>手动预取 (Software Prefetching)</h3>
+      <p>当数据还在 L2 时就用 <code>_mm_prefetch</code> 提前拉入 L1，隐藏内存延迟。</p>
+      <ul class="checklist">
+        <li>预取距离要足够远（通常 8-16 个 Cache Line）</li>
+        <li>不要预取过远导致 Cache 污染</li>
+        <li>区分 L1 (_MM_HINT_T0) 与 L2 (_MM_HINT_T1) 预取</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">5</div>
+      <h3>打包 (Packing / Copy Optimization)</h3>
+      <p>把 Block 从主存拷贝到连续的局部缓冲区，减少 TLB miss 并改善向量化对齐。</p>
+      <ul class="checklist">
+        <li>Pack A 的子矩阵为连续内存</li>
+        <li>Pack B 的子矩阵为连续内存</li>
+        <li>确保 32 字节对齐以获得最佳 AVX 性能</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 编译与提交 -->
+    <h2>编译与提交</h2>
+    <pre><code class="language-bash"># 在 Perlmutter 上编译
+module load gcc/12.3
+mkdir build && cd build
+cmake -DGROUP_NO=NN ..
+make package
+
+# 提交生成的 .tar.gz 文件</code></pre>
+
+    <div class="pitfall">
+      <strong>⚠️ 提交注意：</strong>必须通过 <code>cmake -DGROUP_NO=NN ..</code> 指定组号，否则无法打包。报告最多 8 页，包含性能图、Roofline 分析和优化解释。
+    </div>
+
+    <hr class="rule">
+
+    <!-- 学习心态 -->
+    <div class="mindset-banner">
+      <p><strong>这不是"写一个矩阵乘法"，而是"理解为什么你的 CPU 跑不到峰值"。</strong> 每一步优化都要有 Roofline 数据支撑——不要盲调参数，要让数据告诉你下一步该优化什么。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- 报告要点 -->
+    <h2>报告应包含什么</h2>
+    <table class="component-table">
+      <thead>
+        <tr>
+          <th>部分</th>
+          <th>关键内容</th>
+          <th>页数建议</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="comp-name">Roofline 图</td>
+          <td>每个优化阶段的 Roofline 点，标注分阶段提升</td>
+          <td class="comp-lec">1 页</td>
+        </tr>
+        <tr>
+          <td class="comp-name">性能曲线</td>
+          <td>GFlop/s vs 矩阵大小 n，对比参考实现</td>
+          <td class="comp-lec">1 页</td>
+        </tr>
+        <tr>
+          <td class="comp-name">优化方法论</td>
+          <td>每步优化做了什么、为什么有效、数据支撑</td>
+          <td class="comp-lec">3-4 页</td>
+        </tr>
+        <tr>
+          <td class="comp-name">挑战与反思</td>
+           <td class="comp-lec">瓶颈在哪、为何未达到峰值</td>
+          <td class="comp-lec">1-2 页</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- Quiz -->
+    <h2>自测 Quiz</h2>
+
+    <div class="quiz" data-answer="b" data-correct="正确！列主序下沿行访问是 stride-1。" data-incorrect="再想想——哪种遍历顺序能让内存连续？">
+      <p><strong>Q1.</strong> 在列主序存储中，如何遍历矩阵才能获得最佳的内存局部性？</p>
+      <div class="quiz-options">
+        <button data-choice="a">内层循环遍历列索引</button>
+        <button data-choice="b">内层循环遍历行索引</button>
+        <button data-choice="c">行列无差别</button>
+        <button data-choice="d">必须转置为行主序</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="c" data-correct="正确！FMA 每个周期完成 2 FLOP。" data-incorrect="提示：FMA = Fused Multiply-Add。">
+      <p><strong>Q2.</strong> Perlmutter 节点单核的理论峰值 56 GFlop/s 是如何计算的？</p>
+      <div class="quiz-options">
+        <button data-choice="a">3.5 GHz × 2 (核心) × 4 (AVX) × 2 (FMA)</button>
+        <button data-choice="b">3.5 GHz × 4 (核心) × 2 (AVX) × 2 (FMA)</button>
+        <button data-choice="c">3.5 GHz × 4 (AVX 宽度) × 2 (FLOP/FMA) × 2 (流水线 FMA)</button>
+        <button data-choice="d">3.5 GHz × 8 (超线程) × 2 (FMA)</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="a" data-correct="正确！Blocking 把内存流量从 O(n³) 降到 O(n³/√M)。" data-incorrect="想想分块如何减少内存流量。">
+      <p><strong>Q3.</strong> 为什么 Cache Blocking 能显著提升矩阵乘法性能？</p>
+      <div class="quiz-options">
+        <button data-choice="a">它减少了内存流量，把数据重用放在 Cache 中</button>
+        <button data-choice="b">它减少了浮点运算总量</button>
+        <button data-choice="c">它消除了所有 Cache Miss</button>
+        <button data-choice="d">它把矩阵乘法变成 O(n²)</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="d" data-correct="正确！Strassen 是可选的，且引入更多复杂性。" data-incorrect="题目说“不能少于 2n³”，这意味着 Strassen 是...">
+      <p><strong>Q4.</strong> 关于 Strassen 算法，以下哪项正确？</p>
+      <div class="quiz-options">
+        <button data-choice="a">必须使用 Strassen 才能达到峰值</button>
+        <button data-choice="b">Strassen 能减少内存流量但增加运算量</button>
+        <button data-choice="c">Strassen 是题目强制要求的</button>
+        <button data-choice="d">Strassen 可选，但题目要求运算量 ≥ 2n³</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <div class="quiz" data-answer="b" data-correct="正确！软件预取应在数据还在 L2 时发起。" data-incorrect="预取太晚没用，太早会污染 Cache。">
+      <p><strong>Q5.</strong> 软件预取 (Software Prefetching) 的最佳时机是？</p>
+      <div class="quiz-options">
+        <button data-choice="a">在数据进入寄存器之后</button>
+        <button data-choice="b">在数据还在 L2 Cache 时提前发起</button>
+        <button data-choice="c">在矩阵乘法开始前一次性预取全部</button>
+        <button data-choice="d">每次迭代都预取同一地址</button>
+      </div>
+      <p class="quiz-feedback" data-feedback></p>
+    </div>
+
+    <!-- 导航 -->
+    <div class="nav">
+      <a href="../index.html">← 返回 CS267</a>
+      <a href="hw2-1-openmp.html">下一个 HW →</a>
+    </div>
+
+    <footer><p>CS267: Applications of Parallel Computers · UC Berkeley</p></footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

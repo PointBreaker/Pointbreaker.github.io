@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 24 课：计算生物学 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 24 课</p>
+    <h1>计算生物学</h1>
+    <p class="lede">计算生物学将并行计算机的力量应用于生命科学的重大挑战。本课聚焦于基因组组装、蛋白质家族识别、序列比对和后缀数组等核心问题，展示稀疏矩阵、图算法和字符串算法如何驱动现代生物学的大规模数据分析——从 2.6 TB 宏基因组组装到 4 亿蛋白质序列的全对全搜索。</p>
+    <div class="meta">
+      <span>授课：Aydin Buluc</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等-困难</span>
+    </div>
+    <p><strong>视频：</strong><a href="https://youtu.be/NcZw1AX3ENQ" target="_blank" rel="noopener">Lecture 24 Video</a></p>
+    <hr class="rule">
+
+    <h2>计算生物学简介</h2>
+    <p>计算生物学（Computational Biology）是一个高度跨学科的领域，涉及计算机科学、统计学、数学和分子生物学的交叉。它包含两大方向：</p>
+    <ul class="checklist">
+      <li><strong>仿真方向</strong>：细胞模拟、蛋白质折叠、分子动力学——需要大规模数值模拟</li>
+      <li><strong>数据分析方向</strong>：基因组学（-omics）数据分析——需要处理 TB 级测序数据</li>
+    </ul>
+    <p>本课聚焦于数据分析方向，特别是基因组学中的核心计算问题。根据 Yelick 等人 2020 年发表于 <em>Philosophical Transactions A</em> 的综述 "The Parallelism Motifs of Genomic Data Analysis"，基因组数据分析呈现出若干具有代表性的并行计算模式，包括稀疏线性代数、图遍历、字符串算法等。这些模式与 CS267 课程中讨论的 Berkeley 13 motifs 高度吻合——生物信息学是并行计算 motifs 的天然应用场景。理解这些 motifs 有助于将通用的并行算法设计技术应用到生物学问题中。</p>
+    <p>为什么 CS267 要讲计算生物学？因为生物大数据是驱动高性能计算（HPC）发展的核心应用之一。2018 年 MetaHipMer 获得 SC Best Paper Nominee，2022 年 PASTIS 入围 ACM Gordon Bell Prize 决赛——这些成果验证了并行计算在解决重大生物学问题中的关键作用。同时，生物数据的独特性（不规则、高噪声、极大规模）对并行算法设计提出了新的挑战，推动了通信避免算法、层次化算法、负载均衡等技术的发展。对 CS267 学生而言，这堂课展示了如何将课程中学到的并行编程模型（MPI、UPC++、OpenMP、CUDA）和算法技术应用到真实的重大科学问题中。</p>
+
+    <h2>课程大纲与 Motifs</h2>
+    <p>本课涵盖计算生物学中六类核心问题，它们共享若干并行计算 motifs：</p>
+    <table>
+      <thead>
+        <tr><th>问题</th><th>核心算法</th><th>并行 Motif</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>De novo 基因组组装</td><td>De Bruijn 图、哈希表、图遍历</td><td>不规则图、分布式哈希</td></tr>
+        <tr><td>Read-to-Contig 比对</td><td>Seed-and-Extend、哈希索引</td><td>稀疏查找、不规则通信</td></tr>
+        <tr><td>长读段组装</td><td>SpGEMM、传递性归约</td><td>稀疏图算法</td></tr>
+        <tr><td>蛋白质家族识别</td><td>多对多搜索、马尔可夫聚类</td><td>SpGEMM、图聚类</td></tr>
+        <tr><td>双序列比对</td><td>动态规划、Hirschberg 分治</td><td>对角并行、递归并行</td></tr>
+        <tr><td>后缀数组</td><td>DC3 递归构造、合并</td><td>并行排序、AlltoAll</td></tr>
+      </tbody>
+    </table>
+    <p>课程详细学习目标：</p>
+    <ul class="checklist">
+      <li>理解基因组（与宏基因组）组装的算法流程和并行化挑战</li>
+      <li>掌握基于哈希表的索引（meraligner）和 Bloom Filter 的使用</li>
+      <li>理解稀疏矩阵方法（SpGEMM）如何统一多种生物数据分析</li>
+      <li>掌握蛋白质家族识别的两步流程：PASTIS 搜索 + HipMCL 聚类</li>
+      <li>理解双序列比对的动态规划算法和 Hirschberg 线性空间优化</li>
+      <li>掌握后缀数组的 DC3 线性时间构造和 pDC3 并行版本</li>
+    </ul>
+
+    <h2>1. De novo 基因组组装问题</h2>
+    <p>基因组组装是计算生物学中最具挑战性的问题之一。其核心任务是：给定测序仪产生的短读段（reads），重建原始的 DNA 序列。与"有参考基因组"的比对不同，<em>de novo</em> 组装不依赖任何参考序列，因此难度更大。该问题的计算规模极为庞大：人类基因组约 30 亿碱基对，而一个测序实验可能产生数 TB 的原始数据，覆盖度（coverage）通常为 30-100x——即每个碱基平均被测序 30-100 次。小麦等复杂植物基因组可达 20 Gbp，是人类的 7 倍，而蝾螈基因组可达 30 Gbp。如此大规模的数据使得并行计算成为必需——串行工具无法在合理时间内完成组装，共享内存工具受限于单节点内存容量（通常几百 GB），必须使用分布式内存的超级计算机。</p>
+
+    <h3>拼图类比</h3>
+    <p>基因组组装可以类比为拼图游戏：想象你有三本相同的小说，所有页面被随机切成窄纸条，且每个纸条上可能有随机拼写错误。你的任务是从这些纸条中重建出一本完整的小说。DNA 测序的过程与此类似：</p>
+    <ul class="checklist">
+      <li><strong>DNA 序列</strong>：一条包含 A/C/G/T 四种碱基的长链，人类基因组约 30 亿个碱基对（3 Gbp）</li>
+      <li><strong>读段（Reads）</strong>：测序仪只能读取 20-30K 碱基的短片段，且包含测序错误</li>
+      <li><strong>无参考基因组</strong>：我们面对的是未知序列</li>
+    </ul>
+
+    <h3>基因组规模对比</h3>
+    <table>
+      <thead>
+        <tr><th>物种</th><th>基因组大小</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Switchgrass（柳枝稷）</td><td>1.4 Gbp</td></tr>
+        <tr><td>Maize（玉米）</td><td>2.4 Gbp</td></tr>
+        <tr><td>Human（人类）</td><td>3 Gbp</td></tr>
+        <tr><td>Barley（大麦）</td><td>7 Gbp</td></tr>
+        <tr><td>Wheat（小麦）</td><td>17 Gbp</td></tr>
+        <tr><td>Pine（松树）</td><td>20 Gbp</td></tr>
+        <tr><td>Salamander（蝾螈）</td><td>20-30 Gbp</td></tr>
+      </tbody>
+    </table>
+
+    <h3>组装流程的三个阶段</h3>
+    <p>现代基因组组装通常分为三个阶段：</p>
+    <ol>
+      <li><strong>Contigs（重叠群）</strong>：由重叠的 reads 拼接而成的连续序列片段</li>
+      <li><strong>Scaffolds（支架）</strong>：利用配对末端读段（paired-end reads）将 contigs 按顺序和方向排列，中间可能有 gap</li>
+      <li><strong>染色体（Chromosomes）</strong>：将 scaffolds 进一步组装到染色体级别</li>
+    </ol>
+    <p>在整个流程中，计算瓶颈各不相同：k-mer 分析阶段是 I/O 密集和带宽密集（需要读取所有 reads）；De Bruijn 图遍历是延迟不规则（随机哈希表访问）；scaffolding 阶段的 read-to-contig 比对则是计算密集。这要求并行计算机在带宽、延迟和计算能力上都有良好表现。</p>
+
+    <div class="card warning">
+      <h3>核心挑战</h3>
+      <ul>
+        <li><strong>测序错误</strong>：读段中可能存在碱基替换、插入和缺失错误</li>
+        <li><strong>重复区域</strong>：基因组中存在大量重复序列，使得短读段的正确定位变得困难</li>
+        <li><strong>数据规模</strong>：小麦基因组 20 GB，需要处理 TB 级的测序数据</li>
+      </ul>
+    </div>
+
+    <h2>2. HipMer 组装流程</h2>
+    <p>HipMer（High-performance de novo Mer assembler）是一个极端规模的并行基因组组装器，由 LBL（劳伦斯伯克利国家实验室）开发。它采用 k-mer（长度为 k 的短序列）作为基本处理单元。整个流程在计算上属于 I/O 密集、带宽密集、内存密集和延迟不规则访问的混合型负载——这正是并行计算机设计需要应对的典型挑战。</p>
+
+    <h3>K-mer 分析（三阶段）</h3>
+    <p>HipMer 对 reads 进行三轮并行 k-mer 分析，逐步过滤错误、识别高质量扩展：</p>
+
+    <h4>Pass 1：基数估计与 Bloom Filter 构建</h4>
+    <p>每个处理器并行解析其所分配的 reads 为 k-mers，使用 HyperLogLog 算法估计全局 k-mer 基数（不同 k-mer 的数量）。同时构建本地 Bloom Filter（概率数据结构，用于成员查询，无假阴性、允许少量假阳性）。这一步还识别高频 k-mers（来自重复区域）。</p>
+
+    <div class="card idea">
+      <h3>HyperLogLog：概率基数估计</h3>
+      <p>HyperLogLog 是一种仅需极少量内存（几 KB）即可估计大规模数据集基数（唯一元素数量）的算法。其原理是：如果随机序列中最长前导零长度为 L，则基数约为 2^L。通过分桶取调和平均，可以显著降低方差。</p>
+    </div>
+
+    <h4>Pass 2：All-to-All 通信与精确计数</h4>
+    <p>每个处理器将其 k-mers 哈希到"所有者"处理器，通过 all-to-all 通信分发。All-to-all 是通信密集型操作——每个处理器需要向其他所有处理器发送数据，总通信量为 O(G)。接收方仅在 Bloom Filter 显示该 k-mer 曾出现过时才将其存入本地集合进行精确计数。频率为 1 的 k-mers 被视为错误并安全剔除（它们要么来自测序错误，要么无法与错误区分）。</p>
+
+    <h4>Pass 3：扩展分析</h4>
+    <p>对每个 k-mer 的 4 种可能碱基扩展（A/C/G/T）进行类似 pass 2 的处理。每个 k-mer 不仅自己发送给所有者，还将其"扩展对"（k-mer + 候选扩展碱基）一起发送。接收方记录每个 k-mer 各扩展的出现次数，使用阈值筛选高质量扩展。输出格式为 "ACCCA → CT" 这样的 k-mer 到扩展列表的映射，为后续构建 De Bruijn 图提供边信息。</p>
+
+    <div class="card warning">
+      <h3>高频 K-mer 问题</h3>
+      <p>对于含重复区域的基因组（如小麦），某些 k-mer 的计数可达 4.51 亿次。原始的"所有者计数"方案在此场景下会产生严重负载不均。HipMer 的解决方案：在基数估计阶段快速识别高频 k-mers，使用本地计数器单独处理它们，避免全局 all-to-all 通信的瓶颈。</p>
+    </div>
+
+    <h3>Bloom Filter</h3>
+    <p>Bloom Filter 是一种紧凑的概率数据结构，用于集合成员查询。它由一个 m 位的位数组和 h 个独立的哈希函数组成：插入元素时，计算 h 个哈希值并将对应位设为 1；查询元素时，若 h 个哈希位置全为 1 则回答"可能在集合中"（可能有假阳性），否则回答"肯定不在"（无假阴性）。</p>
+    <p>假阳性率 p 与位数组大小 m、哈希函数数量 h、插入元素数量 n 的关系：当 h = (m/n) ln 2 时，p ≈ (1 - e^{-hn/m})^h。实践中选择 m/n = 10-15、h = 7-8 可将假阳性率控制在 1-5%。对 10⁹ 个 k-mer，仅需约 1.2 GB 内存（m/n = 10）即可达到 ~2% 假阳性率——这比存储完整 k-mer 集合（数十 GB）节省超过 30 倍空间。</p>
+    <ul class="checklist">
+      <li><strong>"见过这个 k-mer 吗？"</strong> — 回答"肯定没有"或"可能有"</li>
+      <li><strong>无假阴性（No false negatives）</strong>：若元素在集合中，必然回答"是"</li>
+      <li><strong>允许假阳性（False positives）</strong>：实践中约 5% 的误报率</li>
+    </ul>
+    <p>使用 Bloom Filter 的价值：频率为 1 的 k-mers（几乎全是测序错误）可以通过 Bloom Filter 被高效识别并剔除，无需全局通信。在 HipMer 中，全局 Bloom Filter 按 G/n 的大小分布在各处理器（G 为全局 k-mer 基数估计值），使得每个处理器只需维护一小部分。</p>
+
+    <h2>3. De Bruijn 图</h2>
+    <p>De Bruijn 图是基因组组装中的核心数据结构。给定一组 k-mers，将每个 k-mer 拆分为长度为 k-1 的前缀和后缀，作为两个节点，k-mer 本身作为从前缀到后缀的有向边。在 Meraculous 等组装器中，它用哈希表表示：</p>
+    <ul class="checklist">
+      <li><strong>节点</strong>：每个 k-mer 是图中的一个节点，也是哈希表的键</li>
+      <li><strong>边</strong>：若两个 k-mer 重叠 k-1 个碱基，则存在一条边</li>
+      <li><strong>值</strong>：哈希表中存储 k-mer 的扩展信息（哪些碱基跟随其后）</li>
+    </ul>
+
+    <h3>并行 De Bruijn 图构造</h3>
+    <p>HipMer 使用 UPC（统一并行 C）的分区全局地址空间（PGAS）模型实现分布式哈希表。PGAS 模型是分布式内存和共享内存之间的折中：内存被逻辑划分为私有（private）和共享（shared）两部分，每个处理器可以访问全局地址空间中的任何数据，但访问本地数据比远程数据快得多（类似于 OpenMP 的 shared/private 语义扩展到分布式内存）。这种模型特别适合基因组组装中不规则的图访问模式。主要挑战：</p>
+    <table>
+      <thead>
+        <tr><th>挑战</th><th>解决方案</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>图极大（数 TB）</td><td>将图分布在多个处理器的内存中</td></tr>
+        <tr><td>并行构造引入通信和同步开销</td><td>分两阶段构造，聚合消息 → 10-20x 加速</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>聚合存储优化</h3>
+      <p>在并行图构造中，每个处理器先将 k-mers 和扩展存储到本地缓冲区，再批量写入分布式哈希表中其"拥有"的桶。这种"先本地聚合再远程写入"的策略实现了无锁、无通信的本地存储，显著减少了同步开销。</p>
+    </div>
+
+    <h3>并行 De Bruijn 图遍历</h3>
+    <p>遍历的目标是生成 UU contigs（无歧义简单路径，即路径上每个节点入度=出度=1）。算法如下：</p>
+    <ol>
+      <li>随机选取一个 k-mer 作为种子（seed）</li>
+      <li>取当前 k-mer 的最后 k-1 个碱基，拼接其高质量扩展碱基，形成新的 k-mer</li>
+      <li>在分布式哈希表中查找新 k-mer，获取其扩展信息</li>
+      <li>重复步骤 2-3，向前扩展直到无法继续（到达 UU contig 右端点）</li>
+      <li>反向重复步骤 2-4，到达 UU contig 左端点</li>
+    </ol>
+    <p>具体示例：假设当前 k-mer = "CGTATTGCA"，已知其正向扩展为 "A"，则新 k-mer = "GTATTGCAA"，再查表获取其扩展，如此迭代。当某个 k-mer 无扩展或多于一个扩展时，到达端点。</p>
+
+    <h3>轻量级同步协议</h3>
+    <p>多个处理器可能从同一 UU contig 的不同位置开始遍历，造成冗余工作。解决方案是基于状态机的轻量级同步协议。每个子 contig 维护一个状态（ACTIVE/ABORTED/INACTIVE/COMPLETE），处理器通过检查邻居子 contig 的状态决定自己的行为：</p>
+    <table>
+      <thead>
+        <tr><th>状态</th><th>含义</th><th>转移条件</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>ACTIVE</td><td>正在扩展子 contig</td><td>发现 USED k-mer 且邻居 ABORTED → 接管该子 contig</td></tr>
+        <tr><td>ABORTED</td><td>被邻居接管</td><td>已完成一个子 contig 的扩展任务</td></tr>
+        <tr><td>INACTIVE</td><td>已附加到邻居子 contig</td><td>等待被接管或最终化</td></tr>
+        <tr><td>COMPLETE</td><td>到达 UU contig 端点</td><td>存储 UU contig，选取新种子</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. MetaHipMer 宏基因组组装</h2>
+    <p>宏基因组组装（Metagenome Assembly）面对的是环境样本中的全部 DNA（如土壤微生物群落），比单物种组装更加复杂：</p>
+    <ul class="checklist">
+      <li><strong>重复序列跨基因组</strong>：不同物种间可能存在相似序列</li>
+      <li><strong>种内多态性</strong>："相似但不相同"的变异株</li>
+      <li><strong>物种丰度差异</strong>：样本中不同物种的数量差异可达 10x、100x 甚至更高</li>
+    </ul>
+
+    <div class="card warning">
+      <h3>Jigsaw Puzzle 类比</h3>
+      <p>宏基因组组装就像混合了 10 副、5 副、1 副拼图碎片——你需要同时重建所有拼图，但每副拼图的碎片数量不同。丰度差异使得组装器必须先处理高丰度物种，再逐步处理低丰度物种。</p>
+    </div>
+
+    <h3>迭代 Contig 生成算法</h3>
+    <p>MetaHipMer 采用迭代策略，每轮使用不同的 k 值（k, k+s, k+2s, ...）。小 k 值能更好连接低丰度物种（覆盖度低），大 k 值能更好处理重复区域。每轮迭代包含：</p>
+    <ol>
+      <li>K-mer 分析（k-mer histogram）</li>
+      <li>De Bruijn 图遍历（bubble merging & hair removal）</li>
+      <li>迭代图修剪（iterative graph pruning）</li>
+      <li>局部组装（local assembly）</li>
+      <li>Reads-to-Contigs 比对</li>
+      <li>Merge k-mers</li>
+    </ol>
+    <p>"Bubble" 是 De Bruijn 图中由于测序错误或杂合性形成的短并行路径，"Hair" 是死胡同末端。通过合并 bubbles 和去除 hairs，可以简化图结构、延长 contigs。</p>
+
+    <h3>并行化策略</h3>
+    <p>宏基因组组装的算法天生不规则，通信模式也是不规则的 all-to-all。核心并行化思想：</p>
+    <ol>
+      <li>使用 PGAS 编程模型（UPC++）设计并行算法——全局地址空间使得访问远程数据像访问本地数据一样自然，编译器优化远程访问</li>
+      <li>使用分布式哈希表管理图结构——k-mer 通过哈希函数映射到"拥有"该 k-mer 的处理器</li>
+      <li>优化哈希表的常见用例——聚合写入、批量查找、本地缓存热点 k-mer</li>
+      <li>理解数据/通信瓶颈，迭代优化——通过性能剖析定位瓶颈并针对性优化</li>
+    </ol>
+    <p>这种 PGAS + 分布式哈希表 + 不规则通信的模式是生物信息学并行计算的代表范式，在 HipMer、MetaHipMer、meraligner 等多个工具中都得到应用。</p>
+
+    <h3>MetaHipMer 强扩展性能</h3>
+    <p>在 NERSC 的 Cray XC40 系统（Cori）上，对 Wetlands 土壤宏基因组数据集进行强扩展测试：从 1K 核到 32K 核，强扩展效率达到 61%。这一结果相当出色——对于高度不规则的宏基因组数据（all-to-all 通信、不规则内存访问），60%+ 的强扩展效率表明 PGAS 编程模型结合分布式哈希表是正确的设计选择。</p>
+    <p>对于完整的 Wetlands 数据集（2.6 TB 原始 reads），MetaHipMer 在 512 个节点上仅用 3 小时 25 分钟完成了组装——这是当时完成的最大规模、最高质量的 de novo 宏基因组组装。此前的工具要么限于共享内存（单节点内存不足），要么只能组装子采样数据（牺牲质量），MetaHipMer 首次实现了完整数据集的高质量组装。该成果获得 SC'18 Best Paper Nominee。</p>
+
+    <h2>5. Read-to-Contig 比对</h2>
+    <p>在 scaffolding 阶段，需要将 reads 比对到已生成的 contigs 上，确定 contigs 之间的顺序和方向。这一步骤的输出是 read-contig 比对表（如 "Read 42 的位置 1-4 比对到 Contig 101 的位置 152-155"）。meraligner 是一种全并行的序列比对器，采用 seed-and-extend 策略。</p>
+
+    <h3>Seed-and-Extend 策略</h3>
+    <p>基本思想：若一条 read 和一条 contig 应在至少 k 个碱基上匹配才能被比对。比对过程分为两步：</p>
+    <ol>
+      <li><strong>种子索引（Seed Index）</strong>：为所有 targets（contigs）建立 k-mer 索引</li>
+      <li><strong>查找与扩展（Lookup & Extend）</strong>：对 query（read）的每个 k-mer 查找索引，然后向两端扩展匹配</li>
+    </ol>
+    <p>示例：Target 0 = "ACTGG"，Target 1 = "GGCA"。构建索引：ACT→(T0,0), CTG→(T0,1), TGG→(T0,2), GGC→(T1,0), GCA→(T1,1)。查询 "GCTG" 时，种子 "CTG" 命中 (T0,1)，从该位置向两端扩展比对。若种子不在索引中（如 "GCT"），则该 query 无法比对到任何 target。</p>
+
+    <div class="card idea">
+      <h3>Seed Index 数据结构</h3>
+      <p>Seed index 是一个从 k-mer 序列到 (target_id, position) 列表的哈希映射。构建时遍历所有 contigs 的所有 k-mer，查询时直接查找 read 的 k-mer 是否存在于索引中。由于使用了精确 k-mer 匹配作为种子，meraligner 能高效过滤大量不相关的比对候选。</p>
+    </div>
+
+    <h2>6. 长读段组装</h2>
+    <p>第三代测序技术（Pacific Biosciences 和 Oxford Nanopore Technologies）产生的长读段（10-100 kb）正在革新 de novo 组装。与短读段（150-300 bp）相比，长读段能跨越大多数重复区域，理论上可以产生接近完整的染色体级别组装。但也带来新的挑战：</p>
+    <ul class="checklist">
+      <li><strong>高错误率</strong>：1-15%（远高于短读段的 0.1-1%）</li>
+      <li><strong>读段更长</strong>：10-100 kb，意味着 overlap graph 节点更少</li>
+    </ul>
+
+    <p>对于长读段，<strong>Overlap-Layout-Consensus (OLC)</strong> 范式比 De Bruijn 图更合适：overlap graph 的顶点数等于读段数（远少于 De Bruijn 图中的 k-mer 数），且高错误率使得大多数 k-mers 都是错误的。</p>
+
+    <h3>BELLA：长读段重叠检测</h3>
+    <p>BELLA（Berkeley Long-read to Long-read Aligner and Overlapper）使用共享 k-mer 方法检测读段间重叠。其核心是一个隐马尔可夫模型（HMM），状态表示两条 read 上正确比对的位置，转移概率刻画匹配、错配和 gap 的开销。HMM 使得 BELLA 能够处理高错误率下的噪声比对。两个关键挑战：</p>
+    <ul class="checklist">
+      <li>如何选择正确的 k-mer 集合（避免过多噪声）：通过 X-drop 算法在扩展时动态截断低质量比对</li>
+      <li>如何利用比对分数区分真实比对和假阳性：使用统计模型估计比对分数的显著性</li>
+    </ul>
+
+    <h3>稀疏矩阵方法</h3>
+    <p>diBELLA.2D 将重叠检测建模为<strong>稀疏矩阵乘法（SpGEMM）</strong>，这是一个优雅的计算抽象：将生物问题转化为线性代数问题，直接利用成熟的并行线性代数库和通信优化算法。这种"抽象层"的方法避免了为每个生物问题重新发明并行算法。</p>
+    <ul class="checklist">
+      <li>构建 reads × k-mers 的稀疏矩阵 A（读段 i 包含 k-mer j 则 A(i,j)=1）</li>
+      <li>计算 C = A × A^T，得到 reads × reads 的重叠矩阵（C(i,j) 表示读段 i 和 j 共享的 k-mer 数）</li>
+      <li>X-drop 比对：对 C 中非零位置的读段对执行精确比对，M = filter(C, alignment_score)</li>
+      <li>传递性归约（Transitive Reduction）：M_{i+1} = Prune(M_i M_i ⊙ M_i)，将 overlap graph 转换为 string graph</li>
+    </ul>
+
+    <table>
+      <thead>
+        <tr><th>方法</th><th>实现时间</th><th>通信方式</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>diBELLA 1D</td><td>数年</td><td>MPI</td></tr>
+        <tr><td>diBELLA 2D</td><td>数周</td><td>2D 稀疏 SpGEMM</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>稀疏矩阵抽象的优势</h3>
+      <p>使用稀疏矩阵抽象后，diBELLA.2D 通过 2D 进程网格上的稀疏 SpGEMM 自动优化通信，相比直接实现的 diBELLA 1D 大幅减少通信量。更重要的是，稀疏矩阵抽象使得代码开发从"数年"缩短到"数周"——这是算法抽象提升生产力的典范。</p>
+    </div>
+
+    <h2>7. 蛋白质家族识别</h2>
+    <p>蛋白质家族识别的目标：给定大量蛋白质序列，识别同源（来自共同祖先的）蛋白质群组。同源蛋白质通常具有相似功能（如不同物种的血红蛋白变体）。由于通常只有序列信息（无结构信息），我们通过序列相似性推断同源性。完整的识别流程分为两步：先构建相似性网络（PASTIS），再对网络进行聚类（HipMCL）。</p>
+
+    <h3>PASTIS：多对多蛋白质相似性搜索</h3>
+    <p>PASTIS（Parallel protein Alignment Search Technology for Iterative Searches）使用稀疏矩阵方法进行大规模蛋白质相似性搜索。与 BELLA 不同的是，PASTIS 需要捕获更弱的信号（~30% ANI，平均核苷酸一致性），因此引入了<strong>替换 k-mer</strong> 的概念——允许一个或两个碱基替换的 k-mer 可能比精确匹配更有价值，因为它们能捕捉进化距离更远的相似性：</p>
+    <ul class="checklist">
+      <li>精确 k-mer：C = A × A^T（A 是 proteins × k-mers 矩阵）</li>
+      <li>含替换的 k-mer：C = A × S × A^T（S 是替换矩阵，存储替换代价）</li>
+    </ul>
+    <p>新引入的半环（semiring）将乘法和加法操作重新定义，以正确组合替换代价，确保最终得分反映真实的进化相似性。</p>
+
+    <p>2022 年，PASTIS 在 ORNL Summit 超级计算机上使用超过 12,000 块 GPU，对 3.13 亿条蛋白质序列进行全对全搜索，不到 4 小时完成。后续工作扩展到 4.05 亿条序列，在 3364 个节点上仅用 3.4 小时，输出 27 TB 的蛋白质相似性网络，达到每秒 6.91 亿次比对、176 TCUPs（每秒万亿次单元更新）。这一成果入围 2022 ACM Gordon Bell Prize 决赛。</p>
+
+    <h3>HipMCL：马尔可夫聚类算法</h3>
+    <p>在构建蛋白质相似性网络后，需要对其进行聚类以发现蛋白质家族。MCL（Markov Cluster Algorithm）是广泛使用的图聚类算法：</p>
+    <ol>
+      <li><strong>Expansion（扩展）</strong>：矩阵平方（SpGEMM），同时修剪小值和过密列</li>
+      <li><strong>Inflation（膨胀）</strong>：逐元素取幂，强化簇内连接、弱化簇间连接</li>
+    </ol>
+
+    <div class="card idea">
+      <h3>MCL 的直觉</h3>
+      <p>随机游走（random walk）在簇内部比簇之间更频繁——这是图聚类的基本假设。MCL 通过矩阵幂运算计算随机游走概率（expansion 使概率沿更长路径传播），然后通过膨胀操作放大差异（inflation 强化高概率、弱化低概率）。迭代执行这两个步骤，最终矩阵会自然分离为若干近对角块，每个块对应一个簇。MCL 的优势在于无需预先指定簇的数量——算法自动发现数据的自然聚类结构。</p>
+    </div>
+
+    <h3>HipMCL 的并行实现</h3>
+    <p>HipMCL（High-performance MCL）使用 SUMMA（Scalable Universal Matrix Multiplication Algorithm）的稀疏变体进行分布式 SpGEMM。SUMMA 算法在 p×p 的处理器网格上执行：每个阶段将矩阵 A 的一列块和矩阵 B 的一行块广播到对应行/列的处理器，各处理器计算其子矩阵乘积。批次大小 b 决定了并行度和内存使用的权衡：b=1 等价于稀疏矩阵-向量乘法（传统 MCL），b=N 等价于完整 SpGEMM。HipMCL 动态选择 b 以适配可用内存。关键优化：</p>
+    <ul class="checklist">
+      <li><strong>动态批次大小 b</strong>：根据可用内存动态选择每次处理的列数</li>
+      <li><strong>随机内存估计</strong>：避免符号分析阶段</li>
+      <li><strong>急切二进制合并</strong>：减少内存占用</li>
+      <li><strong>流水线 CPU-GPU 协同</strong>：隐藏通信延迟</li>
+    </ul>
+
+    <table>
+      <thead>
+        <tr><th>数据集</th><th>蛋白质数</th><th>边数</th><th>簇数</th><th>时间</th><th>平台</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Isolate-1</td><td>47M</td><td>7 B</td><td>1.6M</td><td>1 hr</td><td>1024 nodes Edison</td></tr>
+        <tr><td>Isolate-2</td><td>69M</td><td>12 B</td><td>3.4M</td><td>1.66 hr</td><td>1024 nodes Edison</td></tr>
+        <tr><td>Isolate-3</td><td>70M</td><td>68 B</td><td>2.9M</td><td>2.41 hr</td><td>2048 nodes Cori KNL</td></tr>
+        <tr><td>MetaClust50</td><td>282M</td><td>37 B</td><td>41.5M</td><td>3.23 hr</td><td>2048 nodes Cori KNL</td></tr>
+      </tbody>
+    </table>
+
+    <p>注意：原始 MCL 无法聚类这些大规模网络——HipMCL 是第一个能够处理十亿级边蛋白质网络的并行实现。</p>
+
+    <h2>8. 双序列比对（Pairwise Sequence Alignment）</h2>
+    <p>序列比对的目的是比较两条 DNA 或蛋白质序列的相似性，是生物信息学中最基础的计算任务之一。比对通过动态规划（DP）计算，考虑匹配（match）、错配（mismatch）和插入缺失（gap）。比对结果用于推断功能、进化和结构关系。两种主要变体——全局比对（Needleman-Wunsch）和局部比对（Smith-Waterman）——分别适用于不同生物学场景。</p>
+
+    <h3>Needleman-Wunsch 全局比对</h3>
+    <p>给定两条序列 S = s₁s₂...sₘ 和 T = t₁t₂...tₙ，定义 DP 表 M(i,j) 为前缀 S[1..i] 与 T[1..j] 的最优比对得分。边界条件：M(0,0)=0, M(i,0)=i·gap, M(0,j)=j·gap。递推公式：</p>
+    <pre><code>M(i, j) = max {
+  M(i-1, j)   + gap,
+  M(i, j-1)   + gap,
+  M(i-1, j-1) + score(sᵢ, tⱼ)
+}</code></pre>
+    <p>可以从底向上按行、按列或按对角线填充 DP 表，只要满足数据依赖关系。时间复杂度 O(mn)，空间复杂度 O(mn)。</p>
+
+    <h3>Smith-Waterman 局部比对</h3>
+    <p>Needleman-Wunsch 强制从序列头到尾进行全局比对，但生物学中经常只需要找到局部相似区域（如蛋白质结构域与完整序列的匹配、短保守 motif 的识别、功能位点定位、外显子边界确定、调控元件识别、序列数据库搜索、引物设计验证）。Smith-Waterman 算法在 Needleman-Wunsch 基础上增加"不归债"机制——当 DP 值为负时重置为 0，表示比对可以从当前位置重新开始。这一机制使得算法能够自动忽略两端的低相似区域，仅保留显著相似的局部区段：</p>
+    <pre><code>M(i, j) = max {
+  0,                          ← 不归债
+  M(i-1, j)   + gap,
+  M(i, j-1)   + gap,
+  M(i-1, j-1) + score(sᵢ, tⱼ)
+}</code></pre>
+    <p>回溯时从矩阵中最高分开始，而非右下角。这允许找到局部最优比对。</p>
+
+    <h3>Hirschberg 线性空间算法</h3>
+    <p>1975 年，Dan Hirschberg 提出了一个关键洞察：最优比对必然经过 DP 表的中间列某处。这意味着我们可以只计算中间列的最优分割点，然后递归求解两个子问题，而无需存储整个 DP 表。这是分治策略在动态规划中的经典应用，也是算法课程中"空间高效算法"的必读案例：</p>
+    <ol>
+      <li>找到最优比对的"中间边"（middle column 上的单元格）</li>
+      <li>将问题分为前半部分和后半部分</li>
+      <li>递归求解两个子问题</li>
+    </ol>
+
+    <div class="card idea">
+      <h3>关键子程序</h3>
+      <p><strong>AllYPrefixCosts(x, i, y)</strong>：计算 x[1..i] 与 y 的所有前缀的最优比对分数，返回 DP 表的第 i 行（正向 Needleman-Wunsch）。</p>
+      <p><strong>AllYSuffixCosts(x, i, y)</strong>：计算 x[i..n] 与 y 的所有后缀的最优比对分数，返回 DP 表的第 i 行（反向 Needleman-Wunsch）。</p>
+      <p>合并：cost(q) = YPrefix[q] + YSuffix[q+1] 取最小值即得最优分割点。</p>
+    </div>
+
+    <h3>时间复杂度分析</h3>
+    <p>Hirschberg 算法的总时间复杂度推导：</p>
+    <pre><code>T(n) = nm + (n/2)m + (n/4)m + ... + 2m = Θ(mn)
+因为 n ≤ n + n/2 + n/4 + ... + 2 ≤ 2n</code></pre>
+    <p>这是一个等比数列，公比为 1/2，总和不超过 2nm。因此，Hirschberg 算法在保持 O(mn) 时间复杂度的同时将空间复杂度从 O(mn) 降低到 O(n+m)——这是算法设计中"时间换空间"策略的经典范例。对于两条长度均为 10000 的序列，空间从 100 MB 降至 20 KB，节省超过 5000 倍。</p>
+
+    <h3>并行序列比对</h3>
+    <p>细粒度并行可以沿 DP 表的反对角线进行——每条反对角线上的单元格仅依赖前两条反对角线上的单元格，因此同一条反对角线上的所有单元格可以并行计算。这种方法适合 GPU 等细粒度并行架构。</p>
+    <p>粗粒度并行可利用 Hirschberg 递归将子问题分配给不同处理器：每次分割产生的两个子问题可以独立求解。已知最优结果（Rajko & Aluru, 2004）：使用 p 个处理器可在 O(mn/p) 时间和 O((m+n)/p) 空间内完成比对，达到线性加速比和线性空间缩减。这一结果在理论上是完美的——时间和空间都随处理器数线性下降。</p>
+
+    <h2>9. 后缀数组（Suffix Arrays）</h2>
+    <p>后缀数组是字符串索引和压缩的哈希表替代方案，由 Udi Maninger 和 Gene Myers 在 1990 年提出。它在生物信息学中有广泛应用：基因组序列索引、重复序列检测、序列比对种子定位等。给定字符串 x（长度为 n），后缀数组 SA 是一个整数数组：</p>
+    <pre><code>SA[i] = j  意味着：后缀 x[j..n] 在所有后缀中按字典序排第 i</pre></pre>
+
+    <p>配合 LCP（Longest Common Prefix）数组，后缀数组可以匹配后缀树的功能和性能。</p>
+
+    <h3>后缀数组示例</h3>
+    <p>以 S = "mississippi" 为例，其所有后缀按字典序排序后：</p>
+    <pre><code>SA  = [11, 10, 7, 4, 1, 0, 9, 8, 6, 3, 2]
+对应后缀（已排序）：
+11: "" (空后缀)
+10: "i"
+ 7: "ippi"
+ 4: "issippi"
+ 1: "ississippi"
+ 0: "mississippi"
+ 9: "pi"
+ 8: "ppi"
+ 6: "sippi"
+ 3: "sissippi"
+ 2: "ssissippi"</code></pre>
+    <p>搜索示例：模式 P = "issip"。二分查找发现 SA[3..4] 范围匹配（"issippi" 和 "ississippi" 均以 "issip" 开头），说明 P 在位置 4 和 1 出现。这种 O(|P| log n) 的搜索复杂度使得后缀数组成为大规模基因组搜索的理想工具。</p>
+
+    <div class="card idea">
+      <h3>后缀数组的核心动机</h3>
+      <p>每个子串都是某个后缀的前缀。因此，通过在后缀数组上二分查找，可以在 O(|P| log n) 时间内判断模式 P 是否出现在文本中，或 O(|P| + log n)（配合 LCP 数组）。这比后缀树节省大量空间（后缀数组仅需 4n 字节，后缀树需要约 20n 字节），且缓存友好。</p>
+    </div>
+
+    <h3>DC3/Skew 算法：线性时间构造</h3>
+    <p>Kärkkäinen 和 Sanders 在 2003 年提出的 DC3（Difference Cover modulo 3）算法，将后缀数组构造从 O(n² log n) 朴素排序优化到 O(n)。"Skew"代表"sample by mod 3"的偏斜采样策略，后来被推广为更通用的 DC（Difference Cover）框架。该算法是字符串算法领域最重要的突破之一：</p>
+
+    <h4>Step 1：递归构造 SA₁₂</h4>
+    <p>选取所有 i mod 3 ≠ 0 的后缀（约 2n/3 个）。将它们的三元组（每个后缀的前三个字符）排序，分配字典序名称（lex-names）。将 mod 3 = 1 和 mod 3 = 2 的后缀名称拼接成新字符串 u，中间用分隔符 "#" 隔开。若所有名称唯一，则 SA(u) 直接给出 SA₁₂；否则递归构造 SA(u)（问题规模降为 2/3）。</p>
+    <p>为什么用 mod 3 而不是 mod 2？mod 3 使得递归规模降为 2/3（而非 1/2），保证递归深度为 O(log n) 但每层工作量递减更快。关键性质：SA₁₂ 的排序信息足以在 O(1) 时间内比较任意两个 i mod 3 ≠ 0 的后缀。时间：T(n) = O(n) + T(2n/3) = O(n)。</p>
+
+    <h4>Step 2：构造 SA₀</h4>
+    <p>对 i mod 3 = 0 的后缀，可将其写作 s[i] + s[i+1..]，其中 i+1 mod 3 ≠ 0（即在 SA₁₂ 中有定义）。按首字母排序，同首字母的后缀利用 SA₁₂ 中的顺序（通过逆映射 invSA₁₂）解决排序：若 s[i] = s[j] 且 i ≠ j，则比较 invSA₁₂[i+1] 与 invSA₁₂[j+1]。时间 O(n)。</p>
+
+    <h4>Step 3：合并 SA₁₂ 和 SA₀</h4>
+    <p>合并两个已排序的后缀数组。根据待比较后缀的 i mod 3 值，使用不同的比较规则：</p>
+    <ul class="checklist">
+      <li>i mod 3 = 1：比较 (s[i], rank(s[i+1..])) 与另一后缀，rank 从 SA₁₂ 查得</li>
+      <li>i mod 3 = 2：比较 (s[i], s[i+1], rank(s[i+2..])) 与另一后缀</li>
+    </ul>
+    <p>时间 O(n)。合并过程类似于归并排序的合并步骤，每个比较可在 O(1) 时间完成（rank 已知）。示例：比较 suffix[1] 与 suffix[4]，suffix[1] = i·s[2..]，suffix[4] = i·s[5..]，因为 s[2..] = "ss..." < s[5..] = "ss..."（通过 rank），所以 suffix[1] < suffix[4]。</p>
+
+    <pre><code>T(n) = O(n) + T(2n/3) = O(n)  （线性时间！）</code></pre>
+
+    <h3>pDC3：并行 DC3 算法</h3>
+    <p>Kulla 和 Sanders 提出的 pDC3 将 DC3 算法自然并行化，在 p 个处理器上实现：</p>
+    <ul class="checklist">
+      <li>并行排序（Parallel Sort）：对三元组进行全局排序（使用并行样本排序或并行归并排序）</li>
+      <li>前缀和（Prefix Sum）：计算每个处理器分段的排名偏移，用于将局部排名转换为全局排名</li>
+      <li>数据并行分割（Data Parallel Splitting）：按 mod 3 分组，各处理器独立处理其拥有的后缀</li>
+      <li>All-to-All 通信（AlltoAllV）：在合并阶段交换后缀信息，每个处理器的发送量可能不同</li>
+    </ul>
+    <p>并行化要点：Step 1 中的排序是全局操作，需要高效的并行排序算法（如并行样本排序，时间复杂度 O((n/p) log(n/p))）；Step 3 中的合并涉及不规则通信，使用 AlltoAllV（变长 All-to-All）按比较结果分发后缀。pDC3 的通信复杂度主要由排序和 AlltoAllV 决定，在分布式内存系统上这两者都是带宽密集型操作。实际实现中，pDC3 在数百万字符的基因组上展现出良好的强扩展性。</p>
+
+    <pre><code>T_pDC3 = T_parsort(n, p) + T_alltoall(n/p, p) + f(p) · log(n)
+其中 f(p) ∈ Ω(log p) 是实现相关的瓶颈项</code></pre>
+
+    <hr class="rule">
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>在 De Bruijn 图基因组组装中，Bloom Filter 的主要作用是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="Bloom Filter 不用于排序 k-mers。">A. 对 k-mers 进行排序</button>
+        <button data-answer="correct" data-correct="正确！Bloom Filter 用于快速判断某个 k-mer 是否曾经出现过，从而过滤掉频率为 1 的 k-mers（几乎都是测序错误）。">B. 判断 k-mer 是否曾经出现过，过滤频率为 1 的 k-mers</button>
+        <button data-answer="wrong" data-incorrect="Bloom Filter 不存储计数，仅存储成员信息。">C. 精确统计每个 k-mer 的出现次数</button>
+        <button data-answer="wrong" data-incorrect="Bloom Filter 不直接生成 contigs，那是 De Bruijn 图遍历的任务。">D. 直接生成 contigs</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>为什么长读段组装更适合 OLC 范式而非 De Bruijn 图范式？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="OLC 和 De Bruijn 图都可以并行化。">A. 因为 OLC 范式更容易并行化</button>
+        <button data-answer="wrong" data-incorrect="OLC 的内存使用不一定更少。">B. 因为 OLC 范式内存使用更少</button>
+        <button data-answer="correct" data-correct="正确！长读段的 overlap graph 顶点数（读段数）远少于 De Bruijn 图（k-mer 数）；且高错误率使得多数 k-mers 都是错误的，De Bruijn 图方法失效。">C. 因为长读段的 overlap graph 更小，且高错误率使 k-mers 方法失效</button>
+        <button data-answer="wrong" data-incorrect="OLC 和 De Bruijn 图都能处理重复区域。">D. 因为 OLC 范式能处理更长的重复区域</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>在 MCL（Markov Cluster Algorithm）中，Expansion 和 Inflation 两步分别对应什么操作？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="顺序反了——Expansion 是矩阵乘法，Inflation 是逐元素取幂。">A. Expansion: 逐元素取幂；Inflation: 矩阵乘法</button>
+        <button data-answer="correct" data-correct="正确！Expansion 通过 SpGEMM 计算随机游走概率；Inflation 通过逐元素取幂放大簇间差异。">B. Expansion: 矩阵平方（SpGEMM）；Inflation: 逐元素取幂</button>
+        <button data-answer="wrong" data-incorrect="Expansion 不是特征值分解。">C. Expansion: 特征值分解；Inflation: 归一化</button>
+        <button data-answer="wrong" data-incorrect="Expansion 不是最短路径计算。">D. Expansion: 最短路径计算；Inflation: 剪枝</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>Hirschberg 算法将序列比对的空间复杂度从 O(mn) 降低到 O(n+m)，其核心思想是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="近似算法会牺牲精度，Hirschberg 算法是精确算法。">A. 使用近似算法牺牲精度换取空间</button>
+        <button data-answer="wrong" data-incorrect=" Hirschberg 算法利用的是中间列（middle column），不是行。">B. 仅存储 DP 表的中间行</button>
+        <button data-answer="correct" data-correct="正确！Hirschberg 发现最优比对必然经过中间列某处，通过正向和反向 DP 找到分割点，递归求解子问题。">C. 找到最优比对的中间列分割点，递归求解子问题</button>
+        <button data-answer="wrong" data-incorrect="Hirschberg 算法不使用哈希表。">D. 使用哈希表压缩 DP 表</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>DC3/Skew 算法构造后缀数组的时间复杂度为 O(n)，其递归式是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="这会导致 O(n log n) 时间复杂度。">A. T(n) = O(n) + 2T(n/2)</button>
+        <button data-answer="correct" data-correct="正确！DC3 将 2/3 的后缀递归处理，T(n) = O(n) + T(2n/3) = O(n)。">B. T(n) = O(n) + T(2n/3)</button>
+        <button data-answer="wrong" data-incorrect="这会导致 O(n²) 时间复杂度。">C. T(n) = O(n²) + T(n/3)</button>
+        <button data-answer="wrong" data-incorrect="这不是 DC3 的递归式。">D. T(n) = O(n log n) + T(n/2)</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>基因组组装 = 并行哈希表 + 图遍历</h3>
+        <p>De Bruijn 图构造与遍历是核心计算步骤。分布式哈希表（PGAS）和轻量级同步协议使得并行组装能达到 61% 的强扩展效率。</p>
+      </article>
+      <article>
+        <h3>稀疏矩阵：统一的并行抽象</h3>
+        <p>从 BELLA 到 PASTIS 到 HipMCL，SpGEMM（稀疏矩阵乘法）提供了统一的并行抽象，将开发时间从"数年"缩短到"数周"。</p>
+      </article>
+      <article>
+        <h3>概率数据结构的力量</h3>
+        <p>Bloom Filter 和 HyperLogLog 以极小的内存代价过滤噪声、估计基数，是处理 TB 级生物数据的必备工具。</p>
+      </article>
+      <article>
+        <h3>算法 + 并行 = 突破生物大数据瓶颈</h3>
+        <p>MetaHipMer 在 512 节点上 3.5 小时组装 2.6 TB 宏基因组；PASTIS 在 12K GPU 上 4 小时搜索 3 亿蛋白质——没有并行计算，这些任务不可能完成。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://doi.org/10.1098/rsta.2020.0084" target="_blank" rel="noopener">The Parallelism Motifs of Genomic Data Analysis</a> — Yelick et al., Phil. Trans. A, 2020（基因组分析并行 motifs 综述）</li>
+      <li><a href="https://doi.org/10.1109/SC.2015.61" target="_blank" rel="noopener">HipMer: an extreme-scale de novo genome assembler</a> — Georganas et al., SC'15</li>
+      <li><a href="https://doi.org/10.1109/SC.2018.00018" target="_blank" rel="noopener">Extreme Scale De Novo Metagenome Assembly</a> — Georganas et al., SC'18（Best Paper Nominee）</li>
+      <li><a href="https://doi.org/10.1093/nar/gky433" target="_blank" rel="noopener">HipMCL: a high-performance parallel implementation of the Markov clustering algorithm</a> — Azad et al., NAR, 2018</li>
+      <li><a href="https://doi.org/10.1109/IPDPS.2021.00028" target="_blank" rel="noopener">Parallel String Graph Construction and Transitive Reduction</a> — Guidi et al., IPDPS 2021</li>
+      <li><a href="https://doi.org/10.1137/1.9781611976832.11" target="_blank" rel="noopener">BELLA: Berkeley Efficient Long-Read to Long-Read Aligner and Overlapper</a> — Guidi et al., ACDA 2021</li>
+      <li><a href="https://arxiv.org/abs/2005.09614" target="_blank" rel="noopener">Distributed Many-to-Many Protein Sequence Alignment Using Sparse Matrices</a> — Selvitopi et al., SC'20</li>
+      <li>Extreme-scale many-against-many protein similarity search — Selvitopi et al., SC'22（Gordon Bell Prize Finalist）</li>
+      <li><a href="https://doi.org/10.1016/j.parco.2007.06.004" target="_blank" rel="noopener">Scalable parallel suffix array construction</a> — Kulla & Sanders, Parallel Computing, 2007</li>
+      <li>Sanders & Kärkkäinen, <em>Linear Work Suffix Array Construction</em> — J. ACM 2003（DC3 原始论文）</li>
+      <li>Sandes, Boukerche, Melo, <em>Parallel Optimal Pairwise Biological Sequence Comparison</em> — ACM Computing Surveys, 2016</li>
+      <li><a href="https://sites.google.com/lbl.gov/cs267-spr2025" target="_blank" rel="noopener">CS267 课程主页</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="23-selection-sorting.html">← 第 23 课</a>
+      <a href="25-graph-partitioning.html">第 25 课 →</a>
+    </div>
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley · 本课完全覆盖 Lecture 24 内容</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

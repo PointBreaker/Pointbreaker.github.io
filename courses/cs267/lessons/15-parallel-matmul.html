@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>并行矩阵乘法 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 15 课</p>
+    <h1>并行矩阵乘法</h1>
+    <p class="lede">从 BLAS 层次结构到通信下界，再到现代并行矩阵乘法算法（SUMMA、2.5D、Strassen），理解如何在最小化通信的前提下实现高效并行稠密矩阵乘法。</p>
+    <div class="meta">
+      <span>授课：Jim Demmel</span>
+      <span>视频：<a href="https://youtu.be/VE27JHdXfAw">YouTube</a></span>
+      <span>预计用时：90 分钟</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="motifs">历史背景与并行 motif</h2>
+    <p>矩阵乘法是科学计算中最基础的 kernel 之一。从 1970 年代至今，稠密线性代数（Dense Linear Algebra, DLA）的发展史就是一部与存储层次结构（memory hierarchy）和通信开销博弈的历史。</p>
+
+    <div class="card idea">
+      <h3>DLA 软件时间线</h3>
+      <ul>
+        <li><strong>1970–77</strong>：LINPACK / EISPACK（标量、无 BLAS）</li>
+        <li><strong>1979</strong>：BLAS Level 1（AXPY 等，O(n) 操作）</li>
+        <li><strong>1984–88</strong>：BLAS Level 2（GEMV，O(n²) 操作）</li>
+        <li><strong>1987–90</strong>：BLAS Level 3（GEMM，O(n³) 操作）</li>
+        <li><strong>1992</strong>：LAPACK（共享内存、cache-aware）</li>
+        <li><strong>1995</strong>：ScaLAPACK（分布式内存）</li>
+        <li><strong>2017+</strong>：SLATE（GPU/异构，取代 ScaLAPACK）</li>
+      </ul>
+    </div>
+
+    <p>LAPACK 支持 <strong>28 种矩阵类型</strong>，涵盖对称、三角、带状、三对角等结构。理解这些结构对算法选择至关重要。</p>
+
+    <hr class="rule">
+
+    <h2 id="blas">BLAS 层次结构</h2>
+    <p>基本线性代数子程序（BLAS）按数据重用能力分为三个层次。核心思想：<strong>Level k 的算法将 O(n^k) 操作作用于 O(n^k) 数据</strong>，从而在 cache 中实现高效重用。</p>
+
+    <table>
+      <thead>
+        <tr><th>Level</th><th>操作</th><th>例子</th><th>数据/操作比</th><th>Cache 友好性</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>O(n)</td><td>AXPY, DOT, SCAL</td><td>O(1)</td><td>差（流式）</td></tr>
+        <tr><td>2</td><td>O(n²)</td><td>GEMV, GER</td><td>O(n)</td><td>一般</td></tr>
+        <tr><td>3</td><td>O(n³)</td><td>GEMM, SYMM, TRSM</td><td>O(n²)</td><td>好（可分块）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>为什么 Level 3 如此重要？</h3>
+      <p>现代处理器中 flop 速率远高于内存带宽。Level 3 的 O(n²) 数据重用意味着一旦数据进入 cache，就可以被 O(n) 次 flop 反复使用。因此<strong>尽可能将计算表达为 BLAS3 操作</strong>是性能优化的首要原则。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="why-comm">为什么要最小化通信？</h2>
+    <p>在并行和异构系统中，通信（数据移动）而非算术计算成为瓶颈。执行时间模型为：</p>
+
+    <pre><code>T = (#flops) · γ + (#words) · β + (#messages) · α</code></pre>
+
+    <p>其中：</p>
+    <ul>
+      <li><strong>γ</strong> = 每 flop 时间（≈ 1/clock）</li>
+      <li><strong>β</strong> = 每 word 传输时间（≈ 1/bandwidth）</li>
+      <li><strong>α</strong> = 每次消息启动延迟（latency）</li>
+    </ul>
+
+    <table>
+      <thead>
+        <tr><th>年份</th><th>Peak Flop/s</th><th>Bandwidth (GB/s)</th><th>α (μs)</th><th>Flops/word</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2005</td><td>3.2e10</td><td>6.4</td><td>5</td><td>5</td></tr>
+        <tr><td>2010</td><td>1.2e11</td><td>12</td><td>3</td><td>10</td></tr>
+        <tr><td>2017</td><td>3.0e13</td><td>100</td><td>1</td><td>300</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>指数级增长的鸿沟</h3>
+      <p>峰值 flop 速率每 ≈ 2.5 年翻 10×，而带宽和延迟仅每 ≈ 5 年翻 10×。这意味着<strong>通信开销相对于计算正指数级增长</strong>。未来 exascale 系统上，最小化通信比最小化 flop 更重要。</p>
+    </div>
+
+    <p>通信还消耗能量：移动 1 bit 的能量约是执行 1 flop 的 100–1000 倍。因此最小化通信同时优化能耗。</p>
+
+    <hr class="rule">
+
+    <h2 id="blocked-gemm">分块矩阵乘法回顾</h2>
+    <p>经典的 cache-oblivious 分块 GEMM 算法：将 A、B、C 分块为大小为 b×b 的子矩阵，使得 3b² 数据能放入 cache。</p>
+
+    <pre><code class="language-c">// Blocked GEMM: C = A * B + C
+// A: m x k, B: k x n, C: m x n
+for (ii = 0; ii < m; ii += b)
+  for (jj = 0; jj < n; jj += b)
+    for (pp = 0; pp < k; pp += b)
+      // Micro-kernel: C[ii:ii+b][jj:jj+b] += A[ii:ii+b][pp:pp+b] * B[pp:pp+b][jj:jj+b]
+      for (i = ii; i < min(ii+b, m); i++)
+        for (j = jj; j < min(jj+b, n); j++)
+          for (p = pp; p < min(pp+b, k); p++)
+            C[i][j] += A[i][p] * B[p][j];</code></pre>
+
+    <div class="card tip">
+      <h3>选择分块大小 b</h3>
+      <p>理想情况下，每个分块的 3b² 个 double 能放入 L1 cache：3b²·8 ≤ 32KB ⇒ b ≈ 37。实际中还需考虑 TLB、寄存器压力，最优 b 通常由 auto-tuning 决定。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="comm-lb">通信下界</h2>
+    <p>在并行矩阵乘法中，我们关心两个下界：最少需要移动多少数据（words），以及最少需要发送多少消息（messages）。</p>
+
+    <div class="card idea">
+      <h3>Hong-Kung 下界（I/O 复杂度）</h3>
+      <p>对于在大小为 M 的快速内存中计算 n×n 矩阵乘法，必须至少有：</p>
+      <pre><code>#words moved ≥ Ω(n³ / √M)</code></pre>
+      <p>这由矩阵乘法的算术复杂度（2n³ flops）与每个 word 最多贡献 O(√M) 次 flop 的事实导出。</p>
+    </div>
+
+    <div class="card idea">
+      <h3>Irony-Tiskin-Toledo 消息下界</h3>
+      <p>在分布式内存系统中，假设有 P 个处理器，每个有大小为 M 的本地内存，则：</p>
+      <pre><code>#messages ≥ Ω(n³ / M^(3/2))</code></pre>
+    </div>
+
+    <div class="card idea">
+      <h3>新下界：适用于所有直接线性代数</h3>
+      <p>Irony、Tiskin 和 Toledo（以及 Demmel 等人的后续工作）证明，对于任意直接 LA 算法（包括 LU、QR、特征值等），在大小为 M 的 fast memory 中完成 flop 数为 F 的计算，必须：</p>
+      <pre><code>#words = Ω(F / √M)
+#messages = Ω(F / M^(3/2))</code></pre>
+      <p>这些下界是通用的——任何算法都无法突破。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="attaining">达到下界的算法</h2>
+    <p>存在一系列算法能够渐近达到上述下界：</p>
+    <table>
+      <thead>
+        <tr><th>算法</th><th>#words</th><th>#messages</th><th>达到下界？</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>经典分块 GEMM</td><td>O(n³/√M)</td><td>O(1)</td><td>words ✓, messages ✗ (串行)</td></tr>
+        <tr><td>2D SUMMA</td><td>O(n³/(P√M))</td><td>O(n²/√M·log P)</td><td>接近（log P 因子）</td></tr>
+        <tr><td>2.5D 算法</td><td>O(n³/(P√M))</td><td>O(n³/(c·M^(3/2)))</td><td>参数可调</td></tr>
+        <tr><td>Strassen</td><td>O(n^log₂7 / √M)</td><td>Ω(…)</td><td>减少 flop，降低下界</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <h2 id="layouts">并行数据布局</h2>
+    <p>在将矩阵分布到 P 个处理器时，数据布局决定了通信模式。</p>
+
+    <h3>1D 布局</h3>
+    <ul>
+      <li><strong>Blocked</strong>：每个处理器持有连续的行/列块。通信仅在边界处发生。</li>
+      <li><strong>Cyclic</strong>：行/列循环分配（row i → processor i mod P）。更好的负载均衡。</li>
+      <li><strong>Block-Cyclic</strong>：每 b 行/列为一组循环分配。结合 blocked 的通信效率与 cyclic 的均衡性。</li>
+    </ul>
+
+    <h3>2D 布局</h3>
+    <p>处理器排列为 P_r × P_c 网格。矩阵 A 按行分布、B 按列分布、C 按 (i,j) 分布。这是 ScaLAPACK 等库的标准选择。</p>
+
+    <table>
+      <thead>
+        <tr><th>布局</th><th>通信量</th><th>负载均衡</th><th>实现复杂度</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1D Blocked</td><td>O(n²)</td><td>一般</td><td>简单</td></tr>
+        <tr><td>1D Cyclic</td><td>O(n²)</td><td>好</td><td>中等</td></tr>
+        <tr><td>2D Blocked</td><td>O(n²/√P)</td><td>好</td><td>中等</td></tr>
+        <tr><td>2D Block-Cyclic</td><td>O(n²/√P)</td><td>最好</td><td>复杂</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <h2 id="parallel-matvec">并行矩阵-向量乘法</h2>
+    <p>矩阵-向量乘法 y = Ax 是迭代方法（CG、GMRES）的核心。在 2D 布局下，每个处理器持有 A 的一个子块和 x 的对应部分：</p>
+    <ol>
+      <li>在拥有 x 的处理器列内做 broadcast（或 reduce）</li>
+      <li>每个处理器计算本地 A_ij · x_j</li>
+      <li>在行内做 reduce 得到 y_i</li>
+    </ol>
+    <div class="card warning">
+      <h3>BLAS2 的局限</h3>
+      <p>GEMV 是 O(n²) 操作对 O(n²) 数据，数据重用仅 O(1)。因此在 cache 和分布式系统中都难以高效。这也是为什么迭代方法常需要<strong>矩阵-矩阵乘积</strong>（如 s-step CG、block Krylov）来提升效率。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="1d-mmul">1D 矩阵乘法：总线与环形网络</h2>
+    <p>最简单的并行 matmul：每个处理器持有一行（或一列）的数据。</p>
+
+    <h3>Naïve 总线算法</h3>
+    <pre><code>// 每个处理器 i 持有 A 的第 i 行，需要 B 的所有列
+for each processor i (in parallel):
+    broadcast A[i][:] to all processors
+    compute C[i][:] = A[i][:] * B</code></pre>
+    <p>问题：每次 broadcast 都使用整个总线带宽，无法流水线化。</p>
+
+    <h3>Ring 旋转算法</h3>
+    <pre><code>// 环形拓扑：处理器 i 将数据传给 (i+1) mod P
+for step = 0 to P-1:
+    each processor i:
+        send A_local to processor (i+1) mod P
+        C_local += A_local * B_panel
+        receive new A_local from (i-1) mod P</code></pre>
+
+    <div class="card tip">
+      <h3>Ring 算法的优势</h3>
+      <p>在环形中，每个链路仅传输 O(n²/P) 数据，且可以流水线化（overlap 通信与计算）。SUMMA 算法正是基于这种 outer-product 思想。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="summa">SUMMA 算法</h2>
+    <p><strong>Scalable Universal Matrix Multiplication Algorithm (SUMMA)</strong> 是 2D 并行 GEMM 的经典算法，基于 outer product 形式：</p>
+
+    <pre><code class="language-c">// SUMMA: C = A * B, A: m x k, B: k x n
+// 处理器网格: P_r x P_c
+for (p = 0; p < k; p++) {
+    // 拥有 A[:, p] 的处理器列 broadcast 到本列所有处理器
+    if (I_own_column_p) broadcast A_col to my row;
+    // 拥有 B[p, :] 的处理器行 broadcast 到本行所有处理器
+    if (I_own_row_p) broadcast B_row to my col;
+    // 每个处理器更新本地 C 块
+    C_local += A_col * B_row;  // outer product
+}</code></pre>
+
+    <div class="card idea">
+      <h3>SUMMA 的通信成本</h3>
+      <ul>
+        <li>Words: O(n²/√P · log P) —— 在对数因子内达到下界</li>
+        <li>Messages: O(n²/M · log P) —— 接近下界</li>
+      </ul>
+      <p>SUMMA 的优势：<strong>简单、通用、易于实现</strong>，是 ScaLAPACK PDGEMM 的基础。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="2.5d">2.5D 矩阵乘法</h2>
+    <p>2.5D 算法通过复制数据到 c 层来减少通信，在内存和通信之间取得平衡：</p>
+
+    <pre><code class="language-c">// 2.5D GEMM: 使用 c 份数据副本
+// 将 P 个处理器组织为 c 个 P^(1/3) x P^(1/3) 的层
+for each layer l in [0, c):
+    // 每层执行独立的 SUMMA 子问题
+    C_l += A_l * B_l;
+// 跨层 reduce 结果
+Reduce(C_0, C_1, ..., C_{c-1}) -> C;</code></pre>
+
+    <div class="card idea">
+      <h3>2.5D 的 scaling 特性</h3>
+      <p>当 c = P^(1/3) 时，2.5D 算法实现<strong>完美强扩展（perfect strong scaling）</strong>：在 P 个处理器上使用 c 份副本，通信量与 P=1 时相同！代价是使用 c 倍内存。</p>
+      <pre><code>#words = O(n³ / (P·√M)) · (c^(1/2))
+#messages = O(n³ / M^(3/2)) · (1/c)</code></pre>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="strassen">Strassen 算法</h2>
+    <p>Strassen（1969）发现矩阵乘法可以用 7 次乘法而非 8 次完成：</p>
+
+    <pre><code>// 将 A, B, C 分为 2x2 块
+// 计算 7 个中间矩阵：
+M1 = (A11 + A22) * (B11 + B22)
+M2 = (A21 + A22) * B11
+M3 = A11 * (B12 - B22)
+M4 = A22 * (B21 - B11)
+M5 = (A11 + A12) * B22
+M6 = (A21 - A11) * (B11 + B12)
+M7 = (A12 - A22) * (B21 + B22)
+
+// 组合结果：
+C11 = M1 + M4 - M5 + M7
+C12 = M3 + M5
+C21 = M2 + M4
+C22 = M1 - M2 + M3 + M6</code></pre>
+
+    <div class="card idea">
+      <h3>复杂度分析</h3>
+      <p>递归应用 Strassen：</p>
+      <pre><code>T(n) = 7·T(n/2) + O(n²) ⇒ T(n) = O(n^log₂7) ≈ O(n^2.81)</code></pre>
+      <p>比经典 O(n³) 算法减少约 13% 的 flop 数（当 n 大时）。</p>
+    </div>
+
+    <div class="card warning">
+      <h3>Strassen 的数值稳定性</h3>
+      <p>Strassen 算法使用减法组合中间结果，导致误差界从经典 O(ε·n) 变为 O(ε·n^0.81·log n)。对于大多数问题是安全的，但在 LAPACK 中仅作为可选优化（xGEQRF 等）。</p>
+    </div>
+
+    <h3>并行 Strassen 性能</h3>
+    <p>并行 Strassen 的通信下界也降低：#words = Ω(n^log₂7 / √M)。这意味着 Strassen 不仅减少 flop，还减少通信量。然而递归开销和内存需求使其在实际中通常只在大规模问题（n > 10000）时才有优势。</p>
+
+    <hr class="rule">
+
+    <h2 id="scalapack">ScaLAPACK PDGEMM</h2>
+    <p>ScaLAPACK 的 PDGEMM 实现了基于 SUMMA 的分布式 GEMM：</p>
+
+    <ul>
+      <li>使用 2D block-cyclic 分布</li>
+      <li>基于 BLACS（BLAS Communication）子程序</li>
+      <li>调用本地 BLAS3 DGEMM 作为 micro-kernel</li>
+      <li>支持任意 m, k, n 和 α, β 参数</li>
+    </ul>
+
+    <pre><code class="language-c">// ScaLAPACK PDGEMM 调用示例
+pdgemm_("N", "N", &m, &n, &k, &alpha,
+        A, &ia, &ja, descA,
+        B, &ib, &jb, descB,
+        &beta,
+        C, &ic, &jc, descC);</code></pre>
+
+    <div class="card tip">
+      <h3>现代替代：SLATE</h3>
+      <p>SLATE（Software for Linear Algebra Targeting Exascapes）是 ScaLAPACK 的现代替代品，专为 GPU 和异构系统设计，使用 task-based DAG 调度。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article><h3>通信是瓶颈</h3><p>在现代并行系统中，通信（数据移动）的代价远超算术计算，且差距指数级增长。</p></article>
+      <article><h3>BLAS3 优先</h3><p>将尽可能多的计算表达为 Level 3 BLAS 操作，以获得最佳 cache 重用。</p></article>
+      <article><h3>通用下界</h3><p>#words = Ω(F/√M) 和 #messages = Ω(F/M^(3/2)) 适用于所有直接线性代数算法。</p></article>
+      <article><h3>SUMMA</h3><p>简单、通用、渐近接近下界的 2D 并行矩阵乘法算法。</p></article>
+      <article><h3>2.5D 与 Strassen</h3><p>2.5D 通过数据复制换取通信减少；Strassen 通过减少 flop 降低下界。</p></article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="c" data-incorrect="a,b,d">
+      <p><strong>问题 1：</strong>在时间模型 T = flops·γ + words/β + messages·α 中，哪个参数随时间增长最快（相对于其他）？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. γ（每 flop 时间）</button>
+        <button data-choice="b" aria-pressed="false">B. β（每 word 传输时间）</button>
+        <button data-choice="c" aria-pressed="false">C. 峰值 flop 速率与带宽的比值（即 flops/word 需求增长）</button>
+        <button data-choice="d" aria-pressed="false">D. α（消息延迟）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="b" data-incorrect="a,c,d">
+      <p><strong>问题 2：</strong>根据通信下界，在大小为 M 的快速内存中完成 F 次 flop 的计算，最少需要移动多少 words？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. Ω(F / M)</button>
+        <button data-choice="b" aria-pressed="false">B. Ω(F / √M)</button>
+        <button data-choice="c" aria-pressed="false">C. Ω(F / M^(3/2))</button>
+        <button data-choice="d" aria-pressed="false">D. Ω(F)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="a" data-incorrect="b,c,d">
+      <p><strong>问题 3：</strong>SUMMA 算法基于矩阵乘法的哪种数学形式？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. Outer product（外积）形式：C = Σ A[:,k] * B[k,:]</button>
+        <button data-choice="b" aria-pressed="false">B. Inner product（内积）形式：C[i,j] = Σ A[i,k]*B[k,j]</button>
+        <button data-choice="c" aria-pressed="false">C. Blocked dot product</button>
+        <button data-choice="d" aria-pressed="false">D. Strassen 递归</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="d" data-incorrect="a,b,c">
+      <p><strong>问题 4：</strong>2.5D 矩阵乘法算法中，当副本数 c = P^(1/3) 时，可以实现什么性质？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. 总通信量减少到 O(1)</button>
+        <button data-choice="b" aria-pressed="false">B. flop 数减少为 O(n²)</button>
+        <button data-choice="c" aria-pressed="false">C. 每个处理器的内存使用减少 c 倍</button>
+        <button data-choice="d" aria-pressed="false">D. 完美强扩展（perfect strong scaling），通信量与串行相同</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="c" data-incorrect="a,b,d">
+      <p><strong>问题 5：</strong>Strassen 算法的渐近复杂度（flop 数）是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">A. O(n³)</button>
+        <button data-choice="b" aria-pressed="false">B. O(n²)</button>
+        <button data-choice="c" aria-pressed="false">C. O(n^log₂7) ≈ O(n^2.81)</button>
+        <button data-choice="d" aria-pressed="false">D. O(n^2.376)（Coppersmith-Winograd）</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="nav">
+      <a href="14-ml-unsupervised.html">← 无监督机器学习</a>
+      <a href="16-dense-la.html">稠密线性代数 →</a>
+    </div>
+    <footer>CS267: Applications of Parallel Computers · UC Berkeley · Spring 2025</footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

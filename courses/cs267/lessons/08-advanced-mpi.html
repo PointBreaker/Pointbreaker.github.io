@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 8 课：高级 MPI 与集合通信 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 8 课 · Aydin Buluc</p>
+    <h1>高级 MPI 与集合通信算法</h1>
+    <p class="lede">集合通信（Collective Communication）是 MPI 的核心功能，包括广播、归约、全收集等。理解其底层算法（Ring、Recursive Doubling、Bruck 等）对于实现可扩展的并行程序至关重要。</p>
+
+    <div class="meta">
+      <p><strong>授课教师：</strong>Aydin Buluc</p>
+      <p><strong>日期：</strong>2025-02-13</p>
+      <p><strong>难度：</strong>高级</p>
+      <p><strong>视频：</strong><a href="https://youtu.be/juw0k7WjwGs" target="_blank" rel="noopener">Lecture 8 Video</a></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>分布式深度学习全靠集合通信</h2>
+    <div class="card idea">
+      <p>现代分布式深度学习框架（如 Horovod、NCCL）高度依赖集合通信：</p>
+      <ul>
+        <li><strong>AllReduce：</strong>梯度同步</li>
+        <li><strong>AllGather：</strong>分布式推理</li>
+        <li><strong>Broadcast：</strong>参数分发</li>
+      </ul>
+    </div>
+
+    <h2>集合通信操作</h2>
+    <h3>数据移动</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Broadcast</strong></td><td>一个进程发送数据给所有进程</td></tr>
+        <tr><td><strong>Scatter</strong></td><td>一个进程分发数据块给所有进程</td></tr>
+        <tr><td><strong>Gather</strong></td><td>从所有进程收集数据到一个进程</td></tr>
+        <tr><td><strong>AllGather</strong></td><td>所有进程收集完整数据</td></tr>
+        <tr><td><strong>Alltoall</strong></td><td>每个进程向每个进程发送不同数据</td></tr>
+      </tbody>
+    </table>
+
+    <h3>数据移动 + 计算</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Reduce</strong></td><td>归约（sum、max 等）到一个进程</td></tr>
+        <tr><td><strong>AllReduce</strong></td><td>归约到所有进程</td></tr>
+        <tr><td><strong>Reduce_scatter</strong></td><td>归约后分散</td></tr>
+        <tr><td><strong>Scan</strong></td><td>前缀和</td></tr>
+      </tbody>
+    </table>
+
+    <h3>MPI 集合例程</h3>
+    <p>MPI 提供大量集合例程：</p>
+    <pre><code>MPI_Allgather, MPI_Allgatherv, MPI_Allreduce, MPI_Alltoall, MPI_Alltoallv,
+MPI_Bcast, MPI_Gather, MPI_Gatherv, MPI_Reduce, MPI_Reduce_scatter,
+MPI_Scan, MPI_Scatter, MPI_Scatterv</code></pre>
+    <ul>
+      <li>所有版本将结果交付给所有参与进程</li>
+      <li>v 版本允许变长块</li>
+      <li>AllReduce、Reduce、Reduce_scatter、Scan 支持用户定义的 combiner 函数</li>
+    </ul>
+
+    <h2>SUMMA 矩阵乘法</h2>
+    <h3>算法描述</h3>
+    <p>SUMMA (Scalable Universal Matrix Multiply) 是分布式内存矩阵乘法的经典算法：</p>
+    <pre><code>// 假设 pr × pc 处理器网格
+for k = 0 to n-1 (或 n/b-1)
+  for all I = 1 to pr in parallel
+    A(I,k) 的拥有者广播到整行
+  for all J = 1 to pc in parallel
+    B(k,J) 的拥有者广播到整列
+  C(myproc, myproc) += Acol * Brow</code></pre>
+
+    <h3>MPI 实现</h3>
+    <pre><code>void SUMMA(double *mA, double *mB, double *mC, int p_c) {
+  int row_color = rank / p_c;
+  MPI_Comm row_comm;
+  MPI_Comm_split(MPI_COMM_WORLD, row_color, rank, &amp;row_comm);
+
+  int col_color = rank % p_c;
+  MPI_Comm col_comm;
+  MPI_Comm_split(MPI_COMM_WORLD, col_color, rank, &amp;col_comm);
+
+  for (int k = 0; k &lt; p_c; ++k) {
+    if (col_color == k) memcpy(Atemp, mA, size);
+    if (row_color == k) memcpy(Btemp, mB, size);
+    MPI_Bcast(Atemp, size, MPI_DOUBLE, k, row_comm);
+    MPI_Bcast(Btemp, size, MPI_DOUBLE, k, col_comm);
+    SimpleDGEMM(Atemp, Btemp, mC, N/p, N/p, N/p);
+  }
+}</code></pre>
+
+    <h3>使用非阻塞通信重叠</h3>
+    <pre><code>for (int k = 0; k &lt; p_c-1; ++k) {
+  // 启动下一次迭代的广播
+  MPI_Ibcast(Atemp2, ..., &amp;reqs2[0]);
+  MPI_Ibcast(Btemp2, ..., &amp;reqs2[1]);
+
+  // 等待当前迭代的广播完成
+  MPI_Waitall(reqs1, MPI_STATUS_IGNORE);
+  // 计算
+  SimpleDGEMM(Atemp1, Btemp1, mC, ...);
+
+  // 交换缓冲区
+  swap(Atemp1, Atemp2);
+  swap(Btemp1, Btemp2);
+  swap(reqs1, reqs2);
+}</code></pre>
+
+    <h2>集合通信算法</h2>
+    <h3>AllGather</h3>
+
+    <h4>Ring 算法</h4>
+    <div class="card idea">
+      <pre><code>时间 t: 将 t-1 时刻收到的数据发给右边，从左边接收新数据
+时间 0: 发送自己的原始数据
+
+Tring = α(P-1) + βn(P-1)/P</code></pre>
+      <ul>
+        <li>最优带宽，高延迟</li>
+        <li>流水线化后效果不错</li>
+        <li>NCCL 独家使用流水线 Ring 算法</li>
+      </ul>
+    </div>
+
+    <h4>Recursive Doubling 算法</h4>
+    <pre><code>时间 t: 进程 i 与进程 i+2^t 交换所有当前数据
+每步交换数据量: n/P, 2n/P, 4n/P, ...
+
+Trec-dbl = α log₂(P) + βn(P-1)/P</code></pre>
+    <ul>
+      <li>低延迟，高带宽</li>
+      <li>非 2 的幂时较复杂</li>
+    </ul>
+
+    <h4>Bruck 算法</h4>
+    <pre><code>时间 t: 进程 i 从 i+2^t 接收，向 i-2^t 发送
+⌊log₂(P)⌋ 步后完成
+
+Tbrock = α ⌈log₂(P)⌉ + βn(P-1)/P</code></pre>
+    <ul>
+      <li>适用于任意 P</li>
+      <li>比 Recursive Doubling 更适合非 2 的幂</li>
+    </ul>
+
+    <h3>Broadcast</h3>
+
+    <h4>Binomial Tree 算法</h4>
+    <pre><code>时间 0: root 发送给 P/2
+时间 1: root 和 P/2 同时发送给 P/4 和 3P/4
+...
+深度 log₂(P)
+
+Tbcast = α log₂(P) + βn log₂(P)</code></pre>
+
+    <h4>Scatter + AllGather</h4>
+    <pre><code>// 先用 binomial tree Scatter n 个字
+// 再用 recursive doubling AllGather n/P 个字
+Tbcast = α 2log₂(P) + β2n(P-1)/P  (当 n ≥ P)</code></pre>
+
+    <h3>集合通信复杂度对比</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>算法</th>
+          <th>时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Broadcast</td><td>Binomial Tree</td><td>\(\alpha \log P + \beta n \log P\)</td></tr>
+        <tr><td>Broadcast</td><td>Scatter+AllGather</td><td>\(\alpha 2\log P + \beta 2n(P-1)/P\)</td></tr>
+        <tr><td>Reduce</td><td>Binomial Tree</td><td>\(\alpha \log P + \beta n \log P\)</td></tr>
+        <tr><td>AllReduce</td><td>Ring</td><td>\(2\alpha(P-1)/P + 2\beta n(P-1)/P\)</td></tr>
+        <tr><td>AllReduce</td><td>Recursive Doubling</td><td>\(\alpha \log P + \beta n \log P\)</td></tr>
+        <tr><td>AllGather</td><td>Ring</td><td>\(\alpha(P-1) + \beta n(P-1)/P\)</td></tr>
+        <tr><td>AllGather</td><td>Recursive Doubling</td><td>\(\alpha \log P + \beta n(P-1)/P\)</td></tr>
+        <tr><td>Alltoall</td><td>Bruck</td><td>\(\alpha \log P + \beta n(P-1)/P\)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>非阻塞集合通信</h2>
+    <div class="card idea">
+      <p><strong>MPI 4.0 引入非阻塞集合操作：</strong></p>
+      <pre><code>MPI_Ibcast(&amp;buf, count, datatype, root, comm, &amp;req);
+MPI_Iallreduce(sendbuf, recvbuf, count, datatype, op, comm, &amp;req);
+// ...</code></pre>
+    </div>
+
+    <h3>语义优势</h3>
+    <ul class="checklist">
+      <li>启用异步推进（软件流水线）</li>
+      <li>解耦数据传输和同步</li>
+      <li>抗噪声能力</li>
+      <li>允许重叠 communicator</li>
+    </ul>
+
+    <h3>限制</h3>
+    <ul>
+      <li>无 tag，顺序匹配</li>
+      <li>发送/向量缓冲区在操作期间不能被修改</li>
+      <li>不能与阻塞集合操作混合</li>
+    </ul>
+
+    <h2>混合编程：MPI + Threads</h2>
+    <h3>为什么需要混合编程？</h3>
+    <p>现代集群的节点通常有多核 CPU：</p>
+    <table>
+      <thead>
+        <tr>
+          <th>模式</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>All MPI</td><td>节点间和节点内都用 MPI</td></tr>
+        <tr><td>MPI + OpenMP</td><td>节点内用 OpenMP，节点间用 MPI</td></tr>
+        <tr><td>MPI + Pthreads</td><td>节点内用 Pthreads，节点间用 MPI</td></tr>
+      </tbody>
+    </table>
+
+    <h3>MPI 线程安全级别</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>级别</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>MPI_THREAD_SINGLE</code></td><td>只有一个线程</td></tr>
+        <tr><td><code>MPI_THREAD_FUNNELED</code></td><td>多线程，只有主线程调用 MPI</td></tr>
+        <tr><td><code>MPI_THREAD_SERIALIZED</code></td><td>多线程，但一次只有一个调用 MPI</td></tr>
+        <tr><td><code>MPI_THREAD_MULTIPLE</code></td><td>多线程，任何线程随时可调用 MPI</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <p><strong>注意：</strong></p>
+      <ul>
+        <li>所有实现都支持 MPI_THREAD_SINGLE</li>
+        <li>大多数支持 MPI_THREAD_FUNNELED</li>
+        <li>许多支持 MPI_THREAD_MULTIPLE（但实现效率不同）</li>
+        <li>简单的 OpenMP 程序只需 FUNNELED 级别</li>
+      </ul>
+    </div>
+
+    <h3>MPI_THREAD_MULTIPLE 的语义</h3>
+    <ul>
+      <li><strong>Ordering：</strong>多个线程并发调用 MPI，结果如同顺序执行（任意顺序）</li>
+      <li><strong>Blocking：</strong>阻塞调用只阻塞调用线程，不阻止其他线程</li>
+      <li>用户必须确保同一 communicator 上的集合操作正确排序</li>
+    </ul>
+
+    <h2>单边通信 (One-sided Communication / RMA)</h2>
+    <h3>基本概念</h3>
+    <div class="card idea">
+      <p>单边通信将数据移动与进程同步解耦：</p>
+      <ul>
+        <li>每个进程暴露一部分内存给其他进程</li>
+        <li>其他进程可以直接读写这部分内存</li>
+        <li>不需要远程进程同步</li>
+      </ul>
+    </div>
+
+    <h3>与双边通信对比</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>双边 (Two-sided)</th>
+          <th>单边 (One-sided)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>SEND(data) / RECV(data)</td>
+          <td>PUT(data) / GET(data)</td>
+        </tr>
+        <tr>
+          <td>发送进程被延迟</td>
+          <td>源进程不被延迟</td>
+        </tr>
+        <tr>
+          <td>需要同步</td>
+          <td>无需同步</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>MPI RMA 操作</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>MPI_Win_create</code></td><td>创建可远程访问的内存区域（window）</td></tr>
+        <tr><td><code>MPI_Put</code></td><td>写入远程内存</td></tr>
+        <tr><td><code>MPI_Get</code></td><td>读取远程内存</td></tr>
+        <tr><td><code>MPI_Accumulate</code></td><td>原子累加到远程内存</td></tr>
+        <tr><td><code>MPI_Win_fence</code></td><td>同步（active target）</td></tr>
+        <tr><td><code>MPI_Win_lock/unlock</code></td><td>同步（passive target）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Window 创建模型</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>模型</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>MPI_WIN_CREATE</code></td><td>已有 buffer，使其可远程访问</td></tr>
+        <tr><td><code>MPI_WIN_ALLOCATE</code></td><td>创建 buffer 并使其可远程访问</td></tr>
+        <tr><td><code>MPI_WIN_CREATE_DYNAMIC</code></td><td>创建空 window，动态 attach/detach</td></tr>
+        <tr><td><code>MPI_WIN_ALLOCATE_SHARED</code></td><td>节点内多进程共享 buffer</td></tr>
+      </tbody>
+    </table>
+
+    <h3>同步模型</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>模型</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Fence</strong></td><td>Active target，集体同步</td></tr>
+        <tr><td><strong>Post-Start-Complete-Wait</strong></td><td>Generalized active target</td></tr>
+        <tr><td><strong>Lock/Unlock</strong></td><td>Passive target，单边异步</td></tr>
+      </tbody>
+    </table>
+
+    <div class="rule"></div>
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>SUMMA 算法中，每个处理器负责计算哪个子矩阵？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong">A. C(I,J)，其中 I 和 J 是所有行和列</button>
+        <button data-answer="correct" data-incorrect="SUMMA 中，每个处理器计算 C(myproc, myproc)，即对角块。">B. C(myproc, myproc)</button>
+        <button data-answer="wrong">C. C(I,k)，其中 I 是所有行</button>
+        <button data-answer="wrong">D. C(k,J)，其中 J 是所有列</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>AllGather 的 Ring 算法的时间复杂度是多少？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong">A. \(\alpha \log P + \beta n\)</button>
+        <button data-answer="correct" data-incorrect="Ring 算法：\(T = \alpha(P-1) + \beta n(P-1)/P\)。">B. \(\alpha(P-1) + \beta n(P-1)/P\)</button>
+        <button data-answer="wrong">C. \(\alpha P + \beta nP\)</button>
+        <button data-answer="wrong">D. \(\alpha \log P + \beta n \log P\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>MPI_THREAD_MULTIPLE 的主要限制是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="MPI_THREAD_MULTIPLE 支持多线程调用。">A. 只能有一个线程</button>
+        <button data-answer="wrong" data-incorrect="MPI_THREAD_MULTIPLE 支持任何线程调用。">B. 只有主线程可以调用</button>
+        <button data-answer="correct" data-incorrect="用户必须确保同一 communicator 上的集合操作正确排序。">C. 用户必须确保集合操作的正确排序</button>
+        <button data-answer="wrong" data-incorrect="MPI_THREAD_MULTIPLE 支持非阻塞操作。">D. 不能使用非阻塞操作</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>单边通信（RMA）相比双边通信的主要优点是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="RMA 不一定减少数据量。">A. 减少数据量</button>
+        <button data-answer="correct" data-incorrect="RMA 将数据移动与同步解耦，源进程不被延迟。">B. 将数据移动与同步解耦</button>
+        <button data-answer="wrong" data-incorrect="RMA 不会自动避免死锁。">C. 避免死锁</button>
+        <button data-answer="wrong" data-incorrect="RMA 需要 window 创建。">D. 不需要同步</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>Broadcast 的 Binomial Tree 算法的时间复杂度是多少？</p>
+      <div class="quiz-options">
+        <button data-answer="correct" data-incorrect="Binomial Tree Broadcast：\(T = \alpha \log P + \beta n \log P\)。">A. \(\alpha \log P + \beta n \log P\)</button>
+        <button data-answer="wrong">B. \(\alpha P + \beta nP\)</button>
+        <button data-answer="wrong">C. \(\alpha \log P + \beta n\)</button>
+        <button data-answer="wrong">D. \(\alpha(P-1) + \beta n(P-1)/P\)</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>SUMMA 是经典</h3>
+        <p>SUMMA 算法通过行/列广播实现分布式矩阵乘法，易于泛化和重叠。</p>
+      </article>
+      <article>
+        <h3>集合通信有讲究</h3>
+        <p>Ring、Recursive Doubling、Bruck 等算法各有优劣，适用于不同规模和操作。</p>
+      </article>
+      <article>
+        <article>
+        <h3>非阻塞集合通信</h3>
+        <p>MPI 4.0 的非阻塞集合操作允许软件流水线和异步推进。</p>
+      </article>
+      <article>
+        <h3>混合编程是趋势</h3>
+        <p>MPI + OpenMP/Pthreads 混合编程是现代多核集群的标准做法。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li>Gropp, Hoefler, Thakur, Lusk, <em>Using Advanced MPI</em>, MIT Press, 2014</li>
+      <li>Thakur, Rabenseifner, Gropp, "Optimization of collective communication operations in MPICH," <em>Int. J. HPC Applications</em>, 2005</li>
+      <li>van de Geijn, Watts, "SUMMA: Scalable Universal Matrix Multiplication Algorithm," <em>LAPACK Working Note 96</em></li>
+      <li>Hoefler et al., "Implementation and Performance Analysis of Non-Blocking Collective Operations for MPI"</li>
+      <li>Balaji, Gropp, Thakur, Thakur, "Advanced MPI Programming," ANL Tutorial</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="07-distributed-memory.html">← 第 7 课</a>
+      <span>无后一课</span>
+    </div>
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

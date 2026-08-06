@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW3: Complex Pipelines and Out-of-Order Execution — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Homework 3 导读</p>
+    <h1>HW3: Complex Pipelines and Out-of-Order Execution</h1>
+    <p class="lede">这份导读帮你理解 HW3 在考什么、需要哪些前置知识。它<strong>不包含完整解答</strong>——答案需要你自己动手推导。</p>
+
+    <div class="meta">
+      <span>发布：2023-02-21（随第 11 课）</span>
+      <span>截止：2023-03-14</span>
+      <span>前置：第 11-13 课</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="what">这份作业在考什么？</h2>
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>亲手逐周期推演一台乱序处理器（单发射、支持寄存器重命名）在无限 ROB 和有限（4 项）ROB 两种情况下如何调度一段真实的浮点/整数混合指令序列；再用一个具体的循环+分支例子，追踪 2 位饱和计数器分支预测器的状态演化，计算预测准确率。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem1">Problem 1：OoO Scoreboard/ROB 逐周期追踪</h2>
+    <p>给定一段 7 条指令的序列（load、fadd.d、fmul.d、addi、又一条 load 造成 WAW 需要重命名、fadd.d、fmul.d），以及一套完整的时序规则：load 延迟 2 周期、加法器 3 周期、乘法器 6 周期（均全流水化）；整数结果发射后 1 周期即可旁路、发射后 2 周期写回；<strong>浮点结果写回后还需要额外多停留 1 周期才能被依赖指令使用</strong>；ROB 写端口只有一个（写回冲突时，更旧的指令优先，年轻的指令被推迟）；单发射（每周期系统中只能有一条指令发射）；提交严格按顺序，写回后最早 1 周期提交。</p>
+    <ul>
+      <li><strong>Part A（无限 ROB）</strong>：逐条推算每条指令的发射/写回/提交周期</li>
+      <li><strong>Part B（4 项 ROB）</strong>：在 Part A 基础上叠加 ROB 容量限制——某条指令必须等到它前面第 4 条指令提交之后才能真正进入 ROB</li>
+    </ul>
+    <div class="card">
+      <p><strong>解题的关键提醒：</strong>这道题最容易出错的地方，是"自然"的写回周期（延迟直接相加得到）和"实际"的写回周期（还要考虑单一 ROB 写端口的争用）之间的区别——<strong>较年轻的指令即使自己的操作数都已就绪，也可能因为更旧的指令同一周期也想写 ROB 而被迫推迟写回，进而连带推迟它自己的提交时间</strong>。另外别忘了浮点结果比整数结果多出的那 1 个"停留"周期——这个细节会直接影响后续依赖指令的发射时间。建议先严格按照第 11、12 课讲的"发射→完成→提交"三阶段模型，把每条指令的四个关键时间点（发射、开始执行、写回、提交）分别列成表格，再逐条核对依赖关系。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="problem5">Problem 5：分支预测准确率</h2>
+    <p>给定一段遍历数组 <code>array[N]</code> 的循环代码，外层循环分支（<code>bnez</code> 风格）在 5 次里有 4 次被采纳，内层的 <code>if(array[i]!=0)</code> 分支（<code>beqz</code> 风格，判断元素是否为零）行为则取决于具体数组内容。要求你从初始状态开始，逐次追踪一个 2 位饱和计数器 BHT 的状态演化，分别对两条分支各自计算预测准确率。</p>
+    <div class="card idea">
+      <p><strong>与第 15 课的直接呼应</strong>：这道题就是第 15 课"2 位饱和计数器"和"BHT"内容的直接练习——记住核心规则："只有连续两次预测错误才会真正翻转预测方向"。解题时，把每次分支的（预测，实际结果，新状态）三元组按顺序列成表格，会比试图心算整个过程更不容易出错。题目后续部分还会问到"如果两条分支共享同一个计数器（发生别名）会怎样"，以及"该给哪条分支加静态预测提示"——后者应该回到第 15 课"数据无关的循环分支适合静态提示，数据相关的条件分支不适合"这条论点来组织答案。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！ROB 只有一个写端口，同一周期内如果多条指令都想写回，必须让更旧的指令优先，更年轻的指令即使操作数已就绪也要推迟写回，进而连带推迟提交时间。" data-incorrect="重新看 Problem 1 的'解题的关键提醒'卡片，关于 ROB 写端口冲突的规则。">
+      <p><strong>问题 1：</strong>Problem 1 中，为什么"自然"写回周期（延迟直接相加）和"实际"写回周期可能不同？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为浮点指令永远比整数指令快</button>
+        <button data-choice="b" aria-pressed="false">因为发射端口数量是无限的</button>
+        <button data-choice="c" aria-pressed="false">因为 ROB 只有一个写端口，同一周期多条指令竞争时更旧的指令优先，年轻指令即使就绪也要被推迟写回</button>
+        <button data-choice="d" aria-pressed="false">因为 4 项 ROB 容量对写回时机没有任何影响</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！2 位饱和计数器的核心规则是：只有连续两次预测错误才会真正翻转预测方向——单次错误只会让计数器在同一方向内移动一步。" data-incorrect="重新看 Problem 5 呼应第 15 课'2 位饱和计数器'的卡片。">
+      <p><strong>问题 2：</strong>Problem 5 要求追踪 2 位饱和计数器 BHT 的状态演化，这类计数器最核心的规则是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">任何一次预测错误都会立即翻转预测方向</button>
+        <button data-choice="b" aria-pressed="false">只有连续两次预测错误，才会真正翻转预测方向</button>
+        <button data-choice="c" aria-pressed="false">计数器状态与分支的实际结果无关</button>
+        <button data-choice="d" aria-pressed="false">2 位计数器只能表示"预测采纳"和"预测不采纳"两种状态</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="logistics">提交与评分说明</h2>
+    <ul>
+      <li>鼓励讨论，但每位同学必须独立提交自己的解答</li>
+      <li>提交平台为 Gradescope；除填图/填表题外，答案须用方框圈出</li>
+      <li>评分主要依据完成度，但习题集是期中/期末考试的核心背景材料</li>
+      <li>官方解答在截止日期次日发布</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>本作业原始 PDF：<code>sp23/hw03.pdf</code>（UC Berkeley CS152, Spring 2023）</li>
+      <li>课程依赖内容：第 11 课（数据冒险分类、Scoreboard）、第 12、13 课（重命名设计）、第 15 课（分支预测）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>📝 Homework 3</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

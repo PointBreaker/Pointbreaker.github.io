@@ -1,11 +1,11 @@
 ---
 name: generate-course-site-pr
-description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, homework, labs, notes, code, and an official course homepage into a complete CourseStack v2 GitHub Pages course, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, polished lecture and assignment pages, resource-to-frontend generation, or an automated course PR.
+description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, homework, labs, notes, code, and an official course homepage into a complete CourseStack v3 GitHub Pages course under the shared courses directory, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, polished lecture and assignment pages, resource-to-frontend generation, or an automated course PR.
 ---
 
 # Generate Course Site PR
 
-Build an evidence-backed Chinese course guide from local materials, use the shared CourseStack v2 design system, and stop at a reviewable pull request.
+Build an evidence-backed Chinese course guide from local materials, use the shared CourseStack v3 design system, and stop at a reviewable pull request.
 
 ## Guardrails
 
@@ -59,7 +59,7 @@ Create `.course-build/course-plan.json` using [references/site-contract.md](refe
 
 Use a clean clone or separate worktree. Fetch `origin/main`, create `course/<slug>`, and preserve all unrelated user changes. Read [references/pr-workflow.md](references/pr-workflow.md).
 
-### 5. Scaffold CourseStack v2
+### 5. Scaffold CourseStack v3
 
 Run:
 
@@ -69,7 +69,7 @@ python <skill-root>/scripts/scaffold_course.py \
   --plan "$PWD/.course-build/course-plan.json"
 ```
 
-The script requires `site-platform.json` version 2+, creates the course Dashboard and content stubs, writes normalized JSON, and adds one entry to `courses.json`. It uses shared site assets and does not copy another course or duplicate KaTeX fonts.
+The script requires `site-platform.json` version 3+, creates the course under `courses/<slug>/`, writes its Dashboard and content stubs, normalizes JSON, and adds one entry to `courses.json`. It uses shared site assets and does not copy another course or duplicate KaTeX fonts.
 
 ### 6. Write complete course content
 
@@ -93,6 +93,7 @@ python <skill-root>/scripts/validate_course.py \
   --plan "$PWD/.course-build/course-plan.json" \
   --inventory "$PWD/.course-build/inventory.json" \
   --strict-resources
+python /path/to/repo/tools/check-course-layout.py
 git diff --check
 ```
 
@@ -100,10 +101,10 @@ Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at 
 
 ### 8. Open the PR
 
-Review the complete diff. Stage only `<slug>/**` and `courses.json`, commit, push the course branch, and use `gh pr create`.
+Review the complete diff. Stage only `courses/<slug>/**` and `courses.json`, commit, push the course branch, and use `gh pr create`.
 
 Return the PR URL, branch, commit, page counts, resource coverage, validation results, and known source gaps. Do not claim completion if sources remain unmapped or browser QA was skipped.
 
 ## Runtime outputs
 
-Keep disposable work in `<source-folder>/.course-build/`. Commit only the new course directory and its `courses.json` catalog entry unless the user explicitly expands scope.
+Keep disposable work in `<source-folder>/.course-build/`. Commit only `courses/<slug>/` and its `courses.json` catalog entry unless the user explicitly expands scope.

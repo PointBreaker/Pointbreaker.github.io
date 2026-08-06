@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 5: Multicore Coherence — CS152</title>
+  <link rel="stylesheet" href="../../assets/course.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · Lab 5</p>
+    <h1>Lab 5: Multicore Coherence</h1>
+    <p class="lede">课程最后一个实验，把第 21 课的 MSI/MESI 协议、假共享概念，变成你亲手在一颗真实双核 Rocket 芯片上优化的并行程序——直接感受"同一份数据结构，写法不同，性能可以相差数倍"。</p>
+
+    <div class="meta">
+      <span>发布：2023-04-04（随第 21 课）</span>
+      <span>截止：2023-05-02</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="setup">环境说明</h2>
+    <p>双核 Rocket（RV64GC），每核私有 16KiB 指令缓存/4KiB 数据缓存，窥探式（snoopy）一致性，裸机运行（没有操作系统，所有线程同时进入 <code>main()</code>，通过 <code>ncores</code>/<code>coreid</code> 区分身份，<code>barrier()</code> 用于同步）；每线程 24KiB 栈，<strong>没有任何保护机制</strong>——栈溢出会静默破坏其他数据，调试时需要格外小心。</p>
+
+    <hr class="rule">
+
+    <h2 id="directed">指导性部分（约占 25% 分数）</h2>
+    <ol>
+      <li>在 <code>Lab5MSIDualRocketConfig</code>（MSI 一致性协议）下运行朴素的 <code>vvadd</code></li>
+      <li>在 <code>Lab5MIDualRocketConfig</code>（更简单的 MI 协议，没有 Shared 状态）下运行同样的朴素代码，解释为什么朴素代码在<strong>两种协议下都表现不佳</strong>——这直接对应第 21 课"假共享"的核心教训：朴素实现很可能让多个核心的写入落在同一缓存行里</li>
+      <li>编写 <code>vvadd_opt()</code>——目标是把每次迭代的周期数压缩到朴素版本（MSI 协议下）的约 <strong>60%</strong>，通过自动评分器提交，不需要书面报告</li>
+    </ol>
+
+    <hr class="rule">
+
+    <h2 id="open-ended">开放性部分（约占 75% 分数，组队）</h2>
+    <p>编写 <code>matmul_opt()</code>，实现一个 32×32 的整数矩阵乘法优化版本——矩阵本身有 12KiB 的内存占用，超过了 4 路 4KiB 的 L1 数据缓存容量，这本身就是一个现实的容量压力测试。关键优化技巧，全部直接呼应第 21 课的概念：</p>
+    <ul>
+      <li><strong>避免假共享</strong>：确保每个核心只写入自己独占的输出区域</li>
+      <li><strong>避免 MI 协议下的"乒乓"效应</strong>：在共享输入数据上反复失效-重新获取</li>
+      <li><strong>循环展开/分块/转置/交换</strong>：这些第 8、17 课讲过的局部性优化技巧，在多核场景下同样适用，且效果可能被一致性开销进一步放大</li>
+    </ul>
+    <p>只有在没有达到性能目标时，才需要提交书面报告说明原因。</p>
+
+    <hr class="rule">
+
+    <h2 id="deliverables">交付物与评分说明</h2>
+    <ul>
+      <li>指导性部分独立完成、通过自动评分器提交；开放性部分组队完成</li>
+      <li>报告须为可读的英文摘要，不接受日志文件转储</li>
+      <li>全学期至少完成 3/5 个实验，否则自动判定为 F</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！朴素代码在 MSI 和更简单的 MI 协议下都表现不佳，因为它很可能让多个核心的写入落在同一缓存行里，导致缓存行在核心间反复失效来回传递——这正是第 21 课'假共享'的核心教训。" data-incorrect="重新看指导性部分第 2 步，关于朴素代码为什么两种协议下都表现不佳。">
+      <p><strong>问题 1：</strong>指导性部分要求解释朴素 <code>vvadd</code> 为什么在 MSI 和 MI 协议下都表现不佳，根本原因是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 Rocket 核心的时钟频率太低</button>
+        <button data-choice="b" aria-pressed="false">朴素实现很可能让多个核心的写入落在同一缓存行里，导致该缓存行在核心间反复失效传递（假共享）</button>
+        <button data-choice="c" aria-pressed="false">因为 MSI 和 MI 协议本身存在硬件缺陷</button>
+        <button data-choice="d" aria-pressed="false">因为没有使用任何同步原语</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！开放性部分明确列出'避免假共享'和'避免 MI 协议下的乒乓效应'作为关键优化技巧，两者都直接呼应第 21 课的一致性协议概念。" data-incorrect="重新看开放性部分列出的关键优化技巧。">
+      <p><strong>问题 2：</strong>开放性部分 <code>matmul_opt()</code> 列出的关键优化技巧中，哪两项直接呼应第 21 课的一致性协议概念？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">循环展开与分块</button>
+        <button data-choice="b" aria-pressed="false">矩阵转置与交换</button>
+        <button data-choice="c" aria-pressed="false">避免假共享，以及避免 MI 协议下反复失效-重新获取的"乒乓"效应</button>
+        <button data-choice="d" aria-pressed="false">增加向量寄存器数量</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>课程依赖内容：第 21 课（MSI/MESI、假共享）、第 22 课（内存相合性）</li>
+      <li>Chipyard 文档：<a href="https://chipyard.readthedocs.io/en/latest/">chipyard.readthedocs.io</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>🧪 Lab 5</span>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

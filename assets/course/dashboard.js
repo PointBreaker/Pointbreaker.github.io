@@ -1,15 +1,19 @@
 (function () {
+  const scriptUrl = new URL(document.currentScript.src, location.href);
+  const assetsMarker = '/assets/course/dashboard.js';
+  const markerIndex = scriptUrl.pathname.lastIndexOf(assetsMarker);
+  const siteBase = markerIndex >= 0 ? `${scriptUrl.pathname.slice(0, markerIndex)}/` : '/';
   const mount = document.querySelector('#course-app');
   if (mount) {
     mount.outerHTML = `
       <a class="skip-link" href="#learning-path">跳到学习路径</a>
       <header class="course-bar">
         <div class="shell course-bar-inner">
-          <a class="wordmark" href="../">CourseStack</a>
+          <a class="wordmark" href="${siteBase}">CourseStack</a>
           <nav class="course-bar-links" aria-label="课程导航">
             <a href="#learning-path">学习路径</a>
             <a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a>
-            <a href="../docs/course-generator.html">贡献课程</a>
+            <a href="${siteBase}docs/course-generator.html">贡献课程</a>
           </nav>
         </div>
       </header>
@@ -56,7 +60,7 @@
           <div class="path-list" id="path-list"></div>
         </section>
       </main>
-      <footer class="course-footer"><div class="shell course-footer-inner"><span>CourseStack 课栈 · 基于一手课程资料整理</span><a href="../">返回课程目录</a></div></footer>`;
+      <footer class="course-footer"><div class="shell course-footer-inner"><span>CourseStack 课栈 · 基于一手课程资料整理</span><a href="${siteBase}">返回课程目录</a></div></footer>`;
   }
 
   const root = document.documentElement;

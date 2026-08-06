@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guest Lecture: Branch Prediction — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 15 课</p>
+    <h1>Guest Lecture: Branch Prediction</h1>
+    <p class="lede">这一讲直接量化了"控制冒险为什么是乱序执行的头号敌人"：现代流水线取指和分支真正解出结果之间可能隔着十几级流水，一次误判丢弃的工作量可以轻松超过一百条指令。分支预测正是把这份代价压到最低的关键技术。</p>
+
+    <div class="meta">
+      <span>主讲：客座讲者（幻灯片本身注明"以下内容沿用去年同一讲的幻灯片"，原作者 Krste Asanovic）</span>
+      <span>预计用时：55 分钟</span>
+      <span>难度：较难</span>
+    </div>
+
+    <div class="card warning">
+      <p><strong>关于资料来源的说明：</strong>这份幻灯片的标题页明确写着"客座讲者今日主讲——以下幻灯片沿用去年同一讲的内容"，其内部页眉标注为"Lecture 12 – Branch Prediction, Krste Asanovic"——这是课程组主动重用的一份往年讲义，编号上的错位（"12"而非"15"）是重用旧文件的自然结果，并非真正的课程排期错误。另外，第 16 课的回顾幻灯片提到"上一讲还涉及 Perceptron 和 TAGE 这两种更先进的分支预测结构"，但这两个术语在本份幻灯片实际内容中并未出现——这可能是客座讲者当场口头补充的内容，也可能是回顾模板本身的泛化表述，本页如实按幻灯片实际内容撰写，不臆测未出现的具体机制细节。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="penalty">控制流代价：为什么误判如此昂贵</h2>
+    <p>现代处理器的取指和分支真正被执行、解出结果之间，可能隔着<strong>超过 10 级流水线</strong>。控制流代价大致正比于"循环长度 × 流水线宽度 + 缓冲区大小"。</p>
+    <div class="card">
+      <p><strong>误判代价的具体数字（重新验算）：</strong>假设一台 4 发射超标量、取指到派发之间有 8 级流水线、80 项 ROB、发射到分支解出需要 3 个周期。误判会丢弃：<code>8×4 + (80−1) = 32 + 79 = 111</code> 条指令——重新验算与幻灯片一致。如果预测准确率从 90% 提升到 95%，误判率恰好减半（10%→5%，降低了 50%）；假设每 6 条指令中有 1 条是分支，10% 误判率下平均每 <code>1/((1/6)×0.10)=60</code> 条指令发生一次误判，准确率提升到 95% 后变为每 <code>1/((1/6)×0.05)=120</code> 条指令一次——两次重新计算都与幻灯片给出的 60/120 完全吻合。这组数字直观说明了：<strong>预测准确率哪怕只提升 5 个百分点，两次误判之间能多跑的指令数就能直接翻倍。</strong></p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="static">静态分支预测</h2>
+    <p>整体上分支被采纳（taken）的概率约 60-70%，但方向不同差异很大：<strong>向后分支（循环）约 90% 被采纳</strong>，<strong>向前分支约 50% 被采纳</strong>（接近抛硬币）。两种 ISA 级静态预测机制：在操作码本身附带首选方向提示（<strong>Motorola MC88110</strong>：<code>bne0</code>表示倾向预测采纳，<code>beq0</code>表示倾向预测不采纳）；或者让编译器为每条分支静态选定一个方向（<strong>HP PA-RISC、Intel IA-64</strong>），据称准确率约 80%。</p>
+
+    <hr class="rule">
+
+    <h2 id="dynamic">动态分支预测：从 1 位历史到 2 位饱和计数器</h2>
+    <p>动态预测依赖两种相关性：<strong>时间相关性</strong>（一条分支自己过去的结果预测它未来的结果）与<strong>空间相关性</strong>（多条分支的结果彼此相关，反映"偏好的执行路径"）。<strong>1 位分支历史预测器</strong>只记住上一次的结果——对于循环收尾的向后分支，这会导致<strong>每次循环执行都误判两次</strong>：一次在循环入口（因为上次退出了循环，预测不采纳），一次在循环出口（因为上次继续循环了，预测采纳）。</p>
+    <p>解决办法是<strong>2 位饱和计数器</strong>：四个状态（"预测采纳-上次对/错"、"预测不采纳-上次对/错"）构成一个 FSM，<strong>只有连续两次预测错误才会真正翻转预测方向</strong>——这给了预测器抵御偶发异常的"惯性"。<strong>分支历史表（BHT）</strong>用取指 PC 的低若干位作为索引，查一张 2 位计数器表。真实规格：<strong>4K 项 BHT，每项 2 位，准确率约 80-90%</strong>。</p>
+
+    <hr class="rule">
+
+    <h2 id="two-level">利用空间相关性：两级预测器</h2>
+    <p>引用 <strong>Yeh and Patt (1992)</strong> 的例子：<code>if(x[i]&lt;7) y+=1; if(x[i]&lt;5) c-=4;</code>——如果第一个条件为假，第二个条件必然也为假，这就是空间相关性。引入<strong>历史寄存器 H</strong>，记录处理器最近 N 条分支的方向。<strong>Pentium Pro</strong> 用最近两条分支的结果（2 位）在 4 组 BHT 之间做选择，据称达到约 <strong>95%</strong> 的准确率——2 位历史选 4 组（2²=4）在数字上是自洽的。</p>
+    <p>幻灯片明确讨论并否定了"两个方向都推测执行"这个替代方案：所需资源随并发推测执行的路数线性增长，却只有一半的资源真正做了有用功——如果预测足够准，把全部资源押注在预测方向上明显更划算。</p>
+
+    <hr class="rule">
+
+    <h2 id="btb">分支目标缓冲区（BTB）与返回地址栈</h2>
+    <p>BHT 只能预测<strong>方向</strong>，取指流要重新对齐还需要知道<strong>目标地址</strong>。<strong>分支目标缓冲区（BTB）</strong>同时存储分支 PC 和预测目标 PC；只存储<strong>被采纳</strong>的分支和跳转；BTB 命中让下一条取指的目标<strong>在分支本身被译码之前</strong>就能确定——这是它相对纯 BHT 设计的关键优势。BTB 每项存储代价更高，但能更早改变取指方向、还能加速间接跳转（JR）；BHT 存储的项数多得多、更准确；真实设计中二者结合，BTB 在流水线早期起作用，BHT 在稍后阶段纠正。</p>
+    <p>寄存器跳转（JR）的三种典型用途——switch 语句、动态函数调用（如 C++ 虚函数）、子程序返回——各自的 BTB 命中率取决于"是否总是跳到同一个目标"；子程序返回的弱点在于"同一个函数可能被许多不同的调用点调用"。专用的<strong>返回地址栈</strong>（通常 8-16 项的 LIFO）比通用 BTB 准确得多：函数调用时压入返回地址，识别到子程序返回时弹出——因为调用/返回天然遵循严格的嵌套规律。</p>
+
+    <hr class="rule">
+
+    <h2 id="ooo-recovery">乱序机器中的分支预测恢复</h2>
+    <p>顺序发射机器只有<strong>推测取指</strong>，没有<strong>推测执行</strong>（分支总是先于后续指令完成，已完成的值保留在旁路网络中直到提交）；乱序发射机器则连<strong>执行</strong>本身也是推测性的——分支可能在程序顺序上更晚的指令<strong>已经完成之后</strong>才被解出，已完成的值保存在 ROB 或统一物理寄存器堆的重命名寄存器里，直到提交才算数。乱序恢复因此更复杂：多条分支可能同时处于"尚未解出"状态。真实例子：<strong>MIPS R10K 用 4 个掩码位</strong>为指令标记它依赖于最多 4 条未解出的推测分支中的哪几条，某条分支解出后清除对应掩码位、腾出来给下一条分支复用；重命名表的恢复方式与第 12、13 课讨论异常恢复时完全一致——MIPS R10K 相应地只保留 4 份快照（与 4 个掩码位一一对应），Alpha 21264 则保留 80 份（每条 ROB 指令一份）。</p>
+
+    <hr class="rule">
+
+    <h2 id="fetch-bandwidth">取指带宽：常被忽视的瓶颈</h2>
+    <p>推测式乱序机器的性能常常受限于<strong>取指带宽</strong>：推测执行可能取指的数量是最终提交数量的 <strong>2-3 倍</strong>；误判代价主要取决于重新填满指令窗口所需的时间；被采纳的分支尤其麻烦，因为它们会打断指令缓存行的连续读取。整数代码大约每 <strong>6-9 条指令</strong>就有一条被采纳的分支——要继续扩展性能，机器必须能每周期处理多条被采纳的分支，这意味着每周期预测多条分支、每周期取指多个不连续的指令块。<strong>Trace Cache</strong>（真实例子：<strong>Intel Pentium 4</strong>，用于缓存已译码的微操作）正是为此而生：把实际执行路径上多个<strong>不连续</strong>的基本块，打包进一条<strong>连续</strong>的 trace cache 行里，这样一次取指就能取到跨越多条已采纳分支的指令序列。</p>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：1 位历史预测器已经"足够好"，2 位没有本质区别。</strong>1 位预测器在每一次循环的入口和出口都会各误判一次；2 位饱和计数器需要连续两次错误才翻转方向，恰好能"记住"循环通常会继续执行，从而避免循环出口那一次可预见的误判。</li>
+      <li><strong>误区：乱序机器和顺序机器的分支恢复机制是一样的。</strong>顺序机器只有推测取指，分支总是先于后续指令完成；乱序机器连执行本身都是推测性的，后续指令可能在分支解出前就已经"完成"，因此需要专门的掩码位/快照机制来选择性撤销。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！8×4+(80-1) = 32+79 = 111，与幻灯片给出的数字完全吻合。" data-incorrect="重新计算：取指到派发的流水级数 × 发射宽度，再加上 (ROB 大小-1)。">
+      <p><strong>问题 1：</strong>一台 4 发射超标量、取指到派发 8 级流水线、80 项 ROB 的机器，一次分支误判最多会丢弃多少条已经进入流水线的指令？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">32 条</button>
+        <button data-choice="b" aria-pressed="false">80 条</button>
+        <button data-choice="c" aria-pressed="false">111 条</button>
+        <button data-choice="d" aria-pressed="false">160 条</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！2 位饱和计数器要求连续两次预测错误才会翻转预测方向，因此循环继续执行时的这次"意料之中"的正确预测不会被上一次的错误干扰。" data-incorrect="重新看"动态分支预测"一节：1 位预测器和 2 位饱和计数器分别需要几次错误才会改变预测方向。">
+      <p><strong>问题 2：</strong>为什么"2 位饱和计数器"比"1 位历史预测器"更能避免循环收尾分支的重复误判？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 2 位计数器占用更多存储空间，本身就更准确</button>
+        <button data-choice="b" aria-pressed="false">因为 2 位饱和计数器需要连续两次预测错误才会翻转预测方向，给了预测器抵御偶发异常的"惯性"</button>
+        <button data-choice="c" aria-pressed="false">因为 2 位计数器完全消除了所有分支误判</button>
+        <button data-choice="d" aria-pressed="false">因为 2 位计数器只用于向前分支</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a" data-correct="正确！BTB 存储分支PC和目标PC，命中时能在分支本身被译码之前就确定下一条取指目标；纯 BHT 只能预测方向，不能提供目标地址。" data-incorrect="重新看"分支目标缓冲区与返回地址栈"一节：BTB 相对纯 BHT 设计的关键优势是什么。">
+      <p><strong>问题 3：</strong>为什么仅凭分支历史表（BHT）还不够，还需要分支目标缓冲区（BTB）？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">BHT 只能预测分支方向（采纳/不采纳），不能提供目标地址；BTB 存储目标地址，能在分支被译码之前就重定向取指</button>
+        <button data-choice="b" aria-pressed="false">BHT 的存储成本比 BTB 更高</button>
+        <button data-choice="c" aria-pressed="false">BTB 可以完全替代 ROB</button>
+        <button data-choice="d" aria-pressed="false">BHT 只能用于间接跳转，不能用于条件分支</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>误判代价惊人</h3>
+        <p>111 条指令的例子说明为什么分支预测如此重要</p>
+      </article>
+      <article>
+        <h3>2 位饱和计数器</h3>
+        <p>连续两次错误才翻转，解决 1 位预测器的循环收尾问题</p>
+      </article>
+      <article>
+        <h3>BTB + 返回地址栈</h3>
+        <p>提供目标地址，子程序返回靠 LIFO 结构远比 BTB 准确</p>
+      </article>
+      <article>
+        <h3>乱序恢复更复杂</h3>
+        <p>掩码位/快照机制选择性撤销尚未提交的推测执行结果</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Chapter 3.3, 3.9-3.10</li>
+      <li>本课幻灯片（沿用往年讲义）：<code>sp23/lecture_slides/L15_Guest_Branch_Prediction.pdf</code>（内部标注 "Lecture 12 – Branch Prediction," Krste Asanovic）</li>
+      <li>Yeh and Patt, "Alternative Implementations of Two-Level Adaptive Branch Prediction," ISCA 1992</li>
+      <li>Discussion 7 worksheet：Branch Predictions and VLIW（sp23 discussions）；本讲还提供了 Additional Notes（sp23 course site）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0014-vliw.html">← 第 14 课：VLIW</a>
+      <span>🎓 第 15 课</span>
+      <a href="0016-multithreading.html">第 16 课：Multithreading →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

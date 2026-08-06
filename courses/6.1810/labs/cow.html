@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab: 写时复制 — MIT 6.1810</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.1810 · Lab cow · 写时复制</p>
+    <h1>Lab: Copy-on-Write Fork for xv6</h1>
+    <p class="lede">虚拟内存提供了一层间接性：内核可以通过将 PTE 标记为无效或只读来拦截内存引用，导致 page fault，并可以通过修改 PTE 来更改地址的含义。</p>
+
+    <div class="meta">
+      <p><strong>难度：</strong>困难</p>
+      <p><strong>分支：</strong>cow</p>
+      <p><strong>实验日期：</strong>2026 秋季</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <pre><code class="language-bash">$ git fetch
+$ git checkout cow
+$ make clean</code></pre>
+
+    <h2>问题</h2>
+
+    <p>xv6 中的 fork() 系统调用将父进程的所有用户空间内存复制到子进程中。如果父进程很大，复制可能需要很长时间。更糟糕的是，工作通常大部分被浪费：fork() 通常在子进程中跟随着 exec()，它丢弃了复制的内存，通常没有使用大部分内容。</p>
+
+    <p>另一方面，如果父进程和子进程都使用复制的页面，并且一个或两个写入它，那么复制才是真正需要的。</p>
+
+    <h2>解决方案</h2>
+
+    <div class="card idea">
+      <p>你的目标是实现写时复制 (COW) fork()，推迟分配和复制物理内存页，直到真正需要复制，如果需要的话。</p>
+    </div>
+
+    <p>COW fork() 只为子进程创建一个页表，用户内存的 PTE 指向父进程的物理页。COW fork() 将父进程和子进程中的所有用户 PTE 标记为只读。当任一进程尝试写入这些 COW 页之一时，CPU 将强制产生 page fault。内核 page fault handler 检测这种情况，为 faulting 进程分配一个物理内存页，将原始页复制到新页中，并修改 faulting 进程中的相关 PTE 以引用新页，这次 PTE 标记为可写。</p>
+
+    <div class="card warning">
+      <p>COW fork() 使实现用户内存的物理页的释放变得有点棘手。给定物理页可能被多个进程的页表引用，并且只在最后一个引用消失时才被释放。在像 xv6 这样的简单内核中，这种簿记相当简单，但在生产内核中，这可能很难做好。</p>
+    </div>
+
+    <h2>实现写时复制 fork <span class="badge hard">困难</span></h2>
+
+    <div class="lab-required">
+      <p>你的任务是在 xv6 内核中实现写时复制 fork。如果你的修改后的内核成功执行 cowtest 和 'usertests -q' 程序，你就完成了。</p>
+    </div>
+
+    <pre><code class="language-bash">$ cowtest
+simple: ok
+simple: ok
+three: ok
+three: ok
+three: ok
+file: ok
+forkfork: ok
+ALL COW TESTS PASSED
+$ usertests -q
+...
+ALL TESTS PASSED
+$</code></pre>
+
+    <p>这是一个合理的攻击计划：</p>
+
+    <ol>
+      <li>修改 uvmcopy() 将父进程的物理页映射到子进程中，而不是分配新页。清除子进程和父进程中具有 PTE_W 的页的 PTE_W。</li>
+      <li>修改 vmfault() 识别 page fault。当 COW 页上发生写 page fault 时，分配新页，复制旧页，安装新页并设置 PTE_W。</li>
+      <li>确保每个物理页在最后一个 PTE 引用消失时被释放——但不超过。为每个物理页维护一个"引用计数"。</li>
+      <li>修改 copyout() 在遇到 COW 页时使用与 page fault 相同的方案。</li>
+    </ol>
+
+    <p>一些提示：</p>
+    <ul>
+      <li>你可能需要一种方法来记录每个 PTE 是否是 COW 映射。你可以使用 RISC-V PTE 中的 RSW（保留给软件）位。</li>
+      <li><tt>usertests -q</tt> 探索了 <tt>cowtest</tt> 不测试的场景，所以不要忘记检查两者。</li>
+      <li>一些有用的页表标志宏和定义在 <tt>kernel/riscv.h</tt> 的末尾。</li>
+      <li>如果发生 COW page fault 且没有空闲内存，应该杀死进程。</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>提交实验</h2>
+
+    <h3>时间花费</h3>
+    <p>创建一个新文件 <tt>time.txt</tt>，放入一个整数，表示你花在实验上的小时数。</p>
+
+    <h3>答案</h3>
+    <p>如果本实验有问题，将答案写在 <tt>answers-cow.txt</tt> 中。</p>
+
+    <h3>提交</h3>
+    <p>运行 <kbd>make zipball</kbd>，上传到 Gradescope。</p>
+
+    <div class="card warning">
+      <ul>
+        <li>请运行 <kbd>make grade</kbd> 确保代码通过所有测试</li>
+        <li>在运行 <kbd>make zipball</kbd> 之前提交任何修改的源代码</li>
+      </ul>
+    </div>
+
+    <h2>可选挑战练习</h2>
+    <ul>
+      <li>测量你的 COW 实现减少了多少字节复制和物理页分配，找到并利用机会进一步减少这些数字</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="traps.html">← 上一个实验：陷阱</a>
+      <a href="net.html">下一个实验：网络驱动 →</a>
+    </div>
+    <footer>
+      <p>MIT 6.1810 (6.1810): Operating System Engineering · Lab: 写时复制</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

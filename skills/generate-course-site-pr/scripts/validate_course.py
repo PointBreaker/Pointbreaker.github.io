@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a generated CourseStack v2 course before opening a pull request."""
+"""Validate a generated CourseStack v3 course before opening a pull request."""
 
 from __future__ import annotations
 
@@ -16,8 +16,9 @@ TODO_MARKER = "COURSE_CONTENT_TODO"
 DRIVE_RE = re.compile(r"https?://(?:drive|docs)\.google\.com", re.IGNORECASE)
 DOLLAR_MATH_RE = re.compile(r"(?<!\\)\$[^$\n]{1,300}(?<!\\)\$")
 PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
-PLATFORM_VERSION = 2
-LESSON_STYLE_VERSION = "20260806b"
+PLATFORM_VERSION = 3
+COURSES_ROOT = "courses"
+SHARED_ASSET_VERSION = "20260806c"
 
 
 class PageParser(HTMLParser):
@@ -114,8 +115,10 @@ def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
     if page.name != "index.html":
         if "assets/course/lesson.css" not in source or "assets/course/lesson-ui.js" not in source:
             errors.append(f"{label}: missing shared CourseStack reading shell")
-        if f"assets/course/lesson.css?v={LESSON_STYLE_VERSION}" not in source:
-            errors.append(f"{label}: shared lesson stylesheet is missing cache version {LESSON_STYLE_VERSION}")
+        if f"assets/course/lesson.css?v={SHARED_ASSET_VERSION}" not in source:
+            errors.append(f"{label}: shared lesson stylesheet is missing cache version {SHARED_ASSET_VERSION}")
+        if f"assets/course/lesson-ui.js?v={SHARED_ASSET_VERSION}" not in source:
+            errors.append(f"{label}: shared lesson UI is missing cache version {SHARED_ASSET_VERSION}")
         for quiz in parser.quizzes:
             if not quiz["answer"]:
                 errors.append(f"{label}: quiz {quiz['id']} missing data-answer")
@@ -158,17 +161,23 @@ def main() -> int:
     args = parser.parse_args()
 
     repo = Path(args.repo).expanduser().resolve()
-    course = repo / args.slug
     errors: list[str] = []
     warnings: list[str] = []
     platform_path = repo / "site-platform.json"
     catalog_path = repo / "courses.json"
+    platform = load_json(platform_path) if platform_path.is_file() else {}
+    courses_root = platform.get("coursesRoot", COURSES_ROOT)
+    course = repo / courses_root / args.slug
     required = [course / "index.html", course / "course-info.json", course / "api/status.json", platform_path, catalog_path]
     for path in required:
         if not path.is_file():
             errors.append(f"missing required file: {path.relative_to(repo)}")
     if platform_path.is_file() and int(load_json(platform_path).get("version", 0)) < PLATFORM_VERSION:
         errors.append(f"CourseStack platform v{PLATFORM_VERSION}+ is required")
+    if platform_path.is_file() and courses_root != COURSES_ROOT:
+        errors.append(f"CourseStack platform must use coursesRoot={COURSES_ROOT!r}")
+    if (repo / args.slug).exists():
+        errors.append(f"legacy root-level course directory must not exist: {args.slug}")
     if not course.is_dir():
         errors.append(f"missing course directory: {course}")
     else:
@@ -186,7 +195,8 @@ def main() -> int:
             errors.append(f"work-item page numbers differ from plan: expected {sorted(expected_work)}, got {sorted(actual_work)}")
 
     if catalog_path.is_file():
-        matches = [item for item in load_json(catalog_path).get("courses", []) if item.get("id") == args.slug and item.get("path") == f"{args.slug}/"]
+        expected_path = f"{courses_root}/{args.slug}/"
+        matches = [item for item in load_json(catalog_path).get("courses", []) if item.get("id") == args.slug and item.get("path") == expected_path]
         if len(matches) != 1:
             errors.append(f"courses.json must contain exactly one entry for {args.slug}")
 

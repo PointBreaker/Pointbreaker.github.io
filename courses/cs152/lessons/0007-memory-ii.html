@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memory II — CS152</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS152 · 第 7 课</p>
+    <h1>Memory II：AMAT、三种缺失与多级缓存</h1>
+    <p class="lede">这一课把第 6 课的缓存结构变成可以量化分析的工具——用 AMAT 公式统一衡量命中时间和缺失代价，用"3C"模型区分不同缺失的根本原因，并把单级缓存扩展成真实处理器普遍采用的多级缓存体系。</p>
+
+    <div class="meta">
+      <span>授课：Sophia Shao</span>
+      <span>预计用时：50 分钟</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="recap">回顾第 6 课</h2>
+    <p>处理器-DRAM 性能鸿沟每年扩大约 50%；缓存靠时间/空间局部性弥合这道鸿沟；三种放置策略——全相联、组相联、直接映射。</p>
+
+    <hr class="rule">
+
+    <h2 id="replacement">替换策略（快速回顾）</h2>
+    <p>组相联/全相联缓存在缺失时需要决定替换哪一行：<strong>随机（Random）</strong>；<strong>LRU（最近最少使用）</strong>——状态需要在每次访问时更新，真正实现只在小规模组（如 2 路）内可行，4-8 路通常用<strong>伪 LRU（Pseudo-LRU）</strong>二叉树近似；<strong>FIFO/轮转</strong>——常用于高相联度缓存；<strong>NMRU（非最近使用）</strong>——FIFO 的变体，对最近使用过的行例外处理。替换策略通常被认为是"二阶效应"，因为它只在缺失时才起作用。</p>
+
+    <hr class="rule">
+
+    <h2 id="amat">AMAT：把命中和缺失统一成一个数字</h2>
+    <p>\[ \text{AMAT} = \text{Hit Time} + \text{Miss Rate} \times \text{Miss Penalty} \]</p>
+    <p>一条经验法则：选用尽量大的缓存，只要它的命中时间不超过 1 个周期（对当时的工艺，大约是 8–32 KB 量级）。</p>
+
+    <hr class="rule">
+
+    <h2 id="3c">缺失的三种根本原因（3C 模型）</h2>
+    <ul>
+      <li><strong>强制性缺失（Compulsory / cold-start）</strong>：一行数据第一次被访问，即使缓存无限大也会发生</li>
+      <li><strong>容量性缺失（Capacity）</strong>：缓存太小，装不下程序需要的全部数据，即使替换策略完美也会发生</li>
+      <li><strong>冲突性缺失（Conflict）</strong>：由行放置策略造成的碰撞——如果是理想的全相联，就不会发生</li>
+    </ul>
+    <p>缓存参数对性能的影响可以逐一对应到这三类缺失：更大的容量（减少容量/冲突缺失，但增加命中时间）；更高的相联度（减少冲突缺失，但可能增加命中时间）；更大的行大小（减少强制性缺失，但增加冲突缺失与缺失代价）。</p>
+
+    <hr class="rule">
+
+    <h2 id="write-policy">写策略</h2>
+    <table>
+      <tr><th>策略</th><th>说明</th></tr>
+      <tr><td>写通（Write-through）</td><td>命中时同时写缓存和主存——流量更高，但流水线/缓存设计更简单</td></tr>
+      <tr><td>写回（Write-back）</td><td>只写缓存，行被换出时才写回主存（配合每行一个脏位 dirty bit 进一步减少写回流量）</td></tr>
+      <tr><td>不按写分配（No-write-allocate）</td><td>写缺失时只写主存，不把该块调入缓存</td></tr>
+      <tr><td>按写分配（Write-allocate）</td><td>写缺失时把该块调入缓存</td></tr>
+    </table>
+    <p>常见组合是"写通 + 不按写分配"或"写回 + 按写分配"。为了不让写缺失拖慢流水线，可以引入<strong>写缓冲（write buffer）</strong>：位于数据缓存和统一 L2 之间，写回缓存的脏行、或写通缓存的所有写操作都先进入写缓冲，由缓存流水线异步处理，从而降低读缺失的有效代价。</p>
+
+    <hr class="rule">
+
+    <h2 id="sub-block">用子块降低标签开销</h2>
+    <p><strong>子块放置（sector cache）</strong>：给每个比整行更小的子块单独配一个有效位，既不必把整行做大（避免增大缺失代价），又能减少标签开销——缺失时只需读取真正需要的那个子块。</p>
+
+    <hr class="rule">
+
+    <h2 id="multilevel">多级缓存</h2>
+    <ul>
+      <li><strong>局部缺失率</strong> = 该级缓存的缺失次数 / 该级缓存的访问次数</li>
+      <li><strong>全局缺失率</strong> = 该级缓存的缺失次数 / CPU 的访存次数</li>
+      <li><strong>每指令缺失数（MPI）</strong> = 该级缓存的缺失次数 / 指令数</li>
+    </ul>
+    <p><strong>包含式（inclusive）</strong>多级缓存：内层（L1）缓存持有的行必须也存在于外层（L2）中——外部一致性侦听只需检查外层缓存即可。<strong>排他式（exclusive）</strong>多级缓存：内层缓存可能持有外层没有的行，缺失时在内外层之间"交换"行（真实例子：AMD Athlon，64KB 一级 + 256KB 二级）。</p>
+
+    <div class="card">
+      <p><strong>真实多级缓存参数对比（原始规格数字）：</strong></p>
+      <ul>
+        <li><strong>Itanium-2（Intel/HP, 2002）</strong>：L1 16KB 4 路组相联 64B 行 4 端口 1 周期延迟；L2 256KB 4 路组相联 128B 行 4 端口 5 周期延迟；L3 3MB 12 路组相联 128B 行单 32B 端口 12 周期延迟</li>
+        <li><strong>Power7（IBM, 2009）</strong>：每核 32KB L1 指令缓存 + 32KB L1 数据缓存，3 周期延迟；每核 256KB 统一 L2，8 周期延迟；32MB 统一共享 L3（嵌入式 DRAM/eDRAM），本地片延迟 25 周期</li>
+        <li><strong>IBM z196 大型机（2010）</strong>：96 核（每芯片 4 核 × 24 芯片/系统），乱序 3 发射超标量 @ 5.2GHz；每核 L1 64KB 指令 + 128KB 数据；每核私有 L2 1.5MB（系统总计 144MB）；每芯片共享 L3 24MB eDRAM（系统总计 576MB）；系统共享 L4 768MB eDRAM</li>
+      </ul>
+      <p>核对：z196 的 96 核确实等于 4 核/芯片 × 24 芯片/系统。这些真实数字直观展示了"离处理器越近的缓存越小越快，越远的缓存越大越慢"这条设计规律，贯穿从 L1 到 L4 整整四个层级。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="misconceptions">常见误区</h2>
+    <ul>
+      <li><strong>误区：缓存越大，AMAT 一定越低。</strong>更大的缓存虽然能降低缺失率，但命中时间本身也可能因此变长——AMAT 是二者的权衡，不能只看缺失率一个指标。</li>
+      <li><strong>误区：三种缺失（3C）中，只要提高相联度就能全部消除。</strong>提高相联度只能消除冲突性缺失，对强制性和容量性缺失没有帮助——这也是为什么现实中很少见到"全相联的大缓存"：相联度带来的收益会随缓存增大而递减。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="a" data-correct="正确！即使缓存无限大，第一次访问某个地址时仍然会缺失——这就是强制性缺失的定义。" data-incorrect="重新看"3C 模型"一节：哪一种缺失即使在无限大的缓存中也无法避免？">
+      <p><strong>问题 1：</strong>假设有一个容量无限大、但仍然是有限相联度的缓存，程序第一次访问某个从未访问过的地址时，仍然会发生哪种缺失？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">强制性缺失（Compulsory）</button>
+        <button data-choice="b" aria-pressed="false">容量性缺失（Capacity）</button>
+        <button data-choice="c" aria-pressed="false">冲突性缺失（Conflict）</button>
+        <button data-choice="d" aria-pressed="false">不会发生任何缺失</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！AMAT = Hit Time + Miss Rate × Miss Penalty，这是本课最核心的公式。" data-incorrect="重新看 AMAT 一节的公式定义。">
+      <p><strong>问题 2：</strong>AMAT（平均访存时间）的公式是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">Hit Time × Miss Rate + Miss Penalty</button>
+        <button data-choice="b" aria-pressed="false">Hit Time + Miss Rate × Miss Penalty</button>
+        <button data-choice="c" aria-pressed="false">Miss Rate + Miss Penalty − Hit Time</button>
+        <button data-choice="d" aria-pressed="false">(Hit Time + Miss Penalty) / Miss Rate</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="c" data-correct="正确！排他式多级缓存允许内层持有外层没有的行，缺失时在内外层之间交换行——AMD Athlon 就是这样设计的。" data-incorrect="重新看"多级缓存"一节：包含式要求 L1 的内容必须也在 L2 中，排他式则不要求。">
+      <p><strong>问题 3：</strong>"排他式（exclusive）"多级缓存与"包含式（inclusive）"多级缓存的关键区别是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">排他式缓存不支持写回策略</button>
+        <button data-choice="b" aria-pressed="false">包含式缓存的容量必须比排他式更大</button>
+        <button data-choice="c" aria-pressed="false">排他式允许内层缓存持有外层没有的行，缺失时在内外层之间交换行；包含式则要求内层的内容必须也存在于外层</button>
+        <button data-choice="d" aria-pressed="false">两者没有实质区别，只是命名不同</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>AMAT</h3>
+        <p>Hit Time + Miss Rate × Miss Penalty</p>
+      </article>
+      <article>
+        <h3>3C 模型</h3>
+        <p>强制性、容量性、冲突性缺失，各自的应对手段不同</p>
+      </article>
+      <article>
+        <h3>写策略</h3>
+        <p>写通/写回 × 按写分配/不按写分配</p>
+      </article>
+      <article>
+        <h3>多级缓存</h3>
+        <p>局部/全局缺失率、MPI；包含式 vs. 排他式</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料与延伸阅读</h2>
+    <ul>
+      <li>教材阅读：Hennessy &amp; Patterson, <em>Computer Architecture: A Quantitative Approach</em>, 6th ed., Appendix B.3</li>
+      <li>本课幻灯片：<code>sp23/lecture_slides/L07_Memory_II.pdf</code>（UC Berkeley CS152/CS252A, Spring 2023, Sophia Shao）</li>
+      <li>Gee et al., 1993（SPEC92 缺失率 vs. 块大小实测数据来源）</li>
+      <li>Discussion 3 worksheet：Memory Hierarchy（sp23 discussions）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0006-memory.html">← 第 6 课：Memory</a>
+      <span>🎓 第 7 课</span>
+      <a href="0008-guest-prefetching.html">第 8 课：Guest Lecture: Prefetching →</a>
+    </div>
+
+    <footer>
+      <p>CS152/252A: Computer Architecture and Engineering · University of California, Berkeley · Spring 2023</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

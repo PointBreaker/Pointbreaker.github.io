@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 10 课：推理优化 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 10 课</p>
+    <h1>推理优化</h1>
+    <p class="lede">训练是一次性成本，推理是重复成本——GPT-4 的推理成本远超训练成本。这一课从第一性原理出发理解推理瓶颈，系统讲解减少推理开销的技术：KV cache 压缩、量化、投机解码、动态批处理。</p>
+
+    <div class="meta">
+      <span>授课：Percy Liang</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等 → 困难</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="landscape">推理的重要性</h2>
+
+    <h3>为什么推理比训练更关键？</h3>
+    <pre><code class="language-python"># 训练: 一次性成本
+# GPT-4 训练: ~$100M（一次）
+
+# 推理: 重复成本
+# GPT-4 每天处理数亿次请求
+# 推理成本 >> 训练成本（对于部署的模型）
+
+# Sam Altman: OpenAI 每天处理 100B+ tokens</code></pre>
+
+    <h3>推理的应用场景</h3>
+    <ul>
+      <li><strong>实际使用</strong>：chatbots、代码补全、批处理</li>
+      <li><strong>模型评估</strong>：跑 benchmark</li>
+      <li><strong>Test-time compute</strong>：thinking models（o1/o3）</li>
+      <li><strong>RL 训练</strong>：采样生成</li>
+    </ul>
+
+    <h3>关键指标</h3>
+    <table>
+      <tr><th>指标</th><th>定义</th><th>重要性</th></tr>
+      <tr><td>TTFT</td><td>Time-to-first-token</td><td>用户等待时间</td></tr>
+      <tr><td>Latency</td><td>秒/token</td><td>生成速度</td></tr>
+      <tr><td>Throughput</td><td>tokens/second</td><td>系统容量</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="arithmetic-intensity-inference">推理的算术强度分析</h2>
+
+    <h3>Prefill vs Generation</h3>
+    <pre><code class="language-python"># 推理的两个阶段:
+
+# 1. Prefill: 处理整个 prompt
+#    - 并行处理所有 token（像训练时的 matmul）
+#    - 算术强度 = S/2（S = prompt 长度）
+#    - 当 S 足够大 → compute-bound
+
+# 2. Generation: 逐个生成 token
+#    - 每次只处理 1 个 token（T=1）
+#    - 算术强度 ≈ 1
+#    - 永远 memory-bound！</code></pre>
+
+    <h3>MLP 层的算术强度</h3>
+    <pre><code class="language-python"># MLP 前向传播（SwiGLU）:
+# 读 X (B×T×D), W_gate (D×F), W_up (D×F), W_down (F×D)
+# 计算: U = X @ W_gate, G = X @ W_up, Y = Swish(G)*U @ W_down
+# 写 Y (B×T×D)
+
+FLOPs = 6 × B × T × D × F
+Bytes = 4BTD + 6DF + 4BTD + 4BTD + 4BTF + 4BTD
+      ≈ 4BTD + 4BTF + 6DF (忽略写入)
+
+# 假设 B*T << D, F:
+算术强度 ≈ B*T
+
+# Prefill: B*T 很大 → compute-bound
+# Generation: B*T = B（batch size）
+#   B=1: 强度 = 1 → memory-bound
+#   B=100: 强度 = 100 → 接近 compute-bound</code></pre>
+
+    <h3>Attention 层的算术强度</h3>
+    <pre><code class="language-python"># Attention（FlashAttention 优化后）:
+# 读 Q (B×T×D), K (B×S×D), V (B×S×D)
+# 计算: Q @ K^T, softmax, @ V
+# 写 Y (B×T×D)
+
+FLOPs = 4 × B × S × T × D
+Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
+
+算术强度 = S*T / (S + T)
+
+# Prefill: T = S → 强度 = S/2 → 大 S 时 compute-bound
+# Generation: T = 1 → 强度 ≈ 1 → memory-bound
+
+# 关键发现: Attention 的强度不依赖 B！
+# 所以 batching 不能改善 attention 的 memory-bound 问题</code></pre>
+
+    <div class="card idea">
+      <p><strong>核心洞察：</strong></p>
+      <ul>
+        <li><strong>Prefill 是 compute-bound</strong>：通过增大 batch size 可以轻松提高利用率</li>
+        <li><strong>Generation 是 memory-bound</strong>：无论 batch size 多大，attention 的强度都是 1</li>
+        <li><strong>这就是为什么推理优化如此困难</strong>——你永远无法"算得快"，只能"搬得少"</li>
+      </ul>
+    </div>
+
+    <h3>实际延迟和吞吐量</h3>
+    <pre><code class="language-python"># Llama 2 13B 在 H100 上的理论性能:
+
+# Batch size = 1:
+# 内存: 参数 26GB (bf16) + KV cache ~0.5GB
+# 延迟: ~13 ms/token（受内存带宽限制）
+# 吞吐量: ~77 tokens/s
+
+# Batch size = 64:
+# 内存: 26GB + 32GB KV cache
+# 延迟: ~20 ms/token（更慢）
+# 吞吐量: ~3200 tokens/s（更高！）
+
+# 权衡: 大 batch → 高吞吐、高延迟
+#        小 batch → 低延迟、低吞吐</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="kv-cache-compress">KV Cache 压缩</h2>
+
+    <h3>为什么 KV cache 是瓶颈？</h3>
+    <pre><code class="language-python"># KV cache 大小（每 token 每 layer）:
+# MHA: n_heads × d_head × 2 (K+V) × 2 (bf16)
+#     = 64 × 128 × 2 × 2 = 32 KB/token/layer
+
+# 100K 序列, 80 层:
+# = 32 KB × 100K × 80 = 256 GB！
+
+# 大 batch 时 KV cache 远超模型参数大小</code></pre>
+
+    <h3>GQA（复习）</h3>
+    <pre><code class="language-python"># GQA 把 KV cache 缩小 n_heads / n_kv_heads 倍
+# Llama 2 70B: 64 Q heads, 8 KV heads → 8× 缩小</code></pre>
+
+    <h3>Multi-head Latent Attention (MLA)</h3>
+    <pre><code class="language-python"># DeepSeek-V2 的 MLA:
+# 不存完整的 K, V 向量
+# 存一个低秩压缩的 latent 向量 c (C=512 维)
+# 需要时通过上投影恢复
+
+# KV cache: 512 + 64 (for RoPE) = 576 维
+# vs MHA: 64 × 128 × 2 = 16,384 维
+# 压缩比: 28×！</code></pre>
+
+    <h3>Cross-layer Attention (CLA)</h3>
+    <pre><code class="language-python"># 跨层共享 KV:
+# GQA 是共享 KV across heads
+# CLA 是共享 KV across layers
+
+# 例如: 每 4 层共享一组 KV
+# KV cache 缩小 4×</code></pre>
+
+    <h3>Local Attention</h3>
+    <pre><code class="language-python"># 部分层用 local attention（只关注附近 token）
+# KV cache 不依赖序列长度！
+
+# 混合策略（character.ai）:
+# - 每 6 层有 1 层 global attention
+# - 其余 5 层用 local attention
+# - 有效上下文 = window_size × num_layers</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quantization">量化</h2>
+
+    <h3>为什么量化对推理有效？</h3>
+    <pre><code class="language-python"># 推理是 memory-bound 的
+# 减少权重大小 → 减少内存搬运 → 更快
+
+# 量化级别:
+# fp32 (4 bytes) → bf16 (2 bytes) → fp8 (1 byte) → int4 (0.5 byte)
+
+# int4: 8× 压缩 vs fp32
+# 理论上 8× 加速（如果 memory-bound）</code></pre>
+
+    <h3>Post-training Quantization (PTQ)</h3>
+    <pre><code class="language-python"># 训练后量化: 不需要重新训练
+
+# 简单量化（per-tensor）:
+scale = max(abs(x)) / 127  # int8
+x_quantized = round(x / scale)
+
+# 问题: outlier 会导致精度大幅下降
+# LLM 中有 ~0.1% 的 outlier（值特别大的元素）</code></pre>
+
+    <h3>LLM.int8()</h3>
+    <pre><code class="language-python"># Dettmers et al. (2022):
+# 1. 对大多数元素做 int8 量化
+# 2. 对 outlier 保持 fp16
+# 3. 矩阵乘法: outlier 用 fp16, 其余用 int8
+
+# 效果: 几乎无损，但 15-23% 更慢（因为混合精度）</code></pre>
+
+    <h3>AWQ (Activation-aware Weight Quantization)</h3>
+    <pre><code class="language-python"># Lin et al. (2023):
+# 关键洞察: 不是所有权重都同等重要
+# 对应大 activation 的权重更重要
+
+# 方法:
+# 1. 分析 activation 找出重要权重 (0.1-1%)
+# 2. 重要权重保持 fp16
+# 3. 其余量化到 int3/int4
+
+# 效果: 4× 内存降低, 3.2× 加速</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="speculative">投机解码 (Speculative Decoding)</h2>
+
+    <h3>核心思想</h3>
+    <div class="card idea">
+      <p><strong>关键洞察：</strong>验证比生成快。</p>
+      <p>给定一个序列，大模型可以一次性评估多个 token（像 prefill）。但生成一个 token 需要一次完整的前向传播。</p>
+      <p><strong>投机解码</strong>：用小模型（draft）快速猜几个 token，然后用大模型一次性验证。</p>
+    </div>
+
+    <h3>算法</h3>
+    <pre><code class="language-python"># 投机解码 (Leviathan et al., 2023; Chen et al., 2023)
+
+# 1. Draft 模型（小）生成 γ 个 token: d₁, d₂, ..., dᵧ
+# 2. Target 模型（大）一次性评估: p(x|prefix + d₁ + ... + dᵧ)
+# 3. 逐个验证:
+#    - 如果 p(d₁) > q(d₁) → 接受 d₁
+#    - 否则 → 从修正分布采样
+# 4. 如果 d₁ 被接受，继续验证 d₂，直到拒绝或全部接受
+# 5. 至少生成 1 个 token（保证进度）
+
+# 关键: 生成的分布和直接采样完全一样！（数学保证）</code></pre>
+
+    <h3>为什么能加速？</h3>
+    <pre><code class="language-python"># 不使用投机解码:
+# 生成 γ 个 token → γ 次大模型前向 → γ × T_large
+
+# 使用投机解码:
+# 1 次 draft 前向 + 1 次大模型前向
+# → T_small × γ + T_large
+# → 如果 draft 足够准 ≈ T_large（一次前向生成 γ 个 token）
+
+# 实际加速: 2-3×（取决于 draft 质量和接受率）</code></pre>
+
+    <h3>Draft 模型的选择</h3>
+    <ul>
+      <li><strong>独立小模型</strong>：7B draft for 70B target</li>
+      <li><strong>蒸馏模型</strong>：从 target 蒸馏出小的</li>
+      <li><strong>Medusa</strong>：给 target 加多个预测头</li>
+      <li><strong>EAGLE</strong>：用 target 的特征做 draft</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="dynamic-batching">动态批处理</h2>
+
+    <h3>问题：推理的 batch 是动态的</h3>
+    <pre><code class="language-python"># 训练: 固定 batch, 固定长度
+# batch_size × sequence_length × hidden_dim
+
+# 推理: 请求动态到达，长度不一
+# 请求 1: 已生成 10 tokens
+# 请求 2: 刚到达，prefill 中
+# 请求 3: 已生成 100 tokens
+
+# 朴素方案: 等所有请求完成再返回
+# → 先到的请求被后到的拖慢</code></pre>
+
+    <h3>Continuous Batching（迭代级调度）</h3>
+    <pre><code class="language-python"># Yu et al. (2022) - Orca
+# 不是等整个 batch 完成，而是每步都可以加入/移除请求
+
+# 每个 decode step:
+# 1. 检查是否有新请求到达 → 加入 batch
+# 2. 检查是否有请求完成 → 移除
+# 3. 对所有活跃请求做一步 decode
+
+# 效果: 吞吐量 10-20× 提升</code></pre>
+
+    <h3>Selective Batching</h3>
+    <pre><code class="language-python"># 问题: 不同请求长度不同，不能组成规则 tensor
+
+# 解决方案:
+# - Attention: 每个序列单独处理（或 padding）
+# - 非 attention: 拼接所有序列 [total_tokens, hidden_dim]
+
+# 这样非 attention 部分仍然高效</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="paged-attention">PagedAttention</h2>
+
+    <h3>问题：KV cache 内存碎片</h3>
+    <pre><code class="language-python"># 朴素 KV cache 分配:
+# 每个请求预留 max_seq_len 的空间
+
+# 问题 1: 内部碎片
+# 大多数请求远不到 max_seq_len
+# 预留的空间浪费
+
+# 问题 2: 外部碎片
+# 不同请求的 KV cache 大小不一
+# 内存中出现不连续的空洞</code></pre>
+
+    <h3>PagedAttention（操作系统启发）</h3>
+    <pre><code class="language-python"># Kwon et al. (2023) - vLLM
+
+# 核心思想: 像操作系统管理内存页一样管理 KV cache
+
+# 1. 把 KV cache 分成固定大小的 block（如 16 tokens）
+# 2. 每个请求有一个 "页表"（block table）
+# 3. 按需分配 block，不需要连续
+
+# 效果:
+# - 内存利用率从 ~40% 提升到 ~96%
+# - 支持更大的 batch size
+# - 支持共享前缀（system prompt）</code></pre>
+
+    <h3>Copy-on-Write</h3>
+    <pre><code class="language-python"># 多个请求共享 system prompt 的 KV cache
+# 当某个请求需要修改时，才复制
+
+# 类似操作系统的 fork()</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="alternatives">超越 Transformer</h2>
+
+    <h3>State Space Models</h3>
+    <pre><code class="language-python"># Mamba, Jamba, etc.
+# 用 O(1) 状态替代 O(n) KV cache
+# 推理时不需要存储整个 KV cache
+
+# 但: 不擅长 associative recall
+# 混合架构（Transformer + SSM）是当前趋势</code></pre>
+
+    <h3>Diffusion Models for Text</h3>
+    <pre><code class="language-python"># 非自回归生成
+# 所有 token 同时生成，多步 refinement
+
+# 优势: 并行生成，速度快
+# 劣势: 文本质量目前不如自回归</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="summary">总结</h2>
+
+    <h3>推理优化的四个方向</h3>
+    <table>
+      <tr><th>方向</th><th>技术</th><th>效果</th></tr>
+      <tr><td>减少 KV cache</td><td>GQA, MLA, CLA, local</td><td>2-32× 内存节省</td></tr>
+      <tr><td>减少权重量化</td><td>int8, int4, AWQ</td><td>2-8× 内存/速度</td></tr>
+      <tr><td>投机解码</td><td>draft model</td><td>2-3× 加速</td></tr>
+      <tr><td>系统优化</td><td>continuous batching, paged attention</td><td>10-20× 吞吐</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>核心原则：</strong></p>
+      <ul>
+        <li>推理是 memory-bound 的——优化目标是减少数据搬运</li>
+        <li>Prefill 是 compute-bound 的——可以 batch 优化</li>
+        <li>Generation 是 memory-bound 的——需要压缩/量化</li>
+        <li>系统级优化（batching, paging）效果最显著</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！Generation 时 T=1，attention 的算术强度 ≈ 1，永远 memory-bound。" data-incorrect="Generation 时每次只处理 1 个 token，attention 的算术强度 ≈ 1，是 memory-bound 的。">
+      <p><strong>问题 1：</strong>为什么推理的 generation 阶段是 memory-bound 的？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为计算量太大</button>
+        <button data-choice="b" aria-pressed="false">因为每次只处理 1 个 token，算术强度 ≈ 1</button>
+        <button data-choice="c" aria-pressed="false">因为 GPU 太慢</button>
+        <button data-choice="d" aria-pressed="false">因为 batch size 太大</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！投机解码用小模型猜、大模型验证，保证最终分布一致。" data-incorrect="投机解码的核心是 draft 模型快速猜，大模型验证，数学保证分布一致。">
+      <p><strong>问题 2：</strong>投机解码为什么能加速推理？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">它跳过了部分 token</button>
+        <button data-choice="b" aria-pressed="false">它用小模型猜、大模型验证，一次验证多个 token</button>
+        <button data-choice="c" aria-pressed="false">它使用了量化</button>
+        <button data-choice="d" aria-pressed="false">它减少了模型大小</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！PagedAttention 像操作系统管理内存页一样管理 KV cache block，减少碎片。" data-incorrect="PagedAttention 的核心是分页管理 KV cache，像操作系统管理内存页一样。">
+      <p><strong>问题 3：</strong>PagedAttention 解决了什么问题？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">计算速度慢</button>
+        <button data-choice="b" aria-pressed="false">KV cache 内存碎片</button>
+        <button data-choice="c" aria-pressed="false">模型太大</button>
+        <button data-choice="d" aria-pressed="false">batch size 太小</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！Continuous batching 每步都可以加入/移除请求，不等整个 batch 完成。" data-incorrect="Continuous batching 的核心是迭代级调度，每步都可以动态调整 batch 组成。">
+      <p><strong>问题 4：</strong>Continuous batching 的核心思想是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">固定 batch size</button>
+        <button data-choice="b" aria-pressed="false">每步都可以加入/移除请求</button>
+        <button data-choice="c" aria-pressed="false">只处理相同长度的请求</button>
+        <button data-choice="d" aria-pressed="false">不使用 KV cache</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！AWQ 根据 activation 找出重要权重，只对重要权重保持高精度。" data-incorrect="AWQ 的核心是 activation-aware——根据 activation 找出重要权重，只对它们保持高精度。">
+      <p><strong>问题 5：</strong>AWQ 量化的核心思想是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">所有权重统一量化</button>
+        <button data-choice="b" aria-pressed="false">根据 activation 找出重要权重，只对它们保持高精度</button>
+        <button data-choice="c" aria-pressed="false">只量化 attention 层</button>
+        <button data-choice="d" aria-pressed="false">量化到 1 bit</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>Memory-bound</h3>
+        <p>推理是 memory-bound 的，优化目标是减少数据搬运</p>
+      </article>
+      <article>
+        <h3>KV Cache</h3>
+        <p>GQA/MLA/CLA 压缩 KV cache</p>
+      </article>
+      <article>
+        <h3>投机解码</h3>
+        <p>小模型猜、大模型验证，2-3× 加速</p>
+      </article>
+      <article>
+        <h3>系统优化</h3>
+        <p>Continuous batching + PagedAttention</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Leviathan et al. (2023): <a href="https://arxiv.org/abs/2211.17192">Fast Inference from Transformers via Speculative Decoding</a></li>
+      <li>Chen et al. (2023): <a href="https://arxiv.org/abs/2302.01318">Accelerating Large Language Model Decoding with Speculative Sampling</a></li>
+      <li>Kwon et al. (2023): <a href="https://arxiv.org/abs/2309.06180">PagedAttention: Efficient Memory Management for Large Language Model Serving</a> (vLLM)</li>
+      <li>Yu et al. (2022): <a href="https://www.usenix.org/conference/osdi22/presentation/yu">Orca: A Distributed Serving System for Transformer-Based Generative Models</a></li>
+      <li>Lin et al. (2023): <a href="https://arxiv.org/abs/2306.00978">AWQ: Activation-aware Weight Quantization</a></li>
+      <li>Dettmers et al. (2022): <a href="https://arxiv.org/abs/2208.07339">LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0009-scaling-laws.html">← 第 9 课</a>
+      <a href="0011-scaling-laws-details.html">第 11 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 10 内容</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

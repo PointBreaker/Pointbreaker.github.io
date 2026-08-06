@@ -26,7 +26,7 @@ Never use `reset --hard`, `clean`, force push, direct main push, or automatic me
 
 The normal PR may change only:
 
-- `<slug>/**`
+- `courses/<slug>/**`
 - `courses.json`, only to add the new course record
 
 Stop and review any other path. Keep `.course-build/`, original course resources, temporary extraction, screenshots, and local server artifacts out of the commit.
@@ -39,6 +39,7 @@ Run:
 git diff --check
 python <skill-root>/scripts/refresh_status.py --repo <repo> --slug <slug>
 python <skill-root>/scripts/validate_course.py --repo <repo> --slug <slug> --plan <plan> --inventory <inventory> --strict-resources
+python <repo>/tools/check-course-layout.py
 ```
 
 Then test the static site in a browser. Check dashboard navigation, all page types, representative math/code, quizzes, console errors, and mobile layout.
@@ -48,7 +49,7 @@ Then test the static site in a browser. Check dashboard navigation, all page typ
 Stage only the allowed paths:
 
 ```bash
-git add -- courses.json <slug>
+git add -- courses.json courses/<slug>
 git diff --cached --check
 git diff --cached --stat
 git commit -m "Add <courseCode> course guide"

@@ -8,7 +8,7 @@ CourseStack（课栈）是一个面向系统与机器学习课程的开放中文
 
 ## 用 Skill 新增课程
 
-仓库内置 [`generate-course-site-pr`](skills/generate-course-site-pr/SKILL.md) Skill。它会从本地课程资源生成 CourseStack v2 课程，完成校验后向本仓库提交 PR。
+仓库内置 [`generate-course-site-pr`](skills/generate-course-site-pr/SKILL.md) Skill。它会从本地课程资源生成 CourseStack v3 课程，统一放入 `courses/<slug>/`，完成校验后向本仓库提交 PR。
 
 ### 安装
 
@@ -54,12 +54,12 @@ assets/                         共享主页、Dashboard、阅读页与 vendor �
 courses.json                    数据驱动课程目录
 site-platform.json              平台版本与共享资源契约
 site-comments.json              GitHub Discussions / Giscus 评论配置
-<course>/course-info.json       课程元数据
-<course>/api/status.json        讲义与实践状态
-<course>/lessons/               课程正文
+courses/<course>/course-info.json  课程元数据
+courses/<course>/api/status.json   讲义与实践状态
+courses/<course>/lessons/          课程正文
 skills/generate-course-site-pr  可分发课程生成 Skill
 ```
 
 ## 贡献
 
-课程 PR、内容修订和平台改进请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。新课程通常只应新增课程目录并向 `courses.json` 添加一条记录。
+课程 PR、内容修订和平台改进请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。新课程通常只应新增 `courses/<slug>/` 并向 `courses.json` 添加一条记录。

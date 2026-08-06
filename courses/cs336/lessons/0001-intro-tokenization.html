@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 1 课：课程总览与 Tokenization — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 1 课</p>
+    <h1>课程总览与 Tokenization</h1>
+    <p class="lede">语言模型从字符串开始——如何把文本切分成模型可以理解的单元，是整个流程的第一步。这一课建立对全课的宏观理解，然后深入这个看似简单却影响深远的问题。</p>
+
+    <div class="meta">
+      <span>授课：Mike Lewis & Sida Wang & Kangwook Lee</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：入门 → 中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="why">这门课为什么存在？</h2>
+
+    <h3>抽象层在泄漏</h3>
+    <p>八年前，研究者会自己实现和训练模型。六年前，研究者下载 BERT 做 fine-tune。今天，研究者直接调用 GPT-4/Claude/Gemini 的 API。</p>
+
+    <p>向上抽象提升了生产力，但语言模型的抽象层和编程语言或操作系统不同——<strong>它是泄漏的</strong>。不理解底层，就无法做真正的研究。</p>
+
+    <div class="card idea">
+      <p><strong>这门课的核心信念：理解源于构建 (understanding via building)。</strong></p>
+      <p>不是读论文、不是调 API，而是从第一行代码开始，构建一个语言模型的每一个组件。</p>
+    </div>
+
+    <h3>工业化的现实</h3>
+    <p>GPT-4 据称有 1.8T 参数，训练成本约 1 亿美元。xAI 用 20 万张 H100 训练 Grok。Stargate 项目计划 4 年投资 5000 亿美元。</p>
+
+    <p>更关键的是：<strong>没有公开细节</strong>。GPT-4 的技术报告明确说不会披露架构、训练数据或方法。</p>
+
+    <h3>"More is different"</h3>
+    <p>前沿模型遥不可及。但课堂上训练的小模型 (&lt;1B 参数) 能代表大模型吗？</p>
+
+    <p><strong>例 1</strong>：Attention 和 MLP 的 FLOPs 占比随规模变化。小模型训得好的超参数，大模型上不一定最优。</p>
+    <p><strong>例 2</strong>：某些能力是"涌现"的——在小模型上不存在，到一定规模才突然出现。</p>
+
+    <h3>什么知识可以迁移？</h3>
+    <div class="loop">
+      <article>
+        <h3>Mechanics 机制</h3>
+        <p>事物如何运作——Transformer 是什么、模型并行如何利用 GPU</p>
+      </article>
+      <article>
+        <h3>Mindset 思维</h3>
+        <p>榨干硬件、认真对待规模——scaling laws 的思维方式</p>
+      </article>
+      <article>
+        <h3>Intuitions 直觉</h3>
+        <p>哪些数据和建模决策效果好——这部分<strong>不能</strong>完全教会</p>
+      </article>
+    </div>
+
+    <p><strong>这门课能教的是前两者</strong>。机制（how things work）和 mindset（efficiency-first）在任何规模都适用。直觉则需要你自己在大规模实验中积累。</p>
+
+    <div class="card warning">
+      <p><strong>The Bitter Lesson（苦涩教训）</strong>：错误的解读是"规模万能，算法不重要"。正确的解读是"<strong>能随规模扩展的算法</strong>才是关键"。效率在大规模时更加重要——你承受不起浪费。</p>
+      <p>公式：<strong>accuracy = efficiency × resources</strong></p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="history">语言模型发展简史</h2>
+
+    <h3>前神经网络时代 (2010 年之前)</h3>
+    <ul>
+      <li><strong>Shannon (1950)</strong>：用语言模型测量英语的熵——这是整个领域的思想源头</li>
+      <li><strong>N-gram 模型</strong>：用于机器翻译、语音识别，统治 NLP 几十年</li>
+    </ul>
+
+    <h3>神经网络组件时代 (2010s)</h3>
+    <table>
+      <tr><th>年份</th><th>突破</th><th>意义</th></tr>
+      <tr><td>2003</td><td>Bengio 神经语言模型</td><td>首次用神经网络建模语言</td></tr>
+      <tr><td>2014</td><td>Sutskever seq2seq</td><td>序列到序列建模</td></tr>
+      <tr><td>2014</td><td>Adam 优化器</td><td>训练深度网络的基础设施</td></tr>
+      <tr><td>2015</td><td>Bahdanau Attention</td><td>注意力机制的诞生</td></tr>
+      <tr><td>2017</td><td>Transformer</td><td>架构范式转变</td></tr>
+    </table>
+
+    <h3>早期基础模型 (2018-2020)</h3>
+    <ul>
+      <li><strong>ELMo</strong>：LSTM 预训练 + fine-tune</li>
+      <li><strong>BERT</strong>：Transformer 预训练，fine-tune 帮助下游任务</li>
+      <li><strong>T5 (11B)</strong>：把所有任务统一为 text-to-text</li>
+    </ul>
+
+    <h3>拥抱规模、走向封闭 (2020-2022)</h3>
+    <ul>
+      <li><strong>GPT-2 (1.5B)</strong>：流畅文本、初步 zero-shot 能力</li>
+      <li><strong>Scaling Laws (2020)</strong>：给规模化提供可预测性</li>
+      <li><strong>GPT-3 (175B)</strong>：in-context learning、闭源</li>
+      <li><strong>PaLM (540B)</strong>：极大规模、训练不足</li>
+      <li><strong>Chinchilla (70B)</strong>：compute-optimal scaling laws</li>
+    </ul>
+
+    <h3>开放模型时代 (2022-至今)</h3>
+    <p>GPT-J、OPT、BLOOM、Llama 系列、Mistral、Qwen、DeepSeek、OLMo——开放权重和开放数据的模型生态快速发展。</p>
+
+    <div class="card">
+      <p><strong>开放度的三个层次：</strong></p>
+      <ol>
+        <li><strong>闭源模型</strong>（如 GPT-4o）：只能 API 调用</li>
+        <li><strong>开放权重</strong>（如 DeepSeek）：权重可用，论文有架构细节，无数据细节</li>
+        <li><strong>开源模型</strong>（如 OLMo）：权重+数据可用，论文有大部分细节</li>
+      </ol>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="efficiency">全课框架：效率驱动一切</h2>
+
+    <p>这门课围绕一个核心问题：<strong>给定固定资源，如何训练最好的模型？</strong></p>
+
+    <p>资源 = 数据 + 硬件（算力、内存、通信带宽）。设计决策围绕"榨干硬件"展开：</p>
+
+    <table>
+      <tr><th>阶段</th><th>效率驱动的决策</th></tr>
+      <tr><td>数据处理</td><td>避免在低质量数据上浪费算力</td></tr>
+      <tr><td>Tokenization</td><td>直接用字节优雅但对当前架构计算低效</td></tr>
+      <tr><td>模型架构</td><td>为减少内存/FLOPs 而改动（共享 KV cache、滑动窗口 attention）</td></tr>
+      <tr><td>训练</td><td>可以只做 single epoch</td></tr>
+      <tr><td>Scaling Laws</td><td>用小模型做超参搜索，预测大模型最优配置</td></tr>
+      <tr><td>Alignment</td><td>更精准的调优 → 需要更小的基座模型</td></tr>
+    </table>
+
+    <h3>五大模块</h3>
+    <div class="loop">
+      <article>
+        <h3>Basics</h3>
+        <p>Tokenizer → Transformer → Training，跑通完整流程</p>
+      </article>
+      <article>
+        <h3>Systems</h3>
+        <p>Kernels → Parallelism → Inference，榨干硬件</p>
+      </article>
+      <article>
+        <h3>Scaling Laws</h3>
+        <p>小规模实验 → 预测大规模最优配置</p>
+      </article>
+      <article>
+        <h3>Data</h3>
+        <p>来源 → 过滤 → 去重，数据决定模型上限</p>
+      </article>
+    </div>
+    <p>以及最后一个模块：<strong>Alignment</strong>（SFT → RLHF → DPO → GRPO），让模型真正有用。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="tokenization">Tokenization：核心内容</h2>
+
+    <p>本节灵感来自 <a href="https://www.youtube.com/watch?v=zduSFxRajkE">Andrej Karpathy 的 Tokenization 讲解</a>，强烈推荐观看。</p>
+
+    <h3>什么是 Tokenization？</h3>
+    <p>原始文本通常表示为 Unicode 字符串。语言模型对 <strong>token 序列</strong>（通常用整数索引表示）放置概率分布。</p>
+
+    <p>所以我们需要两个过程：</p>
+    <ul>
+      <li><strong>Encode</strong>：字符串 → token 索引序列</li>
+      <li><strong>Decode</strong>：token 索引序列 → 字符串</li>
+    </ul>
+
+    <p><strong>词表大小 (vocabulary size)</strong> 是可能的 token 数量。</p>
+
+    <div class="card">
+      <p><strong>关键指标：压缩比 (compression ratio)</strong></p>
+      <pre><code class="language-python">compression_ratio = num_bytes / num_tokens</code></pre>
+      <p>即每个 token 对应多少字节。压缩比越高，同样信息用更少的 token 表示，模型处理效率越高。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="char">方案一：Character Tokenization（字符级）</h2>
+
+    <p>Unicode 字符串是字符序列。每个字符可通过 <code>ord()</code> 转为码点（整数）：</p>
+    <pre><code class="language-python">ord("a")  = 97
+ord("🌍") = 127757
+ord("你") = 20320</code></pre>
+
+    <p><strong>问题：</strong></p>
+    <ul>
+      <li>词表极大——Unicode 约有 150,000 个字符</li>
+      <li>很多字符罕见（如 🌍），对词表是低效利用</li>
+      <li>语义粒度太细——单个字符几乎没有意义</li>
+    </ul>
+
+    <p>字符级 tokenization 的压缩比 ≈ 1 字符/token，压缩效率极低。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="byte">方案二：Byte Tokenization（字节级）</h2>
+
+    <p>Unicode 字符串可以表示为 <strong>字节序列</strong>（0-255 的整数）。最常用的 Unicode 编码是 UTF-8：</p>
+    <pre><code class="language-python">"a"  → b"a"              # 1 字节
+"🌍"  → b"\xf0\x9f\x8c\x8d"  # 4 字节
+"你"  → b"\xe4\xbd\xa0"      # 3 字节</code></pre>
+
+    <p><strong>优势：</strong>词表极小且固定——只有 256 个可能的值。</p>
+    <p><strong>劣势：</strong>压缩比 = 1 字节/token，压缩效果极差。序列会非常长。</p>
+
+    <div class="card warning">
+      <p><strong>为什么序列长度重要？</strong> Transformer 的 attention 是 O(n²) 复杂度。序列越长，计算和内存开销越大。上下文长度受限于序列长度，所以极低的压缩比意味着模型能"看到"的有效内容更少。</p>
+    </div>
+
+    <p>不过，字节级 tokenization 有一个优雅的<strong>理论优势</strong>：它是<strong>无损、通用的</strong>——任何文本都可以被编码，没有 out-of-vocabulary 问题。这个优势在最近的研究中被重新发掘（ByT5、MEGABYTE、BLT、TFree 等）。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="word">方案三：Word Tokenization（词级）</h2>
+
+    <p>经典 NLP 的做法：把文本按词分割。</p>
+
+    <pre><code class="language-python">import regex
+pattern = r"\w+|."
+segments = regex.findall(pattern, "I'll say supercalifragilisticexpialidocious!")
+# → ["I", "'", "ll", " ", "say", " ", "supercalifragilisticexpialidocious", "!"]</code></pre>
+
+    <p>更精细的版本（GPT-2 使用的预分词正则）：</p>
+    <pre><code class="language-python">GPT2_TOKENIZER_REGEX = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""</code></pre>
+
+    <p><strong>问题：</strong></p>
+    <ul>
+      <li>词的数量极大（和 Unicode 字符一样多）</li>
+      <li>大量罕见词，模型学不到它们的有效表示</li>
+      <li>词表大小不固定</li>
+      <li>未见过的词只能映射到 <code>UNK</code> token——这既丑陋，又会扰乱 perplexity 计算</li>
+    </ul>
+
+    <p>词级 tokenization 的压缩比高（~4 字符/token），但词表问题让它不实用。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="bpe">方案四：Byte Pair Encoding (BPE)</h2>
+
+    <h3>历史</h3>
+    <p>BPE 算法最初由 Philip Gage 于 <strong>1994 年</strong>提出，用于<strong>数据压缩</strong>。后来被 Sennrich et al. (2016) 引入 NLP，用于神经机器翻译。GPT-2 采用了 BPE tokenization，成为现代 LLM 的标准做法。</p>
+
+    <h3>核心思想</h3>
+    <div class="card idea">
+      <p><strong>从数据中学习 token</strong>——不是人为规定哪些字符组合是一个 token，而是通过算法自动发现。</p>
+      <p>直觉：<strong>常见的字符序列合并为单个 token，罕见序列保持拆分。</strong></p>
+    </div>
+
+    <h3>算法描述</h3>
+    <p>BPE 的训练过程：</p>
+    <ol>
+      <li><strong>初始化</strong>：每个字节是一个初始 token（256 个）</li>
+      <li><strong>统计</strong>：计算所有相邻 token 对的出现频率</li>
+      <li><strong>合并</strong>：找到最频繁的对，将它们合并为一个新 token，新 token ID = 256, 257, ...</li>
+      <li><strong>重复</strong>：回到步骤 2，直到达到目标词表大小</li>
+    </ol>
+
+    <h3>手动推演</h3>
+    <p>用字符串 <code>"the cat in the hat"</code> 演示 3 轮合并：</p>
+
+    <p><strong>初始状态</strong>（每个字节是一个 token）：</p>
+    <pre><code class="language-python">t | h | e |   | c | a | t |   | i | n |   | t | h | e |   | h | a | t</code></pre>
+
+    <p><strong>第 1 轮</strong>：统计所有相邻对频率。<code>(t, h)</code> 出现 2 次（"the" ×2），<code>(h, e)</code> 出现 2 次，<code>(a, t)</code> 出现 2 次... 假设 <code>(t, h)</code> 被选为最频繁对，合并为 <code>th</code>（新 ID = 256）：</p>
+    <pre><code class="language-python">th | e |   | c | a | t |   | i | n |   | th | e |   | h | a | t</code></pre>
+
+    <p><strong>第 2 轮</strong>：重新统计。<code>(th, e)</code> 出现 2 次 → 合并为 <code>the</code>（ID = 257）：</p>
+    <pre><code class="language-python">the |   | c | a | t |   | i | n |   | the |   | h | a | t</code></pre>
+
+    <p><strong>第 3 轮</strong>：继续合并最频繁的对。</p>
+
+    <p>这个过程让<strong>高频组合</strong>（如 "the"、"ing"）逐步成为独立 token，而罕见组合保持拆分。</p>
+
+    <h3>Encoding（编码新文本）</h3>
+    <p>训练完成后，对新的文本进行编码：</p>
+    <ol>
+      <li>将文本转为字节序列</li>
+      <li>按训练时合并的<strong>顺序</strong>，依次应用所有合并规则</li>
+      <li>查找每个最终 token 的 ID</li>
+    </ol>
+
+    <h3>Decoding（解码）</h3>
+    <p>给定 token ID 序列，查找每个 ID 对应的字节，拼接后转为字符串。</p>
+
+    <div class="card warning">
+      <p><strong>重要细节：合并顺序</strong>——Encoding 时必须按照<strong>训练时合并的顺序</strong>应用合并规则。如果顺序不同，同一个文本可能得到完全不同的 token 序列。这是 BPE 的一个关键特性。</p>
+    </div>
+
+    <h3>GPT-2 的改进</h3>
+    <p>原始的 BPE 直接在字节上运行。GPT-2 做了两个关键改动：</p>
+    <ul>
+      <li><strong>Pre-tokenization</strong>：先用正则把文本拆成"词"，再在每个词内部运行 BPE。这防止跨词边界合并（如把 "cat" + "erpillar" 合并）。</li>
+      <li><strong>特殊 token</strong>：如 <code>&lt;|endoftext|&gt;</code>，不参与 BPE 合并，始终作为一个整体。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="tokenizer-tradeoffs">Tokenization 的权衡</h2>
+
+    <table>
+      <tr><th>方法</th><th>词表大小</th><th>压缩比</th><th>OOV 问题</th><th>无损</th></tr>
+      <tr><td>Character</td><td>~150K</td><td>~1.0</td><td>无</td><td>是</td></tr>
+      <tr><td>Byte</td><td>256</td><td>~1.0</td><td>无</td><td>是</td></tr>
+      <tr><td>Word</td><td>无限</td><td>~4.0</td><td>有 (UNK)</td><td>否</td></tr>
+      <tr><td>BPE</td><td>可控</td><td>~3-4.0</td><td>无 (fallback to bytes)</td><td>是</td></tr>
+    </table>
+
+    <h3>BPE 是必要的恶</h3>
+    <p>原版 Transformer 论文用的是 BPE。今天的主流模型（GPT 系列、Llama、Mistral）都用 BPE 或其变体。</p>
+
+    <p>但 BPE 也有问题：</p>
+    <ul>
+      <li>对罕见词/拼写变体处理不佳（"hello" vs "hellooo" 可能完全不同）</li>
+      <li>对多语言不友好（非拉丁文字的压缩比极差）</li>
+      <li>对数字和符号的切分不自然（GPT-2 把数字每几位切一次）</li>
+      <li>Tokenization 是<strong>有状态的</strong>——依赖于训练数据分布</li>
+    </ul>
+
+    <div class="card idea">
+      <p><strong>未来方向：Tokenizer-free</strong></p>
+      <p>直接用字节作为输入（ByT5、MEGABYTE、BLT、TFree），让模型自己学组合。理论上更优雅，但目前尚未扩展到前沿规模。这是一个开放问题。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！UTF-8 中 ASCII 字符 1 字节，常见汉字 3 字节，emoji 4 字节。" data-incorrect="UTF-8 是变长编码：ASCII 1 字节，拉丁/希腊等 2 字节，常见汉字 3 字节，emoji 等 4 字节。">
+      <p><strong>问题 1：</strong>UTF-8 编码中，一个中文字符"你"占多少字节？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">1 字节</button>
+        <button data-choice="b" aria-pressed="false">2 字节</button>
+        <button data-choice="c" aria-pressed="false">3 字节</button>
+        <button data-choice="d" aria-pressed="false">4 字节</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！Attention 是 O(n²)，序列越长计算开销越大，所以低压缩比会限制有效上下文。" data-incorrect="关键在于 Transformer attention 的 O(n²) 复杂度——序列翻倍意味着计算量 4 倍。">
+      <p><strong>问题 2：</strong>为什么 byte-level tokenization 的压缩比差是个问题？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为字节无法表示中文</button>
+        <button data-choice="b" aria-pressed="false">因为序列太长导致 attention 计算爆炸</button>
+        <button data-choice="c" aria-pressed="false">因为字节会丢失信息</button>
+        <button data-choice="d" aria-pressed="false">因为 256 个 token 太多</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！BPE 从 256 个字节开始，每轮合并一对，所以词表 = 256 + 合并次数。" data-incorrect="BPE 从 256 个初始 token（字节）开始，每轮合并增加 1 个新 token，所以最终词表 = 256 + 合并次数。">
+      <p><strong>问题 3：</strong>如果 BPE 训练做了 100 次合并，最终词表大小是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">100</button>
+        <button data-choice="b" aria-pressed="false">256</button>
+        <button data-choice="c" aria-pressed="false">356</button>
+        <button data-choice="d" aria-pressed="false">100 × 平均词长</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>课程哲学</h3>
+        <p>理解源于构建，效率驱动一切</p>
+      </article>
+      <article>
+        <h3>Tokenization 作用</h3>
+        <p>字符串 ↔ 整数序列的双向映射</p>
+      </article>
+      <article>
+        <h3>BPE 核心</h3>
+        <p>从字节开始，迭代合并最频繁对</p>
+      </article>
+      <article>
+        <h3>BPE 局限</h3>
+        <p>多语言不友好，是"必要的恶"</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li><a href="https://www.youtube.com/watch?v=zduSFxRajkE">Andrej Karpathy: Let's build the GPT Tokenizer</a> — 直观演示</li>
+      <li>Sennrich et al. (2016): <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> — BPE 用于 NLP 的原始论文</li>
+      <li>Gage (1994): <a href="http://www.pennelynn.com/Documents/CUJ/HTML/94HTML/19940045.HTM">A New Algorithm for Data Compression</a> — BPE 算法的起源</li>
+      <li>GPT-2 论文 (Radford et al., 2019) — BPE 在 LLM 中的首次大规模应用</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>🎓 第 1 课</span>
+      <a href="0002-pytorch-resource-accounting.html">第 2 课：PyTorch 与资源核算 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 1 内容</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

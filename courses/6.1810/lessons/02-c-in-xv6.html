@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 2 课：C 语言与 xv6 — MIT 6.1810</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.1810 · 第 2 课</p>
+    <h1>C 语言与 xv6</h1>
+    <p class="lede">操作系统内核几乎都用 C 编写。本课聚焦于 xv6 内核中实际使用的 C 语言特性：内存布局、指针、数组、字符串、链表、位运算，以及最常见的 C 语言陷阱。</p>
+
+    <div class="meta">
+      <span>授课：nz (Nickolai Zeldovich)</span>
+      <span>日期：2025-01-23</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2>为什么用 C 写操作系统？</h2>
+    <div class="card idea">
+      <h3>C 的优势</h3>
+      <ul>
+        <li><strong>贴近硬件：</strong>C 到 RISC-V 指令的映射直接，类型与硬件结构（如设备寄存器位字段）对应紧密。</li>
+        <li><strong>最小运行时：</strong>没有解释器、没有 GC，易于移植到新平台，可直接操作硬件。</li>
+        <li><strong>显式内存管理：</strong>内核完全掌控内存分配与释放。</li>
+        <li><strong>高效：</strong>编译为本地代码，性能接近汇编。</li>
+        <li><strong>广泛支持：</strong>几乎所有平台都有高质量的 C 编译器。</li>
+      </ul>
+    </div>
+    <div class="card warning">
+      <h3>C 的风险</h3>
+      <ul>
+        <li>极易写出错误代码——未定义行为（UB）</li>
+        <li>极易引入安全漏洞——缓冲区溢出、use-after-free、double-free</li>
+      </ul>
+      <p>学习识别这些陷阱，是成为系统程序员的基本功。</p>
+    </div>
+
+    <h2>C 程序在 xv6 中的内存布局</h2>
+    <p>参考 xv6 教材图 3.4，一个用户程序的地址空间由以下几段组成：</p>
+
+    <table>
+      <thead><tr><th>段</th><th>内容</th><th>属性</th></tr></thead>
+      <tbody>
+        <tr><td>text</td><td>机器码指令、只读数据</td><td>R+X, 无 W</td></tr>
+        <tr><td>data</td><td>已初始化的全局/静态变量</td><td>R+W</td></tr>
+        <tr><td>stack</td><td>函数局部变量、返回地址</td><td>R+W, 向下增长</td></tr>
+        <tr><td>heap</td><td>malloc/sbrk 动态分配</td><td>R+W, 向上增长</td></tr>
+      </tbody>
+    </table>
+
+    <h3>编译过程示例：cat.c</h3>
+    <pre><code>$ riscv64-linux-gnu-objdump -htr user/cat.o  # 目标文件 + 重定位记录
+$ riscv64-linux-gnu-objdump -fp user/_cat     # 可执行文件头 + 段
+$ riscv64-linux-gnu-objdump -S user/_cat      # 反汇编
+$ riscv64-linux-gnu-nm -n user/_cat           # 符号表 + 地址</code></pre>
+    <p>可执行文件使用 <strong>a.out</strong> 格式，包含 text、data、符号表、调试信息等段。<code>ulib.o</code> 是 xv6 的最小 C 库，提供 <code>main()</code> 入口和系统调用封装。</p>
+
+    <h3>入口点 start</h3>
+    <pre><code>// ulib.c 中的 _start
+void _start() {
+    exit(main());  // 调用 main，返回后 exit
+}</code></pre>
+    <p><code>_start</code> 是 ELF 入口点（<code>user.ld</code> 定义），由它调用用户的 <code>main()</code>。</p>
+
+    <h2>C 指针</h2>
+    <p>指针是内存地址。每个变量都有地址，可以通过指针间接访问：</p>
+    <pre><code>int i = 10;
+int *p = &i;    // p 保存 i 的地址
+*p = 20;        // 通过指针修改 i
+int a = *p;     // 通过指针读取 i</code></pre>
+
+    <h3>指针算术</h3>
+    <pre><code>char *c;
+int *i;
+// c+1 的地址 = c 的地址 + 1
+// i+1 的地址 = i 的地址 + 4（RISC-V 上 int 为 4 字节）</code></pre>
+    <p>指针加 1 的偏移量取决于指向类型的大小——这是 C 数组访问的基础。</p>
+
+    <h3>结构体指针访问</h3>
+    <pre><code>struct point { int x; int y; };
+struct point p = {1, 2};
+struct point *pp = &p;
+pp->x = 10;   // 等价于 (*pp).x = 10</code></pre>
+
+    <h2>C 数组</h2>
+    <pre><code>char buf[64];
+buf[0] = 'a';
+*(buf + 1) = 'b';   // 等价于 buf[1] = 'b'</code></pre>
+    <p>C 数组是连续的内存，<strong>不检查边界</strong>，不能自动增长。数组访问 <code>buf[i]</code> 和指针访问 <code>*(buf+i)</code> 完全等价。</p>
+
+    <h2>C 字符串</h2>
+    <p>C 字符串是以 <code>\0</code>（字节 0）结尾的字符数组：</p>
+    <pre><code>char *s = "hello";   // h e l l o \0
+char buf[] = "world";  // 栈上数组</code></pre>
+    <p><code>ulib.c</code> 提供常用字符串函数：</p>
+    <pre><code>// strlen 用数组索引
+int strlen(char *s) {
+    int n = 0;
+    while (s[n]) n++;
+    return n;
+}
+
+// strcmp 用指针
+int strcmp(char *p, char *q) {
+    while (*p && *p == *q)
+        p++, q++;
+    return (uchar)*p - (uchar)*q;
+}</code></pre>
+
+    <h2>C 链表</h2>
+    <p>xv6 内核大量使用链表。</p>
+
+    <h3>单链表——kalloc.c 空闲页链表</h3>
+    <pre><code>// kernel/kalloc.c
+struct run {
+    struct run *next;  // 单链表指针
+};
+
+struct {
+    struct run *head;  // 链表头
+} kmem;
+
+void kfree(void *pa) {
+    struct run *r = (struct run*)pa;
+    r->next = kmem.head;
+    kmem.head = r;     // 头插法
+}
+
+void *kalloc(void) {
+    struct run *r = kmem.head;
+    if (r) kmem.head = r->next;
+    return (void*)r;
+}</code></pre>
+
+    <h3>双向链表——bio.c LRU buffer cache</h3>
+    <pre><code>// kernel/buf.h
+struct buf {
+    struct buf *prev;
+    struct buf *next;
+    // ...
+};
+
+void brelse(struct buf *b) {
+    // 把 b 移到链表头部（LRU 策略）
+    b->next->prev = b->prev;
+    b->prev->next = b->next;
+    b->next = bcache.head.next;
+    b->prev = &bcache.head;
+    bcache.head.next->prev = b;
+    bcache.head.next = b;
+}</code></pre>
+
+    <h2>位运算</h2>
+    <p>C 提供四种基本位运算，直接映射到 RISC-V 指令：</p>
+    <pre><code>10001 &  10000 = 10000    // 按位与：提取位
+10001 |  10000 = 10001    // 按位或：设置位
+10001 ^  10000 = 00001    // 按位异或：翻转位
+~1000 = 0111              // 按位取反</code></pre>
+
+    <p>在系统编程中，位运算常用于操作硬件寄存器：</p>
+    <pre><code>// kernel/fcntl.h
+#define O_RDONLY  0x000
+#define O_WRONLY  0x001
+#define O_RDWR    0x002
+#define O_CREATE  0x200
+#define O_TRUNC   0x400
+
+// 组合标志位：fd = open("f", O_WRONLY | O_CREATE | O_TRUNC);</code></pre>
+
+    <h2>常见 C 语言陷阱</h2>
+    <table>
+      <thead><tr><th>陷阱</th><th>描述</th></tr></thead>
+      <tbody>
+        <tr><td><strong>use-after-free</strong></td><td>访问已释放的内存</td></tr>
+        <tr><td><strong>double-free</strong></td><td>同一块内存被 free 两次</td></tr>
+        <tr><td><strong>未初始化内存</strong></td><td>栈变量和 malloc 返回的内存不自动清零</td></tr>
+        <tr><td><strong>buffer overflow</strong></td><td>写入超出数组边界</td></tr>
+        <tr><td><strong>memory leak</strong></td><td>分配后不释放，最终耗尽内存</td></tr>
+        <tr><td><strong>type confusion</strong></td><td>错误的类型转换导致解释错误</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>未初始化内存示例</h3>
+      <pre><code>void f() {
+    int x;            // x 的值未定义！
+    char buf[64];     // buf 内容未定义
+    if (x == 0) ...   // 行为不确定
+}</code></pre>
+      <p>内核中尤其危险——未初始化的内存可能泄露敏感数据（如密钥），这就是著名的"内核栈信息泄露"漏洞。</p>
+    </div>
+
+    <h2>关键字 static 与 void</h2>
+    <ul>
+      <li><code>static</code>：限制变量/函数的可见性为文件内部，但在文件内是"全局的"（整个程序生命周期）。</li>
+      <li><code>void</code>：表示"无类型"、"无返回值"、"无参数"。<code>void * </code> 是通用指针类型。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2>知识检查</h2>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q1：</strong>为什么操作系统内核通常用 C 而不是 Java/Go/Python？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="C 的抽象能力并不比高级语言强。">A. C 语言抽象能力最强</button>
+        <button data-choice="b" data-correct="正确！C 直接映射硬件、无运行时、完全掌控内存，适合底层编程。">B. C 直接映射硬件、无运行时开销、完全掌控内存</button>
+        <button data-choice="c" data-incorrect="C 的错误率反而更高。">C. C 语言最不容易出错</button>
+        <button data-choice="d" data-incorrect="C 的运行速度不慢。">D. C 语言运行速度最慢</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="c">
+      <p><strong>Q2：</strong>设有 <code>int arr[10]; int *p = arr;</code>，<code>p+3</code> 的地址与 <code>p</code> 的地址相差多少字节？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="指针算术按类型大小偏移。">A. 3 字节</button>
+        <button data-choice="b" data-incorrect="int 在 RISC-V 上是 4 字节，3 × 4 = 12。">B. 4 字节</button>
+        <button data-choice="c" data-correct="正确！int 占 4 字节，p+3 的偏移 = 3 × 4 = 12 字节。">C. 12 字节</button>
+        <button data-choice="d" data-incorrect="指针算术按元素大小偏移。">D. 32 字节</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="a">
+      <p><strong>Q3：</strong>以下哪项不是 xv6 中 C 链表的典型用途？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-correct="正确！页表是用树（三级页表）实现的，不是链表。">A. 页表（Page Table）</button>
+        <button data-choice="b" data-incorrect="kalloc.c 用单链表管理空闲页。">B. 空闲物理页列表</button>
+        <button data-choice="c" data-incorrect="bio.c 用双向链表实现 LRU buffer cache。">C. 缓冲区缓存（Buffer Cache）</button>
+        <button data-choice="d" data-incorrect="xv6 用链表管理进程表。">D. 进程表</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="d">
+      <p><strong>Q4：</strong>表达式 <code>0x0F &amp; 0x3C</code> 的结果是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="0x0F = 00001111, 0x3C = 00111100, 按位与 = 00001100 = 0x0C。">A. 0xFF</button>
+        <button data-choice="b" data-incorrect="这是按位与，不是按位或。">B. 0x3F</button>
+        <button data-choice="c" data-incorrect="这是按位与，不是按位异或。">C. 0x33</button>
+        <button data-choice="d" data-correct="正确！0x0F & 0x3C = 0x0C。">D. 0x0C</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q5：</strong>以下哪项是典型的 C 安全漏洞？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="C 语言没有异常机制。">A. 异常未捕获</button>
+        <button data-choice="b" data-correct="正确！缓冲区溢出是 C 中最经典的安全漏洞。">B. 缓冲区溢出</button>
+        <button data-choice="c" data-incorrect="C 语言没有类继承。">C. 类继承错误</button>
+        <button data-choice="d" data-incorrect="C 语言没有类型推断。">D. 类型推断失败</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <hr class="rule">
+
+    <h2>本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>C 贴近硬件</h3>
+        <p>C 是系统编程的"通用语"——直接映射指令、无运行时、完全控制内存。</p>
+      </article>
+      <article>
+        <h3>指针是灵魂</h3>
+        <p>指针、数组、字符串、链表本质上都是内存地址的操作。</p>
+      </article>
+      <article>
+        <h3>位运算是工具</h3>
+        <p>与、或、异或、取反——操作硬件寄存器、标志位的基础。</p>
+      </article>
+      <article>
+        <h3>警惕 UB</h3>
+        <p>use-after-free、buffer overflow、未初始化内存——这些是内核漏洞的温床。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://blog.regehr.org/archives/1393" target="_blank" rel="noopener">Understanding and Misunderstanding Static Analysis</a> — C 语言陷阱深入分析</li>
+      <li><a href="https://pdos.csail.mit.edu/6.1810/2025/readings/riscv-calling.pdf" target="_blank" rel="noopener">RISC-V Calling Convention</a> — RISC-V 调用约定</li>
+      <li>K&amp;R, <em>The C Programming Language</em> — C 语言经典教材</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="01-introduction.html">← 上一课</a>
+      <a href="03-os-design.html">下一课 →</a>
+    </div>
+    <footer><p>MIT 6.1810: Operating Systems Engineering</p></footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

@@ -1,11 +1,12 @@
-# CourseStack v2 course-site contract
+# CourseStack v3 course-site contract
 
 ## Platform contract
 
 - Repository: `PointBreaker/Pointbreaker.github.io`
 - Base branch: `main`
-- Required platform file: `site-platform.json`, version 2 or newer
+- Required platform file: `site-platform.json`, version 3 or newer
 - Course catalog: `courses.json`
+- Course root: `courses/`
 - Shared design assets: `assets/course/`
 - Shared KaTeX and Prism assets: `assets/vendor/`
 
@@ -74,7 +75,7 @@ Rules:
 ## Generated tree
 
 ```text
-<slug>/
+courses/<slug>/
 ├── index.html
 ├── course-info.json
 ├── api/status.json
@@ -101,4 +102,4 @@ Each lecture and work-item page must:
 
 ## Catalog contract
 
-Append exactly one object to `courses.json`. Do not edit root `index.html`; it renders the catalog from JSON. Keep course IDs and paths unique.
+Append exactly one object to `courses.json` with `path` set to `courses/<slug>/`. Do not edit root `index.html`; it renders the catalog from JSON. Keep course IDs and paths unique, and never create a root-level `<slug>/` course directory.

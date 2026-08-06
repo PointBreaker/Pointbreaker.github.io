@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 25b 课：动态负载均衡与 Work Stealing — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 25b 课</p>
+    <h1>动态负载均衡与 Work Stealing</h1>
+    <p class="lede">当任务数量、执行时间或依赖结构直到运行时才知道，静态划分就不再可靠。本课从负载不均衡的测量出发，逐步推导 self scheduling、guided scheduling、work stealing，并解释为什么“本地 LIFO、远端 FIFO、随机选择 victim”成为现代任务运行时的经典设计。</p>
+
+    <div class="meta">
+      <p><strong>授课：</strong>Kathy Yelick</p>
+      <p><strong>日期：</strong>2025-04-22</p>
+      <p><strong>原始课件：</strong>Lecture 25b · Dynamic Load Balancing</p>
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>预计用时：</strong>70 分钟</p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>1. 先确认问题真的是负载不均衡</h2>
+    <p>并行程序在 barrier 前等待，并不自动意味着负载不均衡。它也可能来自锁竞争、串行瓶颈、网络抖动或操作系统噪声。平均运行时间会掩盖慢节点，因此应记录每个 worker 的独立时间，并观察分布和尾部。</p>
+
+    <div class="card idea">
+      <h3>一个实用指标</h3>
+      <p>设第 (i) 个 worker 的运行时间为 (t_i)，平均时间为 (ar t)，可用下面的归一化指标快速定位问题：</p>
+      <p>\[I = \frac{\max_i t_i - \bar t}{\bar t}\]</p>
+      <p>(I) 越大，说明最慢 worker 与整体平均值的差距越明显。但它不能区分应用负载、硬件故障和系统噪声，需要配合时间直方图与性能工具继续分析。</p>
+    </div>
+
+    <table>
+      <thead><tr><th>现象</th><th>可能原因</th><th>验证方式</th></tr></thead>
+      <tbody>
+        <tr><td>所有线程同时变慢</td><td>内存带宽、共享锁、系统服务</td><td>硬件计数器、锁等待、节点级时间线</td></tr>
+        <tr><td>少数线程长期更慢</td><td>任务分配不均、持久硬件噪声</td><td>逐线程直方图，而非总体平均</td></tr>
+        <tr><td>偶发超长尾</td><td>云平台抖动、中断、调度抢占</td><td>关注 p99/p99.9，而非中位数</td></tr>
+        <tr><td>大量 barrier 等待</td><td>负载不均或前序串行区</td><td>比较 barrier 前的独立执行时间</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2. 静态划分与动态调度</h2>
+    <p>如果任务数量和成本都能提前估计，静态划分通常有最低的运行时开销和最好的数据局部性。但一旦任务成本不同，最优静态分配会接近 bin packing，而 bin packing 是 NP-hard 的。</p>
+
+    <div class="loop">
+      <article><h3>静态划分</h3><p>适合规则网格、稠密矩阵和固定迭代次数。优点是确定、可复现、局部性强；缺点是无法应对成本估计误差。</p></article>
+      <article><h3>动态调度</h3><p>适合 Mandelbrot、树搜索、自适应网格、稀疏和非规则任务。优点是能吸收不确定性；代价是队列、同步和任务迁移开销。</p></article>
+      <article><h3>核心权衡</h3><p>负载越均衡，任务迁移通常越多；迁移越多，缓存和 NUMA 局部性越容易被破坏。</p></article>
+    </div>
+
+    <h2>3. 从共享队列到 Guided Self Scheduling</h2>
+    <h3>Self Scheduling</h3>
+    <p>最简单的动态方案是维护一个共享任务队列：worker 完成任务后从队列取下一个任务。它能得到细粒度均衡，却可能让共享队列成为新的串行瓶颈。</p>
+
+    <pre><code class="language-python">while True:
+    task = shared_queue.pop()
+    if task is None:
+        break
+    execute(task)</code></pre>
+
+    <h3>Chunked Scheduling</h3>
+    <p>每次领取 (K) 个任务可减少锁竞争。大 chunk 开销低但容易造成尾部不均衡；小 chunk 均衡好但队列访问频繁。</p>
+
+    <h3>Guided Self Scheduling</h3>
+    <p>GSS 让 chunk 随剩余工作递减。若第 (i) 次访问任务池时还有 (R_i) 个任务、共有 (p) 个 worker，则：</p>
+    <p>\[K_i = \left\lceil \frac{R_i}{p} \right\rceil\]</p>
+    <p>执行前期用大 chunk 摊薄调度成本，接近尾部时自动缩小 chunk，提高收尾阶段的均衡性。OpenMP 的 guided schedule 就体现了这一思想。</p>
+
+    <h2>4. Work Stealing 的三个关键选择</h2>
+    <p>共享队列仍然会集中竞争。Work stealing 为每个 worker 配置私有 deque：正常情况下只访问自己的队列；空闲时才从其他 worker 窃取任务。</p>
+
+    <pre><code class="language-python">def worker_loop(me):
+    while not globally_finished():
+        task = me.deque.pop_local()       # 本地端：LIFO
+        if task is None:
+            victim = choose_random_worker()
+            task = victim.deque.steal_oldest()  # 远端：FIFO
+        if task is not None:
+            execute(task)</code></pre>
+
+    <table>
+      <thead><tr><th>设计问题</th><th>经典选择</th><th>原因</th></tr></thead>
+      <tbody>
+        <tr><td>本地取哪个任务？</td><td>LIFO / deque 顶部</td><td>刚生成的任务更可能复用当前缓存和工作集</td></tr>
+        <tr><td>窃取哪个任务？</td><td>FIFO / deque 底部</td><td>较老任务往往代表更大的剩余子树，单次窃取能搬走更多并行工作</td></tr>
+        <tr><td>向谁窃取？</td><td>随机 victim</td><td>避免热点和确定性最坏情况，在未知负载下提供高概率保证</td></tr>
+        <tr><td>邻居还是远端？</td><td>分层或拓扑感知随机</td><td>近邻有局部性，远端有更强均衡能力，实际系统常分阶段选择</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card warning">
+      <h3>Work stealing 不能创造并行度</h3>
+      <p>如果算法的 critical path 很长，或者就绪任务数量始终小于处理器数量，再聪明的调度器也无法填满机器。调度解决的是“已有并行工作如何分配”，不是“如何凭空产生并行工作”。</p>
+    </div>
+
+    <h2>5. 随机化为什么有效？</h2>
+    <p>把任务看作球、worker 看作桶。若把 (n) 个任务随机放入 (p) 个 worker，当 (n > p\log p) 时，最大负载以高概率接近：</p>
+    <p>\[\frac{n}{p} + \Theta\!\left(\sqrt{\frac{n\log p}{p}}\right)\]</p>
+    <p>当 (n=p) 时，最大负载约为：</p>
+    <p>\[\Theta\!\left(\frac{\log n}{\log\log n}\right)\]</p>
+    <p>随机分配并不完美，但它在几乎没有先验信息的情况下避开了集中冲突。对动态任务图，经典 work-stealing 分析进一步给出接近：</p>
+    <p>\[T_P \approx \frac{T_1}{P} + O(T_\infty)\]</p>
+    <p>其中 (T_1) 是总 work，(T_\infty) 是 critical path（span）。这说明性能同时受总工作量和依赖链长度约束。</p>
+
+    <h2>6. 有依赖任务：从树搜索到 DAG</h2>
+    <p>任务相互独立时，调度器只需分配现成工作；对于树或 DAG，任务在运行过程中才产生。DFS 使用显式栈，内存小、局部性好，但并行度有限；BFS 暴露大量同层任务，却可能占用巨大内存。</p>
+
+    <div class="card idea">
+      <h3>为什么 deque 特别适合树搜索？</h3>
+      <p>本地 worker 深度优先展开最新子任务，保持工作集紧凑；窃取者从另一端拿走最老的高层任务，相当于切走一棵较大的子树。一个 deque 同时兼顾了 DFS 的局部性与 BFS 式的并行暴露。</p>
+    </div>
+
+    <p>现代运行时会显式维护任务依赖或数据依赖。OpenMP tasks、Cilk、oneTBB、Charm++、PaRSEC、Legion、StarPU、Dask 都在不同抽象层上解决这个问题：发现 ready task、映射到设备、移动数据并监控长尾。</p>
+
+    <h2>7. Charm++：过度分解与层次化均衡</h2>
+    <p>Charm++ 不把“一个 MPI rank”视为不可移动的负载单位，而是把应用分解成远多于处理器数量的 migratable objects（chares）。运行时周期性收集负载，重新映射对象。</p>
+
+    <ol>
+      <li><strong>Regular Timesteps：</strong>沿用上一步映射，降低迁移成本。</li>
+      <li><strong>Detailed/Aggressive Balancing：</strong>发现明显不均衡后重新分配对象。</li>
+      <li><strong>Refinement：</strong>只移动少量对象修正残余偏差。</li>
+      <li><strong>Topology-aware：</strong>优先把通信频繁的对象放近，同时保留跨节点均衡能力。</li>
+    </ol>
+
+    <h2>8. 选择调度策略的检查表</h2>
+    <ul class="checklist">
+      <li>任务成本是否可预测？若可预测，先考虑静态或 weighted partition。</li>
+      <li>任务是否独立？独立循环优先考虑 static/dynamic/guided；递归任务适合 work stealing。</li>
+      <li>任务粒度是否显著大于调度成本？否则先合并或 chunk。</li>
+      <li>数据是否能迁移？大对象迁移可能让均衡收益被通信成本抵消。</li>
+      <li>是否存在长 critical path？若存在，应先重构算法以暴露并行度。</li>
+      <li>是否有 NUMA/GPU/网络拓扑？随机窃取应升级为分层、拓扑感知策略。</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <h2>测验</h2>
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>为什么只看所有 worker 的平均运行时间容易漏掉负载不均衡？</p>
+      <div class="quiz-options">
+        <button data-answer="correct" data-correct="正确！并行步的完成时间由最慢 worker 决定，平均值会隐藏长尾。">A. 最慢 worker 决定 barrier 的完成时间</button>
+        <button data-answer="wrong" data-incorrect="平均值本身并不会测量通信量。">B. 平均值只能测量通信</button>
+        <button data-answer="wrong" data-incorrect="线程数量不是问题核心。">C. 平均值只适用于单线程</button>
+        <button data-answer="wrong" data-incorrect="平均值可以计算，只是信息不足。">D. 平均值无法计算</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>Guided Self Scheduling 为什么让 chunk 逐渐变小？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="前期大 chunk 的目的恰恰是减少队列访问。">A. 增加前期调度开销</button>
+        <button data-answer="correct" data-correct="正确！前期大 chunk 降低开销，尾部小 chunk 改善收尾均衡。">B. 同时兼顾调度开销与尾部均衡</button>
+        <button data-answer="wrong" data-incorrect="GSS 不要求任务成本持续增加。">C. 因为任务会越来越昂贵</button>
+        <button data-answer="wrong" data-incorrect="GSS 仍然需要任务池。">D. 为了删除任务队列</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>经典 work stealing 为什么从 victim deque 的另一端窃取？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="窃取会引入同步，目标不是完全无锁。">A. 为了完全消除同步</button>
+        <button data-answer="correct" data-correct="正确！较老任务通常位于更高的树层级，代表更大的剩余子树。">B. 为了一次获得更大的并行子树</button>
+        <button data-answer="wrong" data-incorrect="最新任务通常更适合本地缓存复用。">C. 为了拿到最新任务</button>
+        <button data-answer="wrong" data-incorrect="FIFO 不是为了保证任务等成本。">D. 为了让所有任务成本相同</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>公式 (T_P \approx T_1/P + O(T_\infty)) 中，(T_\infty) 表示什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="总 work 是 T₁。">A. 总任务数量</button>
+        <button data-answer="wrong" data-incorrect="它不是网络带宽。">B. 网络带宽</button>
+        <button data-answer="correct" data-correct="正确！T∞ 是依赖图上的 critical path，也称 span。">C. 依赖图的关键路径长度</button>
+        <button data-answer="wrong" data-incorrect="处理器数量是 P。">D. 处理器数量</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article><h3>测量长尾</h3><p>并行性能由最慢 worker 决定。先测逐 worker 时间和尾部分布，再判断是否真的需要负载均衡。</p></article>
+      <article><h3>分布式 deque</h3><p>私有队列消除共享热点；本地 LIFO 保局部性，远端 FIFO 窃取大子树。</p></article>
+      <article><h3>随机化有保证</h3><p>随机 victim 在未知负载下避免集中冲突，并让 work stealing 接近 work/span 理论下界。</p></article>
+      <article><h3>没有万能调度器</h3><p>任务粒度、依赖、迁移成本和拓扑共同决定 static、guided、stealing 或混合策略。</p></article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li>Blumofe, R. D., & Leiserson, C. E. (1999). <em>Scheduling Multithreaded Computations by Work Stealing</em>. JACM.</li>
+      <li>Graham, R. L. (1966). <em>Bounds for Certain Multiprocessing Anomalies</em>.</li>
+      <li>OpenMP 5.x Specification — static、dynamic、guided 与 task scheduling。</li>
+      <li><a href="https://charm.cs.uiuc.edu" target="_blank" rel="noopener">Charm++</a> — 过度分解与自适应负载均衡。</li>
+      <li><a href="https://sites.google.com/lbl.gov/cs267-spr2025" target="_blank" rel="noopener">CS267 Spring 2025 课程主页</a></li>
+    </ul>
+
+    <div class="rule"></div>
+    <div class="nav">
+      <a href="25-graph-partitioning.html">← 第 25 课</a>
+      <a href="26-nbody-hierarchical.html">第 26 课 →</a>
+    </div>
+    <footer><p>CS267: Applications of Parallel Computers · UC Berkeley · 基于 Lecture 25b 课件整理</p></footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

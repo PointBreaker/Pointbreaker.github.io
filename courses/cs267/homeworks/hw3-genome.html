@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HW3 导读：并行基因组组装（UPC++）— CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/guide.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <!-- Banner -->
+    <div class="guide-banner">
+      <p class="guide-eyebrow">CS267 · HW3 导读</p>
+      <h1>并行基因组组装（UPC++）</h1>
+      <p class="guide-lede">用 UPC++ 的 PGAS 模型并行化 de novo 基因组组装——实现分布式哈希表，遍历 k-mer 生成 contigs，体验 one-sided 通信与 RDMA 的力量。</p>
+      <div class="guide-meta">
+        <span><span class="meta-icon">📅</span> 截止：2025-04-11</span>
+        <span><span class="meta-icon">🎓</span> 对应：Lecture 11</span>
+        <span><span class="meta-icon">💻</span> C++ (UPC++)</span>
+        <span><span class="meta-icon">📂</span> human-chr14-synthetic.txt</span>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2 id="what">这个 Homework 要你做什么？</h2>
+
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>使用 UPC++ 并行化 de novo 基因组组装——实现分布式哈希表来存储和遍历 k-mer，从 reads 中重建 contigs。修改 <code>kmer_hash.cpp</code> 和 <code>hash_map.hpp</code>，在 1-8 节点、每节点 60 任务上测试扩展性。</p>
+    </div>
+
+    <p>这是你第一次用 PGAS 模型编程。与 MPI 的 two-sided 通信不同，UPC++ 的 <code>rget</code>/<code>rput</code> 让你可以直接读写远程 rank 的内存——无需远端 CPU 参与，硬件 RDMA 让通信与计算重叠。</p>
+
+    <h3>主要组件</h3>
+    <table class="component-table">
+      <thead>
+        <tr><th>组件</th><th>对应课程</th><th>核心概念</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="comp-name">kmer_hash.cpp</td><td class="comp-lec">Lecture 11</td><td>分布式哈希表、k-mer 存储</td></tr>
+        <tr><td class="comp-name">hash_map.hpp</td><td class="comp-lec">Lecture 11</td><td>PGAS 数据结构、global_ptr</td></tr>
+        <tr><td class="comp-name">contig 生成</td><td class="comp-lec">Lecture 11</td><td>k-mer 遍历、图遍历</td></tr>
+        <tr><td class="comp-name">多节点扩展</td><td class="comp-lec">Lecture 11</td><td>弱扩展 / 强扩展实验</td></tr>
+        <tr><td class="comp-name">报告</td><td class="comp-lec">—</td><td>扩展图 + 优化讨论</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="prereq">前置知识清单</h2>
+
+    <h3>课程知识</h3>
+    <ul class="checklist">
+      <li><strong>Lecture 11（UPC++ PGAS）</strong>：one-sided 通信、RDMA、global_ptr、affinity</li>
+      <li><strong>Lecture 7-8（MPI 回顾）</strong>：理解分布式内存编程，对比 two-sided vs one-sided</li>
+      <li><strong>基础图论</strong>：de Bruijn 图、k-mer、contig 的概念</li>
+    </ul>
+
+    <h3>UPC++ 编程基础</h3>
+    <ul class="checklist">
+      <li><code>upcxx::init()</code> / <code>upcxx::finalize()</code> 初始化和清理</li>
+      <li><code>upcxx::rank_me()</code> / <code>upcxx::rank_n()</code> 获取当前 rank 和总 rank 数</li>
+      <li><code>upcxx::new_&lt;T&gt;()</code> / <code>upcxx::delete_&lt;T&gt;()</code> 分布式内存分配</li>
+      <li><code>upcxx::global_ptr&lt;T&gt;</code> 全局指针，包含 affinity 信息</li>
+      <li><code>upcxx::rget()</code> / <code>upcxx::rput()</code> 异步 one-sided 操作</li>
+      <li><code>upcxx::barrier()</code> 全局同步</li>
+    </ul>
+
+    <h3>生物信息学背景</h3>
+    <ul class="checklist">
+      <li>DNA 序列由 A/T/C/G 四种碱基组成</li>
+      <li><strong>k-mer</strong>：长度为 k 的子串（本题 k=51）</li>
+      <li><strong>Read</strong>：测序仪产生的短 DNA 片段</li>
+      <li><strong>Contig</strong>：重叠 reads 拼接出的连续序列</li>
+      <li><strong>de Bruijn 图</strong>：以 k-mer 为边/节点构建的图，用于组装</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="approach">如何开始？</h2>
+
+    <div class="step-card">
+      <div class="step-number">0</div>
+      <h3>理解串行算法</h3>
+      <p>先理解串行版本的基因组组装流程：</p>
+      <ol>
+        <li>读取所有 reads，提取 k-mer</li>
+        <li>将 k-mer 插入哈希表（记录出现次数）</li>
+        <li>从高频 k-mer 出发，遍历 de Bruijn 图</li>
+        <li>输出 contigs（无分支的路径）</li>
+      </ol>
+      <p>数据集：<code>/global/cfs/cdirs/mp309/cs267-spr2025/hw3-datasets/human-chr14-synthetic.txt</code>（51-mers）</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>设计分布式哈希表</h3>
+      <p>核心挑战：k-mer 分布在多个 rank 上，如何高效存取？</p>
+      <ul>
+        <li><strong>分区策略</strong>：按 k-mer 的哈希值决定归属 rank</li>
+        <li><strong>通信模式</strong>：插入时用 <code>rput</code> 写到远端，查询时用 <code>rget</code> 读取</li>
+        <li><strong>批量操作</strong>：聚合多次操作为一次通信，摊销延迟</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>避免"平凡解"</h3>
+      <p><strong>关键约束：</strong>不能通过 RPC 调用本地 <code>std::unordered_map</code>。这看似简单，但违背了 PGAS 的设计意图——每个请求都要触发远程调用，性能极差。</p>
+      <p>正确做法：在 UPC++ 的框架下直接操作分布式内存，利用 <code>rget</code>/<code>rput</code> 的异步性和批量能力。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>实现 contig 生成</h3>
+      <p>哈希表构建完成后，需要遍历 k-mer 图生成 contigs：</p>
+      <ul>
+        <li>选择一个起始 k-mer（高频、非重复）</li>
+        <li>沿着图遍历，每次扩展一个碱基</li>
+        <li>遇到分支或低覆盖度时停止</li>
+        <li>输出完整的 contig 序列</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">4</div>
+      <h3>扩展性实验</h3>
+      <p>设计两组实验：</p>
+      <ul>
+        <li><strong>多节点</strong>：1-8 节点，每节点 60 任务（固定每 rank 工作量）</li>
+        <li><strong>节点内</strong>：1 节点，1-64 秩（观察共享内存上的扩展）</li>
+      </ul>
+      <p>绘制扩展图（speedup vs rank 数），分析扩展效率。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="common-pitfalls">常见陷阱</h2>
+
+    <div class="pitfall">
+      <p><strong>平凡解陷阱：</strong> 用 UPC++ 的 RPC 调用本地 <code>std::unordered_map</code> 是最容易走的路，但性能极差且<strong>违反题目要求</strong>。评委会检查你的实现方式。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>同步过度：</strong> 每次 <code>rget</code>/<code>rput</code> 都等待完成会丧失异步优势。应该批量发起操作，最后统一 <code>wait</code>。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>数据倾斜：</strong> 基因组中某些 k-mer 出现频率极高（如重复序列）。简单的哈希分区可能导致某些 rank 负载过重。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>忘记 barrier：</strong> UPC++ 的异步操作需要显式同步。在关键阶段后忘记 <code>upcxx::barrier()</code> 会导致数据竞争。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>内存泄漏：</strong> <code>upcxx::new_</code> 分配的内存必须用 <code>upcxx::delete_</code> 释放。分布式内存泄漏比本地更隐蔽且更致命。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="upcpp-patterns">UPC++ 编程模式</h2>
+
+    <h3>One-Sided 通信</h3>
+    <pre><code>// rank 0 读取 rank 1 上的数据
+upcxx::global_ptr&lt;int&gt; remote = ptr;  // rank 1 上的指针
+int value;
+upcxx::future&lt;&gt; fut = upcxx::rget(remote, &amp;value, sizeof(int));
+// ... 做其他工作 ...
+fut.wait();  // 等待读取完成</code></pre>
+
+    <h3>批量操作</h3>
+    <pre><code>// 批量 rput：聚合多次写入为一次通信
+std::vector&lt;upcxx::global_ptr&lt;int&gt;&gt; dst_ptrs;
+std::vector&lt;int&gt; src_values;
+// ... 填充数据 ...
+upcxx::future&lt;&gt; fut = upcxx::rput(
+  src_values.data(), dst_ptrs.data(), sizeof(int) * dst_ptrs.size()
+);
+fut.wait();</code></pre>
+
+    <h3>分布式对象</h3>
+    <pre><code>// 在所有 rank 上分配一个对象
+upcxx::global_ptr&lt;int&gt; ptr = upcxx::new_&lt;int&gt;(0);
+
+// 检查 affinity（该指针指向哪个 rank）
+int owner = ptr.where();
+
+// 仅在拥有者 rank 上操作
+if (owner == upcxx::rank_me()) {
+  *ptr.local() = 42;  // 转为本地指针访问
+}</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="perf-analysis">性能分析方法</h2>
+
+    <h3>报告要求</h3>
+    <ul class="checklist">
+      <li><strong>扩展图</strong>：多节点（1-8 节点）和节点内（1-64 秩）两组曲线</li>
+      <li><strong>实现描述</strong>：解释你的分布式哈希表设计</li>
+      <li><strong>优化讨论</strong>：批量操作、通信隐藏、负载均衡策略</li>
+    </ul>
+
+    <h3>关键指标</h3>
+    <ul>
+      <li><strong>加速比</strong>：T(1 rank) / T(N ranks)</li>
+      <li><strong>扩展效率</strong>：加速比 / 理想加速比 × 100%</li>
+      <li><strong>通信时间占比</strong>：one-sided 操作耗时 / 总时间</li>
+      <li><strong>负载均衡度</strong>：最大 rank 工作量 / 平均工作量</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="connection">与课程的关系</h2>
+
+    <div class="connection-map">
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 11 · UPC++ PGAS</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">one-sided 通信 → 分布式哈希表</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 7-8 · MPI</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">分布式内存模型 → 对比理解 PGAS</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 9-10 · GPU</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">并行思维 → 分布式图遍历</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">Lecture 24 · Comp Biology</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">生物信息学应用 → 基因组组装背景</div>
+      </div>
+    </div>
+
+    <p>HW3 是 PGAS 模型的实战演练。UPC++ 的思想在后续课程中继续延伸：</p>
+    <ul>
+      <li>Lecture 15：并行矩阵乘法（对比不同编程模型）</li>
+      <li>Lecture 22：图算法（分布式图遍历的更多应用）</li>
+      <li>Lecture 24：计算生物学（更多 bioinformatics 并行算法）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="mindset">学习心态</h2>
+
+    <div class="mindset-banner">
+      <p><strong>PGAS 是一种新的思维范式。</strong> 从 MPI 的"发消息"到 UPC++ 的"直接读内存"，你需要重新思考数据放置和访问模式。<strong>Affinity 是关键</strong>——数据在谁的手里，谁访问它最便宜。</p>
+      <p style="margin-top:10px">基因组组装是一个<strong>不规则应用</strong>（irregular application）：k-mer 分布不均、图结构不规则。这正是 PGAS 擅长的场景——one-sided 通信天然适合不规则访问。</p>
+    </div>
+
+    <p><strong>卡住时的正确顺序：</strong> 复习 Lecture 11 → 读 UPC++ 文档 → 从单机单 rank 开始调试 → 逐步增加 rank 数 → 分析通信瓶颈。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">自测：你准备好了吗？</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确！global_ptr 包含 affinity 信息，指明数据属于哪个 rank。" data-incorrect="global_ptr 封装了拥有者 rank 和该 rank 上的地址两部分信息。">
+      <p><strong>问题 1：</strong>UPC++ 的 <code>global_ptr&lt;T&gt;</code> 包含哪些信息？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">仅包含内存地址</button>
+        <button data-choice="b" aria-pressed="false">包含拥有者 rank 和该 rank 上的地址</button>
+        <button data-choice="c" aria-pressed="false">包含数据大小和地址</button>
+        <button data-choice="d" aria-pressed="false">仅包含 rank 编号</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确！one-sided 通信（rget/rput）不需要远端 CPU 参与，数据由网卡直接读写内存。" data-incorrect="one-sided 通信的发起方直接读写远端内存，无需远端 CPU 参与。">
+      <p><strong>问题 2：</strong>为什么 UPC++ 的 <code>rget</code>/<code>rput</code> 比 MPI 的 <code>MPI_Send</code>/<code>MPI_Recv</code> 更适合不规则通信？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为数据传输速度更快</button>
+        <button data-choice="b" aria-pressed="false">因为不需要远端 CPU 参与（RDMA），发起即异步</button>
+        <button data-choice="c" aria-pressed="false">因为 UPC++ 自动优化网络拓扑</button>
+        <button data-choice="d" aria-pressed="false">因为 rget/rput 是同步操作</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确！题目明确禁止通过 RPC 调用本地 std::unordered_map，这被视为平凡解。" data-incorrect="题目明确禁止使用 RPC 调用本地 std::unordered_map，要求直接操作分布式内存。">
+      <p><strong>问题 3：</strong>为什么 HW3 禁止通过 RPC 调用本地 <code>std::unordered_map</code>？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 std::unordered_map 太慢</button>
+        <button data-choice="b" aria-pressed="false">因为这违背了 PGAS 的设计意图，每次操作都要触发远程调用，丧失异步和批量优势</button>
+        <button data-choice="c" aria-pressed="false">因为 UPC++ 不支持 RPC</button>
+        <button data-choice="d" aria-pressed="false">因为哈希表必须用数组实现</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确！批量操作将多次小通信聚合为一次大通信，摊销启动延迟，提高带宽利用率。" data-incorrect="批量操作聚合多次通信为一次，摊销延迟，是隐藏通信开销的关键技术。">
+      <p><strong>问题 4：</strong>在 UPC++ 中，为什么批量操作（batching）对性能至关重要？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为 UPC++ 不支持单次通信</button>
+        <button data-choice="b" aria-pressed="false">因为可以摊销每次通信的启动延迟，提高带宽利用率</button>
+        <button data-choice="c" aria-pressed="false">因为批量操作是同步的，更容易调试</button>
+        <button data-choice="d" aria-pressed="false">因为 RDMA 只支持批量传输</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确！k-mer 是长度为 k 的子串，在基因组组装中用作 de Bruijn 图的基本单元。" data-incorrect="k-mer 是 DNA 序列中长度为 k 的子串，是基因组组装的基本单元。">
+      <p><strong>问题 5：</strong>在基因组组装中，"k-mer"是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">一种特殊的哈希函数</button>
+        <button data-choice="b" aria-pressed="false">DNA 序列中长度为 k 的子串</button>
+        <button data-choice="c" aria-pressed="false">测序仪的一种型号</button>
+        <button data-choice="d" aria-pressed="false">一种并行计算模型</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">导读要点</h2>
+    <div class="loop">
+      <article>
+        <h3>目标</h3>
+        <p>UPC++ 并行化基因组组装</p>
+      </article>
+      <article>
+        <h3>核心</h3>
+        <p>分布式哈希表 + one-sided 通信</p>
+      </article>
+      <article>
+        <h3>约束</h3>
+        <p>禁止 RPC 平凡解</p>
+      </article>
+      <article>
+        <h3>产出</h3>
+        <p>扩展图 + 优化讨论 + 实现描述</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="../lessons/11-upc.html">← 回到课程 #11</a>
+      <a href="hw2-3-gpu.html">← HW2-3 GPU</a>
+      <a href="hw4-pcg.html">HW4 PCG 求解器 →</a>
+    </div>
+
+    <footer>
+      <p>CS267: Applications of Parallel Computers · HW3 导读 · 不含任何实现答案</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

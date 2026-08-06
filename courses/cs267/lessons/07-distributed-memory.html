@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 7 课：分布式内存机器与编程 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 7 课 · Aydin Buluc</p>
+    <h1>分布式内存机器与 MPI 编程</h1>
+    <p class="lede">分布式内存系统通过高速网络连接独立的节点。MPI（Message Passing Interface）是分布式内存编程的工业标准，通过消息传递实现进程间通信。</p>
+
+    <div class="meta">
+      <p><strong>授课教师：</strong>Aydin Buluc</p>
+      <p><strong>日期：</strong>2025-02-11</p>
+      <p><strong>难度：</strong>中等</p>
+      <p><strong>视频：</strong><a href="https://youtu.be/u9Wjsn46n3Y" target="_blank" rel="noopener">Lecture 7 Video</a></p>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>分布式内存架构</h2>
+    <h3>架构演进</h3>
+    <p>TOP500 中系统架构的演进：</p>
+    <ul>
+      <li>早期：单机、SMP、Cluster、MPP、SIMD</li>
+      <li>现在：Cluster 和 MPP 占主导</li>
+    </ul>
+
+    <h3>历史视角</h3>
+    <p>早期分布式内存机器：</p>
+    <ul>
+      <li>微处理器集合</li>
+      <li>通过双向队列在最近邻之间通信</li>
+      <li>消息由路径上的处理器转发（"store and forward" 网络）</li>
+      <li>强调拓扑以最小化跳数</li>
+    </ul>
+
+    <h2>通信网络</h2>
+    <h3>网络类比</h3>
+    <div class="card idea">
+      <p>网络就像街道系统：</p>
+      <ul>
+        <li><strong>Link = 街道</strong></li>
+        <li><strong>Switch = 十字路口</strong></li>
+        <li><strong>距离 (hops) = 经过的街区数</strong></li>
+        <li><strong>Routing algorithm = 行程规划</strong></li>
+      </ul>
+    </div>
+
+    <h3>网络属性</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>属性</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Topology</strong></td><td>连接方式（crossbar、ring、mesh、torus、hypercube、tree、butterfly、dragonfly）</td></tr>
+        <tr><td><strong>Routing</strong></td><td>路由算法（避免死锁）</td></tr>
+        <tr><td><strong>Switching</strong></td><td>Circuit switching vs Packet switching</td></tr>
+        <tr><td><strong>Flow control</strong></td><td>拥塞控制（stall、buffer、reroute、halt）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>延迟 (Latency)</h3>
+    <ul>
+      <li><strong>Diameter：</strong>任意两节点间最长最短路径</li>
+      <li><strong>Latency：</strong>发送和接收之间的延迟</li>
+      <li>软件延迟 >> 硬件延迟（1-10 μs vs 10-100 ns/hop）</li>
+      <li>延迟随时间改善不大（不像摩尔定律）</li>
+    </ul>
+
+    <h3>带宽 (Bandwidth)</h3>
+    <ul>
+      <li>链路带宽 = 线数 / 每比特时间</li>
+      <li>有效带宽 < 物理带宽（包头开销）</li>
+      <li>带宽取决于软件栈，不只是硬件</li>
+    </ul>
+
+    <h3>Bisection Bandwidth（对分带宽）</h3>
+    <p>将对网络切成两半的最小割的带宽：</p>
+    <table>
+      <thead>
+        <tr>
+          <th>拓扑</th>
+          <th>Bisection BW</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Linear Array</td><td>1</td></tr>
+        <tr><td>Ring</td><td>2</td></tr>
+        <tr><td>2D Mesh</td><td>\(\sqrt{n}\)</td></tr>
+        <tr><td>2D Torus</td><td>\(2\sqrt{n}\)</td></tr>
+        <tr><td>Hypercube</td><td>\(n/2\)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>网络拓扑</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>拓扑</th>
+          <th>Diameter</th>
+          <th>Bisection BW</th>
+          <th>特点</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Linear/Ring</strong></td>
+          <td>\(O(n)\) / \(O(n)\)</td>
+          <td>1 / 2</td>
+          <td>简单，但可扩展性差</td>
+        </tr>
+        <tr>
+          <td><strong>2D Mesh</strong></td>
+          <td>\(2(\sqrt{n}-1)\)</td>
+          <td>\(\sqrt{n}\)</td>
+          <td>适合 2D 数组</td>
+        </tr>
+        <tr>
+          <td><strong>2D Torus</strong></td>
+          <td>\(\sqrt{n}\)</td>
+          <td>\(2\sqrt{n}\)</td>
+          <td>Cray XT (Hopper) 使用 3D Torus</td>
+        </tr>
+        <tr>
+          <td><strong>Hypercube</strong></td>
+          <td>\(\log n\)</td>
+          <td>\(n/2\)</td>
+          <td>早期机器（Intel iPSC, NCUBE）</td>
+        </tr>
+        <tr>
+          <td><strong>Tree</strong></td>
+          <td>\(\log n\)</td>
+          <td>1</td>
+          <td>Fat Tree 解决带宽瓶颈</td>
+        </tr>
+        <tr>
+          <td><strong>Butterfly</strong></td>
+          <td>\(\log n\)</td>
+          <td>\(n\)</td>
+          <td>Hypercube 的展开版本</td>
+        </tr>
+        <tr>
+          <td><strong>Dragonfly</strong></td>
+          <td>~5 hops</td>
+          <td>-</td>
+          <td>Edison、Cori 使用</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card idea">
+      <h3>Dragonfly 拓扑</h3>
+      <p>利用光互连（机柜间）和电互连（机柜内）的成本/性能差异：</p>
+      <ul>
+        <li>多个 group 全连接</li>
+        <li>每个 group 内部可以是任意拓扑</li>
+        <li>使用随机路由算法（Valiant, 1982）</li>
+        <li>程序员通常可以忽略拓扑</li>
+      </ul>
+    </div>
+
+    <h2>性能模型</h2>
+    <h3>α-β 模型</h3>
+    <div class="card idea">
+      <p>发送长度为 n 的消息的时间：</p>
+      <p>\[T = \alpha + n \cdot \beta\]</p>
+      <ul>
+        <li>\(\alpha\)：延迟（启动开销）</li>
+        <li>\(\beta\)：每字传输时间的倒数（带宽的倒数）</li>
+        <li>通常 \(\alpha \gg \beta \gg\) 每 flop 时间</li>
+      </ul>
+    </div>
+
+    <p><strong>教训：</strong>一条长消息比许多短消息便宜。需要大的计算/通信比才能高效。</p>
+
+    <h3>PRAM 模型</h3>
+    <p>Parallel Random Access Memory：</p>
+    <ul>
+      <li>所有内存操作在一个时钟周期完成</li>
+      <li>忽略内存层次和通信成本</li>
+      <li>适合判断算法是否有足够的并行性</li>
+      <li>更现实的变体：CREW PRAM、Work-span model</li>
+    </ul>
+
+    <h2>MPI 编程</h2>
+    <h3>Message Passing Libraries</h3>
+    <p>历史上多种消息传递库：</p>
+    <ul>
+      <li>PVM、CMMD、Express、MPL、NX、Chameleon</li>
+      <li><strong>MPI (Message Passing Interface) 现在是工业标准</strong></li>
+    </ul>
+
+    <h3>MPI 的特性</h3>
+    <ul class="checklist">
+      <li><strong>Communicators：</strong>封装通信空间，保证库安全</li>
+      <li><strong>Datatypes：</strong>减少拷贝成本，支持异构</li>
+      <li><strong>Multiple communication modes：</strong>精确缓冲管理</li>
+      <li><strong>Extensive collective operations：</strong>可扩展的全局通信</li>
+      <li><strong>Process topologies：</strong>有效的进程布局</li>
+    </ul>
+
+    <h3>Hello World in MPI</h3>
+    <pre><code>#include "mpi.h"
+#include &lt;stdio.h&gt;
+
+int main(int argc, char *argv[]) {
+  int rank, size;
+  MPI_Init(&amp;argc, &amp;argv);
+  MPI_Comm_rank(MPI_COMM_WORLD, &amp;rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &amp;size);
+  printf("I am %d of %d\n", rank, size);
+  MPI_Finalize();
+  return 0;
+}</code></pre>
+
+    <p>运行：<code>mpirun -np 4 a.out</code></p>
+
+    <h3>核心函数</h3>
+    <p>大多数 MPI 程序只需 6 个函数：</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Point-to-point</th>
+          <th>Collective</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>MPI_INIT</td><td>MPI_INIT</td></tr>
+        <tr><td>MPI_FINALIZE</td><td>MPI_FINALIZE</td></tr>
+        <tr><td>MPI_COMM_SIZE</td><td>MPI_COMM_SIZE</td></tr>
+        <tr><td>MPI_COMM_RANK</td><td>MPI_COMM_RANK</td></tr>
+        <tr><td>MPI_SEND</td><td>MPI_BCAST</td></tr>
+        <tr><td>MPI_RECV</td><td>MPI_REDUCE</td></tr>
+      </tbody>
+    </table>
+
+    <h3>基本 Send/Receive</h3>
+    <pre><code>// 发送
+MPI_Send(start, count, datatype, dest, tag, comm);
+
+// 接收
+MPI_Recv(start, count, datatype, source, tag, comm, status);</code></pre>
+
+    <h3>示例：计算 π</h3>
+    <pre><code>// 每个进程计算自己的部分
+h = 1.0 / n;
+sum = 0.0;
+for (i = myid + 1; i &lt;= n; i += numprocs) {
+  x = h * (i - 0.5);
+  sum += 4.0 * sqrt(1.0 - x*x);
+}
+mypi = h * sum;
+
+// 归约
+MPI_Reduce(&amp;mypi, &amp;pi, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);</code></pre>
+
+    <h2>阻塞与非阻塞通信</h2>
+    <h3>阻塞通信</h3>
+    <ul>
+      <li><strong>MPI_Send：</strong>返回时数据已交付系统，但可能未被接收</li>
+      <li><strong>MPI_Recv：</strong>返回时缓冲区已满</li>
+    </ul>
+
+    <div class="card warning">
+      <h3>死锁问题</h3>
+      <pre><code>// "Unsafe" 代码 — 依赖系统缓冲
+Process 0: Send(1)  Recv(1)
+Process 1: Send(0)  Recv(0)
+// 大消息时可能死锁！</code></pre>
+    </div>
+
+    <h3>解决方案</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>方案</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>MPI_Sendrecv</td><td>同时发送和接收</td></tr>
+        <tr><td>MPI_Bsend</td><td>用户提供的缓冲</td></tr>
+        <tr><td>MPI_Isend/Irecv</td><td>非阻塞操作</td></tr>
+      </tbody>
+    </table>
+
+    <h3>非阻塞通信</h3>
+    <pre><code>MPI_Request request;
+MPI_Status status;
+
+// 非阻塞发送
+MPI_Isend(start, count, datatype, dest, tag, comm, &amp;request);
+// 非阻塞接收
+MPI_Irecv(start, count, datatype, source, tag, comm, &amp;request);
+
+// 等待完成
+MPI_Wait(&amp;request, &amp;status);
+
+// 或测试是否完成
+MPI_Test(&amp;request, &amp;flag, &amp;status);</code></pre>
+
+    <h3>通信模式</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>模式</th>
+          <th>描述</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>MPI_Send</code></td><td>标准模式（实现决定缓冲）</td></tr>
+        <tr><td><code>MPI_Ssend</code></td><td>同步模式（等待接收开始）</td></tr>
+        <tr><td><code>MPI_Bsend</code></td><td>缓冲模式（用户提供缓冲）</td></tr>
+        <tr><td><code>MPI_Rsend</code></td><td>就绪模式（接收已发布）</td></tr>
+      </tbody>
+    </table>
+
+    <div class="rule"></div>
+
+    <h2>测验</h2>
+
+    <div class="quiz" data-q="1">
+      <p><strong>Q1：</strong>α-β 模型中，\(\alpha\) 和 \(\beta\) 分别代表什么？</p>
+      <div class="quiz-options">
+        <button data-answer="correct" data-correct="正确！\(\alpha\) 是延迟，\(\beta\) 是每字传输时间的倒数。">A. 延迟，带宽的倒数</button>
+        <button data-answer="wrong">B. 带宽，延迟</button>
+        <button data-answer="wrong">C. 消息大小，处理器数</button>
+        <button data-answer="wrong">D. 处理器数，消息大小</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="2">
+      <p><strong>Q2：</strong>2D Torus 的直径是多少？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong">A. \(2(\sqrt{n} - 1)\)</button>
+        <button data-answer="correct" data-correct="正确！2D Torus 的直径是 \(\sqrt{n}\)。">B. \(\sqrt{n}\)</button>
+        <button data-answer="wrong">C. \(2\sqrt{n}\)</button>
+        <button data-answer="wrong">D. \(\log n\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="3">
+      <p><strong>Q3：</strong>非阻塞通信的主要优点是什么？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="非阻塞通信不会减少消息大小。">A. 减少消息大小</button>
+        <button data-answer="correct" data-incorrect="非阻塞通信允许重叠通信和计算，隐藏延迟。">B. 重叠通信和计算</button>
+        <button data-answer="wrong" data-incorrect="非阻塞通信不会减少内存使用。">C. 减少内存使用</button>
+        <button data-answer="wrong" data-incorrect="非阻塞通信可能引入同步问题。">D. 避免同步</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="4">
+      <p><strong>Q4：</strong>MPI 中，大多数程序最少需要几个函数？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong">A. 3</button>
+        <button data-answer="wrong">B. 4</button>
+        <button data-answer="correct" data-correct="正确！大多数 MPI 程序只需 6 个函数（init, finalize, size, rank, send/recv 或 bcast/reduce）。">C. 6</button>
+        <button data-answer="wrong">D. 10</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-q="5">
+      <p><strong>Q5：</strong>Dragonfly 拓扑使用什么路由算法？</p>
+      <div class="quiz-options">
+        <button data-answer="wrong" data-incorrect="最小路由在对抗性流量下性能差。">A. 最小路由</button>
+        <button data-answer="correct" data-correct="正确！Dragonfly 使用随机路由算法（Valiant, 1982），避免对抗性流量下的性能崩溃。">B. 随机路由</button>
+        <button data-answer="wrong">C. 最短路径</button>
+        <button data-answer="wrong">D. 洪泛</button>
+      </div>
+    </div>
+
+    <div class="rule"></div>
+
+    <h2>要点总结</h2>
+    <div class="loop">
+      <article>
+        <h3>网络拓扑很重要</h3>
+        <p>不同拓扑有不同的直径、对分带宽和成本。现代系统（Dragonfly）使用层次化拓扑。</p>
+      </article>
+      <article>
+        <h3>α-β 模型指导优化</h3>
+        <p>延迟 \(\alpha\) 远大于带宽倒数 \(\beta\)。需要大的计算/通信比才能高效。</p>
+      </article>
+      <article>
+        <article>
+        <h3>MPI 是标准</h3>
+        <p>MPI 提供了丰富的通信原语。大多数程序只需 6 个函数。</p>
+      </article>
+      <article>
+        <h3>非阻塞通信隐藏延迟</h3>
+        <p>MPI_Isend/Irecv 允许重叠通信和计算，是高性能的关键。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://www.mpi-forum.org" target="_blank" rel="noopener">MPI Forum</a></li>
+      <li>Gropp, Lusk, Skjellum, <em>Using MPI</em>, MIT Press, 2014</li>
+      <li><a href="https://www.mcs.anl.gov/research/projects/mpi/" target="_blank" rel="noopener">Argonne MPI Information</a></li>
+      <li>Valiant, "A scheme for fast parallel communication," <em>SIAM J. Computing</em>, 1982</li>
+    </ul>
+
+    <div class="rule"></div>
+
+    <div class="nav">
+      <a href="06b-comm-avoiding.html">← 第 6b 课</a>
+      <a href="08-advanced-mpi.html">第 8 课 →</a>
+    </div>
+    <footer>
+      <p>CS267: Applications of Parallel Computers · UC Berkeley</p>
+    </footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

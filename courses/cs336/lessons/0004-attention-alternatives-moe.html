@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 4 课：注意力替代方案与混合专家 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 4 课</p>
+    <h1>注意力替代方案与混合专家</h1>
+    <p class="lede">标准 attention 的 O(n²) 复杂度是 Transformer 的致命瓶颈。这一课探索两条突围路径：(1) 设计更高效但近似的注意力机制；(2) 用稀疏激活的 MoE 让模型容量随参数增长而计算量亚线性增长。</p>
+
+    <div class="meta">
+      <span>授课：Tatsu Hashimoto</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：中等 → 困难</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="attention-bottleneck">标准 Attention 的瓶颈</h2>
+
+    <h3>O(n²) 问题</h3>
+    <p>标准 self-attention 对长度为 n 的序列：</p>
+    <pre><code class="language-python">scores = Q @ K^T    # (n, d) @ (d, n) → (n, n)  ← O(n²d) FLOPs
+attn = softmax(scores)
+output = attn @ V   # (n, n) @ (n, d) → (n, d)  ← O(n²d) FLOPs
+
+朴素训练实现的中间量: 可能物化 (n, n) 的 attention matrix</code></pre>
+
+    <p>当 n = 128K（长上下文），n² 超过 16G 元素，单个 bf16 矩阵约 32 GiB。FlashAttention 可以在不改变 full attention 数学结果的前提下避免物化该矩阵；若要降低 O(n²d) 计算量，则需要稀疏、局部、低秩或其他序列模型。</p>
+
+    <h3>两条突围路径</h3>
+    <table>
+      <tr><th>路径</th><th>思路</th><th>代表</th></tr>
+      <tr><td>更高效的 attention 实现</td><td>减少 HBM IO，不改变 full attention</td><td>FlashAttention</td></tr>
+      <tr><td>改变 attention/序列模型</td><td>近似、稀疏化或递归状态</td><td>Linear Attention, Sliding Window, SSM</td></tr>
+      <tr><td>稀疏激活</td><td>每次只激活部分参数</td><td>Mixture of Experts</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="attention-alternatives">注意力替代方案</h2>
+
+    <h3>1. Linear Attention</h3>
+    <p>核心思想：把 softmax 去掉，用核函数近似：</p>
+    <pre><code class="language-python"># 标准 attention: O(n²)
+attn = softmax(Q @ K^T / √d) @ V
+
+# Linear attention: O(n)
+# 利用 (Q @ K^T) @ V = Q @ (K^T @ V) 的结合律
+# 先算 K^T @ V（d × d），再算 Q @ (K^T @ V)
+output = φ(Q) @ (φ(K)^T @ V)  # φ 是核函数（如 ReLU, elu+1）
+
+# 复杂度: O(nd²) —— 当 n >> d 时远优于 O(n²d)</code></pre>
+
+    <div class="card idea">
+      <p><strong>关键洞察：</strong>矩阵乘法满足结合律。标准 attention 先算 (Q @ K^T) 得到 n×n 矩阵，再乘 V。Linear attention 先算 (K^T @ V) 得到 d×d 矩阵，再被 Q 乘。当 n >> d 时，后者快得多。</p>
+    </div>
+
+    <p><strong>代价：</strong>核化 linear attention 改变了 softmax attention 的相似度与归一化形式，表达能力和数值行为可能不同；token 仍由 Q/K 内容动态加权，并不是“所有 token 被平等对待”。</p>
+
+    <h3>2. Sliding Window Attention</h3>
+    <p>Mistral 7B 和 LongFormer 使用：</p>
+    <pre><code class="language-python"># 每个 token 只看前后 w 个 token
+for i in range(n):
+    scores[i] = Q[i] @ K[max(0,i-w):i+w]^T  # 只看窗口内的 key
+    attn[i] = softmax(scores[i])
+    output[i] = attn[i] @ V[max(0,i-w):i+w]
+
+# 复杂度: O(nwd) —— 线性于 n</code></pre>
+
+    <p><strong>直觉：</strong>大多数语言建模任务中，附近的 token 比远处的更重要。</p>
+
+    <h3>3. Sparse Attention（全局 + 局部混合）</h3>
+    <pre><code class="language-python"># 大多数层用 sliding window
+# 少数层用 full attention（"全局层"）
+# 例如: 每 6 层有 1 层全局 attention
+
+# 有效上下文 = window_size × num_layers
+# 例如: w=4096, L=32 → 有效上下文 ~128K</code></pre>
+
+    <h3>4. State Space Models（Mamba）</h3>
+    <p>完全抛弃 attention，用经典控制论的状态空间模型：</p>
+    <pre><code class="language-python"># SSM: 递推形式
+h(t) = A × h(t-1) + B × x(t)
+y(t) = C × h(t)
+
+# 训练时: 用并行 scan / 专用 kernel 高效计算
+# 推理时: 递推；状态内存相对序列长度为 O(1)
+
+# Mamba 的改进: A, B, C 是输入相关的（选择性 SSM）
+# 让模型学会"忘记"不相关的信息</code></pre>
+
+    <div class="card warning">
+      <p><strong>SSM 的边界：</strong>固定大小状态会形成信息瓶颈，部分 associative-recall 与精确检索任务可能弱于 attention；混合模型常用少量 attention 层弥补这一点。具体能力取决于 state size、选择机制和训练数据，不能概括为 SSM 一定需要“极大 state”才可工作。</p>
+    </div>
+
+    <h3>方案对比</h3>
+    <table>
+      <tr><th>方法</th><th>训练复杂度</th><th>推理内存</th><th>长程依赖</th></tr>
+      <tr><td>Full Attention</td><td>O(n²d)</td><td>朴素 O(n²)，FlashAttention 中间存储 O(n)</td><td>任意位置直接交互</td></tr>
+      <tr><td>Linear Attention</td><td>常见形式 O(nd²)</td><td>依实现而定</td><td>受核函数与状态容量限制</td></tr>
+      <tr><td>Sliding Window</td><td>O(nwd)</td><td>O(nw)</td><td>局部好</td></tr>
+      <tr><td>Hybrid (Sparse)</td><td>O(nwd + n²/L)</td><td>O(nw + n²/L)</td><td>好</td></tr>
+      <tr><td>SSM/Mamba</td><td>对序列长度近似线性</td><td>推理状态不随历史长度增长</td><td>受固定状态瓶颈限制</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="gqa">Grouped-Query Attention (GQA)</h2>
+
+    <h3>从 MHA 到 MQA 到 GQA</h3>
+    <pre><code class="language-python"># Multi-Head Attention (MHA)
+# N 个 Q 头, N 个 K 头, N 个 V 头
+# KV cache: N × d_head × 2 (K+V) per token per layer
+
+# Multi-Query Attention (MQA)
+# N 个 Q 头, 1 个 K 头, 1 个 V 头
+# KV cache: 1 × d_head × 2 per token per layer
+# 权衡: KV cache 最小，但共享 K/V 可能带来质量损失
+
+# Grouped-Query Attention (GQA)
+# N 个 Q 头, K 个 KV 头 (1 < K < N)
+# 每 N/K 个 Q 头共享 1 个 KV 头
+# KV cache: K × d_head × 2 per token per layer</code></pre>
+
+    <h3>为什么 GQA 有效？</h3>
+    <div class="card idea">
+      <p><strong>KV cache 是推理瓶颈：</strong>生成一个 token 时，需要读取所有层的 KV cache。对于长序列和大 batch，这占了推理时间的大部分。</p>
+      <p>GQA 把 KV cache 缩小 N/K 倍（例如 8 倍），通常能降低 decode 阶段的内存带宽压力；实际延迟还取决于 batch、上下文长度、kernel 和并行策略。</p>
+    </div>
+
+    <h3>实际效果</h3>
+    <pre><code class="language-python"># Llama 2 70B 配置:
+# n_heads = 64, n_kv_heads = 8
+# GQA ratio = 8:1
+# KV cache 缩小 8 倍！
+
+# Ainslie et al. (2023) 的 uptraining 实验中：
+# GQA 可以接近 MHA 质量并获得接近 MQA 的 KV-cache 优势；
+# 这不是对所有模型、数据与训练方式的“无损”保证。</code></pre>
+
+    <h3>Multi-head Latent Attention (MLA)</h3>
+    <p>DeepSeek-V2 的进一步创新：</p>
+    <pre><code class="language-python"># 不存储完整的 K, V 向量
+# 存储一个低秩压缩的 "latent" 向量 c (C 维)
+# 需要时通过上投影恢复 K, V
+
+# KV cache 存储: C 维 (而不是 N × d_head = 16384 维)
+# DeepSeek-V2: C = 512 (压缩 32 倍！)
+
+# 直接把全部 K/V 投影吸收到 latent 计算时会与位置相关的 RoPE 冲突
+# DeepSeek 用 decoupled RoPE：保留额外的 RoPE key/query 维度
+# 总: 512 + 64 = 576 维 per layer per token</code></pre>
+
+    <table>
+      <tr><th>方法</th><th>KV cache / token / layer</th><th>相对大小</th></tr>
+      <tr><td>MHA (Llama 70B)</td><td>64 × 128 × 2 = 16,384</td><td>1×</td></tr>
+      <tr><td>GQA (Llama 70B)</td><td>8 × 128 × 2 = 2,048</td><td>0.125×</td></tr>
+      <tr><td>MQA</td><td>1 × 128 × 2 = 256</td><td>0.016×</td></tr>
+      <tr><td>MLA (DeepSeek V2)</td><td>576</td><td>0.035×</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="moe">Mixture of Experts (MoE)</h2>
+
+    <h3>核心思想</h3>
+    <div class="card idea">
+      <p><strong>MoE 的直觉：</strong>把一个大 FFN 替换为多个小 FFN（"专家"），每次只激活其中几个。</p>
+      <p>模型总参数 = 所有专家参数之和</p>
+      <p>每次计算量 = 被激活的专家参数之和</p>
+      <p><strong>效果：</strong>每个 token 只路由到少数专家时，总参数量可以远大于每 token 的激活参数量；具体倍数取决于专家数、top-k、共享专家和路由开销，不能固定写成 8×。</p>
+    </div>
+
+    <h3>MoE 层结构</h3>
+    <pre><code class="language-python">class MoELayer(nn.Module):
+    def __init__(self, d_model, d_ff, num_experts, top_k):
+        self.gate = nn.Linear(d_model, num_experts)  # 路由器
+        self.experts = nn.ModuleList([
+            FFN(d_model, d_ff) for _ in range(num_experts)
+        ])
+        self.top_k = top_k  # 通常 2-4
+
+    def forward(self, x):
+        # 1. 路由: 每个 token 选择 top_k 个专家
+        router_probs = self.gate(x).softmax(dim=-1)  # (batch*seq, num_experts)
+        top_k_scores, top_k_indices = router_probs.topk(self.top_k, dim=-1)
+        top_k_scores = top_k_scores / top_k_scores.sum(dim=-1, keepdim=True)
+
+        # 2. 分发: 把 token 送到对应的专家
+        output = torch.zeros_like(x)
+        for k in range(self.top_k):
+            expert_idx = top_k_indices[:, k]
+            expert_mask = (
+                expert_idx.unsqueeze(1)
+                == torch.arange(len(self.experts), device=x.device)
+            )
+            # 把属于该专家的 token 送入计算
+            for i, expert in enumerate(self.experts):
+                token_mask = expert_mask[:, i]
+                if token_mask.any():
+                    weight = top_k_scores[token_mask, k].unsqueeze(-1)
+                    output[token_mask] += expert(x[token_mask]) * weight
+
+        return output</code></pre>
+
+    <h3>路由策略</h3>
+    <table>
+      <tr><th>策略</th><th>描述</th><th>使用</th></tr>
+      <tr><td>Top-K</td><td>选分数最高的 K 个专家</td><td>标准做法</td></tr>
+      <tr><td>Top-K with noise</td><td>加噪声后选 top-K</td><td>训练时负载均衡</td></tr>
+      <tr><td>Expert choice</td><td>专家选择固定容量的 token</td><td>Expert Choice Routing 等研究</td></tr>
+      <tr><td>Soft routing</td><td>所有专家加权混合</td><td>Soft MoE</td></tr>
+    </table>
+
+    <p>DeepSeek-V3 使用的是 token-choice top-k 路由，并通过可学习的 expert bias 做近似 auxiliary-loss-free 的负载均衡；它不是 Expert Choice Routing。</p>
+
+    <h3>负载均衡问题</h3>
+    <p>MoE 最大的挑战：<strong>负载不均衡</strong>。热门专家过载，冷门专家饥饿。</p>
+
+    <div class="card warning">
+      <p><strong>负载不均衡的后果：</strong></p>
+      <ul>
+        <li>热门专家 OOM（太多 token 路由到同一个专家）</li>
+        <li>冷门专家训练不足（梯度信号弱）</li>
+        <li>通信不均衡（某些 GPU 上的专家过载）</li>
+      </ul>
+    </div>
+
+    <h3>辅助损失（Auxiliary Loss）</h3>
+    <pre><code class="language-python"># Switch Transformer / DeepSeek 类辅助损失的简化示意
+# 同时考虑离散 token 分配和连续路由概率
+
+def load_balancing_loss(router_logits, top_k, num_experts):
+    # router_logits: (num_tokens, num_experts)
+    router_probs = router_logits.softmax(dim=-1)
+    selected = router_probs.topk(top_k, dim=-1).indices
+
+    # 实际离散路由后，每个专家接收的 token-assignment 比例
+    assignments = F.one_hot(selected, num_classes=num_experts).float()
+    token_fraction = assignments.mean(dim=(0, 1))
+
+    # 路由器分配给每个专家的平均概率
+    prob_fraction = router_probs.mean(dim=0)
+
+    # Switch/DeepSeek 类辅助项的简化写法
+    load_loss = num_experts * (token_fraction * prob_fraction).sum()
+    return load_loss
+
+# 总损失 = 主损失 + α × 辅助损失
+# α 是需要按模型、路由方案与训练规模调节的超参数</code></pre>
+
+    <h3>MoE 的通信挑战</h3>
+    <p>在多 GPU 上，不同专家分布在不同 GPU 上：</p>
+    <pre><code class="language-python"># Token 需要"旅行"到专家所在的 GPU
+# 这需要 all-to-all 通信
+
+# 一次 MoE 前向通常包含两阶段通信：
+# 1. dispatch all-to-all：把 token hidden states 发到专家所在设备
+# 2. combine all-to-all：把专家输出发回原设备
+#
+# 忽略本地命中、padding 与元数据时，理想化数据量与
+# 2 × top_k × num_tokens × d_model × bytes_per_element 同阶；
+# 实际网络流量取决于 expert-parallel group、专家放置、容量限制和负载均衡。</code></pre>
+
+    <h3>并行策略</h3>
+    <table>
+      <tr><th>策略</th><th>描述</th><th>通信</th></tr>
+      <tr><td>Expert Parallelism</td><td>专家分布在不同 GPU</td><td>all-to-all</td></tr>
+      <tr><td>Expert + Data Parallel</td><td>DP 组内 EP</td><td>all-to-all within group</td></tr>
+      <tr><td>Token Dropping</td><td>超载 token 直接跳过</td><td>无（但损失信息）</td></tr>
+    </table>
+
+    <h3>现代 MoE 模型</h3>
+    <table>
+      <tr><th>模型</th><th>总参数</th><th>激活参数</th><th>Experts</th><th>Top-K</th></tr>
+      <tr><td>Mixtral 8×7B</td><td>47B</td><td>13B</td><td>8</td><td>2</td></tr>
+      <tr><td>DeepSeek-V2</td><td>236B</td><td>21B</td><td>160</td><td>6</td></tr>
+      <tr><td>DeepSeek-V3</td><td>671B</td><td>37B</td><td>256</td><td>8</td></tr>
+      <tr><td>Qwen 3 235B</td><td>235B</td><td>22B</td><td>128</td><td>8</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>MoE 的 scaling 优势：</strong>在专家大小和 top-k 不变时，增加专家数可以提高总参数容量，而每个 token 的专家计算量近似不变。不过这并非“免费扩展”：参数内存、路由与负载均衡难度、all-to-all 通信以及推理部署成本都会随系统规模变化。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="moe-challenges">MoE 的挑战与解决方案</h2>
+
+    <h3>挑战 1：训练不稳定</h3>
+    <p>MoE 训练容易发散，特别是当某些专家被过度使用时。</p>
+    <p><strong>解决方案：</strong></p>
+    <ul>
+      <li>辅助负载均衡损失</li>
+      <li>路由器计算保留 FP32，减少低精度带来的不稳定</li>
+      <li>路由器 z-loss（惩罚过大的 logits）</li>
+      <li>专家容量的硬限制（超载 token 被丢弃）</li>
+    </ul>
+
+    <h3>挑战 2：通信开销</h3>
+    <p>all-to-all 通信在跨节点时成为瓶颈。</p>
+    <p><strong>解决方案：</strong></p>
+    <ul>
+      <li>节点内 expert parallel，节点间 data parallel</li>
+      <li>通信与计算 overlap</li>
+      <li>局部性感知路由（让相关 token 去同一节点）</li>
+    </ul>
+
+    <h3>挑战 3：专家设计与初始化</h3>
+    <p>专家粒度、共享专家是否有效以及如何从已有 dense 模型初始化，都需要通过模型与数据上的实验验证。</p>
+    <p><strong>常见设计：</strong></p>
+    <ul>
+      <li>细粒度专家：把大 FFN 拆成更多、更小的 routed experts</li>
+      <li>共享专家：始终激活少量专家；DeepSeek 的消融显示有收益，但 OLMoE 的消融未观察到同样收益</li>
+      <li>Upcycling：复制或拆分预训练 dense FFN，初始化新的稀疏 MoE</li>
+    </ul>
+
+    <h3>挑战 4：推理内存</h3>
+    <p>虽然激活参数少，但推理时所有专家都要在内存中。</p>
+    <p><strong>解决方案：</strong></p>
+    <ul>
+      <li>专家卸载（不活跃的专家放 CPU）</li>
+      <li>专家量化（低精度存储）</li>
+      <li>专家剪枝（移除不重要的专家）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="hybrid-architectures">混合架构趋势</h2>
+
+    <p>最新的模型开始混合不同架构：</p>
+
+    <h3>Jamba（AI21 Labs）</h3>
+    <pre><code class="language-python"># Transformer + Mamba 混合
+# 比例: 1 层 Transformer : 7 层 Mamba
+# 52B MoE (16 experts, 2 active)
+# 兼顾 Transformer 的质量和 Mamba 的效率</code></pre>
+
+    <h3>MiniMax-01</h3>
+    <pre><code class="language-python"># Linear Attention + Full Attention 混合
+# 456B MoE
+# 大多数层用 linear attention（高效）
+# 少数层用 full attention（保证质量）</code></pre>
+
+    <h3>DeepSeek-V3</h3>
+    <pre><code class="language-python"># Multi-head Latent Attention (MLA) + MoE
+# 671B 总参数, 37B 激活参数
+# 256 个路由专家 + 1 个共享专家
+# 每个 token 激活 8 个路由专家 + 共享专家</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！GQA 通过让多个 Q 头共享较少的 KV 头，把 KV cache 缩小 N/K 倍，并通常降低 decode 阶段的内存带宽压力。" data-incorrect="GQA 的核心优势是减少 KV cache；实际延迟收益还取决于 batch、上下文长度、kernel 和并行策略。">
+      <p><strong>问题 1：</strong>GQA 的主要优势是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">提升训练速度</button>
+        <button data-choice="b" aria-pressed="false">减少 KV cache 大小，提升推理效率</button>
+        <button data-choice="c" aria-pressed="false">增加模型表达能力</button>
+        <button data-choice="d" aria-pressed="false">减少参数量</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！若 64 个 routed experts 大小相同，且忽略共享专家、路由器和其他 dense 部分，那么该专家子层每个 token 激活 2/64 ≈ 3.1% 的 routed-expert 参数。" data-incorrect="2/64 只描述等大小 routed-expert 子层的激活比例，不等于整个模型的激活参数比例。">
+      <p><strong>问题 2：</strong>一个 MoE 子层有 64 个等大小 routed experts、top_k=2；忽略共享专家和路由器时，每个 token 激活该专家子层参数的多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">100%</button>
+        <button data-choice="b" aria-pressed="false">~50%</button>
+        <button data-choice="c" aria-pressed="false">~3%</button>
+        <button data-choice="d" aria-pressed="false">~25%</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！负载不均衡导致热门专家 OOM、冷门专家训练不足、通信不均。" data-incorrect="MoE 的主要挑战是负载不均衡——热门专家过载，冷门专家饥饿。">
+      <p><strong>问题 3：</strong>MoE 训练中最大的挑战是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">梯度消失</button>
+        <button data-choice="b" aria-pressed="false">负载不均衡</button>
+        <button data-choice="c" aria-pressed="false">过拟合</button>
+        <button data-choice="d" aria-pressed="false">计算量过大</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！Linear attention 用结合律先算 K^T @ V（d×d），再被 Q 乘，复杂度 O(nd²)。" data-incorrect="Linear attention 利用矩阵乘法结合律，先算 K^T @ V 得到 d×d 矩阵，再被 Q 乘。">
+      <p><strong>问题 4：</strong>Linear attention 为什么比标准 attention 快？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">它跳过了 softmax</button>
+        <button data-choice="b" aria-pressed="false">它利用矩阵乘法结合律，先算 K^T @ V</button>
+        <button data-choice="c" aria-pressed="false">它只计算部分 token</button>
+        <button data-choice="d" aria-pressed="false">它用低精度计算</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！all-to-all 通信是 MoE 在多 GPU 上的主要瓶颈，因为 token 需要被路由到专家所在的 GPU。" data-incorrect="MoE 的主要通信瓶颈是 all-to-all——token 需要被发送到专家所在的 GPU。">
+      <p><strong>问题 5：</strong>MoE 在多 GPU 上的主要通信瓶颈是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">all-reduce</button>
+        <button data-choice="b" aria-pressed="false">all-to-all</button>
+        <button data-choice="c" aria-pressed="false">broadcast</button>
+        <button data-choice="d" aria-pressed="false">reduce-scatter</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>GQA</h3>
+        <p>共享 KV 头，KV cache 缩小 N/K 倍</p>
+      </article>
+      <article>
+        <h3>Linear Attention</h3>
+        <p>结合律 + 核近似，O(nd²) 替代 O(n²d)</p>
+      </article>
+      <article>
+        <h3>MoE</h3>
+        <p>稀疏激活，大容量低计算</p>
+      </article>
+      <article>
+        <h3>负载均衡</h3>
+        <p>MoE 的核心挑战，需要辅助损失</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Ainslie et al. (2023): <a href="https://arxiv.org/abs/2305.13245">GQA: Training Generalized Multi-Query Transformer Models</a></li>
+      <li>Shazeer et al. (2017): <a href="https://arxiv.org/abs/1701.06538">Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer</a></li>
+      <li>Gu & Dao (2023): <a href="https://arxiv.org/abs/2312.00752">Mamba: Linear-Time Sequence Modeling with Selective State Spaces</a></li>
+      <li>Dao (2023): <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a></li>
+      <li>DeepSeek-V2 (2024): <a href="https://arxiv.org/abs/2405.04434">A Strong, Economical, and Efficient Mixture-of-Experts Language Model</a></li>
+      <li>Stanford CS336 Spring 2025: <a href="https://github.com/stanford-cs336/spring2025-lectures/blob/main/nonexecutable/2025%20Lecture%204%20-%20MoEs.pdf">Lecture 4 - Mixture of Experts</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0003-architectures-hyperparameters.html">← 第 3 课</a>
+      <a href="0005-gpus.html">第 5 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 基于官方 Lecture 4 整理，并结合一手资料校订</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

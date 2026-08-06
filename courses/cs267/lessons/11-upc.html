@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UPC++ 分区全局地址空间 — CS267</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS267 · 第 11 课</p>
+    <h1>UPC++ 分区全局地址空间</h1>
+    <p class="lede">PGAS 模型如何通过 one-sided 通信与 RDMA 实现高性能并行编程</p>
+    <div class="meta">
+      <span>授课：Kathy Yelick</span>
+      <span>视频：<a href="https://youtu.be/t5gIk_P8rO8">YouTube</a></span>
+      <span>预计用时：75 分钟</span>
+    </div>
+    <hr class="rule">
+
+    <h2 id="motivation">动机：介于共享内存与分布式内存之间</h2>
+    <p>大规模并行系统上的编程模型长期面临两难选择：共享内存模型（如 OpenMP）编程简便但不易扩展；分布式内存模型（如 MPI）扩展性好但编程复杂，需要显式管理消息收发。<strong>分区全局地址空间</strong>（Partitioned Global Address Space, PGAS）模型试图在两者之间取得平衡。</p>
+
+    <div class="card idea">
+      <p><strong>PGAS 核心思想：</strong>内存逻辑上全局可见（像共享内存），但物理上分布到各个节点，并通过 <em>affinity</em>（亲和性）标注数据归哪个进程所有。程序员既能直接访问远程数据，又能利用局部性优化性能。</p>
+    </div>
+
+    <p>PGAS 语言/库包括：UPC、UPC++、Chapel、X10、Fortran 2008 coarrays、SHMEM。本课程聚焦 <strong>UPC++</strong>，它是现代 C++ 的 PGAS 库，无需编译器改造即可使用。</p>
+
+    <hr class="rule">
+
+    <h2 id="onesided">One-Sided 通信与 RDMA</h2>
+    <p>MPI 主要依赖 <em>two-sided</em> 通信（send/recv）：发送方和接收方必须协同参与，接收方必须显式匹配接收。这带来同步开销和延迟。</p>
+
+    <p><strong>One-sided 通信</strong>（远程内存访问，Remote Direct Memory Access）允许一个进程直接读写另一个进程的内存，无需远端 CPU 参与。现代高速网络（InfiniBand、Cray Slingshot）提供硬件级 RDMA 支持。</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>特性</th>
+          <th>Two-sided (MPI)</th>
+          <th>One-sided (UPC++/RDMA)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>远端 CPU 参与</td>
+          <td>必须</td>
+          <td>不需要（硬件直传）</td>
+        </tr>
+        <tr>
+          <td>同步点</td>
+          <td>发送与接收匹配</td>
+          <td>发起即异步</td>
+        </tr>
+        <tr>
+          <td>延迟隐藏</td>
+          <td>困难</td>
+          <td>易与计算重叠</td>
+        </tr>
+        <tr>
+          <td>编程复杂度</td>
+          <td>中等</td>
+          <td>较低</td>
+        </tr>
+        <tr>
+          <td>不规则通信</td>
+          <td>不自然</td>
+          <td>天然支持</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card tip">
+      <p><strong>RDMA 优势：</strong>数据直接在网卡与内存之间传输，绕过远端 CPU。这使得 UPC++ 可以在计算的同时异步推进通信，有效隐藏网络延迟。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="upcpp-design">UPC++ 设计</h2>
+    <p>UPC++ 是一个基于 C++ 模板库的 PGAS 编程框架，其关键设计决策：</p>
+    <ul>
+      <li><strong>无需编译器改造：</strong>纯库实现，可在标准 C++ 编译器上构建</li>
+      <li><strong>GASNet-EX 后端：</strong>底层通信使用 GASNet-EX 库，支持多种高性能网络</li>
+      <li><strong>SPMD 模型：</strong>Single Program Multiple Data，所有进程运行相同代码，通过 <code>upcxx::rank_me()</code> 区分</li>
+      <li><strong>全局指针：</strong><code>global_ptr&lt;T&gt;</code> 封装分布式内存地址</li>
+      <li><strong>类型安全：</strong>利用 C++ 模板避免 MPI 中常见的类型不匹配错误</li>
+    </ul>
+
+    <pre><code class="language-cpp">// UPC++ 程序骨架
+#include &lt;upcxx/upcxx.hpp&gt;
+
+int main(int argc, char** argv) {
+    upcxx::init();
+    int rank = upcxx::rank_me();
+    int nprocs = upcxx::rank_n();
+
+    // 在每个 rank 上分配一个整数
+    upcxx::global_ptr&lt;int&gt; ptr = upcxx::new_&lt;int&gt;(42);
+
+    // 获取 rank 0 上的指针值（仅 rank 0 执行）
+    if (rank == 0) {
+        upcxx::global_ptr&lt;int&gt; remote = ptr;
+        // rget/rput 异步操作见下文
+    }
+
+    upcxx::finalize();
+    return 0;
+}</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="global-ptr">global_ptr 与 Affinity</h2>
+    <p><code>global_ptr&lt;T&gt;</code> 是 UPC++ 的核心抽象。它包含两个关键信息：</p>
+    <ul>
+      <li><strong>拥有该内存的 rank</strong>（affinity）</li>
+      <li><strong>该 rank 上的地址</strong></li>
+    </ul>
+
+    <div class="card warning">
+      <p><strong>注意：</strong><code>global_ptr</code> 不能直接解引用！必须通过 <code>rget</code>/<code>rput</code> 或 <code>copy</code> 进行远程访问。这是 UPC++ 与 UPC 的重要区别。</p>
+    </div>
+
+    <p>Affinity 决定了数据物理位置，是性能优化的关键。程序员应尽量让计算靠近其所需数据：</p>
+
+    <pre><code class="language-cpp">// 检查指针的 affinity
+upcxx::global_ptr&lt;int&gt; gp = /* ... */;
+int owner = gp.where();  // 返回拥有该内存的 rank
+
+// 本地 vs 远程判断
+if (gp.where() == upcxx::rank_me()) {
+    // 可以直接解引用本地副本
+    int val = *gp.local();
+}</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="rget-rput">异步操作：rget、rput 与 copy</h2>
+    <p>UPC++ 提供三种主要的远程内存访问原语：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>方向</th>
+          <th>语义</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>rget(src)</code></td>
+          <td>远端 → 本地</td>
+          <td>异步读取远端内存到本地 buffer</td>
+        </tr>
+        <tr>
+          <td><code>rput(dst, src)</code></td>
+          <td>本地 → 远端</td>
+          <td>异步写入本地数据到远端</td>
+        </tr>
+        <tr>
+          <td><code>copy(src, dst)</code></td>
+          <td>通用</td>
+          <td>更灵活的拷贝（UPC++ 1.1+）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <pre><code class="language-cpp">// rget 示例：从 rank 0 读取一个数组
+if (rank == 1) {
+    upcxx::global_ptr&lt;int&gt; remote = /* rank 0 上的指针 */;
+    std::vector&lt;int&gt; local_buf(100);
+    upcxx::future&lt;&gt; fut = upcxx::rget(remote, local_buf.data(), local_buf.size());
+    fut.wait();  // 等待完成
+    // local_buf 现在包含远端数据
+}
+
+// rput 示例：向 rank 0 写入数据
+if (rank == 1) {
+    upcxx::global_ptr&lt;int&gt; remote = /* rank 0 上的指针 */;
+    std::vector&lt;int&gt; data = {1, 2, 3, 4, 5};
+    upcxx::future&lt;&gt; fut = upcxx::rput(data.data(), remote, data.size());
+    fut.wait();
+}</code></pre>
+
+    <div class="card tip">
+      <p><strong>性能提示：</strong>尽量批量传输（bulk transfer）而非频繁小操作。使用更大的 buffer 可以摊销每次操作的固定开销，提高带宽利用率。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="futures">Futures 与异步执行</h2>
+    <p>UPC++ 的异步操作返回 <code>upcxx::future&lt;&gt;</code> 对象，允许程序员显式控制同步时机：</p>
+
+    <pre><code class="language-cpp">// 发起多个异步操作，然后统一等待
+std::vector&lt;upcxx::future&lt;&gt;&gt; futures;
+for (int i = 0; i &lt; neighbors.size(); i++) {
+    futures.push_back(upcxx::rget(remote_ptrs[i], local_bufs[i], sizes[i]));
+}
+// 计算可以与通信重叠...
+do_some_work();
+// 等待所有通信完成
+upcxx::wait_all(futures.begin(), futures.end());</code></pre>
+
+    <p>Futures 还支持链式回调（continuation），当操作完成时自动触发后续代码：</p>
+
+    <pre><code class="language-cpp">// then 回调：操作完成后执行
+upcxx::rget(remote_ptr, local_buf, n)
+    .then([]() {
+        std::cout &lt;&lt; "rget 完成！" &lt;&lt; std::endl;
+    });
+
+// when_all：等待多个 future 全部完成
+upcxx::when_all(fut1, fut2, fut3)
+    .then([]() {
+        std::cout &lt;&lt; "所有操作完成" &lt;&lt; std::endl;
+    });</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="barriers">全局同步：Barriers</h2>
+    <p>UPC++ 提供多种 barrier 变体以适应不同场景：</p>
+    <ul>
+      <li><code>upcxx::barrier()</code>：全局 barrier，所有 rank 必须到达</li>
+      <li><code>upcxx::barrier(upcxx::future&lt;&gt;&amp;)</code>：异步 barrier，返回 future</li>
+      <li><code>upcxx::quiesce()</code>：等待所有未完成的异步操作完成</li>
+    </ul>
+
+    <pre><code class="language-cpp">// 典型计算-通信-同步循环
+for (int iter = 0; iter &lt; max_iter; iter++) {
+    // 1. 发起 halo 交换
+    exchange_halo_data();
+
+    // 2. 计算内部区域（不依赖 halo）
+    compute_interior();
+
+    // 3. 等待 halo 交换完成
+    upcxx::barrier();
+
+    // 4. 计算边界区域（依赖 halo）
+    compute_boundary();
+}</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="atomics">原子操作：atomic_domain</h2>
+    <p>UPC++ 提供通过 <code>atomic_domain</code> 实现的远程原子操作。所有原子操作必须绑定到一个 <code>atomic_domain</code> 对象上，该对象封装了内存顺序语义。</p>
+
+    <pre><code class="language-cpp">// 创建 atomic_domain，指定支持的内存顺序
+upcxx::atomic_domain&lt;int&gt; ad({upcxx::atomic_op::fetch_add,
+                               upcxx::atomic_op::compare_swap});
+
+// 在远端执行 fetch-and-add
+upcxx::global_ptr&lt;int&gt; counter = /* ... */;
+upcxx::future&lt;int&gt; old_val = ad.fetch_add(counter, 1, upcxx::memory_order_relaxed);
+
+// compare-and-swap
+upcxx::future&lt;bool&gt; success = ad.compare_swap(counter, expected, desired);</code></pre>
+
+    <div class="card warning">
+      <p><strong>原子操作注意事项：</strong></p>
+      <ul>
+        <li>原子操作有性能开销，仅在需要互斥时使用</li>
+        <li>不同内存顺序（memory_order）影响性能与正确性</li>
+        <li>atomic_domain 创建有一定开销，应复用</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="collectives">集合通信（Collectives）</h2>
+    <p>UPC++ 支持常见的集合通信操作，与 MPI 类似但返回 future：</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>操作</th>
+          <th>功能</th>
+          <th>返回值</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>broadcast(ptr, root)</code></td>
+          <td>root 广播数据到所有 rank</td>
+          <td>future</td>
+        </tr>
+        <tr>
+          <td><code>reduce(ptr, op, root)</code></td>
+          <td>归约操作（sum/max/min 等）</td>
+          <td>future（root 获得结果）</td>
+        </tr>
+        <tr>
+          <td><code>allgather</code></td>
+          <td>全收集</td>
+          <td>future</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <pre><code class="language-cpp">// 广播示例
+upcxx::global_ptr&lt;int&gt; data = /* rank 0 上的数据 */;
+upcxx::broadcast(data, 1, 0).wait();  // 所有 rank 获得副本
+
+// 归约示例
+upcxx::global_ptr&lt;int&gt; local_sum = /* 每个 rank 的局部和 */;
+upcxx::future&lt;int&gt; total = upcxx::reduce(local_sum, upcxx::operation::plus, 0);
+// rank 0 上获得 total</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="rpc">远程过程调用（RPC）</h2>
+    <p>UPC++ 支持 <code>rpc</code> 原语，允许一个 rank 在另一个 rank 上执行函数。这比 rget/rput 更灵活，适合不规则通信模式。</p>
+
+    <pre><code class="language-cpp">// 在 rank target_rank 上执行函数
+int compute(int x, int y) { return x * y + 1; }
+
+// 发起 RPC
+upcxx::future&lt;int&gt; result = upcxx::rpc(target_rank, [](int a, int b) {
+    return a + b;
+}, 3, 4);
+
+int val = result.wait();  // val = 7
+
+// 带返回值的 RPC
+upcxx::future&lt;std::string&gt; name = upcxx::rpc(0, []() {
+    return std::string("Hello from rank " + std::to_string(upcxx::rank_me()));
+});</code></pre>
+
+    <div class="card idea">
+      <p><strong>RPC vs rget/rput：</strong></p>
+      <ul>
+        <li><code>rget/rput</code>：适合批量数据搬运，带宽高</li>
+        <li><code>rpc</code>：适合不规则、小数据量的远程操作，灵活但延迟高</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="dist-objects">分布式对象</h2>
+    <p>UPC++ 提供 <code>dist_object</code> 抽象，将数据分布到所有 rank，每个 rank 持有局部视图：</p>
+
+    <pre><code class="language-cpp">// 创建一个分布式数组
+upcxx::dist_object&lt;upcxx::global_ptr&lt;int&gt;&gt; dist_arr(upcxx::new_array&lt;int&gt;(100));
+
+// 每个 rank 可以访问其他 rank 的视图
+int neighbor = (rank + 1) % nprocs;
+upcxx::global_ptr&lt;int&gt; neighbor_ptr = dist_arr.fetch(neighbor).wait();
+// 现在可以 rget/rput 邻居的数据</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="dht">案例：分布式哈希表</h2>
+    <p>分布式哈希表（DHT）是展示 UPC++ 能力的经典示例。每个 rank 负责一部分哈希桶，通过 RPC 实现跨 rank 的插入和查找：</p>
+
+    <pre><code class="language-cpp">// 简化的 DHT 实现
+class DistributedHashTable {
+    std::unordered_map&lt;int, std::string&gt; local_table;
+
+public:
+    // 计算 key 属于哪个 rank
+    int owner(int key) const {
+        return key % upcxx::rank_n();
+    }
+
+    // 插入操作：RPC 到 owner
+    upcxx::future&lt;void&gt; insert(int key, const std::string&amp; value) {
+        int target = owner(key);
+        if (target == upcxx::rank_me()) {
+            local_table[key] = value;
+            return upcxx::make_future();
+        }
+        return upcxx::rpc(target, [key, value]() {
+            // 在 target rank 上执行
+            local_table[key] = value;
+        });
+    }
+
+    // 查找操作
+    upcxx::future&lt;std::string&gt; lookup(int key) {
+        int target = owner(key);
+        if (target == upcxx::rank_me()) {
+            return upcxx::make_future(local_table[key]);
+        }
+        return upcxx::rpc(target, [key]() {
+            return local_table[key];
+        });
+    }
+};</code></pre>
+
+    <hr class="rule">
+
+    <h2 id="callbacks">回调与 then/when_all</h2>
+    <p>UPC++ 的 future 机制支持丰富的回调组合：</p>
+
+    <pre><code class="language-cpp">// then：链式回调
+upcxx::rget(remote, buf, n)
+    .then([buf]() {
+        process(buf);
+    })
+    .then([]() {
+        finalize();
+    });
+
+// when_all：等待多个独立操作
+auto f1 = upcxx::rget(src1, dst1, n1);
+auto f2 = upcxx::rget(src2, dst2, n2);
+upcxx::when_all(f1, f2).then([]() {
+    // 两个 rget 都完成后再执行
+    compute(dst1, dst2);
+});
+
+// when_any：任一操作完成即触发
+upcxx::when_any(f1, f2).then([]() {
+    // 至少一个完成
+});</code></pre>
+
+    <div class="card tip">
+      <p><strong>回调设计模式：</strong>使用 <code>then</code> 可以将通信与计算流水线化。当第一个 rget 完成时就开始处理其数据，同时第二个 rget 仍在传输中。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="progress">Progress 与通信推进</h2>
+    <p>UPC++ 的异步操作需要显式推进（progress）。通信不会自动在后台完成，必须通过以下方式之一触发：</p>
+    <ul>
+      <li>调用 <code>upcxx::progress()</code>：手动推进</li>
+      <li>调用 <code>future.wait()</code>：等待特定操作完成时推进</li>
+      <li>调用 <code>upcxx::barrier()</code>：集合操作会推进</li>
+      <li>调用 <code>upcxx::discharge()</code>：排空所有未完成操作</li>
+    </ul>
+
+    <pre><code class="language-cpp">// 手动推进通信（在长时间计算中）
+upcxx::future&lt;&gt; fut = upcxx::rget(remote, buf, n);
+
+// 计算与通信重叠
+while (!fut.ready()) {
+    do_partial_work();
+    upcxx::progress();  // 推进通信
+}
+fut.wait();  // 确保完成</code></pre>
+
+    <div class="card warning">
+      <p><strong>Progress 陷阱：</strong>如果在发起 rget 后长时间不调用 progress 或 wait，通信将无法完成。这可能导致程序挂起或性能下降。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="case-studies">案例研究</h2>
+
+    <h3>MetaHipMer：基因组组装</h3>
+    <p>MetaHipMer 是用于宏基因组组装的 UPC++ 应用。基因组组装需要处理 TB 级的测序数据，涉及大量不规则通信。UPC++ 的 one-sided 通信和原子操作使其能够高效实现 de Bruijn 图遍历。</p>
+
+    <h3>SIMCoV：COVID-19 模拟</h3>
+    <p>SIMCoV 使用 UPC++ 实现大规模细胞自动机模拟，模拟 COVID-19 在人群中的传播。每个细胞的状态通过 RDMA 与邻居交换。</p>
+
+    <h3>SymPACK：稀疏直接求解器</h3>
+    <p>SymPACK 是稀疏对称不定矩阵的直接求解器。稀疏矩阵的不规则结构天然适合 UPC++ 的异步 one-sided 通信模式。</p>
+
+    <div class="card idea">
+      <p><strong>不规则应用的优势：</strong>相比规则网格或稠密线性代数，不规则应用（图、稀疏矩阵、粒子方法）更能从 UPC++ 的 one-sided 通信中获益，因为 MPI 的 two-sided 模型在这些场景下难以高效表达。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>PGAS 模型</h3>
+        <p>在共享内存的编程简便性与分布式内存的可扩展性之间取得平衡，通过 affinity 标注数据归属。</p>
+      </article>
+      <article>
+        <h3>One-Sided 通信</h3>
+        <p>利用 RDMA 实现 CPU 旁路的远程内存访问，天然支持异步执行与延迟隐藏。</p>
+      </article>
+      <article>
+        <h3>UPC++ 抽象</h3>
+        <p>global_ptr、atomic_domain、dist_object、rpc 等高层抽象降低 PGAS 编程复杂度。</p>
+      </article>
+      <article>
+        <h3>异步与 Futures</h3>
+        <p>所有异步操作返回 future，支持 wait/then/when_all 等组合，实现通信-计算重叠。</p>
+      </article>
+      <article>
+        <h3>Progress 模型</h3>
+        <p>通信推进需要显式触发，程序员需在计算与 progress 调用之间取得平衡。</p>
+      </article>
+      <article>
+        <h3>不规则应用</h3>
+        <p>UPC++ 在图分析、稀疏求解、粒子模拟等不规则应用中表现尤为突出。</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-correct="正确。PGAS 内存逻辑上全局可见，但物理分布到各进程。global_ptr 封装了地址和亲和性信息，程序员可以像访问共享内存一样访问远程数据。" data-incorrect="再想想。请回顾 PGAS 模型的核心特性。">
+      <p><strong>问题 1：</strong>PGAS 模型中，内存是全局可见的吗？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">逻辑上全局可见，但物理上分布</button>
+        <button data-choice="b" aria-pressed="false">完全全局共享，无物理分布</button>
+        <button data-choice="c" aria-pressed="false">完全私有，只能通过消息传递访问</button>
+        <button data-choice="d" aria-pressed="false">只有 root 进程可以访问</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-correct="正确。RDMA 允许网卡直接读写远端内存，无需远端 CPU 参与，这是 one-sided 通信的核心优势。" data-incorrect="不对。请回顾 one-sided 通信与 two-sided 通信的区别。">
+      <p><strong>问题 2：</strong>UPC++ 的 one-sided 通信相比 MPI 的 send/recv 主要优势是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">需要更多内存</button>
+        <button data-choice="b" aria-pressed="false">远端 CPU 必须参与每次通信</button>
+        <button data-choice="c" aria-pressed="false">通过 RDMA 绕过远端 CPU，支持异步执行</button>
+        <button data-choice="d" aria-pressed="false">只能传输小数据量</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-correct="正确。rget 是远程读取（远端到本地），rput 是远程写入（本地到远端）。" data-incorrect="不对。rget 是 'remote get'（读取远端），rput 是 'remote put'（写入远端）。">
+      <p><strong>问题 3：</strong>在 UPC++ 中，rget 和 rput 的方向分别是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">rget: 远端→本地；rput: 本地→远端</button>
+        <button data-choice="b" aria-pressed="false">rget: 本地→远端；rput: 远端→本地</button>
+        <button data-choice="c" aria-pressed="false">两者都是双向</button>
+        <button data-choice="d" aria-pressed="false">两者都只能在本地操作</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-correct="正确。UPC++ 需要显式调用 progress()、wait()、barrier() 等来推进通信，不会自动在后台完成。" data-incorrect="不对。UPC++ 的通信推进是显式的，需要程序员主动触发。">
+      <p><strong>问题 4：</strong>UPC++ 的异步通信如何推进？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">自动在后台线程中推进</button>
+        <button data-choice="b" aria-pressed="false">需要显式调用 progress() 或 wait()</button>
+        <button data-choice="c" aria-pressed="false">仅在 finalize 时统一推进</button>
+        <button data-choice="d" aria-pressed="false">不需要推进，硬件自动处理</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-correct="正确。rget/rput 适合批量数据搬运（高带宽），而 RPC 适合不规则、小数据量的远程操作（更灵活）。" data-incorrect="不对。请回顾 rget/rput 与 RPC 的适用场景差异。">
+      <p><strong>问题 5：</strong>当需要从远端读取一个 1MB 的数组时，应该使用 rget 还是 RPC？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">必须使用 RPC</button>
+        <button data-choice="b" aria-pressed="false">必须使用 rget</button>
+        <button data-choice="c" aria-pressed="false">rget 更合适，因为它专为批量数据搬运设计</button>
+        <button data-choice="d" aria-pressed="false">两者性能完全相同</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="nav">
+      <a href="10-data-parallel.html">← 第 10 课</a>
+      <a href="12-ml-supervised.html">第 12 课 →</a>
+    </div>
+
+    <footer>CS267: Applications of Parallel Computers · UC Berkeley · Spring 2025</footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

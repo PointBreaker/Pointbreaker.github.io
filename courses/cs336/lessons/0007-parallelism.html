@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 7 课：分布式训练并行 — CS336</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/prism.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS336 · 第 7 课</p>
+    <h1>分布式训练并行</h1>
+    <p class="lede">现代大模型不可能在一张 GPU 上训练。这一课系统讲解分布式训练的四种并行策略——data、tensor、pipeline、sequence——以及它们如何组合。统一主题：<strong>通过复制/分片来编排计算，避免数据搬运瓶颈</strong>。</p>
+
+    <div class="meta">
+      <span>授课：Tatsu Hashimoto</span>
+      <span>预计用时：80 分钟</span>
+      <span>难度：困难</span>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="why">为什么需要分布式训练</h2>
+
+    <h3>规模的力量</h3>
+    <pre><code class="language-python"># 单卡是否能训练一个模型，不能只用参数量判断：
+# 还要计入梯度、优化器状态、激活、临时 buffer 和通信 workspace。
+#
+# 例如常见 mixed-precision AdamW 预算可接近 18 bytes/parameter，
+# 但具体值随 master weights、gradient dtype、optimizer 与 sharding 改变。
+# 70B、405B 等规模通常需要同时分片模型状态、计算和激活。
+#
+# 理想训练时间 = 总训练 FLOPs / (GPU 数 × 单卡峰值 FLOP/s × MFU)
+# 真实扩展还受通信、负载不均、batch size 与故障影响，不能假定线性加速。</code></pre>
+
+    <h3>统一主题</h3>
+    <div class="card idea">
+      <p><strong>上一课（单 GPU）：</strong>通过 fusion/tiling 减少内存访问</p>
+      <p><strong>这一课（多 GPU）：</strong>通过复制/分片减少跨 GPU 通信</p>
+      <p><strong>核心权衡：</strong>计算 vs 内存 vs 通信——你可以选择重算、存内存、或存到另一张 GPU 然后通信。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="collectives">通信原语</h2>
+
+    <h3>七种基本通信操作</h3>
+    <table>
+      <tr><th>操作</th><th>输入</th><th>输出</th><th>描述</th></tr>
+      <tr><td>Broadcast</td><td>1 个 GPU 有数据</td><td>所有 GPU 有数据</td><td>一对多</td></tr>
+      <tr><td>Scatter</td><td>1 个 GPU 有大数据</td><td>所有 GPU 各有一片</td><td>分片分发</td></tr>
+      <tr><td>Gather</td><td>所有 GPU 各有一片</td><td>1 个 GPU 有大数据</td><td>收集</td></tr>
+      <tr><td>Reduce</td><td>所有 GPU 有数据</td><td>1 个 GPU 有结果</td><td>聚合（sum/max）</td></tr>
+      <tr><td>All-Gather</td><td>所有 GPU 各有一片</td><td>所有 GPU 有完整数据</td><td>Gather 到所有</td></tr>
+      <tr><td>Reduce-Scatter</td><td>所有 GPU 有完整数据</td><td>所有 GPU 各有一片结果</td><td>Reduce + Scatter</td></tr>
+      <tr><td>All-Reduce</td><td>所有 GPU 有数据</td><td>所有 GPU 有结果</td><td>Reduce + Broadcast</td></tr>
+    </table>
+
+    <h3>关键等式</h3>
+    <pre><code class="language-python">All-Reduce = Reduce-Scatter + All-Gather
+
+# 直觉:
+# Reduce-Scatter: 每个 GPU 得到最终结果的 1/N
+# All-Gather: 把所有片拼起来，每个 GPU 都有完整结果</code></pre>
+
+    <h3>带宽分析</h3>
+    <pre><code class="language-python"># All-Reduce 的每-rank 通信量（ring algorithm，忽略延迟）:
+# 每个 rank 发送并接收约: 2 × (N-1)/N × data_size
+# 近似: 2 × data_size（与 N 无关！）
+
+# Reduce-Scatter:
+# 每个 rank 发送并接收约: (N-1)/N × data_size
+# 近似: data_size
+
+# All-Gather:
+# 每个 rank 发送并接收约: (N-1)/N × data_size
+# 近似: data_size</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="data-parallel">Data Parallelism (DP)</h2>
+
+    <h3>核心思想</h3>
+    <p>每个 GPU 持有完整模型，处理不同的数据片。梯度通过 all-reduce 同步。</p>
+
+    <pre><code class="language-python"># Data Parallelism 流程
+for each GPU in parallel:
+    # 1. 获取不同的数据片
+    x_local = data[rank * batch_size : (rank+1) * batch_size]
+
+    # 2. 前向传播（本地计算）
+    loss = model(x_local)
+
+    # 3. 反向传播（计算本地梯度）
+    loss.backward()
+
+    # 4. 同步梯度（通信！）
+    all_reduce(gradients)  # 所有 GPU 得到平均梯度
+
+    # 5. 更新参数（所有 GPU 同步更新）
+    optimizer.step()</code></pre>
+
+    <h3>通信开销</h3>
+    <pre><code class="language-python"># 每步通信: 对梯度做 All-Reduce
+# 若梯度 payload 为 S bytes，N-rank ring 的每-rank 通信量约为:
+#   2 × (N-1)/N × S
+#
+# 理想带宽时间下界约为 通信字节数 / 有效 collective 带宽。
+# 不能直接用 900 GB/s NVLink 聚合峰值或单条 NIC line rate 相除：
+# 实际值取决于拓扑、NCCL 算法、并发、协议效率和计算/通信 overlap。</code></pre>
+
+    <h3>Gradient Accumulation</h3>
+    <p>当 batch size 太大，单 GPU 放不下时：</p>
+    <pre><code class="language-python"># DDP 示意：把一个大 batch 拆成多个 micro-batch
+optimizer.zero_grad()
+for micro_batch in micro_batches[:-1]:
+    with model.no_sync():
+        (model(micro_batch) / len(micro_batches)).backward()
+
+# 最后一次 backward 不使用 no_sync()，触发 gradient bucket all-reduce
+(model(micro_batches[-1]) / len(micro_batches)).backward()
+optimizer.step()</code></pre>
+
+    <div class="card idea">
+      <p><strong>Gradient Accumulation 的好处：</strong></p>
+      <ul>
+        <li>模拟大 batch size（对训练稳定性重要）</li>
+        <li>减少通信频率（每 N 个 micro-batch 通信一次）</li>
+        <li>通信量不变（最终还是要同步所有梯度）</li>
+      </ul>
+    </div>
+
+    <h3>DDP vs FSDP</h3>
+    <table>
+      <tr><th>策略</th><th>参数存储</th><th>通信</th><th>内存</th></tr>
+      <tr><td>DDP</td><td>每个 GPU 完整副本</td><td>All-Reduce 梯度</td><td>高（冗余）</td></tr>
+      <tr><td>FSDP / ZeRO-3</td><td>参数按组分片，需要时 All-Gather</td><td>前向/反向 All-Gather + 梯度 Reduce-Scatter</td><td>模型状态可近似 1/N；激活与临时 buffer 另算</td></tr>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="tensor-parallel">Tensor Parallelism (TP)</h2>
+
+    <h3>核心思想</h3>
+    <p>把模型的<strong>宽度</strong>切分到多个 GPU——每个 GPU 只持有参数的一部分。</p>
+
+    <pre><code class="language-python"># 标准 Linear 层: Y = X @ W
+# W: (D_in, D_out)
+
+# Tensor Parallel: 把 W 按列切分
+# GPU 0: W_0: (D_in, D_out/2)  → Y_0 = X @ W_0
+# GPU 1: W_1: (D_in, D_out/2)  → Y_1 = X @ W_1
+
+# 需要 All-Gather 把 Y_0 和 Y_1 拼起来: Y = [Y_0, Y_1]</code></pre>
+
+    <h3>Megatron-LM 的切分策略</h3>
+    <p>对于 Transformer 的 FFN 和 Attention，有特定的切分方式：</p>
+
+    <pre><code class="language-python"># FFN / SwiGLU:
+# W_gate 与 W_up 按输出维切分（column parallel）
+# 每个 rank 保留自己的中间分片，先在本地做 Swish(gate) * up
+# W_down 按输入维切分（row parallel），最后合并各 rank 的部分和
+
+# Attention 的切分:
+# W_q, W_k, W_v 按 head 切分（每个 GPU 负责部分 head）
+# W_o 按输入维切分，最后合并各 rank 的部分和
+#
+# 基础 Megatron TP 常用 All-Reduce 合并；配合 sequence parallel 时，
+# 相邻区域可改用 Reduce-Scatter / All-Gather 组合。</code></pre>
+
+    <h3>通信模式</h3>
+    <pre><code class="language-python"># Transformer block 的 TP 通信:
+# 1. Attention:
+#    - Q, K, V 计算: 无需通信（head 独立）
+#    - W_o: All-Reduce
+
+# 2. FFN:
+#    - W_gate, W_up 和逐元素门控: 本地分片计算
+#    - W_down 后: All-Reduce（或 sequence-parallel 变体中的 Reduce-Scatter）
+
+# 总计: 每个 block 2 次 All-Reduce</code></pre>
+
+    <div class="card warning">
+      <p><strong>TP 的代价：</strong>每个 Transformer block 都有 activation collectives，通常位于关键路径；框架可以尝试 overlap，但其低延迟、高带宽需求仍然很强。</p>
+      <p><strong>TP 通常优先放在节点内高带宽域</strong>。跨节点 TP 并非不可能，但是否划算取决于网络拓扑、消息大小和实现。</p>
+    </div>
+
+    <h3>切分示例（4 GPU）</h3>
+    <pre><code class="language-python"># 假设 d_model = 4096, num_heads = 32
+# 每 GPU: 8 个 head, d_model_per_gpu = 1024
+
+# W_q: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
+# W_k: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
+# W_v: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
+# W_o: (4096, 4096) → 切成 4 份: 每 GPU (1024, 4096)</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="pipeline-parallel">Pipeline Parallelism (PP)</h2>
+
+    <h3>核心思想</h3>
+    <p>把模型的<strong>深度</strong>切分到多个 GPU——每个 GPU 持有连续的几层。</p>
+
+    <pre><code class="language-python"># Pipeline Parallel: 4 GPU, 16 层
+# GPU 0: layers 0-3
+# GPU 1: layers 4-7
+# GPU 2: layers 8-11
+# GPU 3: layers 12-15
+
+# 数据流:
+# Input → GPU 0 → activations → GPU 1 → ... → GPU 3 → Output</code></pre>
+
+    <h3>Pipeline Bubble</h3>
+    <p>朴素的 pipeline 有大量空闲时间——"bubble"：</p>
+
+    <pre><code class="language-python"># 朴素 pipeline (4 stages, 1 batch):
+# Time →
+# GPU 0: [====L0-3====]  idle   idle   idle
+# GPU 1:  idle  [====L4-7====]  idle   idle
+# GPU 2:  idle   idle  [====L8-11===]  idle
+# GPU 3:  idle   idle   idle  [====L12-15==]
+
+# 对理想化流水线，bubble time / useful compute ≈ (p-1) / m
+# 若写成总时间占比，则约为 (p-1) / (m+p-1)
+# p = pipeline stages, m = micro-batches
+# 当 m >> p 时，bubble 可以忽略</code></pre>
+
+    <h3>1F1B Schedule（One Forward One Backward）</h3>
+    <p>减少 bubble 的关键技术：</p>
+
+    <pre><code class="language-python"># 1F1B: 每个 stage 交替做 forward 和 backward
+# 而不是等所有 forward 做完再做 backward
+
+# 1F1B 在 warmup 后交替安排 forward/backward，
+# 相比先做完全部 forward 再 backward，通常降低峰值 activation memory。
+# 它仍有 warmup/drain bubble；bubble 大小取决于 stage 数、micro-batch 数、
+# stage 是否均衡以及采用 GPipe、1F1B、interleaved 或 zero-bubble 等 schedule。</code></pre>
+
+    <h3>通信量</h3>
+    <pre><code class="language-python"># Pipeline Parallel 的通信:
+# 每对相邻 GPU 之间只传 activations
+# 数据量: batch_size × seq_len × d_model × 2 (bf16)
+
+# 例如: 一个 bf16 activation tensor，B=4, S=4096, D=8192
+# = 4 × 4096 × 8192 × 2 bytes = 256 MiB
+
+# 反向还要传 activation gradients；若叠加 TP/sequence sharding，张量大小会变化。
+# P2P 通信可以与其他 micro-batch 的计算 overlap，但受 schedule 和依赖约束。</code></pre>
+
+    <div class="card idea">
+      <p><strong>TP vs PP 的选择：</strong></p>
+      <ul>
+        <li><strong>TP</strong>：每层都有 collective，对低延迟和高带宽敏感，通常放在节点内。</li>
+        <li><strong>PP</strong>：只在 stage 边界传激活/梯度，常用于跨节点，但需要足够 micro-batches 控制 bubble。</li>
+      </ul>
+      <p><strong>实际中：</strong>常见做法是先按高带宽域选择 TP degree，再用 PP/FSDP 让模型装得下，最后用 DP 扩展吞吐；这只是经验起点，不是固定拓扑。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="sequence-parallel">Sequence Parallelism (SP)</h2>
+
+    <h3>动机</h3>
+    <p>Tensor parallel 主要切分矩阵乘法的宽度维；LayerNorm、Dropout 等逐 token 区域仍可能复制 activation。Megatron 的 sequence parallel 用序列维分片这些区域，以继续降低 activation memory。</p>
+
+    <h3>核心思想</h3>
+    <pre><code class="language-python"># 标准 TP 只切分宽度维度
+# Sequence Parallel 额外切分序列维度
+
+# 具体做法:
+# 1. LayerNorm / Dropout 是逐 token 独立的 → 自然在序列维度并行
+# 2. 在 row-parallel / column-parallel 区域之间用 Reduce-Scatter 与 All-Gather
+# 3. 让非 TP 区域的 activation 也随 TP degree 分片
+
+# 效果: 相关 activation 可近似减少到 1/N
+#
+# 注意：这不同于为超长上下文设计的 context parallel / ring attention；
+# 后者会分片 attention 所需的序列上下文，并引入不同通信模式。</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="combined">混合并行策略</h2>
+
+    <h3>3D / 4D 并行</h3>
+    <p>实际训练大规模模型时，所有并行策略组合使用：</p>
+
+    <pre><code class="language-python"># 常见 3D 并行分解:
+# - 数据并行 (DP): 复制训练任务，处理不同数据
+# - 张量并行 (TP): 切分单层矩阵计算
+# - 流水线并行 (PP): 切分层
+# - 序列并行 (SP): 配合 TP 分片部分 activation
+
+# 总 GPU 数 = DP_degree × TP_degree × PP_degree</code></pre>
+
+    <h3>并行策略选择</h3>
+    <table>
+      <tr><th>场景</th><th>推荐策略</th><th>原因</th></tr>
+      <tr><td>模型状态单卡可放下</td><td>DDP / ZeRO-1</td><td>实现简单，主要同步梯度或优化器状态</td></tr>
+      <tr><td>模型状态需要分片</td><td>FSDP / ZeRO-3 或 TP+PP</td><td>在参数通信、activation 通信和 bubble 间权衡</td></tr>
+      <tr><td>高带宽节点内域</td><td>常用于 TP / EP</td><td>这些策略的 collective 更频繁</td></tr>
+      <tr><td>超长上下文</td><td>SP + context parallel 等</td><td>分别解决非 TP activation 与 attention context 分片</td></tr>
+    </table>
+
+    <h3>实际配置示例</h3>
+    <pre><code class="language-python"># 训练 70B 模型，16 节点 (128 GPU):
+# TP = 8 (节点内)
+# PP = 4 (4 个 stages)
+# DP = 128 / (8 × 4) = 4 (数据并行)
+# 总计: 8 × 4 × 4 = 128 GPU
+
+# 仅参数 shard（未考虑 embedding tie、负载不均等）:
+# 70B / (TP 8 × PP 4) ≈ 2.19B 参数/GPU
+#
+# 但不能据此宣布“放得下”：梯度、master weights、Adam moments 是否再按 DP 分片，
+# 以及 activation、temporary buffers、pipeline schedule 都会改变峰值内存。</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="bandwidth">通信量对比</h2>
+
+    <table>
+      <tr><th>并行策略</th><th>通信类型</th><th>每步通信量</th><th>频率</th></tr>
+      <tr><td>DDP</td><td>梯度 All-Reduce</td><td>ring 每 rank 约 2(N-1)/N × gradient bytes</td><td>通常每步，按 bucket 触发</td></tr>
+      <tr><td>Tensor Parallel</td><td>每 block 约 2 个 activation collectives</td><td>与 micro-batch × sequence × hidden × dtype 及 TP degree 同阶</td><td>每层</td></tr>
+      <tr><td>Pipeline Parallel</td><td>P2P activation / gradient</td><td>每边界每 micro-batch 各传前向 activation 与反向 gradient</td><td>stage 边界</td></tr>
+      <tr><td>FSDP / ZeRO-3</td><td>2× parameter All-Gather + gradient Reduce-Scatter</td><td>若参数/梯度 payload 为 P bytes，大 N 下每 rank 约 3P</td><td>每 FSDP unit</td></tr>
+    </table>
+
+    <div class="card idea">
+      <p><strong>统一视角：</strong></p>
+      <ul>
+        <li><strong>DDP</strong>：复制参数，同步梯度</li>
+        <li><strong>FSDP</strong>：分片模型状态，按需收集参数并分散梯度</li>
+        <li><strong>TP</strong>：分片参数，同步激活</li>
+        <li><strong>PP</strong>：分片层，传递激活</li>
+      </ul>
+      <p>每种策略都在"计算冗余 vs 内存节省 vs 通信开销"之间做权衡。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！Data Parallelism 的梯度通信量与梯度张量大小、也就是参数数量同阶；ring All-Reduce 的每-rank 字节数约为 2(N-1)/N 倍梯度 payload。" data-incorrect="DP 的通信来自梯度同步，复杂度是 O(参数数量)，精确字节数取决于 collective 算法与 dtype。">
+      <p><strong>问题 1：</strong>Data Parallelism 每步的通信量是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">O(batch_size)</button>
+        <button data-choice="b" aria-pressed="false">O(参数数量)</button>
+        <button data-choice="c" aria-pressed="false">O(序列长度)</button>
+        <button data-choice="d" aria-pressed="false">无通信</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！Tensor Parallelism 把权重矩阵切分到多个 GPU，每个 GPU 只计算部分结果，需要 collective 合并或重新分片 activation。" data-incorrect="TP 的核心是切分权重矩阵，每个 GPU 计算部分结果然后通信合并。">
+      <p><strong>问题 2：</strong>Tensor Parallelism 的主要特点是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">每个 GPU 处理不同数据</button>
+        <button data-choice="b" aria-pressed="false">每个 GPU 持有部分参数，需要通信</button>
+        <button data-choice="c" aria-pressed="false">每个 GPU 处理不同层</button>
+        <button data-choice="d" aria-pressed="false">不需要通信</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！1F1B 在 warmup 后交替 forward/backward，主要减少同时保存的 micro-batch activations；它并不会自动消除 warmup/drain bubble。" data-incorrect="1F1B 的突出优势是降低 activation memory；bubble 仍取决于 stage 和 micro-batch 数。">
+      <p><strong>问题 3：</strong>与先完成全部 forward 再 backward 相比，1F1B 的主要优势是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">消除所有通信</button>
+        <button data-choice="b" aria-pressed="false">降低峰值 activation memory</button>
+        <button data-choice="c" aria-pressed="false">通信开销</button>
+        <button data-choice="d" aria-pressed="false">负载不均衡</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！TP 每层都有关键路径 collective，因此通常优先映射到 NVLink/NVSwitch 等高带宽低延迟域；PP 只在 stage 边界传 P2P 张量，更常跨节点。" data-incorrect="这是拓扑感知的经验选择，不是 TP 或 PP 的功能限制。">
+      <p><strong>问题 4：</strong>为什么 TP 通常优先用于节点内，而 PP 更常跨节点？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">TP 计算更快</button>
+        <button data-choice="b" aria-pressed="false">TP 需要高带宽 NVLink，节点内才有</button>
+        <button data-choice="c" aria-pressed="false">PP 只能在跨节点工作</button>
+        <button data-choice="d" aria-pressed="false">没有特别原因</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！Ring All-Reduce 可以分解为 Reduce-Scatter + All-Gather；这是带宽高效实现方式之一，不表示所有实现都必须使用同一算法。" data-incorrect="这里问的是 ring 的带宽高效分解：Reduce-Scatter 后接 All-Gather。">
+      <p><strong>问题 5：</strong>Ring All-Reduce 常分解为哪两个 collective？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">Scatter + Broadcast</button>
+        <button data-choice="b" aria-pressed="false">Reduce-Scatter + All-Gather</button>
+        <button data-choice="c" aria-pressed="false">Scatter + Gather</button>
+        <button data-choice="d" aria-pressed="false">Broadcast + Reduce</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>Data Parallel</h3>
+        <p>复制模型，All-Reduce 梯度</p>
+      </article>
+      <article>
+        <h3>Tensor Parallel</h3>
+        <p>切分宽度，All-Reduce 激活</p>
+      </article>
+      <article>
+        <h3>Pipeline Parallel</h3>
+        <p>切分深度，P2P 传激活</p>
+      </article>
+      <article>
+        <h3>混合并行</h3>
+        <p>按拓扑组合 TP / PP / DP / FSDP，并核算通信与 activation</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">延伸阅读</h2>
+    <ul>
+      <li>Korthikanti et al. (2023): <a href="https://arxiv.org/abs/2205.05198">Reducing Activation Recomputation in Large Transformer Models</a> — 并行策略组合</li>
+      <li>Narayanan et al. (2021): <a href="https://arxiv.org/abs/2104.04473">Efficient Large-Scale Language Model Training on GPU Clusters Using Megatron-LM</a></li>
+      <li>Rajbhandari et al. (2020): <a href="https://arxiv.org/abs/1910.02054">ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</a></li>
+      <li>Stanford CS336 Spring 2025: <a href="https://github.com/stanford-cs336/spring2025-lectures/blob/main/nonexecutable/2025%20Lecture%207%20-%20Parallelism%20basics.pdf">Lecture 7 - Parallelism Basics</a></li>
+      <li><a href="https://colossal.ai/">Colossal-AI</a> — 并行策略可视化</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="0006-kernels-triton.html">← 第 6 课</a>
+      <a href="0008-parallelism-2.html">第 8 课 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 基于官方 Lecture 7 整理，并结合 ZeRO、Megatron-LM 一手资料校订</p>
+    </footer>
+  </div>
+  <script src="../assets/prism.js"></script>
+  <script src="../assets/prism-python.js"></script>
+  <script src="../assets/prism-bash.js"></script>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>

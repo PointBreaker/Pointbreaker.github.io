@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 4 课：OS 组织与系统调用 — MIT 6.1810</title>
+  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/katex.min.css">
+  <script defer src="../assets/katex.min.js"></script>
+  <script defer src="../assets/katex-auto-render.min.js"></script>
+  <script defer src="../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806c">
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.1810 · 第 4 课</p>
+    <h1>OS 组织与系统调用</h1>
+    <p class="lede">内核应该提供什么抽象？是所有功能都放进内核（宏内核），还是只保留最小功能（微内核）？本课以 L4 微内核为例，探讨这两种设计哲学的权衡。</p>
+
+    <div class="meta">
+      <span>授课：rtm (Robert Morris)</span>
+      <span>日期：2025-01-30</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2>传统方法：大抽象 + 宏内核</h2>
+    <p>UNIX、Linux、xv6 都采用这种设计哲学：</p>
+    <ul>
+      <li><strong>大抽象</strong>：文件系统（含命名、目录、权限）、进程、管道、socket 等——为程序员提供便捷、可移植的接口。</li>
+      <li><strong>宏内核</strong>：整个内核是一个大程序，所有系统调用运行在同一个高特权地址空间。</li>
+    </ul>
+
+    <h3>大抽象的好处</h3>
+    <table>
+      <thead><tr><th>受益方</th><th>收益</th></tr></thead>
+      <tbody>
+        <tr><td>程序员</td><td>便捷（操作文件而非磁盘块）、可移植（POSIX 标准）</td></tr>
+        <tr><td>内核</td><td>帮助共享和管理资源（分配磁盘空间给不同程序）</td></tr>
+        <tr><td>内核</td><td>帮助安全（文件权限检查）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>宏内核的问题</h3>
+    <table>
+      <thead><tr><th>问题</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><strong>复杂 → bug 多</strong></td><td>Linux 有数百万行代码，CVE 层出不穷</td></tr>
+        <tr><td><strong>过度通用 → 慢</strong></td><td>发送一个字节经过管道：缓冲、锁、sleep/wakeup、调度器——代码路径极长</td></tr>
+        <tr><td><strong>强制设计决策</strong></td><td>不能等待非子进程、不能修改其他进程的地址空间、DB 无法自定义磁盘布局</td></tr>
+      </tbody>
+    </table>
+
+    <h2>微内核：另一种思路</h2>
+    <p>代表：<strong>L4、Mach</strong>（CMU，最有影响力的早期微内核）。</p>
+
+    <h3>核心思想</h3>
+    <div class="card idea">
+      <p><strong>最小的内核，把大部分 O/S 功能移到用户态服务进程。</strong></p>
+      <p>内核只提供：</p>
+      <ul>
+        <li>地址空间（Task）</li>
+        <li>内存管理（页映射）</li>
+        <li>线程</li>
+        <li>IPC（进程间通信）</li>
+      </ul>
+    </div>
+
+    <h3>期望收益</h3>
+    <ul class="checklist">
+      <li>简洁 → 更优雅</li>
+      <li>小 → 更少 bug → 更安全（可形式化验证，如 seL4）</li>
+      <li>小 → 更易优化</li>
+      <li>小 → 更少强制的设计决策</li>
+      <li>用户态 → 模块化、可扩展、可替换服务</li>
+      <li>用户态 → 更健壮（大多数 bug 在驱动中，驱动在用户态可重启）</li>
+    </ul>
+
+    <h3>设计挑战</h3>
+    <ul class="checklist">
+      <li>最小功能集是什么？能否保证安全（如无用户概念）？</li>
+      <li>没有内核的文件/目录/socket 抽象，程序如何共享磁盘和网络？</li>
+      <li>没有宏内核的集成，性能能否接受？</li>
+      <li>内核如何知道该如何分配资源（CPU、内存、磁盘）？</li>
+    </ul>
+
+    <h2>L4 微内核</h2>
+    <p>L4 经过多年演进，至今仍用于手机和嵌入式控制器。强调最小性：</p>
+    <table>
+      <thead><tr><th>L4</th><th>Linux</th></tr></thead>
+      <tbody>
+        <tr><td>几十个系统调用</td><td>300+ 系统调用</td></tr>
+        <tr><td>~13,000 行代码</td><td>数百万行代码</td></tr>
+      </tbody>
+    </table>
+
+    <h3>L4 基本抽象</h3>
+    <table>
+      <thead><tr><th>抽象</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>Task（地址空间）</td><td>一组页映射的集合</td></tr>
+        <tr><td>Thread</td><td>执行上下文（寄存器、栈）</td></tr>
+        <tr><td>IPC</td><td>线程间的同步消息传递</td></tr>
+        <tr><td>Page Fault 拦截</td><td>pager 可处理其他地址空间的页错误</td></tr>
+        <tr><td>硬件访问</td><td>直接访问设备寄存器/端口</td></tr>
+        <tr><td>中断接收</td><td>中断作为 IPC 消息投递</td></tr>
+      </tbody>
+    </table>
+
+    <h3>L4 系统调用</h3>
+    <ul>
+      <li>创建 task / 地址空间</li>
+      <li>创建/销毁线程</li>
+      <li>通过 IPC 发送/接收消息（地址是 thread ID）</li>
+      <li>拦截另一个地址空间的页错误（pager）并修改映射</li>
+      <li>访问设备硬件</li>
+      <li>通过 IPC 接收设备中断</li>
+    </ul>
+
+    <h2>示例：L4 上的 exec()</h2>
+    <p>假设有一个用户态文件服务器，T1 想创建新任务并执行文件中的程序：</p>
+    <ol>
+      <li>T1 创建新 task T2（此时 T2 没有任何内存）</li>
+      <li>T1 告诉 L4 让 T2 从 PC=0 开始执行</li>
+      <li>T2 立即访问无效内存 → 页错误</li>
+      <li>L4 通过 IPC 把页错误信息发送给 T1</li>
+      <li>T1 通过 IPC 请求文件服务器读取文件块</li>
+      <li>T1 得到文件块后，告诉 L4 映射到 T2 的地址空间，恢复 T2</li>
+    </ol>
+    <p>这就是 <strong>按需分页（demand paging）</strong>——通过页错误驱动文件访问。</p>
+
+    <h2>IPC 性能：微内核的阿喀琉斯之踵</h2>
+
+    <h3>慢速 IPC 设计（基于 UNIX 管道）</h3>
+    <pre><code>// 异步、缓冲
+send(id, msg):   // 拷贝 msg 到内核队列，返回
+recv(&id, &data): // 等待队列消息，拷贝到用户空间
+
+// 一次 RPC 需要 4 次系统调用：
+//   client: send() → recv()
+//   server: recv() → send()
+// = 8 次用户/内核切换 + 4 次消息拷贝</code></pre>
+
+    <h3>L4 的快速 IPC</h3>
+    <p> Jochen Liedtke, 1993, "Improving IPC by Kernel Design"：</p>
+    <table>
+      <thead><tr><th>优化</th><th>效果</th></tr></thead>
+      <tbody>
+        <tr><td>合并 call/sendrecv</td><td>IPC 通常是 RPC，合并后减少 2× 用户/内核切换</td></tr>
+        <tr><td>同步（Synchronous）</td><td>call() 直接切换到目标的 sendrecv()，无需经过内核队列</td></tr>
+        <tr><td>无缓冲（Unbuffered）</td><td>同步意味着双方缓冲区地址已知，直接内存到内存拷贝</td></tr>
+        <tr><td>小消息用寄存器</td><td>无需内存拷贝</td></tr>
+        <tr><td>大消息用页映射</td><td>发送方页映射到接收方地址空间，零拷贝</td></tr>
+        <tr><td>内核代码 cache 友好</td><td>减少 cache miss</td></tr>
+      </tbody>
+    </table>
+    <p><strong>结果：IPC 成本降低 20×！</strong></p>
+
+    <h2>在微内核上构建完整操作系统</h2>
+    <h3>问题</h3>
+    <p>工作站/服务器需要兼容现有应用（如 UNIX 程序）。如何在微内核上提供完整的 UNIX 环境？</p>
+
+    <h3>实用方案：把 Linux 作为用户态服务运行</h3>
+    <div class="card idea">
+      <p><strong>L4/Linux 方案：</strong>修改少量 Linux 代码，把硬件访问替换为 L4 系统调用/IPC。Linux 本身变成用户态的"O/S server"。</p>
+      <ul>
+        <li>L4 内核在最底层</li>
+        <li>Linux kernel server 是一个 L4 task</li>
+        <li>每个 Linux 进程对应一个 L4 task</li>
+        <li>系统调用通过 IPC 转发给 Linux server</li>
+      </ul>
+    </div>
+
+    <h3>L4/Linux 系统调用流程</h3>
+    <pre><code>用户进程:
+  fork() → libc → IPC(call) → 阻塞等待回复
+
+L4 内核:
+  转发 IPC → Linux server
+
+Linux server:
+  执行 fork() 实现（分配内存、创建新 L4 task、复制父进程内存）
+  IPC(reply) → 用户进程恢复</code></pre>
+
+    <h3>Linux server 如何访问用户内存？</h3>
+    <p>Linux server 分配所有用户内存，因此用户内存也映射在 server 地址空间内。<code>copyin()/copyout()</code> 可以直接解引用用户指针。fork/exec 时 server 可直接操作用户内存——IPC 只需传地址，不需拷贝数据。</p>
+
+    <h2>性能评估</h2>
+    <p>Härtig et al., 1997, "The Performance of micro-Kernel-Based Systems"。</p>
+
+    <h3>IPC 微基准测试：getpid() 成本</h3>
+    <table>
+      <thead><tr><th>系统</th><th>getpid() 时间</th></tr></thead>
+      <tbody>
+        <tr><td>Linux</td><td>1.68 μs</td></tr>
+        <tr><td>L4/Linux</td><td>3.95 μs</td></tr>
+        <tr><td>Mach+Linux</td><td>15.41 μs</td></tr>
+      </tbody>
+    </table>
+    <p>L4/Linux 大约是 native Linux 的 2×——但比 Mach 快 4×。</p>
+
+    <h3>整体系统基准测试：AIM</h3>
+    <p>AIM 启动大量进程，随机使用磁盘、内存分配、管道、计算——模拟真实工作负载。</p>
+    <p><strong>结果：</strong>Native Linux 最好，L4/Linux 仅慢一点，Mach+Linux 明显低效。</p>
+    <p><strong>结论：</strong>2× 系统调用开销对整体性能影响不大——微内核的性能惩罚是可以接受的。</p>
+
+    <h2>现状</h2>
+    <table>
+      <thead><tr><th>领域</th><th>微内核使用情况</th></tr></thead>
+      <tbody>
+        <tr><td>嵌入式</td><td>广泛使用（微控制器、Apple Secure Enclave）</td></tr>
+        <tr><td>通用计算</td><td>未普及（无足够理由从 Linux 切换）</td></tr>
+      </tbody>
+    </table>
+    <p>微内核的许多思想已被现代 UNIX 采用：</p>
+    <ul class="checklist">
+      <li>复杂的虚拟内存支持</li>
+      <li>用户态线程</li>
+      <li>可扩展性（通过加载内核模块）</li>
+      <li>IPC 和用户态服务</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2>知识检查</h2>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q1：</strong>微内核设计的主要目标是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="微内核通常性能低于宏内核。">A. 最高性能</button>
+        <button data-choice="b" data-correct="正确！微内核追求最小内核，把功能移到用户态服务，减少内核 bug。">B. 最小内核，减少内核 bug 和攻击面</button>
+        <button data-choice="c" data-incorrect="微内核的系统调用通常更少。">C. 最多的系统调用</button>
+        <button data-choice="d" data-incorrect="微内核把功能移到用户态，不是全部放进内核。">D. 把所有 O/S 功能放进内核</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="c">
+      <p><strong>Q2：</strong>L4 快速 IPC 的关键优化是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="L4 的 IPC 是同步的。">A. 异步 + 缓冲</button>
+        <button data-choice="b" data-incorrect="L4 的大消息不拷贝，用页映射。">B. 大消息拷贝</button>
+        <button data-choice="c" data-correct="正确！L4 的 IPC 是同步、无缓冲的，小消息用寄存器，大消息用页映射，减少切换和拷贝。">C. 同步 + 无缓冲 + 寄存器/页映射</button>
+        <button data-choice="d" data-incorrect="L4 不允许直接访问硬件。">D. 直接访问硬件</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="a">
+      <p><strong>Q3：</strong>L4/Linux 中，Linux 内核运行在哪里？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-correct="正确！Linux 被修改为用户态的“O/S server”，通过 L4 IPC 提供服务。">A. 用户态，作为 L4 task</button>
+        <button data-choice="b" data-incorrect="L4 是唯一的内核。">B. 内核态，作为 L4 内核的一部分</button>
+        <button data-choice="c" data-incorrect="Linux 不在 M 模式运行。">C. 机器模式（M mode）</button>
+        <button data-choice="d" data-incorrect="L4/Linux 不使用 Linux 内核。">D. 不运行 Linux，完全重写</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="d">
+      <p><strong>Q4：</strong>根据 L4/Linux 论文，L4/Linux 的 getpid() 时间约为 native Linux 的多少倍？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="L4/Linux 约为 native Linux 的 2×。">A. 10×</button>
+        <button data-choice="b" data-incorrect="L4/Linux 比 Mach 快很多。">B. 0.5×</button>
+        <button data-choice="c" data-incorrect="L4/Linux 的 getpid() 是 3.95μs。">C. 1×</button>
+        <button data-choice="d" data-correct="正确！L4/Linux 的 getpid() 约 3.95μs，native Linux 约 1.68μs，约为 2×。">D. 2×</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <div class="quiz" data-answer="b">
+      <p><strong>Q5：</strong>宏内核设计的主要缺点是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" data-incorrect="宏内核性能通常更高。">A. 性能低</button>
+        <button data-choice="b" data-correct="正确！宏内核代码量大、复杂度高，bug 多且内部无隔离。">B. 复杂度高，bug 多，内部无隔离</button>
+        <button data-choice="c" data-incorrect="宏内核易于扩展。">C. 难以扩展</button>
+        <button data-choice="d" data-incorrect="宏内核的系统调用通常更多。">D. 系统调用少</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>    </div>
+
+    <hr class="rule">
+
+    <h2>本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>大抽象 vs. 小抽象</h3>
+        <p>UNIX 提供大抽象（文件系统、socket），L4 只提供最小抽象（地址空间、IPC）。各有利弊。</p>
+      </article>
+      <article>
+        <h3>宏内核 vs. 微内核</h3>
+        <p>宏内核性能高但复杂；微内核简洁但 IPC 开销大。现代 OS 是两者的混合。</p>
+      </article>
+      <article>
+        <h3>IPC 是关键</h3>
+        <p>微内核的性能瓶颈在 IPC。L4 通过同步、无缓冲、寄存器传参将 IPC 成本降低 20×。</p>
+      </article>
+      <article>
+        <h3>实用主义</h3>
+        <p>L4/Linux 把 Linux 作为用户态服务——兼容现有应用，同时利用微内核的优势。</p>
+      </article>
+    </div>
+
+    <h2>延伸阅读</h2>
+    <ul>
+      <li><a href="https://cs.nyu.edu/~mwalfish/classes/15fa/ref/liedtke93improving.pdf" target="_blank" rel="noopener">Liedtke 1993 — Improving IPC by Kernel Design</a></li>
+      <li><a href="http://www.cse.unsw.edu.au/~cs9242/02/lectures/01-l4.pdf" target="_blank" rel="noopener">L4 微内核详细文档</a></li>
+      <li><a href="https://trustworthy.systems/publications/nicta_full_text/8988.pdf" target="_blank" rel="noopener">seL4: 形式化验证的微内核</a></li>
+      <li><a href="https://l4re.org/doc/" target="_blank" rel="noopener">Fiasco.OC — L4 的现代后代</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="03-os-design.html">← 上一课</a>
+      <a href="05-page-tables.html">下一课 →</a>
+    </div>
+    <footer><p>MIT 6.1810: Operating Systems Engineering</p></footer>
+  </div>
+  <script src="../assets/quiz.js"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806c"></script>
+</body>
+</html>
