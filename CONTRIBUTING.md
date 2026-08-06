@@ -11,6 +11,8 @@
 
 不要复制其他课程的 vendor 资源；页面应使用根目录 `assets/course/` 与 `assets/vendor/` 的共享资源。
 
+不要在课程目录复制评论脚本；讲义与实践页面通过共享 `lesson-ui.js` 和根目录 `site-comments.json` 接入 GitHub Discussions。
+
 ## 内容要求
 
 - 以官方讲义、作业、Lab、代码和原始论文为主要来源。

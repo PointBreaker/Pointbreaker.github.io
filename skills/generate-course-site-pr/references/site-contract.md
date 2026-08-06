@@ -11,6 +11,8 @@
 
 Do not copy an existing course directory or duplicate vendor assets. New courses use the shared platform files.
 
+The shared lesson shell also mounts the repository's Giscus discussion block from `site-comments.json`. Course generators must not embed a second comment provider or create per-course comment configuration.
+
 ## Course plan schema
 
 ```json

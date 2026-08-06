@@ -26,6 +26,7 @@
         </div>
         <nav class="pb-coursebar-actions" aria-label="阅读导航">
           <a href="${courseBase}">课程目录</a>
+          <a href="#pb-comments">讨论</a>
           <a href="#pb-page-end">跳到页尾</a>
         </nav>
       </div>
@@ -97,6 +98,74 @@
   endMarker.setAttribute('aria-hidden', 'true');
   page.appendChild(endMarker);
 
+  const commentsSection = document.createElement('section');
+  commentsSection.className = 'pb-comments';
+  commentsSection.id = 'pb-comments';
+  commentsSection.innerHTML = `
+    <div class="pb-comments-heading">
+      <div>
+        <p class="pb-comments-kicker">Course discussion</p>
+        <h2>继续讨论这一课</h2>
+      </div>
+      <p>使用 GitHub 账号参与讨论。每个讲义与实践页面都有独立话题。</p>
+    </div>
+    <div class="pb-comments-status" role="status">正在连接 GitHub Discussions…</div>
+    <div class="pb-comments-host"></div>`;
+  page.insertBefore(commentsSection, endMarker);
+
+  const mountComments = async () => {
+    const statusNode = commentsSection.querySelector('.pb-comments-status');
+    const host = commentsSection.querySelector('.pb-comments-host');
+    try {
+      const response = await fetch(`${siteBase}site-comments.json`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`comments config ${response.status}`);
+      const config = await response.json();
+      if (!config.enabled || config.provider !== 'giscus') {
+        commentsSection.remove();
+        return;
+      }
+
+      const required = ['repo', 'repoId', 'category', 'categoryId'];
+      if (required.some((key) => !config[key])) throw new Error('comments config is incomplete');
+
+      const script = document.createElement('script');
+      script.src = 'https://giscus.app/client.js';
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      const showUnavailable = () => {
+        host.hidden = true;
+        statusNode.hidden = false;
+        statusNode.innerHTML = '评论功能正在完成 GitHub 授权。你可以先前往 <a href="https://github.com/PointBreaker/Pointbreaker.github.io/discussions">GitHub Discussions</a> 参与讨论。';
+      };
+      addEventListener('message', (event) => {
+        if (event.origin !== 'https://giscus.app' || !event.data?.giscus) return;
+        if (event.data.giscus.error) showUnavailable();
+        if (event.data.giscus.discussion) statusNode.hidden = true;
+      });
+      const attributes = {
+        repo: config.repo,
+        'repo-id': config.repoId,
+        category: config.category,
+        'category-id': config.categoryId,
+        mapping: config.mapping || 'specific',
+        term: config.term || `${courseId}/${currentRelative}`,
+        strict: config.strict || '1',
+        'reactions-enabled': config.reactionsEnabled || '1',
+        'emit-metadata': config.emitMetadata || '0',
+        'input-position': config.inputPosition || 'top',
+        theme: config.theme || 'light',
+        lang: config.lang || 'zh-CN',
+        loading: config.loading || 'lazy'
+      };
+      Object.entries(attributes).forEach(([key, value]) => script.setAttribute(`data-${key}`, value));
+      script.addEventListener('error', showUnavailable);
+      host.appendChild(script);
+    } catch (_) {
+      statusNode.innerHTML = '评论区配置尚未完成。请前往 <a href="https://github.com/PointBreaker/Pointbreaker.github.io/discussions">GitHub Discussions</a> 查看现有话题。';
+    }
+  };
+  mountComments();
+
   Promise.all([
     fetch(`${courseBase}course-info.json`, { cache: 'no-store' }).then((response) => response.json()),
     fetch(`${courseBase}api/status.json`, { cache: 'no-store' }).then((response) => response.json())
@@ -125,7 +194,7 @@
     pager.innerHTML += next
       ? `<a class="pb-pager-link" href="${courseBase}${next.file}"><span class="pb-pager-label">下一篇</span><span class="pb-pager-title">${titleFor(next)}</span></a>`
       : `<a class="pb-pager-link" href="${courseBase}"><span class="pb-pager-label">完成本组内容</span><span class="pb-pager-title">返回课程 Dashboard</span></a>`;
-    page.insertBefore(pager, endMarker);
+    page.insertBefore(pager, commentsSection);
   }).catch(() => {
     document.querySelector('#pb-course-name').textContent = courseId.toUpperCase();
   });

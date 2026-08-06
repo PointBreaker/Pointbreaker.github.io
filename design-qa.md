@@ -42,6 +42,13 @@
 - Inline and display math delimiters are balanced across all four courses.
 - The reported `optimizer.zero_grad(set_to_none=True)` example remains a single code node and renders without math splitting.
 
+## Community refinement
+
+- Dashboard learning units no longer use pure-white raised cards; computed `.path-unit` background is transparent with no shadow or radius.
+- The flattened learning path passes at desktop and `390 × 844` with `0px` horizontal overflow.
+- Every lecture and practice page mounts a unique Giscus term from its stable course-relative path.
+- Before the Giscus App is authorized, the page shows a styled GitHub Discussions fallback instead of the provider error frame.
+
 ## Result
 
 No actionable P0, P1, or P2 design findings remain.
