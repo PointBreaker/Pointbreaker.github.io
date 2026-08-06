@@ -48,6 +48,8 @@
 - The flattened learning path passes at desktop and `390 × 844` with `0px` horizontal overflow.
 - Every lecture and practice page mounts a unique Giscus term from its stable course-relative path.
 - Before the Giscus App is authorized, the page shows a styled GitHub Discussions fallback instead of the provider error frame.
+- Shared table wrappers eliminate the visual trailing blank column: representative pages across all four courses report a maximum trailing gap of `0px`.
+- At `390 × 844`, wide tables scroll inside their own container while page-level horizontal overflow remains `0px`.
 
 ## Result
 

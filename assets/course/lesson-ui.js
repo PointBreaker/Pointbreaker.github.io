@@ -74,6 +74,14 @@
     headings.forEach((heading) => observer.observe(heading));
   }
 
+  page.querySelectorAll('table').forEach((table) => {
+    if (table.parentElement?.classList.contains('pb-table-scroll')) return;
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'pb-table-scroll';
+    table.parentNode.insertBefore(scrollContainer, table);
+    scrollContainer.appendChild(table);
+  });
+
   page.querySelectorAll('pre').forEach((pre) => {
     if (pre.querySelector('.pb-copy-code')) return;
     const button = document.createElement('button');

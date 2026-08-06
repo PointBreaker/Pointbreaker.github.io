@@ -29,6 +29,7 @@
 
 ```bash
 git diff --check
+python3 tools/check-table-columns.py .
 python skills/generate-course-site-pr/scripts/refresh_status.py --repo . --slug <slug>
 python skills/generate-course-site-pr/scripts/validate_course.py --repo . --slug <slug> --plan <plan> --inventory <inventory> --strict-resources
 ```
