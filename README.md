@@ -33,7 +33,7 @@ Skill 会盘点资源、建立课程计划、生成前端与内容、检查公�
 
 所有讲义、作业与 Lab 页面会通过共享阅读层自动接入 GitHub Discussions 评论。评论由 Giscus 承载，页面路径作为独立话题标识；新课程无需复制评论代码。
 
-仓库管理员首次启用评论时，需要安装 [Giscus GitHub App](https://github.com/apps/giscus/installations/new) 并授权本仓库；Discussions 与页面配置已经纳入平台。
+仓库管理员首次启用评论时，需要安装 [Giscus GitHub App](https://github.com/apps/giscus/installations/new) 并授权本仓库，然后将 `site-comments.json` 中的 `installed` 改为 `true`；Discussions 与页面配置已经纳入平台。
 
 完整说明见 [课程生成指南](docs/course-generator.html)。
 

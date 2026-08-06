@@ -116,12 +116,21 @@
   const mountComments = async () => {
     const statusNode = commentsSection.querySelector('.pb-comments-status');
     const host = commentsSection.querySelector('.pb-comments-host');
+    const showUnavailable = () => {
+      host.hidden = true;
+      statusNode.hidden = false;
+      statusNode.innerHTML = '评论功能正在完成 GitHub 授权。你可以先前往 <a href="https://github.com/PointBreaker/Pointbreaker.github.io/discussions">GitHub Discussions</a> 参与讨论。';
+    };
     try {
       const response = await fetch(`${siteBase}site-comments.json`, { cache: 'no-store' });
       if (!response.ok) throw new Error(`comments config ${response.status}`);
       const config = await response.json();
       if (!config.enabled || config.provider !== 'giscus') {
         commentsSection.remove();
+        return;
+      }
+      if (config.installed === false) {
+        showUnavailable();
         return;
       }
 
@@ -132,11 +141,6 @@
       script.src = 'https://giscus.app/client.js';
       script.async = true;
       script.crossOrigin = 'anonymous';
-      const showUnavailable = () => {
-        host.hidden = true;
-        statusNode.hidden = false;
-        statusNode.innerHTML = '评论功能正在完成 GitHub 授权。你可以先前往 <a href="https://github.com/PointBreaker/Pointbreaker.github.io/discussions">GitHub Discussions</a> 参与讨论。';
-      };
       addEventListener('message', (event) => {
         if (event.origin !== 'https://giscus.app' || !event.data?.giscus) return;
         if (event.data.giscus.error) showUnavailable();
