@@ -1,4 +1,4 @@
-# PointBreaker platform v2 design QA
+# CourseStack platform v2 design QA
 
 - Desktop viewport: `1440 × 1024`
 - Mobile viewport: `390 × 844`

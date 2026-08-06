@@ -5,7 +5,7 @@
       <a class="skip-link" href="#learning-path">跳到学习路径</a>
       <header class="course-bar">
         <div class="shell course-bar-inner">
-          <a class="wordmark" href="../">PointBreaker</a>
+          <a class="wordmark" href="../">CourseStack</a>
           <nav class="course-bar-links" aria-label="课程导航">
             <a href="#learning-path">学习路径</a>
             <a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a>
@@ -56,7 +56,7 @@
           <div class="path-list" id="path-list"></div>
         </section>
       </main>
-      <footer class="course-footer"><div class="shell course-footer-inner"><span>PointBreaker · 基于一手课程资料整理</span><a href="../">返回课程目录</a></div></footer>`;
+      <footer class="course-footer"><div class="shell course-footer-inner"><span>CourseStack 课栈 · 基于一手课程资料整理</span><a href="../">返回课程目录</a></div></footer>`;
   }
 
   const root = document.documentElement;
@@ -83,7 +83,7 @@
 
   function hydrateHeader() {
     root.style.setProperty('--course-accent', info.accent || '#63e68c');
-    document.title = `${info.code} · ${info.title} — PointBreaker`;
+    document.title = `${info.code} · ${info.title} — CourseStack 课栈`;
     setText('#course-code', `${info.code} · ${info.domain}`);
     setText('#course-title', info.title);
     setText('#course-title-zh', info.titleZh || '');

@@ -1,14 +1,14 @@
-# PointBreaker
+# CourseStack · 课栈
 
-PointBreaker 是一个面向系统与机器学习课程的开放中文学习档案。课程主页、Dashboard、讲义、作业和实验共享同一套数据模型与阅读设计，可持续扩展到更多课程。
+CourseStack（课栈）是一个面向系统与机器学习课程的开放中文学习档案。课程主页、Dashboard、讲义、作业和实验共享同一套数据模型与阅读设计，可持续扩展到更多课程。
 
 ## 浏览课程
 
-打开 [PointBreaker 课程主页](https://pointbreaker.github.io/)；课程目录由 [`courses.json`](courses.json) 自动生成，支持搜索和主题筛选。
+打开 [CourseStack 课栈课程主页](https://pointbreaker.github.io/)；课程目录由 [`courses.json`](courses.json) 自动生成，支持搜索和主题筛选。
 
 ## 用 Skill 新增课程
 
-仓库内置 [`generate-course-site-pr`](skills/generate-course-site-pr/SKILL.md) Skill。它会从本地课程资源生成 PointBreaker v2 课程，完成校验后向本仓库提交 PR。
+仓库内置 [`generate-course-site-pr`](skills/generate-course-site-pr/SKILL.md) Skill。它会从本地课程资源生成 CourseStack v2 课程，完成校验后向本仓库提交 PR。
 
 ### 安装
 
@@ -26,7 +26,7 @@ cp -R skills/generate-course-site-pr "${CODEX_HOME:-$HOME/.codex}/skills/"
 3. 提供官方课程主页，并调用：
 
 ```text
-Use $generate-course-site-pr to turn this folder into a new PointBreaker course and open a PR.
+Use $generate-course-site-pr to turn this folder into a new CourseStack course and open a PR.
 ```
 
 Skill 会盘点资源、建立课程计划、生成前端与内容、检查公式和页面、创建分支并打开 PR。它不会访问 `drive.google.com` 或 `docs.google.com`，请提前下载需要的官方资料。

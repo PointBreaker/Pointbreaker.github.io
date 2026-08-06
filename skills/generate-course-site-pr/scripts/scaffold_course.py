@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scaffold a PointBreaker v2 course from a reviewed course-plan JSON file."""
+"""Scaffold a CourseStack v2 course from a reviewed course-plan JSON file."""
 
 from __future__ import annotations
 
@@ -77,10 +77,10 @@ def check_platform(repo: Path) -> dict:
     platform_path = repo / "site-platform.json"
     catalog_path = repo / "courses.json"
     if not platform_path.is_file() or not catalog_path.is_file():
-        raise RuntimeError("target repository is missing PointBreaker v2 platform files")
+        raise RuntimeError("target repository is missing CourseStack v2 platform files")
     platform = load_json(platform_path)
     if int(platform.get("version", 0)) < PLATFORM_VERSION:
-        raise RuntimeError(f"PointBreaker platform v{PLATFORM_VERSION}+ is required")
+        raise RuntimeError(f"CourseStack platform v{PLATFORM_VERSION}+ is required")
     for relative in platform.get("sharedAssets", {}).values():
         if not (repo / relative).is_file():
             raise RuntimeError(f"missing shared platform asset: {relative}")
@@ -110,7 +110,7 @@ def dashboard_page(plan: dict) -> str:
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{description}">
-  <title>{code} — PointBreaker</title>
+  <title>{code} — CourseStack 课栈</title>
   <link rel="stylesheet" href="../assets/course/dashboard.css">
   <script defer src="../assets/course/dashboard.js"></script>
 </head>
@@ -195,7 +195,7 @@ def main() -> int:
     repo = Path(args.repo).expanduser().resolve()
     plan_path = Path(args.plan).expanduser().resolve()
     if not (repo / ".git").exists() or not (repo / "index.html").is_file():
-        parser.error(f"not a PointBreaker site clone: {repo}")
+        parser.error(f"not a CourseStack site clone: {repo}")
     check_platform(repo)
     plan = load_json(plan_path)
     validate_plan(plan)

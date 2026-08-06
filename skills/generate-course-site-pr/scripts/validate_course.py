@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a generated PointBreaker v2 course before opening a pull request."""
+"""Validate a generated CourseStack v2 course before opening a pull request."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
             errors.append(f"{label}: {error}")
     if page.name != "index.html":
         if "assets/course/lesson.css" not in source or "assets/course/lesson-ui.js" not in source:
-            errors.append(f"{label}: missing shared PointBreaker reading shell")
+            errors.append(f"{label}: missing shared CourseStack reading shell")
         for quiz in parser.quizzes:
             if not quiz["answer"]:
                 errors.append(f"{label}: quiz {quiz['id']} missing data-answer")
@@ -165,7 +165,7 @@ def main() -> int:
         if not path.is_file():
             errors.append(f"missing required file: {path.relative_to(repo)}")
     if platform_path.is_file() and int(load_json(platform_path).get("version", 0)) < PLATFORM_VERSION:
-        errors.append(f"PointBreaker platform v{PLATFORM_VERSION}+ is required")
+        errors.append(f"CourseStack platform v{PLATFORM_VERSION}+ is required")
     if not course.is_dir():
         errors.append(f"missing course directory: {course}")
     else:

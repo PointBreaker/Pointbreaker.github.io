@@ -1,11 +1,11 @@
 ---
 name: generate-course-site-pr
-description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, homework, labs, notes, code, and an official course homepage into a complete PointBreaker v2 GitHub Pages course, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, polished lecture and assignment pages, resource-to-frontend generation, or an automated course PR.
+description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, homework, labs, notes, code, and an official course homepage into a complete CourseStack v2 GitHub Pages course, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, polished lecture and assignment pages, resource-to-frontend generation, or an automated course PR.
 ---
 
 # Generate Course Site PR
 
-Build an evidence-backed Chinese course guide from local materials, use the shared PointBreaker v2 design system, and stop at a reviewable pull request.
+Build an evidence-backed Chinese course guide from local materials, use the shared CourseStack v2 design system, and stop at a reviewable pull request.
 
 ## Guardrails
 
@@ -42,7 +42,7 @@ Create `.course-build/course-plan.json` using [references/site-contract.md](refe
 
 Use a clean clone or separate worktree. Fetch `origin/main`, create `course/<slug>`, and preserve all unrelated user changes. Read [references/pr-workflow.md](references/pr-workflow.md).
 
-### 5. Scaffold PointBreaker v2
+### 5. Scaffold CourseStack v2
 
 Run:
 

@@ -1,6 +1,6 @@
-# Contributing to PointBreaker
+# Contributing to CourseStack
 
-感谢你帮助 PointBreaker 增加课程或修正文档。提交内容应当可追溯、可验证，并保持课程原本的教学脉络。
+感谢你帮助 CourseStack（课栈）增加课程或修正文档。提交内容应当可追溯、可验证，并保持课程原本的教学脉络。
 
 ## 新增课程
 

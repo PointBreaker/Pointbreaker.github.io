@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Attach PointBreaker's shared reading shell to every course content page."""
+"""Attach CourseStack's shared reading shell to every course content page."""
 
 from pathlib import Path
 

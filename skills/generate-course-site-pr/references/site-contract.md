@@ -1,4 +1,4 @@
-# PointBreaker v2 course-site contract
+# CourseStack v2 course-site contract
 
 ## Platform contract
 

@@ -20,7 +20,7 @@
     <header class="pb-coursebar">
       <div class="pb-coursebar-inner">
         <div class="pb-crumb">
-          <a class="pb-brand" href="${homeBase}">PointBreaker</a>
+          <a class="pb-brand" href="${homeBase}">CourseStack</a>
           <span aria-hidden="true">/</span>
           <a class="pb-crumb-course" href="${courseBase}" id="pb-course-name">课程 Dashboard</a>
         </div>
