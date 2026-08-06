@@ -9,10 +9,11 @@
 - Course root: `courses/`
 - Shared design assets: `assets/course/`
 - Shared KaTeX and Prism assets: `assets/vendor/`
+- Shared interactive runtime: `assets/course/interactive.css` and `assets/course/interactive.js`
 
 Do not copy an existing course directory or duplicate vendor assets. New courses use the shared platform files.
 
-The shared lesson shell also mounts the repository's Giscus discussion drawer from `site-comments.json`. On desktop the drawer reserves a right-side reading column instead of covering lesson content; on narrow screens it becomes a dedicated full-screen panel. Course generators must not embed a second comment provider or create per-course comment configuration.
+The shared lesson shell also mounts the repository's Giscus discussion drawer from `site-comments.json`. On desktop the drawer reserves a right-side reading column instead of covering lesson content; on narrow screens it becomes a dedicated full-screen panel. The shared configuration places the comment composer below the discussion thread. Course generators must not embed a second comment provider or create per-course comment configuration.
 
 ## Course plan schema
 
@@ -42,7 +43,16 @@ The shared lesson shell also mounts the repository's Giscus discussion drawer fr
       "title": "Introduction",
       "instructor": "Ada Example",
       "slug": "introduction",
-      "sourceFiles": ["slides/lecture01.pdf"]
+      "sourceFiles": ["slides/lecture01.pdf"],
+      "visuals": [
+        {
+          "id": "gradient-descent-curve",
+          "kind": "function-plot",
+          "learningGoal": "Understand how learning rate changes the update trajectory.",
+          "sourceFiles": ["slides/lecture01.pdf"],
+          "reason": "The source compares the same loss under multiple parameter values."
+        }
+      ]
     }
   ],
   "workItems": [
@@ -71,6 +81,7 @@ Rules:
 - If no graded work exists, create meaningful `Module` groups.
 - Keep the catalog summary concise and factual. Use 3–6 tags.
 - Choose an accessible accent color that remains legible on light and dark surfaces.
+- Use `visuals` only for source-backed learning needs. Use a lowercase hyphenated `id` and a supported kind from `interactive-content.md`; omit unjustified visuals.
 
 ## Generated tree
 
@@ -79,6 +90,10 @@ courses/<slug>/
 ├── index.html
 ├── course-info.json
 ├── api/status.json
+├── figures/
+│   └── <visual-id>-fallback.svg
+├── interactives/
+│   └── <visual-id>.json
 └── lessons/
     ├── 0001-<slug>.html
     └── assignments/
@@ -92,11 +107,12 @@ The Dashboard reads `course-info.json` and `api/status.json`. The homepage reads
 Each lecture and work-item page must:
 
 - Declare Chinese language, UTF-8, viewport, a descriptive title, and exactly one `h1`.
-- Load shared base, lesson, KaTeX, Prism, math-render, quiz, and lesson-UI assets using correct relative paths.
+- Load shared base, lesson, interactive, KaTeX, Prism, math-render, quiz, and lesson-UI assets using correct relative paths.
 - Use semantic headings with stable IDs.
 - Use only `\(...\)` and `\[...\]` for math.
 - Put code inside escaped `<pre><code class="language-...">` blocks.
 - Give each quiz a unique `data-quiz` and a valid container `data-answer`.
+- Give every interactive a course-local JSON spec and exactly one static fallback image with meaningful alt text. Use only Interactive v1 kinds documented in `references/interactive-content.md`.
 - Include a primary-source reference section.
 - Contain no placeholder, Drive/Docs URL, remote font dependency, or unsupported dollar math.
 

@@ -15,7 +15,7 @@ SLUG_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
 TODO_MARKER = "COURSE_CONTENT_TODO"
-SHARED_ASSET_VERSION = "20260806d"
+SHARED_ASSET_VERSION = "20260806e"
 
 
 def load_json(path: Path) -> dict:
@@ -145,6 +145,7 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
 {guide_css}  <link rel="stylesheet" href="{root_prefix}assets/vendor/prism.css">
   <link rel="stylesheet" href="{root_prefix}assets/vendor/katex.min.css">
   <link rel="stylesheet" href="{root_prefix}assets/course/lesson.css?v={SHARED_ASSET_VERSION}">
+  <link rel="stylesheet" href="{root_prefix}assets/course/interactive.css?v={SHARED_ASSET_VERSION}">
   <script defer src="{root_prefix}assets/vendor/katex.min.js"></script>
   <script defer src="{root_prefix}assets/vendor/katex-auto-render.min.js"></script>
   <script defer src="{root_prefix}assets/course/math-render.js"></script>
@@ -164,6 +165,7 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
   <script src="{root_prefix}assets/vendor/prism-python.js"></script>
   <script src="{root_prefix}assets/vendor/prism-bash.js"></script>
   <script src="{root_prefix}assets/course/quiz.js"></script>
+  <script defer src="{root_prefix}assets/course/interactive.js?v={SHARED_ASSET_VERSION}"></script>
   <script defer src="{root_prefix}assets/course/lesson-ui.js?v={SHARED_ASSET_VERSION}"></script>
 </body>
 </html>

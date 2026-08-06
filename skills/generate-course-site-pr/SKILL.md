@@ -1,6 +1,6 @@
 ---
 name: generate-course-site-pr
-description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, homework, labs, notes, code, and an official course homepage into a complete CourseStack v3 GitHub Pages course under the shared courses directory, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, polished lecture and assignment pages, resource-to-frontend generation, or an automated course PR.
+description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, homework, labs, notes, code, figures, and an official course homepage into a complete CourseStack v3 GitHub Pages course under the shared courses directory, including source-backed math visualizations and interactive learning components when useful, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, polished lecture and assignment pages, visual or interactive explanations, resource-to-frontend generation, or an automated course PR.
 ---
 
 # Generate Course Site PR
@@ -50,10 +50,11 @@ Read the generated inventory and extracted text. Inspect PDF pages visually when
 Use the official homepage for the schedule, course identity, public links, and mapping only. Follow first-party links except Google Drive/Docs. Prefer local official handouts and slides over summaries.
 
 Read [references/content-quality.md](references/content-quality.md) before writing content.
+Read [references/interactive-content.md](references/interactive-content.md) when the course contains mathematical relationships, diagrams, matrices, parameter-sensitive behavior, algorithms, or multi-stage processes that may benefit from a visual explanation.
 
 ### 3. Create the course plan
 
-Create `.course-build/course-plan.json` using [references/site-contract.md](references/site-contract.md). Put `sourceFiles` on every lecture and work item. Verify numbering, term, titles, dependencies, slug, summary, domain, tags, and the catalog card copy.
+Create `.course-build/course-plan.json` using [references/site-contract.md](references/site-contract.md). Put `sourceFiles` on every lecture and work item. Add a `visuals` array only for justified source-backed figures or interactives, recording `id`, `kind`, `learningGoal`, `sourceFiles`, and `reason`. Verify numbering, term, titles, dependencies, slug, summary, domain, tags, and the catalog card copy.
 
 ### 4. Prepare an isolated branch
 
@@ -79,6 +80,8 @@ Replace every `COURSE_CONTENT_TODO` with source-grounded content.
 - Organize each homework/lab/project guide around objectives, prerequisites, task structure, setup, deliverables, validation, and common failure modes.
 - Use `\(...\)` and `\[...\]` for math. Never split identifiers with math delimiters or put LaTeX inside code.
 - Add 2–5 meaningful quizzes with a valid container `data-answer`.
+- Create static SVG diagrams, function plots, matrix heatmaps, or steppers only when they materially improve understanding. Follow [references/interactive-content.md](references/interactive-content.md), store course-owned files under `figures/` and `interactives/`, and require a static fallback for every interactive.
+- Use the shared declarative interactive runtime. Never add inline JavaScript, arbitrary executable expressions, external chart libraries, CDN scripts, or remote interactive data.
 - Do not publish graded solutions unless explicitly authorized.
 
 ### 7. Refresh and validate
@@ -93,6 +96,7 @@ python <skill-root>/scripts/validate_course.py \
   --plan "$PWD/.course-build/course-plan.json" \
   --inventory "$PWD/.course-build/inventory.json" \
   --strict-resources
+python <skill-root>/scripts/validate_interactive.py --repo /path/to/repo --slug <slug>
 python /path/to/repo/tools/check-course-layout.py
 git diff --check
 ```
@@ -103,7 +107,7 @@ Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at 
 
 Review the complete diff. Stage only `courses/<slug>/**` and `courses.json`, commit, push the course branch, and use `gh pr create`.
 
-Return the PR URL, branch, commit, page counts, resource coverage, validation results, and known source gaps. Do not claim completion if sources remain unmapped or browser QA was skipped.
+Return the PR URL, branch, commit, page counts, figure and interactive counts, resource coverage, validation results, and known source gaps. Do not claim completion if sources remain unmapped or browser QA was skipped.
 
 ## Runtime outputs
 

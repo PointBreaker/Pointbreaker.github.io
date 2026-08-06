@@ -199,7 +199,7 @@
         strict: config.strict || '1',
         'reactions-enabled': config.reactionsEnabled || '1',
         'emit-metadata': config.emitMetadata || '0',
-        'input-position': config.inputPosition || 'top',
+        'input-position': config.inputPosition || 'bottom',
         theme: config.theme || 'light',
         lang: config.lang || 'zh-CN',
         loading: config.loading || 'lazy'

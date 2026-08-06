@@ -38,6 +38,15 @@ Use this structure when it fits the source:
 
 Use concise Chinese explanations while retaining important English terms in parentheses on first use. Avoid bloating pages with generic history, motivational filler, or claims unrelated to the course sources.
 
+## Visual and interactive explanations
+
+- Create a visual only when it makes a relationship, state transition, geometry, comparison, or parameter effect materially easier to understand.
+- Prefer a static SVG for a fixed architecture, dataflow, tensor-shape map, or derivation overview.
+- Prefer the shared declarative interactive runtime for parameterized curves, matrices that change across frames, and step-by-step processes.
+- Preserve quantitative values and attribution from official figures. Clearly label redrawn explanatory diagrams instead of presenting them as official originals.
+- Require surrounding prose that explains what the learner should notice. A figure or simulator must not stand alone without interpretation.
+- Follow [interactive-content.md](interactive-content.md) for schema, fallback, accessibility, safety, and performance requirements.
+
 ## Math and code
 
 - Use `\(...\)` inline and `\[...\]` for display math.

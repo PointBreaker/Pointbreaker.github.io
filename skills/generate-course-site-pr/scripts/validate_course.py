@@ -11,6 +11,8 @@ import re
 import sys
 from urllib.parse import unquote, urlsplit
 
+from validate_interactive import validate_interactives
+
 
 TODO_MARKER = "COURSE_CONTENT_TODO"
 DRIVE_RE = re.compile(r"https?://(?:drive|docs)\.google\.com", re.IGNORECASE)
@@ -18,7 +20,7 @@ DOLLAR_MATH_RE = re.compile(r"(?<!\\)\$[^$\n]{1,300}(?<!\\)\$")
 PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
-SHARED_ASSET_VERSION = "20260806d"
+SHARED_ASSET_VERSION = "20260806e"
 
 
 class PageParser(HTMLParser):
@@ -115,10 +117,16 @@ def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
     if page.name != "index.html":
         if "assets/course/lesson.css" not in source or "assets/course/lesson-ui.js" not in source:
             errors.append(f"{label}: missing shared CourseStack reading shell")
+        if "assets/course/interactive.css" not in source or "assets/course/interactive.js" not in source:
+            errors.append(f"{label}: missing shared CourseStack interactive runtime")
         if f"assets/course/lesson.css?v={SHARED_ASSET_VERSION}" not in source:
             errors.append(f"{label}: shared lesson stylesheet is missing cache version {SHARED_ASSET_VERSION}")
         if f"assets/course/lesson-ui.js?v={SHARED_ASSET_VERSION}" not in source:
             errors.append(f"{label}: shared lesson UI is missing cache version {SHARED_ASSET_VERSION}")
+        if f"assets/course/interactive.css?v={SHARED_ASSET_VERSION}" not in source:
+            errors.append(f"{label}: shared interactive stylesheet is missing cache version {SHARED_ASSET_VERSION}")
+        if f"assets/course/interactive.js?v={SHARED_ASSET_VERSION}" not in source:
+            errors.append(f"{label}: shared interactive runtime is missing cache version {SHARED_ASSET_VERSION}")
         for quiz in parser.quizzes:
             if not quiz["answer"]:
                 errors.append(f"{label}: quiz {quiz['id']} missing data-answer")
@@ -168,6 +176,7 @@ def main() -> int:
     platform = load_json(platform_path) if platform_path.is_file() else {}
     courses_root = platform.get("coursesRoot", COURSES_ROOT)
     course = repo / courses_root / args.slug
+    interactive_stats = {"interactiveEmbeds": 0, "interactiveSpecs": 0}
     required = [course / "index.html", course / "course-info.json", course / "api/status.json", platform_path, catalog_path]
     for path in required:
         if not path.is_file():
@@ -183,6 +192,8 @@ def main() -> int:
     else:
         for page in sorted(course.rglob("*.html")):
             errors.extend(page_errors(page, repo, course))
+        interactive_errors, interactive_stats = validate_interactives(repo, course)
+        errors.extend(interactive_errors)
 
     plan = load_json(Path(args.plan).expanduser().resolve()) if args.plan else None
     if plan and course.is_dir():
@@ -229,6 +240,7 @@ def main() -> int:
             "htmlPages": len(list(course.rglob("*.html"))) if course.is_dir() else 0,
             "lecturePages": len(list((course / "lessons").glob("*.html"))) if course.is_dir() else 0,
             "workItemPages": len(list((course / "lessons" / "assignments").glob("*.html"))) if course.is_dir() else 0,
+            **interactive_stats,
         },
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))

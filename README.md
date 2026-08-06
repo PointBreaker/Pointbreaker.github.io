@@ -31,7 +31,9 @@ cp -R skills/generate-course-site-pr "${CODEX_HOME:-$HOME/.codex}/skills/"
 Use $generate-course-site-pr to turn this folder into a new CourseStack course and open a PR.
 ```
 
-Skill 会盘点资源、建立课程计划、生成前端与内容、检查公式和页面、创建分支并打开 PR。它不会访问 `drive.google.com` 或 `docs.google.com`，请提前下载需要的官方资料。
+Skill 会盘点资源、建立课程计划、生成前端与内容、识别适合可视化的数学关系或算法过程、生成静态 SVG 或声明式交互组件、检查公式和页面、创建分支并打开 PR。它不会访问 `drive.google.com` 或 `docs.google.com`，请提前下载需要的官方资料。
+
+CourseStack Interactive v1 支持参数化函数图、矩阵热力图和分步推导。所有交互使用仓库内的共享运行时，不依赖外部 CDN，并强制保留静态降级图。
 
 所有讲义、作业与 Lab 页面会通过共享阅读层自动接入 GitHub Discussions 评论。点击顶部“讨论”会打开右侧抽屉；桌面端会为抽屉让出空间，不遮挡正文。评论由 Giscus 承载，页面路径作为独立话题标识；新课程无需复制评论代码。
 
@@ -57,6 +59,8 @@ site-comments.json              GitHub Discussions / Giscus 评论配置
 courses/<course>/course-info.json  课程元数据
 courses/<course>/api/status.json   讲义与实践状态
 courses/<course>/lessons/          课程正文
+courses/<course>/figures/          静态图与交互降级图
+courses/<course>/interactives/     声明式交互 JSON
 skills/generate-course-site-pr  可分发课程生成 Skill
 ```
 

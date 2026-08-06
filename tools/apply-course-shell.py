@@ -8,10 +8,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STYLE_PATH = "assets/course/lesson.css"
-STYLE_VERSION = "20260806d"
+STYLE_VERSION = "20260806e"
 STYLE_MARKER = f"{STYLE_PATH}?v={STYLE_VERSION}"
+INTERACTIVE_STYLE_PATH = "assets/course/interactive.css"
+INTERACTIVE_STYLE_MARKER = f"{INTERACTIVE_STYLE_PATH}?v={STYLE_VERSION}"
 SCRIPT_PATH = "assets/course/lesson-ui.js"
 SCRIPT_MARKER = f"{SCRIPT_PATH}?v={STYLE_VERSION}"
+INTERACTIVE_SCRIPT_PATH = "assets/course/interactive.js"
+INTERACTIVE_SCRIPT_MARKER = f"{INTERACTIVE_SCRIPT_PATH}?v={STYLE_VERSION}"
 
 
 def relative_asset_prefix(path: Path) -> str:
@@ -24,7 +28,9 @@ def update_page(path: Path) -> bool:
     text = original
     prefix = relative_asset_prefix(path)
     stylesheet = f'  <link rel="stylesheet" href="{prefix}{STYLE_MARKER}">\n'
+    interactive_stylesheet = f'  <link rel="stylesheet" href="{prefix}{INTERACTIVE_STYLE_MARKER}">\n'
     script = f'  <script defer src="{prefix}{SCRIPT_MARKER}"></script>\n'
+    interactive_script = f'  <script defer src="{prefix}{INTERACTIVE_SCRIPT_MARKER}"></script>\n'
     if STYLE_PATH in text:
         text = re.sub(
             rf"(?P<lead>href=[\"'])(?:\.\./)*{re.escape(STYLE_PATH)}(?:\?v=[^\"']*)?",
@@ -33,6 +39,22 @@ def update_page(path: Path) -> bool:
         )
     else:
         text = text.replace("</head>", f"{stylesheet}</head>", 1)
+    if INTERACTIVE_STYLE_PATH in text:
+        text = re.sub(
+            rf"(?P<lead>href=[\"'])(?:\.\./)*{re.escape(INTERACTIVE_STYLE_PATH)}(?:\?v=[^\"']*)?",
+            rf"\g<lead>{prefix}{INTERACTIVE_STYLE_MARKER}",
+            text,
+        )
+    else:
+        text = text.replace("</head>", f"{interactive_stylesheet}</head>", 1)
+    if INTERACTIVE_SCRIPT_PATH in text:
+        text = re.sub(
+            rf"(?P<lead>src=[\"'])(?:\.\./)*{re.escape(INTERACTIVE_SCRIPT_PATH)}(?:\?v=[^\"']*)?",
+            rf"\g<lead>{prefix}{INTERACTIVE_SCRIPT_MARKER}",
+            text,
+        )
+    else:
+        text = text.replace("</body>", f"{interactive_script}</body>", 1)
     if SCRIPT_PATH in text:
         text = re.sub(
             rf"(?P<lead>src=[\"'])(?:\.\./)*{re.escape(SCRIPT_PATH)}(?:\?v=[^\"']*)?",
