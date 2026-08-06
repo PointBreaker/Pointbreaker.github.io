@@ -86,6 +86,11 @@ def check_shared_table_shell(root: Path) -> list[str]:
     findings: list[str] = []
     if ".pb-table-scroll" not in css or "overflow-x: auto" not in css:
         findings.append("shared table scroll container is missing from lesson.css")
+    compact_css = "".join(css.split())
+    if ".pb-table-scroll{box-sizing:border-box;width:fit-content;max-width:100%" not in compact_css:
+        findings.append("table scroll container must shrink to its table instead of leaving a trailing blank area")
+    if "min-width:100%" in compact_css.partition(".pb-table-scrolltable{")[2].partition("}")[0]:
+        findings.append("shared table styles must not stretch narrow tables to the full lesson width")
     if "pb-table-scroll" not in javascript or "appendChild(table)" not in javascript:
         findings.append("lesson-ui.js does not wrap tables in the shared scroll container")
     return findings
