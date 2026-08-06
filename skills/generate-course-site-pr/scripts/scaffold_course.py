@@ -14,6 +14,7 @@ import sys
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 PLATFORM_VERSION = 2
 TODO_MARKER = "COURSE_CONTENT_TODO"
+LESSON_STYLE_VERSION = "20260806b"
 
 
 def load_json(path: Path) -> dict:
@@ -133,7 +134,7 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
   <link rel="stylesheet" href="{root_prefix}assets/course/base.css">
 {guide_css}  <link rel="stylesheet" href="{root_prefix}assets/vendor/prism.css">
   <link rel="stylesheet" href="{root_prefix}assets/vendor/katex.min.css">
-  <link rel="stylesheet" href="{root_prefix}assets/course/lesson.css">
+  <link rel="stylesheet" href="{root_prefix}assets/course/lesson.css?v={LESSON_STYLE_VERSION}">
   <script defer src="{root_prefix}assets/vendor/katex.min.js"></script>
   <script defer src="{root_prefix}assets/vendor/katex-auto-render.min.js"></script>
   <script defer src="{root_prefix}assets/course/math-render.js"></script>

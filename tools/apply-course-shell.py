@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Attach CourseStack's shared reading shell to every course content page."""
 
+import re
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 COURSES = ("cs336", "cs267", "6.1810", "cs152")
-STYLE_MARKER = "assets/course/lesson.css"
+STYLE_PATH = "assets/course/lesson.css"
+STYLE_VERSION = "20260806b"
+STYLE_MARKER = f"{STYLE_PATH}?v={STYLE_VERSION}"
 SCRIPT_MARKER = "assets/course/lesson-ui.js"
 
 
@@ -22,7 +25,13 @@ def update_page(path: Path) -> bool:
     prefix = relative_asset_prefix(path)
     stylesheet = f'  <link rel="stylesheet" href="{prefix}{STYLE_MARKER}">\n'
     script = f'  <script defer src="{prefix}{SCRIPT_MARKER}"></script>\n'
-    if STYLE_MARKER not in text:
+    if STYLE_PATH in text:
+        text = re.sub(
+            rf"({re.escape(STYLE_PATH)})(?:\?v=[^\"']*)?",
+            STYLE_MARKER,
+            text,
+        )
+    else:
         text = text.replace("</head>", f"{stylesheet}</head>", 1)
     if SCRIPT_MARKER not in text:
         text = text.replace("</body>", f"{script}</body>", 1)

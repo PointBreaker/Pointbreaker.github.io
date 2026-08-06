@@ -17,6 +17,7 @@ DRIVE_RE = re.compile(r"https?://(?:drive|docs)\.google\.com", re.IGNORECASE)
 DOLLAR_MATH_RE = re.compile(r"(?<!\\)\$[^$\n]{1,300}(?<!\\)\$")
 PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
 PLATFORM_VERSION = 2
+LESSON_STYLE_VERSION = "20260806b"
 
 
 class PageParser(HTMLParser):
@@ -113,6 +114,8 @@ def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
     if page.name != "index.html":
         if "assets/course/lesson.css" not in source or "assets/course/lesson-ui.js" not in source:
             errors.append(f"{label}: missing shared CourseStack reading shell")
+        if f"assets/course/lesson.css?v={LESSON_STYLE_VERSION}" not in source:
+            errors.append(f"{label}: shared lesson stylesheet is missing cache version {LESSON_STYLE_VERSION}")
         for quiz in parser.quizzes:
             if not quiz["answer"]:
                 errors.append(f"{label}: quiz {quiz['id']} missing data-answer")
