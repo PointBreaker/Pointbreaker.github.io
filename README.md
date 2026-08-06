@@ -19,6 +19,8 @@ cp -R skills/generate-course-site-pr "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 也可以下载发布页中的 ZIP，解压后把其中的 `generate-course-site-pr` 文件夹复制到 Codex skills 目录。
 
+安装一次即可。Skill 每次启动课程生成流程时，都会先从本仓库 `main` 分支检查最新版；更新包会经过文件大小与 SHA-256 校验，完整下载成功后才替换本地版本。离线时会继续使用已安装版本，本地手工修改过的文件不会被自动覆盖。若要关闭自动更新，可设置 `COURSESTACK_SKILL_AUTO_UPDATE=0`。
+
 ### 使用
 
 1. 把官方讲义、PDF、PPT/PPTX、作业、Lab、代码和笔记放在同一资源文件夹。

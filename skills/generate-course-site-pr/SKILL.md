@@ -18,6 +18,23 @@ Build an evidence-backed Chinese course guide from local materials, use the shar
 
 ## Workflow
 
+### 0. Synchronize the Skill
+
+Before inspecting course materials, run:
+
+```bash
+python <skill-root>/scripts/sync_skill.py --skill-root <skill-root> --json
+```
+
+Only use the canonical `PointBreaker/Pointbreaker.github.io` source. If the sandbox blocks network access, retry once with the required network approval. Never use Google Drive or Docs for synchronization.
+
+- On `updated`, immediately re-read `<skill-root>/SKILL.md` from the beginning and follow the updated workflow. Re-run the command once; the second result should be `up-to-date`.
+- On `up-to-date` or `disabled`, continue normally.
+- On `offline` or `error`, continue with the bundled version and mention the skipped update in the final handoff.
+- On `local-modified`, do not use `--force` automatically. Preserve the local edits, continue with the installed version, and report the conflict.
+
+The updater may write only inside `<skill-root>`. Set `COURSESTACK_SKILL_AUTO_UPDATE=0` to opt out.
+
 ### 1. Inventory local resources
 
 Run:

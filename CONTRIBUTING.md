@@ -25,6 +25,14 @@
 
 ## 验证
 
+修改可分发 Skill 时，先递增 `skills/generate-course-site-pr/VERSION`，再刷新自动更新清单：
+
+```bash
+python3 skills/generate-course-site-pr/scripts/build_update_manifest.py
+```
+
+提交前确认 `update-manifest.json` 与 Skill 文件处于同一提交；已安装的旧版 Skill 只会接受通过清单哈希校验的新版本。
+
 提交前至少完成：
 
 ```bash
