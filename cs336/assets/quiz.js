@@ -15,6 +15,13 @@ document.querySelectorAll(".quiz, [data-quiz]").forEach((quiz) => {
       buttons.forEach((candidate) => candidate.setAttribute("aria-pressed", "false"));
       button.setAttribute("aria-pressed", "true");
 
+      if (!answer && !button.dataset.answer) {
+        feedback.dataset.state = "neutral";
+        feedback.textContent = "参考解析：" + (quiz.dataset.correct || "请结合上文重新判断。答案仍待课程校订。" );
+        window.renderCourseMath?.(feedback);
+        return;
+      }
+
       const isCorrect = button.dataset.answer
         ? button.dataset.answer === "correct"
         : button.dataset.choice === answer;
