@@ -15,7 +15,7 @@ SLUG_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
 TODO_MARKER = "COURSE_CONTENT_TODO"
-SHARED_ASSET_VERSION = "20260806c"
+SHARED_ASSET_VERSION = "20260806d"
 
 
 def load_json(path: Path) -> dict:

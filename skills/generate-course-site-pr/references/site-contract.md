@@ -12,7 +12,7 @@
 
 Do not copy an existing course directory or duplicate vendor assets. New courses use the shared platform files.
 
-The shared lesson shell also mounts the repository's Giscus discussion block from `site-comments.json`. Course generators must not embed a second comment provider or create per-course comment configuration.
+The shared lesson shell also mounts the repository's Giscus discussion drawer from `site-comments.json`. On desktop the drawer reserves a right-side reading column instead of covering lesson content; on narrow screens it becomes a dedicated full-screen panel. Course generators must not embed a second comment provider or create per-course comment configuration.
 
 ## Course plan schema
 

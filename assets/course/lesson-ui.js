@@ -28,7 +28,7 @@
         </div>
         <nav class="pb-coursebar-actions" aria-label="阅读导航">
           <a href="${courseBase}">课程目录</a>
-          <a href="#pb-comments">讨论</a>
+          <button class="pb-comments-toggle" type="button" aria-controls="pb-comments" aria-expanded="false">讨论</button>
           <a href="#pb-page-end">跳到页尾</a>
         </nav>
       </div>
@@ -108,24 +108,54 @@
   endMarker.setAttribute('aria-hidden', 'true');
   page.appendChild(endMarker);
 
-  const commentsSection = document.createElement('section');
-  commentsSection.className = 'pb-comments';
-  commentsSection.id = 'pb-comments';
-  commentsSection.innerHTML = `
-    <div class="pb-comments-heading">
+  const commentsDrawer = document.createElement('aside');
+  commentsDrawer.className = 'pb-comments-drawer';
+  commentsDrawer.id = 'pb-comments';
+  commentsDrawer.setAttribute('aria-label', '课程讨论');
+  commentsDrawer.setAttribute('aria-hidden', 'true');
+  commentsDrawer.innerHTML = `
+    <div class="pb-comments-drawer-header">
       <div>
         <p class="pb-comments-kicker">Course discussion</p>
         <h2>继续讨论这一课</h2>
       </div>
-      <p>使用 GitHub 账号参与讨论。每个讲义与实践页面都有独立话题。</p>
+      <button class="pb-comments-close" type="button" aria-label="关闭讨论区">关闭</button>
     </div>
-    <div class="pb-comments-status" role="status">正在连接 GitHub Discussions…</div>
-    <div class="pb-comments-host"></div>`;
-  page.insertBefore(commentsSection, endMarker);
+    <div class="pb-comments-drawer-body">
+      <p class="pb-comments-intro">使用 GitHub 账号参与讨论。每个讲义与实践页面都有独立话题。</p>
+      <div class="pb-comments-status" role="status">正在连接 GitHub Discussions…</div>
+      <div class="pb-comments-host"></div>
+    </div>`;
+  document.body.appendChild(commentsDrawer);
+
+  const commentsToggle = document.querySelector('.pb-comments-toggle');
+  const commentsClose = commentsDrawer.querySelector('.pb-comments-close');
+  let commentsMounted = false;
+  const setCommentsOpen = (open, restoreFocus = false) => {
+    document.body.classList.toggle('pb-comments-open', open);
+    commentsToggle.setAttribute('aria-expanded', String(open));
+    commentsDrawer.setAttribute('aria-hidden', String(!open));
+    if (open) {
+      mountComments();
+      requestAnimationFrame(() => commentsClose.focus({ preventScroll: true }));
+    } else if (restoreFocus) {
+      commentsToggle.focus({ preventScroll: true });
+    }
+  };
+  commentsToggle.addEventListener('click', () => setCommentsOpen(!document.body.classList.contains('pb-comments-open')));
+  commentsClose.addEventListener('click', () => setCommentsOpen(false, true));
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.body.classList.contains('pb-comments-open')) setCommentsOpen(false, true);
+  });
+  addEventListener('hashchange', () => {
+    if (location.hash === '#pb-comments') setCommentsOpen(true);
+  });
 
   const mountComments = async () => {
-    const statusNode = commentsSection.querySelector('.pb-comments-status');
-    const host = commentsSection.querySelector('.pb-comments-host');
+    if (commentsMounted) return;
+    commentsMounted = true;
+    const statusNode = commentsDrawer.querySelector('.pb-comments-status');
+    const host = commentsDrawer.querySelector('.pb-comments-host');
     const showUnavailable = () => {
       host.hidden = true;
       statusNode.hidden = false;
@@ -136,7 +166,8 @@
       if (!response.ok) throw new Error(`comments config ${response.status}`);
       const config = await response.json();
       if (!config.enabled || config.provider !== 'giscus') {
-        commentsSection.remove();
+        commentsToggle.remove();
+        commentsDrawer.remove();
         return;
       }
       if (config.installed === false) {
@@ -153,7 +184,9 @@
       script.crossOrigin = 'anonymous';
       addEventListener('message', (event) => {
         if (event.origin !== 'https://giscus.app' || !event.data?.giscus) return;
-        if (event.data.giscus.error) showUnavailable();
+        const error = event.data.giscus.error;
+        if (error && !error.includes('Discussion not found')) showUnavailable();
+        if (error?.includes('Discussion not found')) statusNode.hidden = true;
         if (event.data.giscus.discussion) statusNode.hidden = true;
       });
       const attributes = {
@@ -178,7 +211,7 @@
       statusNode.innerHTML = '评论区配置尚未完成。请前往 <a href="https://github.com/PointBreaker/Pointbreaker.github.io/discussions">GitHub Discussions</a> 查看现有话题。';
     }
   };
-  mountComments();
+  if (location.hash === '#pb-comments') setCommentsOpen(true);
 
   Promise.all([
     fetch(`${courseBase}course-info.json`, { cache: 'no-store' }).then((response) => response.json()),
@@ -208,7 +241,7 @@
     pager.innerHTML += next
       ? `<a class="pb-pager-link" href="${courseBase}${next.file}"><span class="pb-pager-label">下一篇</span><span class="pb-pager-title">${titleFor(next)}</span></a>`
       : `<a class="pb-pager-link" href="${courseBase}"><span class="pb-pager-label">完成本组内容</span><span class="pb-pager-title">返回课程 Dashboard</span></a>`;
-    page.insertBefore(pager, commentsSection);
+    page.insertBefore(pager, endMarker);
   }).catch(() => {
     document.querySelector('#pb-course-name').textContent = courseId.toUpperCase();
   });

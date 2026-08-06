@@ -97,7 +97,7 @@ python /path/to/repo/tools/check-course-layout.py
 git diff --check
 ```
 
-Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at least two lectures, every page type, representative math and code, quiz feedback, mobile width, links, and browser console. Treat placeholders, math errors, clipped layouts, missing shared assets, and broken navigation as blockers.
+Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at least two lectures, every page type, representative math and code, quiz feedback, the GitHub Discussion drawer, mobile width, links, and browser console. On desktop, verify that opening Discussion reserves space instead of covering the lesson. Treat placeholders, math errors, clipped layouts, missing shared assets, broken navigation, and overlapping discussion UI as blockers.
 
 ### 8. Open the PR
 

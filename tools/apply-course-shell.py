@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STYLE_PATH = "assets/course/lesson.css"
-STYLE_VERSION = "20260806c"
+STYLE_VERSION = "20260806d"
 STYLE_MARKER = f"{STYLE_PATH}?v={STYLE_VERSION}"
 SCRIPT_PATH = "assets/course/lesson-ui.js"
 SCRIPT_MARKER = f"{SCRIPT_PATH}?v={STYLE_VERSION}"

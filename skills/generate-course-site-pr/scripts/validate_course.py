@@ -18,7 +18,7 @@ DOLLAR_MATH_RE = re.compile(r"(?<!\\)\$[^$\n]{1,300}(?<!\\)\$")
 PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
-SHARED_ASSET_VERSION = "20260806c"
+SHARED_ASSET_VERSION = "20260806d"
 
 
 class PageParser(HTMLParser):

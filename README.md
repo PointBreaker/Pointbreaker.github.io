@@ -33,9 +33,9 @@ Use $generate-course-site-pr to turn this folder into a new CourseStack course a
 
 Skill 会盘点资源、建立课程计划、生成前端与内容、检查公式和页面、创建分支并打开 PR。它不会访问 `drive.google.com` 或 `docs.google.com`，请提前下载需要的官方资料。
 
-所有讲义、作业与 Lab 页面会通过共享阅读层自动接入 GitHub Discussions 评论。评论由 Giscus 承载，页面路径作为独立话题标识；新课程无需复制评论代码。
+所有讲义、作业与 Lab 页面会通过共享阅读层自动接入 GitHub Discussions 评论。点击顶部“讨论”会打开右侧抽屉；桌面端会为抽屉让出空间，不遮挡正文。评论由 Giscus 承载，页面路径作为独立话题标识；新课程无需复制评论代码。
 
-仓库管理员首次启用评论时，需要安装 [Giscus GitHub App](https://github.com/apps/giscus/installations/new) 并授权本仓库，然后将 `site-comments.json` 中的 `installed` 改为 `true`；Discussions 与页面配置已经纳入平台。
+本仓库已经安装并启用 Giscus。其他部署首次启用评论时，需要安装 [Giscus GitHub App](https://github.com/apps/giscus/installations/new)、授权目标仓库，并将 `site-comments.json` 中的 `installed` 改为 `true`。
 
 完整说明见 [课程生成指南](docs/course-generator.html)。
 
