@@ -132,65 +132,41 @@
 
   function renderPaths() {
     const lectures = status.lectures || [];
-    const courseUnits = info.units || [];
+    const assignments = info.assignments || status.assignments || [];
     const assigned = new Set();
-    let html = '';
-
-    // Render hierarchical units if available
-    if (courseUnits.length > 0) {
-      courseUnits.forEach((unit, unitIndex) => {
-        const unitLectures = (unit.lectures || []).map((lec) => {
-          const found = lectures.find((l) => String(l.number) === String(lec.number));
-          return found || { ...lec, status: 'completed', lessonFile: `lessons/${String(lec.number).padStart(4, '0')}-${lec.slug}.html` };
-        });
-        unitLectures.forEach((l) => assigned.add(String(l.number)));
-
-        const workItems = (unit.workItems || []).map((item) => {
-          const kind = item.type === 'exam' ? 'Exam' : 'HW';
-          const icon = item.type === 'exam' ? '📝' : '📚';
-          const href = item.contentFile ? `href="${escapeHtml(normalizePath(item.contentFile))}"` : '';
-          return `<a class="work-card mini" data-type="work" ${href}>
-            <span class="work-kind">${icon} ${kind} ${item.number}</span>
-            <span class="work-title-mini">${escapeHtml(item.titleZh || item.title)}</span>
-          </a>`;
-        }).join('');
-
-        html += `<section class="path-unit" data-unit data-search="${escapeHtml([unit.title, unit.titleZh, ...unitLectures.map((l) => l.title)].join(' ').toLowerCase())}">
-          <div class="unit-header">
-            <h3>Unit ${unit.number}: ${escapeHtml(unit.titleZh || unit.title)}</h3>
-          </div>
-          <div class="lesson-list">${unitLectures.map(lessonMarkup).join('')}</div>
-          ${workItems ? `<div class="work-list">${workItems}</div>` : ''}
-        </section>`;
-      });
-    } else {
-      // Fallback to flat assignments
-      const assignments = info.assignments || status.assignments || [];
-      assignments.forEach((item, index) => {
-        const dependencies = (item.dependsOn || []).map((number) => lectures.find((l) => String(l.number) === String(number))).filter(Boolean);
-        dependencies.forEach((l) => assigned.add(String(l.number)));
-        const kind = item.kind || 'Assignment';
-        const href = item.assGuideFile ? `href="${escapeHtml(normalizePath(item.assGuideFile))}"` : '';
-        html += `<section class="path-unit" data-unit>
-          <a class="work-card" data-type="work" ${href}>
-            <p class="unit-number">Unit ${String(index + 1).padStart(2, '0')}</p>
-            <h3>${escapeHtml(item.title)}</h3>
-          </a>
-          <div class="lesson-list">${dependencies.map(lessonMarkup).join('')}</div>
-        </section>`;
-      });
-    }
-
-    // Remaining lectures
-    const remaining = lectures.filter((l) => !assigned.has(String(l.number)));
-    if (remaining.length) {
-      html += `<section class="path-unit" data-unit>
-        <div class="unit-header"><h3>补充主题</h3></div>
-        <div class="lesson-list">${remaining.map(lessonMarkup).join('')}</div>
+    const units = assignments.map((item, index) => {
+      const dependencies = (item.dependsOn || []).map((number) => lectures.find((lecture) => String(lecture.number) === String(number))).filter(Boolean);
+      dependencies.forEach((lecture) => assigned.add(String(lecture.number)));
+      const kind = item.kind || item.type || info.workItemLabel || status.workItemLabel || 'Assignment';
+      const due = item.due ? `截止 ${item.due}` : '';
+      const action = item.assGuideFile || item.contentFile ? '打开' : '导读制作中';
+      const file = item.contentFile || item.assGuideFile;
+      const href = file ? `href="${escapeHtml(normalizePath(file))}"` : '';
+      return `<section class="path-unit" data-unit data-search="${escapeHtml([kind, item.number, item.title, item.titleZh, item.description, ...dependencies.map((lecture) => lecture.title)].join(' ').toLowerCase())}">
+        <a class="work-card" data-type="work" ${href}>
+          <p class="unit-number">Unit ${String(index + 1).padStart(2, '0')} · ${escapeHtml(kind)} ${escapeHtml(item.number)}</p>
+          <h3>${escapeHtml(item.titleZh || item.title)}</h3>
+          <p class="work-description">${escapeHtml(item.description || '')}</p>
+          <div class="work-meta">${item.released ? `<span>发布 ${escapeHtml(item.released)}</span>` : ''}${due ? `<span>${escapeHtml(due)}</span>` : ''}</div>
+          <span class="work-action">${action}</span>
+        </a>
+        <div class="lesson-list">${dependencies.map(lessonMarkup).join('') || '<div class="empty-state">这项实践暂未登记前置讲义。</div>'}</div>
       </section>`;
+    });
+
+    const remaining = lectures.filter((lecture) => !assigned.has(String(lecture.number)));
+    if (remaining.length) {
+      units.push(`<section class="path-unit" data-unit data-search="${escapeHtml(remaining.map((lecture) => lecture.title).join(' ').toLowerCase())}">
+        <div class="work-card" data-type="work">
+          <p class="unit-number">Further study</p>
+          <h3>补充与进阶主题</h3>
+          <p class="work-description">不直接对应当前作业或实验，但构成课程知识地图的重要部分。</p>
+        </div>
+        <div class="lesson-list">${remaining.map(lessonMarkup).join('')}</div>
+      </section>`);
     }
 
-    pathList.innerHTML = html || '<div class="empty-state">课程内容正在整理中。</div>';
+    pathList.innerHTML = units.join('') || '<div class="empty-state">课程内容正在整理中。</div>';
     applyFilters();
   }
 
