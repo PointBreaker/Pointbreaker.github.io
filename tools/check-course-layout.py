@@ -85,6 +85,31 @@ def main() -> int:
         course_dir = root / COURSES_ROOT / course_id
         if not course_dir.is_dir():
             findings.append(f"{course_id}: missing directory {course_dir.relative_to(root)}")
+        else:
+            course_info_path = course_dir / "course-info.json"
+            if course_info_path.is_file():
+                course_info = json.loads(course_info_path.read_text(encoding="utf-8"))
+                assignments_dir = course_dir / "lessons" / "assignments"
+                for assignment in course_info.get("assignments", []):
+                    guide_file = assignment.get("assGuideFile") or assignment.get("contentFile")
+                    number = assignment.get("number")
+                    if guide_file:
+                        if not (course_dir / str(guide_file)).is_file():
+                            findings.append(
+                                f"{course_id}: assignment {number} guide does not exist: {guide_file}"
+                            )
+                        continue
+                    try:
+                        prefix = f"ass{int(number):02d}-"
+                    except (TypeError, ValueError):
+                        continue
+                    local_guides = sorted(assignments_dir.glob(f"{prefix}*.html"))
+                    if local_guides:
+                        candidates = ", ".join(path.name for path in local_guides)
+                        findings.append(
+                            f"{course_id}: assignment {number} has local guide {candidates} "
+                            "but no assGuideFile/contentFile"
+                        )
         if (root / course_id).exists():
             findings.append(f"{course_id}: legacy root-level course directory still exists")
 
