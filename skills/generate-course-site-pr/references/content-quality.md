@@ -55,6 +55,17 @@ Use concise Chinese explanations while retaining important English terms in pare
 - Check every symbol definition, tensor shape, unit, asymptotic condition, and numerical substitution.
 - Keep code executable in spirit: use real APIs, specify version-sensitive behavior, and separate pseudocode from runnable examples.
 
+## Assignment localization and offline completeness
+
+- Translate all student-facing titles, instructions, statements, subparts, hints, checks, and source-gap explanations into natural Simplified Chinese. Keep an English technical term in parentheses only when it improves precision.
+- Require a learner to be able to answer every displayed problem without opening an external URL, textbook, PDF, slide deck, or image. Include all numerical data, formulas allowed by the problem, matrix entries, domains, intervals, units, graph coordinates, and diagram relationships in the page.
+- Classify each displayed problem as one of: `官方题面翻译`, `依据本地资料重建`, or `站内等价练习`. Show the classification and a `可离线作答` marker in the UI.
+- Use `依据本地资料重建` only when downloaded handouts, local solution text, or other local first-party evidence supports the full conditions. Do not copy final answers into the reconstructed statement.
+- Use `站内等价练习` when the official handout contains only a textbook/problem number and local evidence cannot recover the complete wording. Create a self-contained exercise that tests the same source-backed topic and expected technique, and state clearly that it is not the official original.
+- Never leave directions such as “see the textbook,” “refer to the figure,” or “open the source PDF.” Replace missing figures with sufficient coordinates, matrices, labeled relationships, or a locally owned redrawn diagram.
+- Preserve an existing human-written guide. Generated problem extraction must live between dedicated markers and may replace only that region. A work-item page must contain both a guide and a complete problem outline.
+- Do not expose solution keys. Hints should identify an entry point, and checks should validate dimensions, units, signs, boundary behavior, or substitution without revealing the final result.
+
 ## Quiz contract
 
 Use container answers:

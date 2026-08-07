@@ -7,8 +7,8 @@ Use Claude Code only as a bounded extraction worker for large local resource set
 Before every extraction run:
 
 1. Confirm `claude` exists and `claude --help` exposes `--model` and JSON output.
-2. Invoke the worker with the exact flag `--model longcat-2.0`; do not rely on a default model, alias, resumed session, or fallback model.
-3. Use a tiny JSON probe first and inspect its machine-readable metadata or debug trace for the actual resolved model identifier. Continue only when it is exactly `longcat-2.0`.
+2. Invoke the worker with an explicit provider-supported LongCat label; do not rely on a default model, generic alias, resumed session, or fallback model. Use `--model LongCat-2.0[1M]` for whole-course localization or another task that benefits materially from the larger context.
+3. Use a tiny JSON probe first and inspect its machine-readable metadata or debug trace. Continue only when `provider` is `firstParty`, the canonical model is `longcat-2.0` or `longcat-2.0[1m]`, and the reported context window matches the requested mode. The provider label can be case-sensitive; machine metadata, not spelling alone, is authoritative.
 4. If the CLI rejects the identifier, silently substitutes another model, omits verifiable model metadata, or cannot authenticate, do not run Claude Code. Continue locally or report the extraction limitation.
 
 Never claim that the model was verified from self-reported prose. Verification must come from the CLI invocation and its metadata.
@@ -21,6 +21,8 @@ Delegate tasks such as:
 - producing a source-indexed candidate schedule;
 - locating repeated or conflicting passages across downloaded handouts;
 - returning structured candidate mappings between lecture, homework, lab, and exam resources.
+- translating large batches of extracted work items into consistent Simplified Chinese;
+- proposing source-labeled, self-contained onsite equivalent exercises when an official handout contains only a textbook reference.
 
 Do not delegate:
 
@@ -29,6 +31,7 @@ Do not delegate:
 - defining `dependsOn`, stage boundaries, or information architecture without primary-agent review;
 - editing the website, running git commands, opening a PR, browsing the web, or accessing Google Drive/Docs;
 - final math, citation, link, accessibility, or browser QA.
+- accepting a reconstructed or equivalent exercise as publishable without primary-agent source review.
 
 ## Invocation contract
 

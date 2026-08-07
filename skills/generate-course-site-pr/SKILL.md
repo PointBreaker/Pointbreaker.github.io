@@ -79,6 +79,9 @@ Replace every `COURSE_CONTENT_TODO` with source-grounded content.
 
 - Organize each lecture around conceptual dependencies, derivations, worked examples, implementation notes, misconceptions, recap, quizzes, and primary references.
 - Organize each homework/lab/project guide around objectives, prerequisites, task structure, setup, deliverables, validation, and common failure modes.
+- Localize every student-facing work item into natural Simplified Chinese. Preserve the original identifier for traceability, but never leave the learner dependent on an English-only statement.
+- Make every homework and exam self-contained: include all functions, matrices, intervals, units, constraints, subparts, and figure data needed to answer it without opening a textbook, PDF, or external link. When the local source only gives a textbook reference, either reconstruct the statement from local evidence or add a clearly labeled source-aligned onsite equivalent exercise; never present an adaptation as the official original.
+- Preserve the existing guide when refreshing extracted problem lists. Treat the guide and the complete problem outline as separate regions; automated reruns may replace only the generated outline markers.
 - Use `\(...\)` and `\[...\]` for math. Never split identifiers with math delimiters or put LaTeX inside code.
 - Add 2–5 meaningful quizzes with a valid container `data-answer`.
 - Create static SVG diagrams, function plots, matrix heatmaps, or steppers only when they materially improve understanding. Follow [references/interactive-content.md](references/interactive-content.md), store course-owned files under `figures/` and `interactives/`, and require a static fallback for every interactive.
@@ -98,6 +101,7 @@ python <skill-root>/scripts/validate_course.py \
   --inventory "$PWD/.course-build/inventory.json" \
   --strict-resources
 python <skill-root>/scripts/validate_interactive.py --repo /path/to/repo --slug <slug>
+python <skill-root>/scripts/validate_assignment_localization.py --repo /path/to/repo --slug <slug>
 python /path/to/repo/tools/check-course-layout.py
 git diff --check
 ```
