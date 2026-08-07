@@ -108,7 +108,7 @@
 
   function hydrateStats() {
     const lectures = status.lectures || [];
-    const workItems = status.assignments || [];
+    const workItems = info.assignments || status.assignments || [];
     const completed = lectures.filter((lecture) => lecture.status === 'completed').length;
     const percent = lectures.length ? Math.round(completed / lectures.length * 100) : 0;
     setText('#metric-lectures', lectures.length);
@@ -132,7 +132,7 @@
 
   function renderPaths() {
     const lectures = status.lectures || [];
-    const assignments = status.assignments || [];
+    const assignments = info.assignments || status.assignments || [];
     const assigned = new Set();
     const units = assignments.map((item, index) => {
       const dependencies = (item.dependsOn || []).map((number) => lectures.find((lecture) => String(lecture.number) === String(number))).filter(Boolean);
