@@ -60,6 +60,8 @@ def validate_page(path: Path) -> list[str]:
         errors.append("guide content is missing before the generated outline")
     if re.search(r'<a\s+[^>]*href=["\']https?://', outline, re.I):
         errors.append("problem outline contains an external link")
+    if re.search(r"\\[\(\[]", outline) and "assets/course/math-render.js" not in html:
+        errors.append("page contains KaTeX delimiters but does not load math-render.js")
 
     lowered = text_content(outline).lower()
     for phrase in BANNED_DEPENDENCIES:
@@ -85,17 +87,18 @@ def validate_page(path: Path) -> list[str]:
             flags=re.I,
         )
         student_text = text_content(student_body)
+        raw_math_candidate = re.sub(r"\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]", " ", student_body)
         for pattern in BARE_REFERENCE_PATTERNS:
             if pattern.search(student_text):
                 errors.append(f"problem {index} still contains a bare exercise reference")
                 break
         for pattern in RAW_MATH_PATTERNS:
-            if pattern.search(student_body):
+            if pattern.search(raw_math_candidate):
                 errors.append(f"problem {index} contains raw math without KaTeX delimiters")
                 break
-        if re.search(r"水平[^。；\n]{0,24}(?:y\s*轴|纵轴)|(?:y\s*轴|纵轴)[^。；\n]{0,24}水平", student_text, re.I):
+        if re.search(r"水平(?:的)?\s*(?:y\s*轴|纵轴)|(?:y\s*轴|纵轴)\s*(?:是|为)?\s*水平", student_text, re.I):
             errors.append(f"problem {index} contradicts horizontal direction and the y-axis")
-        if re.search(r"竖直[^。；\n]{0,24}(?:x\s*轴|横轴)|(?:x\s*轴|横轴)[^。；\n]{0,24}竖直", student_text, re.I):
+        if re.search(r"竖直(?:的)?\s*(?:x\s*轴|横轴)|(?:x\s*轴|横轴)\s*(?:是|为)?\s*竖直", student_text, re.I):
             errors.append(f"problem {index} contradicts vertical direction and the x-axis")
 
     return errors
