@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 3 课：矩阵与逆矩阵 Matrices and Inverse Matrices — MIT 18.02</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 18.02 · 第 3 课</p>
+    <h1>矩阵与逆矩阵 (Matrices; Inverse Matrices)</h1>
+    <p class="lede">把线性变换写成矩阵乘法，用逆矩阵"反向操作"，并掌握用余子式 (cofactor) 方法计算逆矩阵。</p>
+
+    <div class="meta">
+      <span>授课：Denis Auroux</span>
+      <span>日期：2007-09-11</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="objectives">学习目标</h2>
+    <ul>
+      <li>把线性变换写成矩阵形式 \(AX=U\)。</li>
+      <li>理解矩阵乘法的定义：每个元 = 左边矩阵的行与右边矩阵的列的点积。</li>
+      <li>理解矩阵乘法对应线性变换的复合，以及它<strong>不可交换</strong>。</li>
+      <li>掌握单位矩阵与逆矩阵的定义 \(AA^{-1}=A^{-1}A=I\)。</li>
+      <li>用余子式法求 \(A^{-1}=\frac{1}{\det A}\operatorname{adj}(A)\)。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="linear-transformations">线性变换与矩阵</h2>
+    <p>许多物理和几何问题中，新坐标 \((u_1,u_2,u_3)\) 由旧坐标 \((x_1,x_2,x_3)\) 经<strong>线性变换 (linear transformation)</strong> 得到。课堂上的例子是：</p>
+    \[\begin{cases}
+    u_1 = 2x_1+3x_2+3x_3\\
+    u_2 = 2x_1+4x_2+5x_3\\
+    u_3 = x_1+x_2+2x_3
+    \end{cases}\]
+    <p>把它写成<strong>矩阵乘法 (matrix product)</strong> 形式：</p>
+    \[\underbrace{\begin{bmatrix}2&3&3\\2&4&5\\1&1&2\end{bmatrix}}_{A}
+    \underbrace{\begin{bmatrix}x_1\\x_2\\x_3\end{bmatrix}}_{X} =
+    \underbrace{\begin{bmatrix}u_1\\u_2\\u_3\end{bmatrix}}_{U},\quad\text{即 } AX=U.\]
+    <div class="card"><p><strong>矩阵乘法的规则：</strong>乘积 \(AX\) 的第 \(i\) 个分量，是 \(A\) 的第 \(i\) 行与 \(X\) 这一列的<strong>点积</strong>。这里 \(A\) 是 \(3\times3\) 矩阵，\(X\) 是 \(3\times1\) 的列向量。</p></div>
+
+    <h3>一般矩阵乘法</h3>
+    <p>更一般地，乘积 \(AB\) 中，第 \(i\) 行第 \(j\) 列的元 = \(A\) 的第 \(i\) 行与 \(B\) 的第 \(j\) 列的点积。<strong>前提：</strong>\(A\) 的列数必须等于 \(B\) 的行数，乘法才有意义。</p>
+
+    <hr class="rule">
+
+    <h2 id="composition">矩阵乘法的意义：复合变换</h2>
+    <p>设 \(B\) 是一个线性变换，则 \(BX\) 表示把向量 \(X\) 用 \(B\) 变换。于是</p>
+    \[(AB)X = A(BX)\]
+    <p>表示：<strong>先做 \(B\)，再做 \(A\)</strong>。也就是说，矩阵乘法对应线性变换的<strong>复合 (composition)</strong>，但顺序是<strong>从右到左</strong>！</p>
+
+    <div class="card warning"><p><strong>注意：</strong>矩阵乘法<strong>不可交换 (non-commutative)</strong>：一般 \(AB\neq BA\)。甚至当 \(A,B\) 尺寸不同时，\(AB\) 与 \(BA\) 可能一个存在、一个不存在。</p></div>
+
+    <hr class="rule">
+
+    <h2 id="identity">单位矩阵与逆矩阵</h2>
+    <div class="card"><p><strong>单位矩阵 (identity matrix)：</strong>\(IX=X\)。\(3\times3\) 单位矩阵为
+    \[I_{3\times3} = \begin{bmatrix}1&0&0\\0&1&0\\0&0&1\end{bmatrix}.\]</p></div>
+
+    <p><strong>旋转例子：</strong>\(2\times2\) 矩阵</p>
+    \[R=\begin{bmatrix}0&-1\\1&0\end{bmatrix}\]
+    <p>表示把平面<strong>逆时针旋转 \(90^\circ\)</strong>：\(R\hat{\imath}=\hat{\jmath}\)，\(R\hat{\jmath}=-\hat{\imath}\)，且 \(R^2=-I\)（转两次 \(90^\circ\) 等于反向）。</p>
+
+    <div class="card"><p><strong>逆矩阵 (inverse matrix)：</strong>对于方阵 \(A\)，若存在方阵 \(M=A^{-1}\) 使得
+    \[AM=MA=I_n,\]
+    则称 \(A\) 可逆，\(M\) 为其逆矩阵。它对应线性变换的<strong>逆操作</strong>。</p></div>
+
+    <p><strong>应用：解线性方程组。</strong>若 \(AX=U\)，则</p>
+    \[X = A^{-1}U.\]
+    <p>只要我们能算出 \(A^{-1}\)，就能直接写出解。</p>
+
+    <hr class="rule">
+
+    <h2 id="cofactor-method">余子式法求逆矩阵</h2>
+    <p>对于小矩阵，逆矩阵有一个显式公式：</p>
+    \[A^{-1} = \frac{1}{\det A}\,\operatorname{adj}(A),\]
+    <p>其中 \(\operatorname{adj}(A)\) 称为 <strong>伴随矩阵 (adjoint/adjugate)</strong>。下面以课堂上的例子逐步演示。</p>
+
+    <h3>例题</h3>
+    <p>设 \(A = \begin{bmatrix}2&3&3\\2&4&5\\1&1&2\end{bmatrix}\)，求 \(A^{-1}\)。</p>
+
+    <h4>第 1 步：余子式矩阵 (matrix of minors)</h4>
+    <p>删去第 \(i\) 行第 \(j\) 列，剩下的 \(2\times2\) 行列式就是 \((i,j)\) 位置的<strong>余子式 (minor)</strong>：</p>
+    \[\begin{bmatrix}
+    \begin{vmatrix}4&5\\1&2\end{vmatrix}&
+    \begin{vmatrix}2&5\\1&2\end{vmatrix}&
+    \begin{vmatrix}2&4\\1&1\end{vmatrix}\\
+    \begin{vmatrix}3&3\\1&2\end{vmatrix}&
+    \begin{vmatrix}2&3\\1&2\end{vmatrix}&
+    \begin{vmatrix}2&3\\1&1\end{vmatrix}\\
+    \begin{vmatrix}3&3\\4&5\end{vmatrix}&
+    \begin{vmatrix}2&3\\2&5\end{vmatrix}&
+    \begin{vmatrix}2&3\\2&4\end{vmatrix}
+    \end{bmatrix}
+    = \begin{bmatrix}3&-1&-2\\3&1&-1\\3&4&2\end{bmatrix}.\]
+    <p>例如左上角：删去第 1 行第 1 列，\(\begin{vmatrix}4&5\\1&2\end{vmatrix}=4\cdot2-5\cdot1=3\)。</p>
+
+    <h4>第 2 步：代数余子式 (cofactors)</h4>
+    <p>按"棋盘"符号模式 \((+,-,+;-,-,+;+,-,+)\) 交错变号：</p>
+    \[\begin{bmatrix}3&+1&-2\\-3&1&+1\\3&-4&2\end{bmatrix}.\]
+
+    <h4>第 3 步：转置得到伴随矩阵</h4>
+    <p>把行与列互换（"横着读、竖着写"）：</p>
+    \[\operatorname{adj}(A)=M^{\mathsf{T}} = \begin{bmatrix}3&-3&3\\1&1&-4\\-2&1&2\end{bmatrix}.\]
+
+    <h4>第 4 步：除以 \(\det A\)</h4>
+    <p>这里 \(\det A = 3\)，于是</p>
+    \[A^{-1} = \frac{1}{3}\begin{bmatrix}3&-3&3\\1&1&-4\\-2&1&2\end{bmatrix}.\]
+
+    <div class="card idea"><p><strong>核心思想：</strong>逆矩阵把"作用"反向。只要 \(\det A\neq0\)，就能用余子式显式地写出 \(A^{-1}\)。大矩阵则交给计算机。</p></div>
+
+    <hr class="rule">
+    <h2 id="quiz">知识检查</h2>
+    <div class="quiz" data-quiz="1" data-answer="b"
+         data-correct="正确。矩阵乘积 \(AB\) 的第 \((i,j)\) 元是 \(A\) 的第 \(i\) 行与 \(B\) 的第 \(j\) 列的点积。"
+         data-incorrect="矩阵乘法的定义是：行乘列再求和，即点积。">
+      <p><strong>问题 1：</strong>乘积 \(AB\) 的第 \((i,j)\) 个元素是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A\) 的第 \(i\) 列与 \(B\) 的第 \(j\) 行的点积</button>
+        <button data-choice="b" aria-pressed="false">\(A\) 的第 \(i\) 行与 \(B\) 的第 \(j\) 列的点积</button>
+        <button data-choice="c" aria-pressed="false">\(A\) 的第 \(i\) 行与 \(B\) 的第 \(j\) 行的点积</button>
+        <button data-choice="d" aria-pressed="false">\(A\) 与 \(B\) 对应位置的乘积之和</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c"
+         data-correct="正确。\((AB)X=A(BX)\) 表示先做 \(B\) 再做 \(A\)，故顺序从右到左。"
+         data-incorrect="把 \(X\) 代入看：\((AB)X = A(BX)\)，先作用的是 \(B\)。">
+      <p><strong>问题 2：</strong>\((AB)X\) 相当于对 \(X\) 施加怎样的变换？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">先做 \(A\)，再做 \(B\)</button>
+        <button data-choice="b" aria-pressed="false">同时做 \(A\) 和 \(B\)</button>
+        <button data-choice="c" aria-pressed="false">先做 \(B\)，再做 \(A\)</button>
+        <button data-choice="d" aria-pressed="false">做 \(A\) 与 \(B\) 的逆</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a"
+         data-correct="正确。由 \(AX=U\) 两边左乘 \(A^{-1}\) 得 \(X=A^{-1}U\)。"
+         data-incorrect="在 \(AX=U\) 两边左乘 \(A^{-1}\)，注意矩阵乘法不交换，要左乘。">
+      <p><strong>问题 3：</strong>若 \(A\) 可逆，则线性系统 \(AX=U\) 的解为？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(X=A^{-1}U\)</button>
+        <button data-choice="b" aria-pressed="false">\(X=UA^{-1}\)</button>
+        <button data-choice="c" aria-pressed="false">\(X=\frac{U}{\det A}\)</button>
+        <button data-choice="d" aria-pressed="false">\(X=U-A\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="d"
+         data-correct="正确。公式 \(A^{-1}=\frac{1}{\det A}\operatorname{adj}(A)\) 显示 \(\det A\neq0\) 是求逆的前提。"
+         data-incorrect="逆矩阵公式中分母是 \(\det A\)，所以行列式不能为零。">
+      <p><strong>问题 4：</strong>用余子式法求 \(A^{-1}\) 时，必须满足什么条件？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(A\) 是对称矩阵</button>
+        <button data-choice="b" aria-pressed="false">\(\det A = 1\)</button>
+        <button data-choice="c" aria-pressed="false">\(A\) 是正交矩阵</button>
+        <button data-choice="d" aria-pressed="false">\(\det A\neq 0\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article><h3>矩阵乘法</h3><p>\(AX=U\)，每个元 = 行与列的点积；要求左列数 = 右行数。</p></article>
+      <article><h3>复合与不可交换</h3><p>\((AB)X=A(BX)\)：先 \(B\) 后 \(A\)；一般 \(AB\neq BA\)。</p></article>
+      <article><h3>逆矩阵</h3><p>\(AA^{-1}=A^{-1}A=I\)；解 \(AX=U\) 等价于 \(X=A^{-1}U\)。</p></article>
+      <article><h3>余子式法</h3><p>minors → cofactors（棋盘变号）→ 转置得 adj → 除以 \(\det A\)。</p></article>
+    </div>
+
+    <hr class="rule">
+    <h2 id="reading">一手资料</h2>
+    <ul>
+      <li><code>lecture_notes/week_02_summary.pdf</code></li>
+      <li><code>lecture_notes/matrices_algebra.pdf</code>（矩阵代数讲义）</li>
+      <li>官方课程主页：<a href="https://ocw.mit.edu/courses/18-02-multivariable-calculus-fall-2007/">MIT OCW 18.02</a></li>
+    </ul>
+
+    <hr class="rule">
+    <div class="nav">
+      <span>← <a href="0002-determinants-cross-product.html">行列式与叉积</a></span>
+      <span><a href="0004-planes.html">平面方程 →</a></span>
+    </div>
+
+    <footer>
+      <p>MIT 18.02 Multivariable Calculus · Fall 2007 · Prof. Denis Auroux · 本课依据官方讲义整理</p>
+    </footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

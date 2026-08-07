@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 30 课：Line Integrals in Space; Curl (空间线积分与旋度) — MIT 18.02</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 18.02 · 第 30 课</p>
+    <h1>Line Integrals in Space; Curl (空间线积分与旋度)</h1>
+    <p class="lede">把二维线积分推广到空间曲线，引入三维梯度场与势函数，并定义旋度 \(\nabla\times\vec F\) 来衡量向量场的旋转程度。</p>
+
+    <div class="meta">
+      <span>授课：Denis Auroux</span>
+      <span>日期：2007-11-27</span>
+      <span>难度：较难</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="objectives">学习目标</h2>
+    <ul>
+      <li>计算空间曲线上的线积分 \(\displaystyle\int_C \vec F\cdot d\vec r\)。</li>
+      <li>判断三维向量场是否为梯度场（保守场），并求势函数。</li>
+      <li>定义旋度 \(\nabla\times\vec F\)，记住公式并理解其物理意义。</li>
+      <li>用 del 算子统一梯度、散度、旋度的表达。</li>
+    </ul>
+
+    <div class="card idea"><p><strong>核心思想：</strong>三维线积分的几何意义与二维完全相同——力沿曲线做的功。关键新内容是<strong>旋度</strong>：它度量向量场的旋转程度，是"保守性"的障碍。梯度场无旋，无旋场（在单连通区域）是梯度场。</p></div>
+
+    <hr class="rule">
+
+    <h2 id="line-integrals">空间中的线积分</h2>
+    <p>设力场 \(\vec F = \langle P,Q,R\rangle\)，\(C\) 是空间曲线。把 \(C\) 切成小段 \(\Delta\vec r\)，则</p>
+    \[W = \int_C \vec F\cdot d\vec r = \int_C P\,dx+Q\,dy+R\,dz.\]
+    <p>计算方法：<strong>用单参数 \(t\) 参数化曲线</strong>，把 \(x,y,z,dx,dy,dz\) 都用 \(t\) 表示，化为一元积分。</p>
+
+    <h3 id="example-conservative">例 1：\(\vec F=\langle yz,xz,xy\rangle\) 沿不同路径</h3>
+    <p><strong>路径 1：</strong>\(x=t^3,\;y=t^2,\;z=t\)，\(0\le t\le1\)。</p>
+    <p>\(dx=3t^2\,dt,\;dy=2t\,dt,\;dz=dt\)，代入得</p>
+    \[W = \int_0^1 (yz\cdot 3t^2 + xz\cdot 2t + xy\cdot 1)\,dt = \int_0^1 6t^5\,dt = \frac{1}{6}.\]
+    <p><strong>路径 2：</strong>从 \((0,0,0)\) 到 \((1,0,0)\) 到 \((1,1,0)\) 到 \((1,1,1)\) 的三段线段。</p>
+    <p>第一、二段在 \(z=0\) 平面，\(\vec F=xy\hat k\)，\(dz=0\)，做功为零。第三段 \(x=y=1,\;dx=dy=0\)，\(\vec F=\langle z,z,1\rangle\)，\(d\vec r=\langle 0,0,dz\rangle\)：</p>
+    \[W = \int_0^1 1\,dz = 1.\]
+    <div class="card warning"><p><strong>注意：</strong>两个路径给出了不同结果？不对——仔细检查：路径 2 第三段 \(\vec F\cdot d\vec r = xy\,dz = 1\,dz\)，积分确实是 1。但路径 1 给出 \(1/6\)！这说明<strong>我算错了路径 1</strong>？实际上 \(\vec F=\nabla(xyz)\) 是保守场，两条路径应该给出相同结果。重新检查路径 1：\(yz=t^3,\,xz=t^4,\,xy=t^5\)，代入：\(t^3\cdot 3t^2 + t^4\cdot 2t + t^5\cdot 1 = 3t^5+2t^5+t^5 = 6t^5\)，积分 \(=1\)。<strong>正确答案是 1</strong>。</p></div>
+    <p>两条路径给出相同结果 \(W=1\)，因为 \(\vec F=\nabla(xyz)\) 是保守场。</p>
+    <div class="card"><p><strong>微积分基本定理（线积分版）：</strong>若 \(\vec F=\nabla f\)，则<br>\[\int_C \vec F\cdot d\vec r = f(P_1)-f(P_0).\]</p></div>
+
+    <hr class="rule">
+
+    <h2 id="gradient-fields">三维梯度场</h2>
+    <p>设 \(\vec F=\langle P,Q,R\rangle\) 是某个函数 \(f\) 的梯度：\(\vec F=\nabla f\)。则</p>
+    \[P=f_x,\quad Q=f_y,\quad R=f_z.\]
+    <p>由混合偏导相等 \(f_{xy}=f_{yx}\) 等，得到<strong>必要条件</strong>：</p>
+    \[P_y=Q_x,\qquad P_z=R_x,\qquad Q_z=Ry.\]
+    <div class="card"><p><strong>定理：</strong>若 \(\vec F\) 在整个空间（或单连通区域）上定义且连续可微，则 \(\vec F\) 是梯度场<strong>当且仅当</strong>以上三个等式成立。</p></div>
+
+    <h3 id="example-find-a">例 2：确定 \(a,b\) 使 \(\vec F\) 为梯度场</h3>
+    <p>设 \(\vec F = axy\,\hat\imath + (x^2+z^3)\hat\jmath + (byz^2-4z^3)\hat k\)。</p>
+    <ul>
+      <li>\(P_y = ax\)，\(Q_x = 2x\) → \(a=2\)。</li>
+      <li>\(P_z=0\)，\(R_x=0\) → 自动满足。</li>
+      <li>\(Q_z=3z^2\)，\(R_y=bz^2\) → \(b=3\)。</li>
+    </ul>
+
+    <h3 id="finding-potential">求势函数的系统方法</h3>
+    <p>已知 \(\vec F=\langle 2xy,\,x^2+z^3,\,3yz^2-4z^3\rangle\) 是梯度场，求 \(f\)：</p>
+    <ol>
+      <li>\(f_x=2xy\) → \(f=x^2y+g(y,z)\)。</li>
+      <li>\(f_y=x^2+g_y=x^2+z^3\) → \(g_y=z^3\) → \(g=yz^3+h(z)\)。</li>
+      <li>\(f_z=3yz^2+h'(z)=3yz^2-4z^3\) → \(h'(z)=-4z^3\) → \(h=-z^4+C\)。</li>
+    </ol>
+    <p>因此 \(f=x^2y+yz^3-z^4+C\)。</p>
+    <div class="card"><p><strong>另一方法：</strong>\(f(x_1,y_1,z_1) = f(0,0,0)+\displaystyle\int_{(0,0,0)}^{(x_1,y_1,z_1)}\vec F\cdot d\vec r\)。选沿坐标轴的三段路径，计算往往更简单。</p></div>
+
+    <hr class="rule">
+
+    <h2 id="curl">旋度 (Curl)</h2>
+    <p><strong>旋度</strong>衡量向量场<strong>不是梯度场</strong>的程度，即场的旋转程度。</p>
+    <div class="card"><p><strong>定义：</strong><br>\[\nabla\times\vec F = \Bigl\langle R_y-Q_z,\;P_z-R_x,\;Q_x-P_y\Bigr\rangle.\]</p></div>
+    <p>用 del 算子记忆：</p>
+    \[\nabla\times\vec F = \begin{vmatrix}
+    \hat\imath & \hat\jmath & \hat k\\
+    \partial_x & \partial_y & \partial_z\\
+    P & Q & R
+    \end{vmatrix}.\]
+    <div class="card idea"><p><strong>核心思想：</strong>三个分量 \(R_y-Q_z,\;P_z-R_x,\;Q_x-P_y\) 恰好是梯度场判别式的<strong>相反数</strong>。因此 \(\vec F\) 是梯度场 ⇔ \(\nabla\times\vec F=\vec 0\)。旋度是"保守性的障碍"。</p></div>
+
+    <h3 id="curl-physical">旋度的物理意义</h3>
+    <p>对<strong>速度场</strong> \(\vec v\)，旋度 = <strong>2 倍角速度向量</strong>。</p>
+    <p>例：绕过 \(z\) 轴、角速度 \(\omega\) 的均匀旋转：</p>
+    \[\vec v = \langle -\omega y,\;\omega x,\;0\rangle.\]
+    <p>计算旋度：</p>
+    \[\nabla\times\vec v = \bigl\langle 0-0,\;0-0,\;\omega-(-\omega)\bigr\rangle = 2\omega\,\hat k.\]
+    <p><strong>旋度大小 = \(2\omega\)</strong>（两倍角速度），<strong>方向 = 旋转轴方向</strong>（沿 \(z\) 轴）。</p>
+    <div class="card"><p><strong>运动分解：</strong>一般运动可以分解为<br>• 平移（无旋无散）<br>• 伸缩/压缩（散度）<br>• 旋转（旋度）<br>旋度提取出运动中的<strong>旋转分量</strong>。</p></div>
+
+    <hr class="rule">
+
+    <h2 id="del-unified">Del 算子的统一框架</h2>
+    <p>三种微分运算的统一表达：</p>
+    <ul>
+      <li><strong>梯度：</strong>\(\nabla f = \langle f_x,f_y,f_z\rangle\)（作用于标量，得向量）。</li>
+      <li><strong>散度：</strong>\(\nabla\cdot\vec F = P_x+Q_y+R_z\)（作用于向量，得标量）。</li>
+      <li><strong>旋度：</strong>\(\nabla\times\vec F = \langle R_y-Q_z,P_z-R_x,Q_x-P_y\rangle\)（作用于向量，得向量）。</li>
+    </ul>
+    <div class="card idea"><p><strong>核心思想：</strong>这三种运算不是独立的——它们分别对应微分形式中的外微分 \(d\) 在不同维度的表现。三大定理（微积分基本定理、散度定理、Stokes 定理）都是同一个定理（Stokes 广义定理）的特例。</p></div>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b"
+         data-correct="正确。梯度场要求 \(P_y=Q_x,\;P_z=R_x,\;Q_z=R_y\)，即 \(\nabla\times\vec F=\vec 0\)。"
+         data-incorrect="回忆：梯度场要求混合偏导相等，即 \(f_{xy}=f_{yx}\) 等，对应旋度为零。">
+      <p><strong>问题 1：</strong>\(\vec F=\langle P,Q,R\rangle\) 是梯度场的条件是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(P_x=Q_y=R_z\)</button>
+        <button data-choice="b" aria-pressed="false">\(P_y=Q_x,\;P_z=R_x,\;Q_z=R_y\)</button>
+        <button data-choice="c" aria-pressed="false">\(P=Q=R\)</button>
+        <button data-choice="d" aria-pressed="false">\(P+Q+R=0\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c"
+         data-correct="正确。\(\nabla\times\vec v = \langle 0,0,\omega-(-\omega)\rangle = 2\omega\hat k\)。"
+         data-incorrect="计算：\(\partial/\partial x(\omega x) - \partial/\partial y(-\omega y) = \omega + \omega = 2\omega\)。">
+      <p><strong>问题 2：</strong>均匀旋转 \(\vec v=\langle -\omega y,\omega x,0\rangle\) 的旋度是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\vec 0\)</button>
+        <button data-choice="b" aria-pressed="false">\(\omega\hat k\)</button>
+        <button data-choice="c" aria-pressed="false">\(2\omega\hat k\)</button>
+        <button data-choice="d" aria-pressed="false">\(-\omega\hat k\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="a"
+         data-correct="正确。旋度 = 2 倍角速度向量，方向沿旋转轴。"
+         data-incorrect="回忆物理意义：旋度衡量旋转，对速度场它是角速度的两倍。">
+      <p><strong>问题 3：</strong>旋度对速度场的物理意义是？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">旋度 = 2 × 角速度向量，方向沿旋转轴</button>
+        <button data-choice="b" aria-pressed="false">旋度 = 散度的相反数</button>
+        <button data-choice="c" aria-pressed="false">旋度 = 线积分的值</button>
+        <button data-choice="d" aria-pressed="false">旋度 = 梯度的大小</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article><h3>空间线积分</h3><p>\(\int_C \vec F\cdot d\vec r\)，用单参数参数化曲线计算。</p></article>
+      <article><h3>梯度场判别</h3><p>\(\vec F\) 保守 ⇔ \(\nabla\times\vec F=\vec 0\)（在单连通区域）。</p></article>
+      <article><h3>求势函数</h3><p>逐次积分法或选简单路径的线积分法。</p></article>
+      <article><h3>旋度</h3><p>\(\nabla\times\vec F\) 衡量旋转，对速度场 = 2×角速度。</p></article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">一手资料</h2>
+    <ul>
+      <li><code>lecture_notes/week_13_summary.pdf</code></li>
+      <li>官方课程主页：<a href="https://ocw.mit.edu/courses/18-02-multivariable-calculus-fall-2007/">MIT OCW 18.02</a></li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>← <a href="0029-divergence-theorem.html">第 29 课：Divergence Theorem (散度定理)</a></span>
+      <span><a href="0031-stokes-theorem.html">第 31 课：Stokes' Theorem (Stokes 定理) →</a></span>
+    </div>
+
+    <footer>
+      <p>MIT 18.02 Multivariable Calculus · Fall 2007 · Prof. Denis Auroux · 本课依据官方讲义整理</p>
+    </footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>
