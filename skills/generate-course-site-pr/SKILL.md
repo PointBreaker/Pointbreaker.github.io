@@ -51,10 +51,11 @@ Use the official homepage for the schedule, course identity, public links, and m
 
 Read [references/content-quality.md](references/content-quality.md) before writing content.
 Read [references/interactive-content.md](references/interactive-content.md) when the course contains mathematical relationships, diagrams, matrices, parameter-sensitive behavior, algorithms, or multi-stage processes that may benefit from a visual explanation.
+Read [references/claude-code-extraction.md](references/claude-code-extraction.md) before delegating high-volume local text extraction to Claude Code. Keep source interpretation, dependency modeling, content decisions, frontend architecture, and final QA in the primary agent.
 
 ### 3. Create the course plan
 
-Create `.course-build/course-plan.json` using [references/site-contract.md](references/site-contract.md). Put `sourceFiles` on every lecture and work item. Add a `visuals` array only for justified source-backed figures or interactives, recording `id`, `kind`, `learningGoal`, `sourceFiles`, and `reason`. Verify numbering, term, titles, dependencies, slug, summary, domain, tags, and the catalog card copy.
+Create `.course-build/course-plan.json` using [references/site-contract.md](references/site-contract.md). Put `sourceFiles` on every lecture and work item. Add a `visuals` array only for justified source-backed figures or interactives, recording `id`, `kind`, `learningGoal`, `sourceFiles`, and `reason`. Verify numbering, term, titles, dependencies, slug, summary, domain, tags, and the catalog card copy. For courses with homework and exams, model the curricular sequence explicitly with `dependsOn` so the Dashboard can render each lecture exactly once as `Lecture → HW → Exam` stages.
 
 ### 4. Prepare an isolated branch
 
@@ -101,7 +102,7 @@ python /path/to/repo/tools/check-course-layout.py
 git diff --check
 ```
 
-Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at least two lectures, every page type, representative math and code, quiz feedback, the GitHub Discussion drawer, mobile width, links, and browser console. On desktop, verify that opening Discussion reserves space instead of covering the lesson. Treat placeholders, math errors, clipped layouts, missing shared assets, broken navigation, and overlapping discussion UI as blockers.
+Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at least two lectures, every page type, representative math and code, quiz feedback, the GitHub Discussion drawer, mobile width, links, and browser console. On courses with exams, verify stage boundaries, `Lecture → HW → Exam` order, non-repeated lectures, separate HW/Exam counts and filters, and every work-item link. On desktop, verify that opening Discussion reserves space instead of covering the lesson. Treat placeholders, math errors, clipped layouts, missing shared assets, broken navigation, invalid dependency stages, and overlapping discussion UI as blockers.
 
 ### 8. Open the PR
 

@@ -46,14 +46,15 @@
         <section class="dashboard shell" id="learning-path" aria-labelledby="path-title">
           <div class="dashboard-heading">
             <div><p class="section-kicker">Learning path</p><h2 id="path-title">从讲义走向实践。</h2></div>
-            <p>每个学习单元把前置讲义和对应作业或实验放在一起。先建立概念，再用实践检验理解。</p>
+            <p id="path-description">先建立概念，再用实践检验理解。每节讲义只在所属阶段出现一次。</p>
           </div>
           <div class="dashboard-tools">
-            <label class="dashboard-search"><span class="visually-hidden">搜索课程内容</span><input id="dashboard-search" type="search" placeholder="搜索讲义、作业或概念" autocomplete="off"></label>
+            <label class="dashboard-search"><span class="visually-hidden">搜索课程内容</span><input id="dashboard-search" type="search" placeholder="搜索讲义、作业、考试或概念" autocomplete="off"></label>
             <div class="view-filters" id="view-filters" aria-label="内容类型">
               <button class="view-filter" type="button" data-view="all" aria-pressed="true">全部</button>
               <button class="view-filter" type="button" data-view="lectures" aria-pressed="false">讲义</button>
-              <button class="view-filter" type="button" data-view="work" aria-pressed="false">实践</button>
+              <button class="view-filter" type="button" data-view="homework" aria-pressed="false">实践</button>
+              <button class="view-filter" type="button" data-view="exams" aria-pressed="false">Exam</button>
             </div>
           </div>
           <p class="result-status" id="result-status" aria-live="polite">正在载入课程…</p>
@@ -72,17 +73,37 @@
 
   let info;
   let status;
+  let stages = [];
   let activeView = 'all';
+  let hasExams = false;
 
+  const EXAM_PATTERN = /\b(exam|quiz|midterm|final)\b|考试|测验|期中|期末/i;
+  const FINAL_PATTERN = /\bfinal\b|期末/i;
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"]/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
   })[char]);
 
-  const normalizePath = (value) => String(value || '').replace(/^\.\//, '');
+  const lectureNumber = (lecture) => Number(lecture.number) || 0;
+  const dependencyNumbers = (item) => (item.dependsOn || []).map(Number).filter(Number.isFinite);
+  const dependencyBoundary = (item) => Math.max(0, ...dependencyNumbers(item));
+  const itemLabel = (item) => [item.kind, item.type, item.title, item.titleZh].filter(Boolean).join(' ');
+  const isExam = (item) => EXAM_PATTERN.test(itemLabel(item));
+  const isFinalExam = (item) => FINAL_PATTERN.test(itemLabel(item));
+
+  function normalizePath(value, workItem = false) {
+    const path = String(value || '').replace(/^\.\//, '');
+    if (!path || /^(?:[a-z]+:)?\/\//i.test(path) || path.startsWith('/') || path.startsWith('lessons/')) return path;
+    if (workItem && /^(?:work-items|assignments)\//.test(path)) return `lessons/${path}`;
+    return path;
+  }
 
   function setText(selector, value) {
     const element = document.querySelector(selector);
     if (element) element.textContent = value ?? '';
+  }
+
+  function getAssignments() {
+    return info.assignments || status.assignments || [];
   }
 
   function hydrateHeader() {
@@ -108,93 +129,205 @@
 
   function hydrateStats() {
     const lectures = status.lectures || [];
-    const workItems = info.assignments || status.assignments || [];
+    const assignments = getAssignments();
+    const homework = assignments.filter((item) => !isExam(item));
+    const exams = assignments.filter(isExam);
     const completed = lectures.filter((lecture) => lecture.status === 'completed').length;
     const percent = lectures.length ? Math.round(completed / lectures.length * 100) : 0;
+    const homeworkLabel = hasExams ? 'HW' : (info.workItemLabel || status.workItemLabel || '实践');
+
     setText('#metric-lectures', lectures.length);
-    setText('#metric-work', workItems.length);
+    setText('#metric-work', hasExams ? `${homework.length} / ${exams.length}` : assignments.length);
     setText('#metric-completed', `${completed}/${lectures.length}`);
     setText('#metric-progress', `${percent}%`);
     document.querySelector('#progress-fill').style.width = `${percent}%`;
-    setText('#work-label', info.workItemLabel || status.workItemLabel || '实践任务');
+    setText('#work-label', hasExams ? 'HW / Exam' : homeworkLabel);
+    setText('#path-title', hasExams ? '讲义、作业与考试，按阶段衔接。' : '从讲义走向实践。');
+    setText('#path-description', hasExams
+      ? '从左到右阅读：先掌握本阶段讲义，再完成 HW，最后用 Exam 检验整组知识。累计考试不会重复铺开之前的讲义。'
+      : '先建立概念，再用实践检验理解。每节讲义只在所属阶段出现一次。');
+
+    const homeworkFilter = filters.querySelector('[data-view="homework"]');
+    const examFilter = filters.querySelector('[data-view="exams"]');
+    if (homeworkFilter) homeworkFilter.textContent = homeworkLabel;
+    if (examFilter) examFilter.hidden = !hasExams;
+  }
+
+  function buildStages() {
+    const lectures = [...(status.lectures || [])].sort((a, b) => lectureNumber(a) - lectureNumber(b));
+    const assignments = getAssignments();
+    const homework = assignments.filter((item) => !isExam(item));
+    const exams = assignments.filter(isExam);
+    const lastLecture = lectures.length ? lectureNumber(lectures[lectures.length - 1]) : 0;
+
+    if (!exams.length) {
+      const orderedHomework = [...homework].sort((a, b) => dependencyBoundary(a) - dependencyBoundary(b) || Number(a.number) - Number(b.number));
+      const result = [];
+      let previousBoundary = 0;
+      orderedHomework.forEach((item) => {
+        const boundary = Math.max(previousBoundary, dependencyBoundary(item));
+        const previous = result[result.length - 1];
+        if (previous && boundary === previous.boundary) {
+          previous.homework.push(item);
+          return;
+        }
+        result.push({ boundary, lectures: [], homework: [item], exams: [] });
+        previousBoundary = boundary;
+      });
+      if (!result.length || previousBoundary < lastLecture) {
+        result.push({ boundary: lastLecture, lectures: [], homework: [], exams: [] });
+      }
+      let lectureStart = 0;
+      result.forEach((stage) => {
+        stage.lectures = lectures.filter((lecture) => lectureNumber(lecture) > lectureStart && lectureNumber(lecture) <= stage.boundary);
+        lectureStart = stage.boundary;
+      });
+      return result;
+    }
+
+    const orderedExams = [...exams].sort((a, b) => {
+      if (isFinalExam(a) !== isFinalExam(b)) return isFinalExam(a) ? 1 : -1;
+      return dependencyBoundary(a) - dependencyBoundary(b) || Number(a.number) - Number(b.number);
+    });
+    const result = [];
+    let previousBoundary = 0;
+    orderedExams.forEach((exam) => {
+      const requestedBoundary = isFinalExam(exam) ? lastLecture : dependencyBoundary(exam);
+      const boundary = Math.max(previousBoundary, requestedBoundary);
+      const previous = result[result.length - 1];
+      if (previous && boundary === previous.boundary) {
+        previous.exams.push(exam);
+        return;
+      }
+      result.push({ boundary, lectures: [], homework: [], exams: [exam] });
+      previousBoundary = boundary;
+    });
+    if (previousBoundary < lastLecture) {
+      result.push({ boundary: lastLecture, lectures: [], homework: [], exams: [] });
+    }
+
+    let lectureStart = 0;
+    result.forEach((stage) => {
+      stage.lectures = lectures.filter((lecture) => lectureNumber(lecture) > lectureStart && lectureNumber(lecture) <= stage.boundary);
+      lectureStart = stage.boundary;
+    });
+    homework.forEach((item) => {
+      const boundary = dependencyBoundary(item);
+      const target = result.find((stage) => stage.boundary >= boundary) || result[result.length - 1];
+      if (target) target.homework.push(item);
+    });
+    return result;
   }
 
   function lessonMarkup(lecture) {
     const detail = [lecture.instructor, lecture.date].filter(Boolean).join(' · ');
     const state = lecture.status || 'upcoming';
     const stateLabel = state === 'completed' ? '已完成' : state === 'current' ? '进行中' : '待学习';
-    return `<a class="lesson-link" data-type="lecture" data-search="${escapeHtml([lecture.number, lecture.title, detail].join(' ').toLowerCase())}" href="${escapeHtml(normalizePath(lecture.lessonFile))}">
+    const searchText = [lecture.number, lecture.title, detail].join(' ').toLowerCase();
+    return `<a class="lesson-link" data-card data-type="lectures" data-search="${escapeHtml(searchText)}" href="${escapeHtml(normalizePath(lecture.lessonFile))}">
       <span class="lesson-number">L${escapeHtml(lecture.number)}</span>
       <span class="lesson-title">${escapeHtml(lecture.title)}<span class="lesson-detail">${escapeHtml(detail)}</span></span>
       <span class="lesson-status ${escapeHtml(state)}">${stateLabel}</span>
     </a>`;
   }
 
+  function workMarkup(item, type) {
+    const kind = item.kind || item.type || (type === 'exams' ? 'Exam' : info.workItemLabel || status.workItemLabel || 'Assignment');
+    const file = item.assGuideFile || item.contentFile;
+    const href = file ? normalizePath(file, true) : '';
+    const tag = href ? 'a' : 'article';
+    const linkAttribute = href ? ` href="${escapeHtml(href)}"` : '';
+    const due = item.due ? `截止 ${item.due}` : '';
+    const searchText = [kind, item.number, item.title, item.titleZh, item.description].join(' ').toLowerCase();
+    const sequenceLabel = hasExams
+      ? `${type === 'exams' ? 'Exam' : 'HW'} ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
+      : `${kind} ${item.number}`;
+    return `<${tag} class="flow-card ${type === 'exams' ? 'exam-card' : 'homework-card'}" data-card data-type="${type}" data-search="${escapeHtml(searchText)}"${linkAttribute}>
+      <p class="card-kicker">${escapeHtml(sequenceLabel)}</p>
+      <h4>${escapeHtml(item.titleZh || item.title)}</h4>
+      ${item.description ? `<p class="card-description">${escapeHtml(item.description)}</p>` : ''}
+      <div class="card-meta">${item.released ? `<span>发布 ${escapeHtml(item.released)}</span>` : ''}${due ? `<span>${escapeHtml(due)}</span>` : ''}</div>
+      <span class="card-action">${href ? '打开导读' : '导读制作中'}</span>
+    </${tag}>`;
+  }
+
+  function rangeLabel(stage) {
+    if (!stage.lectures.length) return '补充阶段';
+    const first = stage.lectures[0].number;
+    const last = stage.lectures[stage.lectures.length - 1].number;
+    return String(first) === String(last) ? `L${first}` : `L${first}–L${last}`;
+  }
+
+  function laneMarkup(type, title, items, emptyText) {
+    return `<div class="flow-lane ${type}-lane" data-lane="${type}">
+      <div class="lane-heading"><span>${escapeHtml(title)}</span><strong>${items.length}</strong></div>
+      <div class="lane-content">${items.join('') || `<div class="lane-empty">${escapeHtml(emptyText)}</div>`}</div>
+    </div>`;
+  }
+
   function renderPaths() {
-    const lectures = status.lectures || [];
-    const assignments = info.assignments || status.assignments || [];
-    const assigned = new Set();
-    const units = assignments.map((item, index) => {
-      const dependencies = (item.dependsOn || []).map((number) => lectures.find((lecture) => String(lecture.number) === String(number))).filter(Boolean);
-      dependencies.forEach((lecture) => assigned.add(String(lecture.number)));
-      const kind = item.kind || item.type || info.workItemLabel || status.workItemLabel || 'Assignment';
-      const due = item.due ? `截止 ${item.due}` : '';
-      const action = item.assGuideFile || item.contentFile ? '打开' : '导读制作中';
-      const file = item.contentFile || item.assGuideFile;
-      const href = file ? `href="${escapeHtml(normalizePath(file))}"` : '';
-      return `<section class="path-unit" data-unit data-search="${escapeHtml([kind, item.number, item.title, item.titleZh, item.description, ...dependencies.map((lecture) => lecture.title)].join(' ').toLowerCase())}">
-        <a class="work-card" data-type="work" ${href}>
-          <p class="unit-number">Unit ${String(index + 1).padStart(2, '0')} · ${escapeHtml(kind)} ${escapeHtml(item.number)}</p>
-          <h3>${escapeHtml(item.titleZh || item.title)}</h3>
-          <p class="work-description">${escapeHtml(item.description || '')}</p>
-          <div class="work-meta">${item.released ? `<span>发布 ${escapeHtml(item.released)}</span>` : ''}${due ? `<span>${escapeHtml(due)}</span>` : ''}</div>
-          <span class="work-action">${action}</span>
-        </a>
-        <div class="lesson-list">${dependencies.map(lessonMarkup).join('') || '<div class="empty-state">这项实践暂未登记前置讲义。</div>'}</div>
-      </section>`;
+    stages = buildStages();
+    let homeworkNumber = 0;
+    let examNumber = 0;
+    getAssignments().forEach((item) => {
+      item.courseStackDisplayNumber = isExam(item) ? ++examNumber : ++homeworkNumber;
     });
-
-    const remaining = lectures.filter((lecture) => !assigned.has(String(lecture.number)));
-    if (remaining.length) {
-      units.push(`<section class="path-unit" data-unit data-search="${escapeHtml(remaining.map((lecture) => lecture.title).join(' ').toLowerCase())}">
-        <div class="work-card" data-type="work">
-          <p class="unit-number">Further study</p>
-          <h3>补充与进阶主题</h3>
-          <p class="work-description">不直接对应当前作业或实验，但构成课程知识地图的重要部分。</p>
+    const homeworkTitle = hasExams ? 'HW' : (info.workItemLabel || status.workItemLabel || '实践');
+    pathList.innerHTML = stages.map((stage, index) => {
+      const lectureCards = stage.lectures.map(lessonMarkup);
+      const homeworkCards = stage.homework.map((item) => workMarkup(item, 'homework'));
+      const examCards = stage.exams.map((item) => workMarkup(item, 'exams'));
+      return `<section class="flow-stage${hasExams ? '' : ' two-lane'}" data-stage>
+        <header class="stage-heading">
+          <p>Stage ${String(index + 1).padStart(2, '0')}</p>
+          <h3>${escapeHtml(rangeLabel(stage))}</h3>
+          <span>${stage.lectures.length} 节讲义</span>
+        </header>
+        <div class="flow-grid">
+          ${laneMarkup('lectures', '讲义', lectureCards, '本阶段暂无讲义')}
+          <div class="flow-arrow" data-arrow data-from="lectures" data-to="homework" aria-hidden="true"><span>→</span></div>
+          ${laneMarkup('homework', homeworkTitle, homeworkCards, `本阶段暂无 ${homeworkTitle}`)}
+          ${hasExams ? `<div class="flow-arrow" data-arrow data-from="homework" data-to="exams" aria-hidden="true"><span>→</span></div>${laneMarkup('exams', 'Exam', examCards, '本阶段暂无 Exam')}` : ''}
         </div>
-        <div class="lesson-list">${remaining.map(lessonMarkup).join('')}</div>
-      </section>`);
-    }
-
-    pathList.innerHTML = units.join('') || '<div class="empty-state">课程内容正在整理中。</div>';
+      </section>`;
+    }).join('') || '<div class="empty-state">课程内容正在整理中。</div>';
     applyFilters();
   }
 
   function applyFilters() {
     const query = search.value.trim().toLocaleLowerCase('zh-CN');
-    const visibleLessonFiles = new Set();
-    let visibleUnits = 0;
-    document.querySelectorAll('[data-unit]').forEach((unit) => {
-      const work = unit.querySelector('[data-type="work"]');
-      const lessons = [...unit.querySelectorAll('[data-type="lecture"]')];
-      const unitMatches = !query || (unit.dataset.search || '').includes(query);
-      let unitHasVisibleLesson = false;
+    const visibleCounts = { lectures: 0, homework: 0, exams: 0, stages: 0 };
 
-      lessons.forEach((lesson) => {
-        const matchesType = activeView !== 'work';
-        const matchesSearch = !query || (lesson.dataset.search || '').includes(query) || unitMatches;
+    document.querySelectorAll('[data-stage]').forEach((stage) => {
+      stage.querySelectorAll('[data-card]').forEach((card) => {
+        const matchesType = activeView === 'all' || card.dataset.type === activeView;
+        const matchesSearch = !query || (card.dataset.search || '').includes(query);
         const visible = matchesType && matchesSearch;
-        lesson.classList.toggle('is-hidden', !visible);
-        if (visible) { visibleLessonFiles.add(lesson.getAttribute('href')); unitHasVisibleLesson = true; }
+        card.classList.toggle('is-hidden', !visible);
+        if (visible) visibleCounts[card.dataset.type] += 1;
       });
 
-      const workVisible = activeView !== 'lectures' && unitMatches;
-      if (work) work.hidden = !workVisible;
-      const visible = workVisible || unitHasVisibleLesson;
-      unit.classList.toggle('is-hidden', !visible);
-      if (visible) visibleUnits += 1;
+      stage.querySelectorAll('[data-lane]').forEach((lane) => {
+        const laneWanted = activeView === 'all' || lane.dataset.lane === activeView;
+        const visibleCards = lane.querySelectorAll('[data-card]:not(.is-hidden)').length;
+        lane.hidden = !laneWanted || (Boolean(query) && visibleCards === 0);
+      });
+
+      stage.querySelectorAll('[data-arrow]').forEach((arrow) => {
+        const from = stage.querySelector(`[data-lane="${arrow.dataset.from}"]`);
+        const to = stage.querySelector(`[data-lane="${arrow.dataset.to}"]`);
+        arrow.hidden = !from || !to || from.hidden || to.hidden;
+      });
+
+      const visible = Boolean(stage.querySelector('[data-lane]:not([hidden])'));
+      stage.classList.toggle('is-hidden', !visible);
+      if (visible) visibleCounts.stages += 1;
     });
-    resultStatus.textContent = `显示 ${visibleLessonFiles.size} 节讲义 · ${visibleUnits} 个学习单元`;
+
+    const parts = [`${visibleCounts.lectures} 节讲义`, `${visibleCounts.homework} 个 ${hasExams ? 'HW' : (info.workItemLabel || status.workItemLabel || '实践')}`];
+    if (hasExams) parts.push(`${visibleCounts.exams} 个 Exam`);
+    parts.push(`${visibleCounts.stages} 个阶段`);
+    resultStatus.textContent = `${query || activeView !== 'all' ? '显示 ' : ''}${parts.join(' · ')}`;
   }
 
   filters.addEventListener('click', (event) => {
@@ -212,6 +345,7 @@
   ]).then(([courseInfo, courseStatus]) => {
     info = courseInfo;
     status = courseStatus;
+    hasExams = getAssignments().some(isExam);
     hydrateHeader();
     hydrateStats();
     renderPaths();

@@ -21,6 +21,8 @@ PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
 SHARED_ASSET_VERSION = "20260806e"
+EXAM_RE = re.compile(r"\b(exam|quiz|midterm|final)\b|考试|测验|期中|期末", re.IGNORECASE)
+FINAL_RE = re.compile(r"\bfinal\b|期末", re.IGNORECASE)
 
 
 class PageParser(HTMLParser):
@@ -159,6 +161,81 @@ def mapped_sources(plan: dict) -> set[str]:
     return mapped
 
 
+def item_text(item: dict) -> str:
+    return " ".join(str(item.get(key, "")) for key in ("kind", "type", "title", "titleZh"))
+
+
+def dependency_boundary(item: dict) -> int:
+    values = [value for value in item.get("dependsOn", []) if isinstance(value, int)]
+    return max(values, default=0)
+
+
+def validate_learning_graph(course: Path, info: dict, status: dict) -> list[str]:
+    errors: list[str] = []
+    lectures = status.get("lectures") or info.get("lectures") or []
+    lecture_numbers = {item.get("number") for item in lectures if isinstance(item.get("number"), int)}
+    assignments = info.get("assignments") or status.get("assignments") or []
+    work_numbers = [item.get("number") for item in assignments]
+    if len(work_numbers) != len(set(work_numbers)):
+        errors.append("course-info assignments must use unique numbers")
+
+    for item in assignments:
+        number = item.get("number", "?")
+        dependencies = item.get("dependsOn")
+        if not isinstance(dependencies, list):
+            errors.append(f"work item {number} dependsOn must be a list")
+            continue
+        invalid_types = [value for value in dependencies if not isinstance(value, int) or value < 1]
+        if invalid_types:
+            errors.append(f"work item {number} has non-positive or non-integer dependsOn values: {invalid_types}")
+        unknown = sorted(set(value for value in dependencies if isinstance(value, int)) - lecture_numbers)
+        if unknown:
+            errors.append(f"work item {number} references missing lectures: {unknown}")
+
+        relative = item.get("assGuideFile") or item.get("contentFile")
+        if not relative:
+            errors.append(f"work item {number} has no assGuideFile or contentFile")
+        elif urlsplit(str(relative)).scheme or urlsplit(str(relative)).netloc:
+            errors.append(f"work item {number} must use a course-local guide file: {relative}")
+        else:
+            target = (course / str(relative)).resolve()
+            try:
+                target.relative_to(course.resolve())
+            except ValueError:
+                errors.append(f"work item {number} guide file escapes the course directory: {relative}")
+            else:
+                if not target.is_file():
+                    errors.append(f"work item {number} guide file does not exist: {relative}")
+
+    exams = [item for item in assignments if EXAM_RE.search(item_text(item))]
+    if not exams:
+        return errors
+    if not lecture_numbers:
+        errors.append("exam-based learning graph has no lectures")
+        return errors
+
+    ordered_exams = sorted(
+        exams,
+        key=lambda item: (bool(FINAL_RE.search(item_text(item))), dependency_boundary(item), item.get("number", 0)),
+    )
+    last_lecture = max(lecture_numbers)
+    boundaries = [last_lecture if FINAL_RE.search(item_text(item)) else dependency_boundary(item) for item in ordered_exams]
+    if any(boundary < 1 for boundary in boundaries):
+        errors.append("every exam must depend on at least one lecture")
+    if boundaries != sorted(boundaries):
+        errors.append(f"exam stage boundaries are not chronological: {boundaries}")
+    final_count = sum(bool(FINAL_RE.search(item_text(item))) for item in exams)
+    if final_count > 1:
+        errors.append("learning graph contains more than one final exam")
+
+    last_boundary = max(boundaries, default=0)
+    homework = [item for item in assignments if item not in exams]
+    unplaced = [item.get("number") for item in homework if dependency_boundary(item) > last_boundary]
+    if unplaced:
+        errors.append(f"homework items fall after the final exam stage: {unplaced}")
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", required=True)
@@ -223,6 +300,7 @@ def main() -> int:
             message = "unmapped primary resources: " + ", ".join(unmapped)
             (errors if args.strict_resources else warnings).append(message)
 
+    info_path = course / "course-info.json"
     status_path = course / "api" / "status.json"
     if status_path.is_file():
         status = load_json(status_path)
@@ -231,6 +309,8 @@ def main() -> int:
         missing_guides = [item.get("number") for item in status.get("assignments", []) if not item.get("assGuideFile")]
         if missing_guides:
             errors.append(f"status reports incomplete work-item guides: {missing_guides}")
+        if info_path.is_file():
+            errors.extend(validate_learning_graph(course, load_json(info_path), status))
 
     result = {
         "course": str(course),

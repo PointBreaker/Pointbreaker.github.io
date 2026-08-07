@@ -16,6 +16,9 @@ PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
 TODO_MARKER = "COURSE_CONTENT_TODO"
 SHARED_ASSET_VERSION = "20260806e"
+DASHBOARD_ASSET_VERSION = "20260807a"
+EXAM_RE = re.compile(r"\b(exam|quiz|midterm|final)\b|考试|测验|期中|期末", re.IGNORECASE)
+FINAL_RE = re.compile(r"\bfinal\b|期末", re.IGNORECASE)
 
 
 def load_json(path: Path) -> dict:
@@ -31,6 +34,10 @@ def slugify(value: str, fallback: str) -> str:
     value = value.lower().strip()
     value = re.sub(r"[^a-z0-9]+", "-", value).strip("-")
     return value or fallback
+
+
+def work_item_text(item: dict) -> str:
+    return " ".join(str(item.get(key, "")) for key in ("kind", "type", "title", "titleZh"))
 
 
 def validate_plan(plan: dict) -> None:
@@ -73,6 +80,17 @@ def validate_plan(plan: dict) -> None:
         invalid = set(item.get("dependsOn", [])) - known
         if invalid:
             raise ValueError(f"work item {item['number']} has invalid dependsOn values: {sorted(invalid)}")
+    exams = [item for item in work_items if EXAM_RE.search(work_item_text(item))]
+    if exams:
+        last_lecture = max(known)
+        boundaries = []
+        for item in sorted(exams, key=lambda value: (bool(FINAL_RE.search(work_item_text(value))), max(value.get("dependsOn", []) or [0]), value["number"])):
+            label = work_item_text(item)
+            if not item.get("dependsOn"):
+                raise ValueError(f"exam work item {item['number']} must depend on at least one lecture")
+            boundaries.append(last_lecture if FINAL_RE.search(label) else max(item["dependsOn"]))
+        if boundaries != sorted(boundaries):
+            raise ValueError(f"exam stage boundaries must be chronological: {boundaries}")
 
 
 def check_platform(repo: Path) -> dict:
@@ -122,8 +140,9 @@ def dashboard_page(plan: dict, root_prefix: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{description}">
   <title>{code} — CourseStack 课栈</title>
-  <link rel="stylesheet" href="{root_prefix}assets/course/dashboard.css?v={SHARED_ASSET_VERSION}">
-  <script defer src="{root_prefix}assets/course/dashboard.js?v={SHARED_ASSET_VERSION}"></script>
+  <link rel="icon" href="{root_prefix}favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="{root_prefix}assets/course/dashboard.css?v={DASHBOARD_ASSET_VERSION}">
+  <script defer src="{root_prefix}assets/course/dashboard.js?v={DASHBOARD_ASSET_VERSION}"></script>
 </head>
 <body><div id="course-app"></div></body>
 </html>

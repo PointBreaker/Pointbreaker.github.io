@@ -78,6 +78,11 @@ Rules:
 - Keep every `sourceFiles` path relative to the source-resource folder.
 - Use unique numbers and valid `dependsOn` targets.
 - Use `kind` such as `Assignment`, `Homework`, `Lab`, `Project`, `Exam`, or `Module`.
+- Set `kind` explicitly to `Exam`, `Quiz`, `Midterm`, or `Final Exam` for assessments that terminate a learning stage. Do not disguise exams as generic assignments.
+- Make each `dependsOn` entry a lecture number. Sparse dependencies are allowed, but their maximum number must place the item in the correct chronological stage.
+- When exams exist, the Dashboard derives stage boundaries from exams ordered by `max(dependsOn)`. It assigns the continuous, previously unshown lecture interval to that stage, assigns each HW to the first exam boundary covering `max(dependsOn)`, and extends a final exam through the last lecture. Cumulative final-exam dependencies must not cause previous lectures to render again.
+- For a sequence such as lectures 1–2 feeding HW1 and lectures 1–4 feeding Exam1, encode HW1 with `dependsOn: [1, 2]` and Exam1 with `dependsOn: [1, 2, 3, 4]`; the visual result is one left-to-right stage, not repeated rows.
+- Ensure every generated `assGuideFile` or `contentFile` is relative to the course root, normally `lessons/assignments/<file>.html`, and exists before validation.
 - If no graded work exists, create meaningful `Module` groups.
 - Keep the catalog summary concise and factual. Use 3–6 tags.
 - Choose an accessible accent color that remains legible on light and dark surfaces.
