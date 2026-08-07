@@ -226,7 +226,8 @@
     const searchText = [lecture.number, lecture.title, detail].join(' ').toLowerCase();
     return `<a class="lesson-link" data-card data-type="lectures" data-search="${escapeHtml(searchText)}" href="${escapeHtml(normalizePath(lecture.lessonFile))}">
       <span class="lesson-number">L${escapeHtml(lecture.number)}</span>
-      <span class="lesson-title">${escapeHtml(lecture.title)}<span class="lesson-detail">${escapeHtml(detail)}</span></span>
+      <span class="lesson-title">${escapeHtml(lecture.title)}</span>
+      <span class="lesson-detail">${escapeHtml(detail)}</span>
       <span class="lesson-status ${escapeHtml(state)}">${stateLabel}</span>
     </a>`;
   }
