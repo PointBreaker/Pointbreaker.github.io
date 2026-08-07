@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>曲线之间面积，切片法求体积 — MIT 18.01</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 18.01 · 第 21 课</p>
+    <h1>曲线之间面积，切片法求体积</h1>
+    <p class="lede">定积分的力量在于它能把「不规则形状」的度量变成积分运算。这一课把面积从「曲线下方」推广到「两条曲线之间」，再用切片法 (slicing) 求一般三维立体的体积——这是微积分走向几何应用的第一次飞跃。</p>
+
+    <div class="meta">
+      <span>授课：Prof. David Jerison</span>
+      <span>日期：2006-10-26</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="where">这一课在课程中的位置</h2>
+    <p>第 18–20 课建立了定积分与基本定理的理论框架，第 15–16 课给出了实际物理意义（位移、速度）。这一课把抽象的积分落到几何上：面积与体积。下一课的圆盘法与壳层法会把「切片」技巧专门化到旋转体，而这里学到的「先截面、再积分」思路是处理一切累积量问题的通用模板。</p>
+
+    <hr class="rule">
+
+    <h2 id="area">两条曲线之间的面积</h2>
+    <p>设 \(f(x) \ge g(x)\) 对所有 \(x\in[a,b]\) 成立，由曲线 \(y=f(x)\)、\(y=g(x)\)、直线 \(x=a\)、\(x=b\) 所围区域的面积为</p>
+    \[ A = \int_a^b \bigl(f(x)-g(x)\bigr)\,dx. \]
+
+    <div class="card idea">
+      <p><strong>「外减内」原理</strong>：竖条的高度是 \(f(x)-g(x)\)，宽度是 \(dx\)，面积微元 \(dA = (f-g)\,dx\)。积分即把这些竖条从 \(a\) 累加到 \(b\)。</p>
+    </div>
+
+    <h3>例 1：抛物线与直线</h3>
+    <p>求由 \(y=x^2\) 与 \(y=x\) 所围区域的面积。</p>
+    <p>先求交点：\(x^2=x\) 得 \(x=0,1\)。在 \([0,1]\) 上 \(x \ge x^2\)，故</p>
+    \[ A = \int_0^1 (x-x^2)\,dx = \Bigl[\frac{x^2}{2}-\frac{x^3}{3}\Bigr]_0^1 = \frac12-\frac13 = \frac16. \]
+
+    <h3>例 2：曲线相交、上下翻转</h3>
+    <p>求 \(y=\sin x\) 与 \(y=\cos x\) 在 \([0,\pi/2]\) 上所围面积。</p>
+    <p>交点：\(\sin x=\cos x\) 得 \(x=\pi/4\)。在 \([0,\pi/4]\) 上 \(\cos x\ge\sin x\)，在 \([\pi/4,\pi/2]\) 上 \(\sin x\ge\cos x\)。因此</p>
+    \[ A = \int_0^{\pi/4}(\cos x-\sin x)\,dx + \int_{\pi/4}^{\pi/2}(\sin x-\cos x)\,dx. \]
+    <p>第一段：\([\sin x+\cos x]_0^{\pi/4} = (\frac{\sqrt2}{2}+\frac{\sqrt2}{2})-(0+1) = \sqrt2-1\)。第二段：\([-\cos x-\sin x]_{\pi/4}^{\pi/2} = (0-1)-(-\frac{\sqrt2}{2}-\frac{\sqrt2}{2}) = \sqrt2-1\)。总面积 \(=2\sqrt2-2\)。</p>
+
+    <div class="card warning">
+      <p><strong>必须找到交点</strong>：若区间内 \(f-g\) 会变号，必须分段积分，否则正负会抵消，得到错误面积。</p>
+    </div>
+
+    <h3>用水平条（对 y 积分）</h3>
+    <p>有时对 \(y\) 积分更方便：若 \(x_{\text{right}}(y) \ge x_{\text{left}}(y)\)，则</p>
+    \[ A = \int_c^d \bigl(x_{\text{right}}(y)-x_{\text{left}}(y)\bigr)\,dy. \]
+    <p><strong>例</strong>：由 \(y=x^2\) 与 \(y=x\) 所围面积，改写为 \(x=y\) 与 \(x=\sqrt{y}\)，对 \(y\) 从 0 到 1 积分：</p>
+    \[ A = \int_0^1 (y-\sqrt{y})\,dy = \Bigl[\frac{y^2}{2}-\frac{2}{3}y^{3/2}\Bigr]_0^1 = \frac12-\frac23 = \frac16. \]
+
+    <hr class="rule">
+
+    <h2 id="slicing">切片法求体积</h2>
+    <p>设三维立体位于 \(x=a\) 与 \(x=b\) 之间，过点 \(x\) 作垂直于 \(x\) 轴的截面，截面面积为 \(A(x)\)。体积微元是厚度 \(dx\)、底面 \(A(x)\) 的薄片，因此</p>
+    \[ V = \int_a^b A(x)\,dx. \]
+
+    <div class="card idea">
+      <p><strong>「切片法」的核心</strong>：只要能用 \(x\) 表达截面积 \(A(x)\)，体积就等于 \(\int A(x)\,dx\)。</p>
+    </div>
+
+    <h3>例 3：正方锥体</h3>
+    <p>底面是边长为 \(a\) 的正方形、高为 \(h\) 的正方锥。在高度 \(x\) 处（从顶点起算），截面是边长为 \(s(x)=a\cdot x/h\) 的正方形，面积 \(A(x) = a^2 x^2/h^2\)。于是</p>
+    \[ V = \int_0^h \frac{a^2 x^2}{h^2}\,dx = \frac{a^2}{h^2}\cdot\frac{h^3}{3} = \frac{a^2 h}{3}, \]
+    <p>即「底乘高除以 3」。</p>
+
+    <h3>例 4：一般锥体</h3>
+    <p>任何底面积为 \(B\)、高为 \(h\) 的锥体，在高度 \(x\) 处截面面积按相似比 \(x/h\) 缩小：\(A(x) = B(x/h)^2\)。故</p>
+    \[ V = \int_0^h B\frac{x^2}{h^2}\,dx = \frac{B}{h^2}\cdot\frac{h^3}{3} = \frac{Bh}{3}. \]
+    <p>这说明所有锥体（不论底面形状）体积都是 \(\frac13 Bh\)。</p>
+
+    <h3>例 5：PS5 第 3b 题思路</h3>
+    <p>求由 \(x,y,z&gt;0\) 与 \(z/2 &lt; x+y &lt; z\) 所围区域的体积。</p>
+    <p>思路：先固定 \(z\)，水平截面是 \(x,y&gt;0\) 上满足 \(z/2 &lt; x+y &lt; z\) 的区域，这是一个等腰直角三角形之间的「环带」。求出截面面积 \(A(z)\)（它是 \(z\) 的二次函数），再对 \(z\) 积分。</p>
+
+    <h3>例 6：旋转体的预备——圆盘</h3>
+    <p>把区域 \(0\le y\le f(x)\)，\(a\le x\le b\) 绕 \(x\) 轴旋转，截面是半径 \(R(x)=f(x)\) 的圆盘，面积 \(A(x)=\pi f(x)^2\)，故</p>
+    \[ V = \int_a^b \pi f(x)^2\,dx. \]
+    <p>这是下一课圆盘法 (disk method) 的特例。</p>
+
+    <hr class="rule">
+
+    <h2 id="pitfalls">常见误区与边界情况</h2>
+
+    <div class="card warning">
+      <p><strong>面积必须是非负的</strong>：算面积时若 \(f-g\) 变号却没分段，积分会给出有向面积而非几何面积。</p>
+    </div>
+
+    <ul>
+      <li><strong>选对积分变量</strong>：对 \(x\) 积分用竖条，对 \(y\) 积分用水平条。选错变量可能让反函数很复杂。</li>
+      <li><strong>截面面积表达式</strong>：切片法要求 \(A(x)\) 能写出显式。如果截面形状随 \(x\) 变化，要仔细找出规律。</li>
+      <li><strong>旋转轴</strong>：绕 \(x\) 轴用 \(dx\)、绕 \(y\) 轴用 \(dy\)。轴选错会让半径表达式错乱。</li>
+      <li><strong>单位一致性</strong>：面积是长度平方，体积是长度立方，截面面积表达式里不要漏平方。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确。面积 = \(\int_0^1 (x-x^2)\,dx = 1/6\)。" data-incorrect="交点在 0 和 1，上曲线是 \(y=x\)，下曲线是 \(y=x^2\)，面积是 \(1/6\)。">
+      <p><strong>问题 1：</strong>由 \(y=x^2\) 与 \(y=x\) 所围区域的面积是</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(1/2\)</button>
+        <button data-choice="b" aria-pressed="false">\(1/6\)</button>
+        <button data-choice="c" aria-pressed="false">\(1/3\)</button>
+        <button data-choice="d" aria-pressed="false">\(1\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确。底面积 \(B\)、高 \(h\) 的锥体体积恒为 \(Bh/3\)，与底面形状无关。" data-incorrect="由切片法，\(A(x)=B(x/h)^2\)，积分得 \(Bh/3\)，与底面形状无关。">
+      <p><strong>问题 2：</strong>底面积为 \(B\)、高为 \(h\) 的任意锥体体积是</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(Bh\)</button>
+        <button data-choice="b" aria-pressed="false">\(Bh/2\)</button>
+        <button data-choice="c" aria-pressed="false">\(Bh/3\)</button>
+        <button data-choice="d" aria-pressed="false">\(Bh/4\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确。绕 x 轴旋转，截面半径 \(R(x)=f(x)\)，面积 \(\pi f(x)^2\)，积分得 \(V=\int_a^b \pi f(x)^2 dx\)。" data-incorrect="绕 x 轴旋转时截面是半径 \(f(x)\) 的圆盘，面积 \(\pi f(x)^2\)，体积 = \(\int \pi f(x)^2 dx\)。">
+      <p><strong>问题 3：</strong>区域 \(0\le y\le f(x)\)，\(a\le x\le b\) 绕 \(x\) 轴旋转所得旋转体体积为</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\int_a^b f(x)\,dx\)</button>
+        <button data-choice="b" aria-pressed="false">\(\int_a^b \pi f(x)^2\,dx\)</button>
+        <button data-choice="c" aria-pressed="false">\(\int_a^b 2\pi f(x)\,dx\)</button>
+        <button data-choice="d" aria-pressed="false">\(\int_a^b \pi f(x)\,dx\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确。面积 = \(\int_0^2 (x^2-x)\,dx = [x^3/3-x^2/2]_0^2 = 8/3-2 = 2/3\)。" data-incorrect="交点在 0 和 2，\(y=x^2\) 在上，面积 = \(\int_0^2(x^2-x)dx = 8/3-2 = 2/3\)。">
+      <p><strong>问题 4：</strong>由 \(y=x^2\) 与 \(y=2x\) 所围区域（取第一象限部分 \(0\le x\le 2\)）的面积是</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(8/3\)</button>
+        <button data-choice="b" aria-pressed="false">\(2/3\)</button>
+        <button data-choice="c" aria-pressed="false">\(4/3\)</button>
+        <button data-choice="d" aria-pressed="false">\(2\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>曲线间面积</h3>
+        <p>\(\int (\text{上} - \text{下})\,dx\)，注意分段</p>
+      </article>
+      <article>
+        <h3>切片法体积</h3>
+        <p>\(V = \int_a^b A(x)\,dx\)</p>
+      </article>
+      <article>
+        <h3>选对积分变量</h3>
+        <p>竖条对 x，水平条对 y</p>
+      </article>
+      <article>
+        <h3>锥体体积</h3>
+        <p>恒为 \(\frac13 Bh\)，不论底面形状</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料</h2>
+    <ul>
+      <li>PS5 第 1–3 题（温度模型、菲涅尔积分、体积切片）</li>
+      <li>Simmons 第 7.1–7.3 节：面积与切片法</li>
+      <li>OCW 18.01 Lecture 21 视频</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>← <a href="0020-second-fundamental-theorem.html">第 20 课：微积分第二基本定理，ln 的定义</a></span>
+      <a href="0022-volumes-disks-shells.html">第 22 课：圆盘法与壳层法求体积 →</a>
+    </div>
+
+    <footer>
+      <p>MIT 18.01 Single Variable Calculus · Fall 2006 · 覆盖 Lecture 21</p>
+    </footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

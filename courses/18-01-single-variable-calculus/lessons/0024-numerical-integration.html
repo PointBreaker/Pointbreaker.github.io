@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数值积分 — MIT 18.01</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 18.01 · 第 24 课</p>
+    <h1>数值积分</h1>
+    <p class="lede">许多定积分找不到初等闭形（如 \(\int_0^{\pi/2}\cos(t^2)\,dt\)），但工程上仍需要数值答案。这一课介绍两种经典近似方案——梯形法则 (Trapezoidal rule) 与辛普森法则 (Simpson's rule)——并给出它们的误差估计，这是 Exam 3 的收官考点。</p>
+
+    <div class="meta">
+      <span>授课：Prof. David Jerison</span>
+      <span>日期：2006-11-02</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="where">这一课在课程中的位置</h2>
+    <p>前几课教了用 FTC 1 算精确积分的方法，但被积函数 \(\cos(t^2)\)、\(e^{-x^2}\) 等没有初等反导数。这一课转向数值近似：把积分区间等分，用折线或抛物线代替曲线，再求和。Exam 3 会要求你手算梯形 / 辛普森近似值并估算误差。</p>
+
+    <hr class="rule">
+
+    <h2 id="trap">梯形法则 (Trapezoidal rule)</h2>
+    <p>把 \([a,b]\) 分成 \(n\) 等份，步长 \(h=(b-a)/n\)，节点 \(x_i=a+ih\)，\(y_i=f(x_i)\)。在每个子区间 \([x_{i-1},x_i]\) 上用梯形代替曲边：</p>
+    \[ \int_{x_{i-1}}^{x_i} f(x)\,dx \approx \frac{h}{2}(y_{i-1}+y_i). \]
+    <p>求和得复合梯形公式：</p>
+    \[ T_n = \frac{h}{2}\Bigl(y_0 + 2y_1 + 2y_2 + \dots + 2y_{n-1} + y_n\Bigr). \]
+
+    <h3>误差估计</h3>
+    <p>若 \(f''\) 在 \([a,b]\) 上连续，记 \(M_2 = \max_{[a,b]}|f''(x)|\)，则梯形误差满足</p>
+    \[ |E_T| \le \frac{(b-a)^3}{12n^2}\,M_2 = \frac{(b-a)h^2}{12}\,M_2. \]
+    <p>误差按 \(O(h^2)\) 衰减——步长减半，误差约减为四分之一。</p>
+
+    <h3>例 1：\(\int_0^{\pi/2}\sin^6 x\,dx\)，\(n=2\)</h3>
+    <p>节点：\(x_0=0\)，\(x_1=\pi/4\)，\(x_2=\pi/2\)，\(h=\pi/4\)。</p>
+    <p>\(y_0=\sin^6 0=0\)，\(y_1=\sin^6(\pi/4)=(\sqrt2/2)^6=1/8\)，\(y_2=\sin^6(\pi/2)=1\)。</p>
+    \[ T_2 = \frac{\pi/4}{2}\Bigl(0 + 2\cdot\tfrac18 + 1\Bigr) = \frac{\pi}{8}\cdot\frac54 = \frac{5\pi}{32} \approx 0.4909. \]
+
+    <hr class="rule">
+
+    <h2 id="simp">辛普森法则 (Simpson's rule)</h2>
+    <p>梯形用直线近似，辛普森用抛物线近似——每两个子区间（三个点）拟合一条二次曲线。设区间 \([x_0,x_2]\) 长 \(2h\)，中点 \(x_1=x_0+h\)，抛物线过 \((x_0,y_0)\)、\((x_1,y_1)\)、\((x_2,y_2)\)，其下面积为</p>
+    \[ \frac{h}{3}(y_0+4y_1+y_2). \]
+
+    <div class="card idea">
+      <p><strong>辛普森公式的关键</strong>：系数模式是 \(1,4,2,4,2,\dots,4,1\)。必须要求<strong>偶数</strong>个子区间（奇数个节点）。</p>
+    </div>
+
+    <p>复合辛普森公式（\(n\) 为偶数）：</p>
+    \[ S_n = \frac{h}{3}\Bigl(y_0 + 4y_1 + 2y_2 + 4y_3 + \dots + 4y_{n-1} + y_n\Bigr). \]
+
+    <h3>误差估计</h3>
+    <p>若 \(f^{(4)}\) 连续，记 \(M_4=\max|f^{(4)}(x)|\)，则</p>
+    \[ |E_S| \le \frac{(b-a)^5}{180n^4}\,M_4 = \frac{(b-a)h^4}{180}\,M_4. \]
+    <p>误差按 \(O(h^4)\) 衰减——步长减半，误差约减为十六分之一，比梯形快得多。</p>
+
+    <h3>例 2：同例 1，辛普森法则 \(n=2\)</h3>
+    \[ S_2 = \frac{\pi/4}{3}\Bigl(0 + 4\cdot\tfrac18 + 1\Bigr) = \frac{\pi}{12}\cdot\frac32 = \frac{\pi}{8} \approx 0.3927. \]
+
+    <h3>辛普森公式的证明思路（PS6 第 4 题）</h3>
+    <p>平移区间使 \(x_0=-h\)，\(x_1=0\)，\(x_2=h\)。设过三点的抛物线 \(y=Ax^2+Bx+C\)：</p>
+    <ul>
+      <li>由 \(y(-h)=y_0\)、\(y(0)=y_1\)、\(y(h)=y_2\) 解得 \(C=y_1\)，\(A=\frac{y_0-2y_1+y_2}{2h^2}\)，\(B=\frac{y_2-y_0}{2h}\)。</li>
+      <li>积分 \(\int_{-h}^h (Ax^2+Bx+C)\,dx = \frac{2Ah^3}{3}+2Ch\)。</li>
+      <li>代入 \(A,C\)：\(\frac{h}{3}(y_0+4y_1+y_2)\)。</li>
+    </ul>
+
+    <h3>例 3：菲涅尔积分近似（PS6 第 5 题）</h3>
+    <p>精确到五位小数，\(\displaystyle\int_0^{\pi/2}\cos(t^2)\,dt \approx 1.22505\)。用辛普森 \(n=4\) 与 \(n=8\) 做近似，可以观察到误差随 \(n\) 增大迅速缩小。</p>
+
+    <hr class="rule">
+
+    <h2 id="compare">两种方法对比</h2>
+    <table>
+      <tr><th>方法</th><th>每段近似</th><th>误差阶</th><th>要求</th></tr>
+      <tr><td>梯形</td><td>直线</td><td>\(O(h^2)\)</td><td>任意 \(n\)</td></tr>
+      <tr><td>辛普森</td><td>抛物线</td><td>\(O(h^4)\)</td><td>\(n\) 为偶数</td></tr>
+    </table>
+    <p>辛普森精度远高于梯形（同 \(n\) 下），但要求偶数段且被积函数四阶导数连续。</p>
+
+    <hr class="rule">
+
+    <h2 id="pitfalls">常见误区与边界情况</h2>
+
+    <div class="card warning">
+      <p><strong>辛普森法则要求偶数个子区间</strong>：\(n\) 必须是偶数，否则系数模式 \(1,4,2,4,\dots\) 对不上。</p>
+    </div>
+
+    <ul>
+      <li><strong>系数别记错</strong>：梯形是 \(1,2,2,\dots,2,1\)；辛普森是 \(1,4,2,4,\dots,4,1\)。</li>
+      <li><strong>步长 \(h\) 的定义</strong>：\(h=(b-a)/n\)，辛普森中每段跨 \(2h\)（两个子区间）。</li>
+      <li><strong>误差界要算导数</strong>：误差公式需要 \(\max|f''|\) 或 \(\max|f^{(4)}|\)，考试会给或要求你估算。</li>
+      <li><strong>近似 ≠ 精确</strong>：数值方法给出近似值，能算精确时仍应用 FTC。</li>
+      <li><strong>被积函数要光滑</strong>：若 \(f\) 有尖点或间断，误差估计可能失效。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确。梯形公式：\(T_2=\frac{\pi/4}{2}(0+2\cdot 1/8+1)=5\pi/32\)。" data-incorrect="梯形公式系数模式是 \(1,2,1\)，代入得 \(5\pi/32\)。">
+      <p><strong>问题 1：</strong>用梯形法则（\(n=2\)）近似 \(\int_0^{\pi/2}\sin^6 x\,dx\)，结果为</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(\pi/8\)</button>
+        <button data-choice="b" aria-pressed="false">\(5\pi/32\)</button>
+        <button data-choice="c" aria-pressed="false">\(3\pi/16\)</button>
+        <button data-choice="d" aria-pressed="false">\(\pi/4\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确。辛普森 \(n=2\)：\(\frac{\pi/4}{3}(0+4\cdot 1/8+1)=\pi/8\)。" data-incorrect="辛普森公式系数模式是 \(1,4,1\)，代入得 \(\pi/8\)。">
+      <p><strong>问题 2：</strong>用辛普森法则（\(n=2\)）近似同一积分，结果为</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(5\pi/32\)</button>
+        <button data-choice="b" aria-pressed="false">\(\pi/8\)</button>
+        <button data-choice="c" aria-pressed="false">\(\pi/4\)</button>
+        <button data-choice="d" aria-pressed="false">\(\pi/2\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="c" data-correct="正确。辛普森误差按 \(O(h^4)\) 衰减，梯形按 \(O(h^2)\)。" data-incorrect="辛普森误差阶是 \(O(h^4)\)，比梯形的 \(O(h^2)\) 更高阶，收敛更快。">
+      <p><strong>问题 3：</strong>辛普森法则的误差阶是</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(O(h)\)</button>
+        <button data-choice="b" aria-pressed="false">\(O(h^2)\)</button>
+        <button data-choice="c" aria-pressed="false">\(O(h^4)\)</button>
+        <button data-choice="d" aria-pressed="false">\(O(h^6)\)</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="c" data-correct="正确。辛普森法则需要偶数个子区间（奇数个节点），系数模式才匹配。" data-incorrect="辛普森法则要求偶数个子区间，因为每段抛物线覆盖两个子区间。">
+      <p><strong>问题 4：</strong>使用辛普森法则时，子区间数 \(n\) 必须满足</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(n\) 为奇数</button>
+        <button data-choice="b" aria-pressed="false">\(n\) 为 3 的倍数</button>
+        <button data-choice="c" aria-pressed="false">\(n\) 为偶数</button>
+        <button data-choice="d" aria-pressed="false">任意正整数</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article>
+        <h3>梯形法则</h3>
+        <p>\(T_n = \frac{h}{2}(y_0+2y_1+\dots+2y_{n-1}+y_n)\)，误差 \(O(h^2)\)</p>
+      </article>
+      <article>
+        <h3>辛普森法则</h3>
+        <p>\(S_n = \frac{h}{3}(y_0+4y_1+2y_2+\dots+y_n)\)，误差 \(O(h^4)\)</p>
+      </article>
+      <article>
+        <h3>关键限制</h3>
+        <p>辛普森要求偶数段</p>
+      </article>
+      <article>
+        <h3>应用场景</h3>
+        <p>被积函数积不出闭形时</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料</h2>
+    <ul>
+      <li>PS6 第 4–5 题（辛普森公式证明、菲涅尔积分数值近似）</li>
+      <li>Simmons 第 10.9 节：数值积分</li>
+      <li>Exam 3 Review 第 3 条：梯形与辛普森法则</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>← <a href="0023-work-average-probability.html">第 23 课：功、平均值与概率</a></span>
+      <a href="0025-trigonometric-integrals.html">第 25 课：三角函数的积分 →</a>
+    </div>
+
+    <footer>
+      <p>MIT 18.01 Single Variable Calculus · Fall 2006 · 覆盖 Lecture 24</p>
+    </footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>

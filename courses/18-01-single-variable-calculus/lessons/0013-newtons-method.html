@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>牛顿法与其他应用 — MIT 18.01</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260806e">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260806e">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 18.01 · 第 13 课</p>
+    <h1>牛顿法与其他应用</h1>
+    <p class="lede">手算 \(\sqrt[3]{9}\) 精确到六位有效数字，不用计算器——牛顿法用切线一次次逼近方程的根，每一步正确位数大约翻倍。本课还把这些逼近思想用于指数增长等实际估计问题。</p>
+
+    <div class="meta">
+      <span>授课：Prof. David Jerison</span>
+      <span>日期：2006-10-05</span>
+      <span>难度：中等</span>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="where">这一课在课程中的位置</h2>
+    <p>第 9 课的线性逼近 \(L(x)=f(a)+f'(a)(x-a)\) 是牛顿法的几何基础：用切线代替曲线，切线与 x 轴的交点就是下一次近似。本课把这个思想迭代化，得到求方程根的数值方法，并展示它在根号计算与指数估计中的威力。</p>
+
+    <hr class="rule">
+
+    <h2 id="newton">牛顿法：求 \(f(x)=0\) 的根</h2>
+
+    <h3>几何想法</h3>
+    <p>从一个猜测 \(x_0\) 出发，过点 \((x_n, f(x_n))\) 作切线，切线与 x 轴的交点就是 \(x_{n+1}\)。切线方程：</p>
+    <p>\[y-f(x_n)=f'(x_n)(x-x_n).\]</p>
+    <p>令 \(y=0\) 解出切线的 x 截距，得到<strong>牛顿迭代公式</strong>：</p>
+
+    <div class="card idea">
+      <p><strong>牛顿迭代公式</strong></p>
+      <p>\[x_{n+1}=x_n-\frac{f(x_n)}{f'(x_n)}.\]</p>
+    </div>
+
+    <h3>收敛性</h3>
+    <p>若初值 \(x_0\) 足够靠近一根（且 \(f'\) 在该根处不为零），牛顿法<strong>二次收敛</strong>——每步正确位数大约翻倍。这是它比二分法快得多的原因。</p>
+
+    <div class="card warning">
+      <p><strong>失效情形：</strong></p>
+      <ul>
+        <li>\(f'(x_n)=0\) 时分母为零，迭代中断；</li>
+        <li>初值离根太远可能发散或落入循环；</li>
+        <li>重根附近收敛退化为线性。</li>
+      </ul>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="example-cube">例题：用牛顿法计算 \(\sqrt[3]{9}\)（六位有效数字）</h2>
+    <p>（作业 3 第 5 题类型）令 \(f(x)=x^3-9\)，求其正根。\(f'(x)=3x^2\)，迭代公式：</p>
+    <p>\[x_{n+1}=x_n-\frac{x_n^3-9}{3x_n^2}=\frac{2x_n^3+9}{3x_n^2}.\]</p>
+    <p>取 \(x_0=2\)：</p>
+
+    <table>
+      <tr><th>n</th><th>\(x_n\)</th><th>与 \(\sqrt[3]{9}\) 的接近程度</th></tr>
+      <tr><td>0</td><td>2</td><td>初值</td></tr>
+      <tr><td>1</td><td>\((2\cdot 8+9)/(3\cdot 4)=25/12\approx 2.08333\)</td><td>接近</td></tr>
+      <tr><td>2</td><td>\(\approx 2.08009\)</td><td>已准到 4 位</td></tr>
+      <tr><td>3</td><td>\(\approx 2.08008\)</td><td>稳定到 6 位</td></tr>
+    </table>
+
+    <p>仅三步就达到六位有效数字——牛顿法的二次收敛可见一斑。作业要求比较每一步 \(x_k\) 与 \(x_{k-1}\) 以及精确值的大小，并在 \(y=x^3-9\) 的图像上用切线几何解释这种单调逼近的由来。</p>
+
+    <hr class="rule">
+
+    <h2 id="example-exp">应用：用线性/二次逼近估计指数</h2>
+    <p>（复习题 7）要使 \(f(x)=\dfrac{e^{-x}}{1+2\sin x}\) 在 \(x\approx 0\) 时尽可能"像常数 1"，就要消掉它的一阶变化。在 \(x=0\) 处：\(f(0)=1\)，\(f'(0)=-3\)。取 \(\epsilon\) 使得分子分的一阶项相消，可让函数在 0 附近更平——这是<strong>参数选择型逼近</strong>，思路与第 9 课的泰勒展开一脉相承。</p>
+
+    <div class="card">
+      <p><strong>指数增长估计：</strong>利用 \((1+x)^{1/2}\approx 1+x/2\)（一阶）和更高阶的二次逼近，可快速估算 \((1+r)^t\) 类复利增长，无需计算器。作业 2B 第 1 题（球冠面积）正是这一技巧的典型应用。</p>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="pitfalls">常见误区与边界情况</h2>
+    <ul>
+      <li><strong>忘记检查 \(f'(x_n)\neq 0\)：</strong>分母为零时迭代公式无定义。</li>
+      <li><strong>初值选取不当：</strong>离根太远可能发散，必要时先用二分法定位。</li>
+      <li><strong>混淆"收敛"与"收敛到想要的根"：</strong>多根函数可能收敛到另一根。</li>
+      <li><strong>误以为牛顿法一定收敛：</strong>它只在满足条件时局部收敛，不是万能方法。</li>
+      <li><strong>有效数字的判断：</strong>要明确"六位有效数字"的判据——相邻两次迭代相差小于 \(0.5\times 10^{-5}\)。</li>
+    </ul>
+
+    <hr class="rule">
+
+    <h2 id="quiz">知识检查</h2>
+
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！牛顿迭代公式为 \(x_{n+1}=x_n-f(x_n)/f'(x_n)\)，来自切线的 x 截距。" data-incorrect="牛顿法的公式是 \(x_{n+1}=x_n-f(x_n)/f'(x_n)\)，由切线方程令 y=0 推出。">
+      <p><strong>问题 1：</strong>牛顿法的迭代公式是哪一个？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(x_{n+1}=x_n+f(x_n)f'(x_n)\)</button>
+        <button data-choice="b" aria-pressed="false">\(x_{n+1}=x_n-\dfrac{f(x_n)}{f'(x_n)}\)</button>
+        <button data-choice="c" aria-pressed="false">\(x_{n+1}=f'(x_n)-f(x_n)\)</button>
+        <button data-choice="d" aria-pressed="false">\(x_{n+1}=x_n-\dfrac{f'(x_n)}{f(x_n)}\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！牛顿法在单根附近二次收敛，正确位数每步大约翻倍。" data-incorrect="牛顿法的收敛是二次的（正确位数大致翻倍），不是线性每次多一位。">
+      <p><strong>问题 2：</strong>牛顿法在单根附近的收敛速度如何？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">线性收敛（每步多一位正确数字）</button>
+        <button data-choice="b" aria-pressed="false">二次收敛（每步正确位数大致翻倍）</button>
+        <button data-choice="c" aria-pressed="false">不收敛</button>
+        <button data-choice="d" aria-pressed="false">三次收敛（无此说法）</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="3" data-answer="c" data-correct="正确！用 \(f(x)=x^3-9\) 可求 \(\sqrt[3]{9}\)，这是牛顿法的经典例题。" data-incorrect="求 \(\sqrt[3]{9}\) 即解 \(x^3-9=0\)，应令 \(f(x)=x^3-9\)。">
+      <p><strong>问题 3：</strong>要用牛顿法计算 \(\sqrt[3]{9}\)，应取哪个 \(f(x)\)？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(f(x)=x^2-9\)</button>
+        <button data-choice="b" aria-pressed="false">\(f(x)=9-x\)</button>
+        <button data-choice="c" aria-pressed="false">\(f(x)=x^3-9\)</button>
+        <button data-choice="d" aria-pressed="false">\(f(x)=x^{-3}-9\)</button>
+      </div>
+    </div>
+
+    <div class="quiz" data-quiz="4" data-answer="a" data-correct="正确！分母为零时迭代公式无定义，这是牛顿法的主要失效模式之一。" data-incorrect="当 \(f'(x_n)=0\) 时分母为零，迭代无法进行，这是需要避免的情形。">
+      <p><strong>问题 4：</strong>牛顿法在什么情况下会失效？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">\(f'(x_n) = 0\)</button>
+        <button data-choice="b" aria-pressed="false">\(f(x_n) = 0\)</button>
+        <button data-choice="c" aria-pressed="false">\(x_n\) 是整数</button>
+        <button data-choice="d" aria-pressed="false">\(f(x)\) 为多项式</button>
+      </div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">本课要点</h2>
+    <div class="loop">
+      <article><h3>迭代公式</h3><p>\(x_{n+1}=x_n-f(x_n)/f'(x_n)\)，来自切线逼近</p></article>
+      <article><h3>二次收敛</h3><p>每步正确位数大致翻倍</p></article>
+      <article><h3>几何来源</h3><p>切线与 x 轴的交点即下一次近似</p></article>
+      <article><h3>初值敏感</h3><p>初值要靠近根，否则可能发散</p></article>
+      <article><h3>逼近应用</h3><p>根号计算、指数估计、参数选择</p></article>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="reading">参考资料</h2>
+    <ul>
+      <li>Simmons 第 4.6 节——牛顿法</li>
+      <li>Problem Set 3 第 5 题——用牛顿法计算 \(\sqrt[3]{9}\) 到六位有效数字</li>
+    </ul>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <span>← <a href="0012-related-rates.html">第 12 课：相关变化率</a></span>
+      <a href="0014-mean-value-theorem-inequalities.html">第 14 课：中值定理与不等式 →</a>
+    </div>
+
+    <footer>
+      <p>MIT 18.01 Single Variable Calculus · Fall 2006 · 覆盖 Lecture 13</p>
+    </footer>
+  </div>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/vendor/prism-python.js"></script>
+  <script src "../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260806e"></script>
+</body>
+</html>
