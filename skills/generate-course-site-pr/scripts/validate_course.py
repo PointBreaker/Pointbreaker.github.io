@@ -15,12 +15,11 @@ from validate_interactive import validate_interactives
 
 
 TODO_MARKER = "COURSE_CONTENT_TODO"
-DRIVE_RE = re.compile(r"https?://(?:drive|docs)\.google\.com", re.IGNORECASE)
 DOLLAR_MATH_RE = re.compile(r"(?<!\\)\$[^$\n]{1,300}(?<!\\)\$")
 PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
-SHARED_ASSET_VERSION = "20260806e"
+SHARED_ASSET_VERSION = "20260808b"
 EXAM_RE = re.compile(r"\b(exam|quiz|midterm|final)\b|考试|测验|期中|期末", re.IGNORECASE)
 FINAL_RE = re.compile(r"\bfinal\b|期末", re.IGNORECASE)
 
@@ -103,8 +102,6 @@ def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
     label = page.relative_to(course).as_posix()
     if TODO_MARKER in source or re.search(r"\bTODO\b|\bTBD\b", source):
         errors.append(f"{label}: contains placeholder text")
-    if DRIVE_RE.search(source):
-        errors.append(f"{label}: contains forbidden Google Drive/Docs URL")
     parser = PageParser()
     try:
         parser.feed(source)
@@ -136,7 +133,9 @@ def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
                 errors.append(f"{label}: quiz {quiz['id']} answer {quiz['answer']!r} has no matching choice")
             if len(quiz["choices"]) < 2:
                 errors.append(f"{label}: quiz {quiz['id']} has fewer than two choices")
-        if not parser.quizzes:
+        relative_parts = set(page.relative_to(course).parts)
+        is_work_item = bool(relative_parts & {"assignments", "work-items"})
+        if not parser.quizzes and not is_work_item:
             errors.append(f"{label}: contains no quizzes")
     visible = strip_protected_blocks(source)
     if DOLLAR_MATH_RE.search(visible):

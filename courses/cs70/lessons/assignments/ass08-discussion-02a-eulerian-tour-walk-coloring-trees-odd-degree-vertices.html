@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eulerian Tour/Walk, Coloring Trees, Odd-Degree Vertices — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 02a</p>
+    <h1>欧拉迹/回路、树染色、奇度顶点</h1>
+    <p class="lede">本讨论课涵盖图论的三个主题：(1) 欧拉回路与欧拉通路的存在性判定；(2) 证明所有至少包含两个顶点的树都是二分图；(3) 用三种方法（直接证明、对边数归纳、对顶点数归纳）证明无向图中奇度顶点的个数必为偶数。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Eulerian tour</li><li>Eulerian walk</li><li>graph theory</li><li>bipartite graph</li><li>tree</li><li>induction</li><li>handshake lemma</li><li>odd-degree vertices</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis02a.pdf</code>、<code>solutions/discussion/dis02a-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis02a.pdf</code>、<code>solutions/discussion/dis02a-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>欧拉回路与欧拉通路</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4>1 欧拉回路与欧拉通路
+<p>（图 \(G\) 的顶点集为 \(V = \{1,2,3,4,5,6,7\}\)，边集为 \(E = \{\{1,2\},\{2,3\},\{3,4\},\{4,1\},\{1,3\},\{3,6\},\{6,4\},\{4,5\},\{5,2\},\{2,4\},\{4,7\},\{7,5\},\{5,6\},\{6,7\}\}\)，共 14 条边。）</p>
+<p>(a) 图 \(G\) 中是否存在欧拉回路（Eulerian tour）？若不存在，请给出理由；若存在，请给出一个例子。</p>
+<p>(b) 图 \(G\) 中是否存在欧拉通路（Eulerian walk）？欧拉通路是指恰好经过每条边一次的通路（walk）。若不存在，请给出理由；若存在，请给出一个例子。</p>
+<p>(c) 无向图中存在欧拉通路的条件是什么？简要说明你的理由。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 问题 1 的图：7 个顶点（标记为 1–7）的无向图，共 14 条边</h4><p>顶点集 \(V = \{1,2,3,4,5,6,7\}\)；边集 \(E = \{\{1,2\},\{2,3\},\{3,4\},\{4,1\},\{1,3\},\{3,6\},\{6,4\},\{4,5\},\{5,2\},\{2,4\},\{4,7\},\{7,5\},\{5,6\},\{6,7\}\}\)（共 14 条边）。各顶点度数：\(\deg(1)=3\)（奇），\(\deg(2)=4\)，\(\deg(3)=4\)，\(\deg(4)=6\)，\(\deg(5)=4\)，\(\deg(6)=4\)，\(\deg(7)=3\)（奇）。</p><p class="problem-source">来源：<code>discussion/dis02a.pdf</code> · 1</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>计算图 \(G\) 中每个顶点的度数，特别关注奇度顶点的个数。回顾课堂上讲的欧拉回路存在性定理，并思考：如果一条通路恰好经过每条边一次，那么除了起点和终点外，其余顶点的度数必须满足什么条件？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 不存在。图 \(G\) 中有两个顶点的度数为奇数。</p>
+<p>(b) 存在。两个奇度顶点中，一个必须是起点，另一个必须是终点。例如：\(1 \to 2 \to 3 \to 4 \to 1 \to 3 \to 6 \to 4 \to 5 \to 2 \to 4 \to 7 \to 5 \to 6 \to 7\) 是一条欧拉通路（数字表示依次访问的顶点）。注意图 \(G\) 中共有 14 条边。</p>
+<p>(c) （此解答较长且深入。请慢慢阅读，如果需要多次阅读也不要担心，因为这是较密集的数学文本。）</p>
+<p>一个无向图存在欧拉通路，当且仅当它连通（除孤立顶点外）且至多有两个奇度顶点。注意，不存在恰好只有一个奇度顶点的图（这是握手引理（Handshake Lemma）的推论）。欧拉回路也是一种欧拉通路，且起点和终点是同一个顶点。我们已经在课堂上看到，一个无向图 \(G\) 存在欧拉回路，当且仅当 \(G\) 连通（除孤立顶点外）且所有顶点的度数均为偶数。我们现在证明：一个图 \(G\) 存在起点和终点不同的欧拉通路，当且仅当它连通（除孤立顶点外）且恰好有两个奇度顶点。</p>
+<p>说明：</p>
+<p><strong>仅必要性（Only if）。</strong> 假设存在一条欧拉通路，设其起点为 \(u\)，终点为 \(v\)（注意 \(u\) 和 \(v\) 是不同的）。那么该通路上的所有顶点彼此连通，不在该通路上的顶点（如果有的话）必须是孤立顶点。因此图是连通的（除孤立顶点外）。此外，通路中每次经过一个中间顶点都与两条边配对，因此除了 \(u\) 和 \(v\) 之外，所有其他顶点的度数必须为偶数。</p>
+<p><strong>充分性（If）。</strong> 首先注意，对于没有奇度顶点的连通图，我们已在课堂中证明它存在欧拉回路，从而存在欧拉通路。因此考虑恰好有两个奇度顶点的情况。</p>
+<p>解法 1：取两个奇度顶点 \(u\) 和 \(v\)，添加一个顶点 \(w\) 以及两条边 \((u, w)\) 和 \((w, v)\)。所得图 \(G'\) 只有偶度顶点（我们给 \(u\) 和 \(v\) 的度数各加了 1，并引入了一个度数为 2 的顶点），且仍然连通。因此我们可以在 \(G'\) 上找到一条欧拉回路。现在删除该回路中使用边 \((u, w)\) 和 \((w, v)\) 的部分。剩余部分就是从 \(u\) 到 \(v\) 在原图上的欧拉通路，因为它经过了原图的每一条边。</p>
+<p>解法 2：或者，我们可以构造一种与图论笔记中描述的带拼接的 FindTour 算法非常相似的算法。</p>
+<p>假设 \(G\) 连通（除孤立顶点外）且恰好有两个奇度顶点 \(u\) 和 \(v\)。首先移除孤立顶点（如果有的话）。由于 \(u\) 和 \(v\) 属于同一个连通分量，可以找到一条从 \(u\) 到 \(v\) 的路径。考虑从图中移除该路径的边后得到的图。在所得图中，所有顶点的度数均为偶数。因此，对于剩余图的每个连通分量，我们找出一条欧拉回路。（注意，移除路径的边后得到的图可能不连通。）注意，欧拉通路就是覆盖所有边的边不重通路（edge-disjoint walk）。我们刚才所做的就是将所有的边分解为一条从 \(u\) 到 \(v\) 的路径和若干条边不重的欧拉回路。路径显然是边不重的通路。然后，给定一条边不重的通路和一条边不重的回路，且它们至少共享一个公共顶点，就可以通过在公共顶点处将回路拼接到通路中，将它们组合成一条边不重的通路。因此，我们可以将所有边不重的欧拉回路拼接到从 \(u\) 到 \(v\) 的路径中，构成一条从 \(u\) 到 \(v\) 的欧拉通路。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis02a-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis02a.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>树的染色</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4>2 树的染色
+<p>证明：所有至少包含 2 个顶点的树都是二分图（bipartite）：顶点可被划分为两个组，使得每条边都跨越这两个组。</p>
+<p>[提示：对顶点数使用归纳法。]</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑从树中移除一个叶子顶点。剩余图仍是树，可以应用归纳假设得到一种二染色。思考如何将移除的叶子顶点加回，并为其分配颜色，使得每条边仍然跨越两个组。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>证明（对顶点数 \(n\) 使用归纳法）。</p>
+<p>基础情形 \(n = 2\)。具有两个顶点的树只有一条边，将这两个顶点划分到两个不同的部分即构成一个二分图。</p>
+<p>归纳假设。假设对于任意 \(k \ge 2\)，所有具有 \(k\) 个顶点的树都是二分图。</p>
+<p>归纳步骤。考虑一个具有 \(k + 1\) 个顶点的树 \(T = (V, E)\)。我们知道每棵树必须至少有两个叶子，因此移除一个叶子 \(u\) 及与 \(u\) 相连的边 \(e\)。所得图 \(T - u\) 是一棵具有 \(k\) 个顶点的树，由归纳假设它是二分图。于是存在顶点的一个划分 \(V = R \cup L\)，使得不存在连接 \(L\) 中两个顶点或 \(R\) 中两个顶点的边。现在将 \(u\) 加回图中。如果边 \(e\) 将 \(u\) 与 \(L\) 中的某个顶点相连，则令 \(L' = L\)，\(R' = R \cup \{u\}\)。另一方面，如果边 \(e\) 将 \(u\) 与 \(R\) 中的某个顶点相连，则令 \(L' = L \cup \{u\}\)，\(R' = R\)。\(L'\) 和 \(R'\) 给出了所需的划分，表明 \(T\) 是二分图。这完成了归纳步骤，因此由归纳法可知，所有至少包含 2 个顶点的树都是二分图。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis02a-sol.pdf</code> · 2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis02a.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>并非都正常：奇度顶点</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4>3 并非都正常：奇度顶点
+<p>命题：设 \(G = (V, E)\) 是一个无向图。\(G\) 中度数为奇数的顶点个数是偶数。</p>
+<p>用以下方法证明上述命题：</p>
+<p>(i) 直接证明（例如，计算 \(G\) 中的边数）。提示：在课堂上，我们已证明 \(\sum_{v \in V} \deg(v) = 2|E|\)。</p>
+<p>(ii) 对 \(m = |E|\)（边数）使用归纳法</p>
+<p>(iii) 对 \(n = |V|\)（顶点数）使用归纳法</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(i) 直接证明：利用握手定理 \(\sum_{v \in V} \deg(v) = 2|E|\)，将顶点按度数的奇偶性分成两组，分析等式两边的奇偶性。
+(ii) 对边数归纳：考虑移除一条边后，其两个端点的度数奇偶性如何变化，从而奇度顶点集合如何改变。
+(iii) 对顶点数归纳：考虑移除一个顶点后，其邻居的度数奇偶性如何翻转，并分类讨论该顶点度数本身的奇偶性。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>设 \(V_{\text{odd}}(G)\) 表示 \(G\) 中度数为奇数的顶点集合。我们证明 \(|V_{\text{odd}}(G)|\) 是偶数。</p>
+<p>(i) 设 \(d_v\) 表示顶点 \(v\) 的度数（因此 \(d_v = |N_v|\)，其中 \(N_v\) 是 \(v\) 的邻居集合）。注意到
+\[
+\sum_{v \in V} d_v = 2m
+\]
+因为当我们对所有顶点的度数求和时，每条边恰好被计算了两次。现在将 \(V\) 划分为奇度顶点 \(V_{\text{odd}}(G)\) 和偶度顶点 \(V_{\text{odd}}(G)^c\)，因此可以写出
+\[
+\sum_{v \in V_{\text{odd}}(G)} d_v = 2m - \sum_{v \notin V_{\text{odd}}(G)} d_v.
+\]
+上面等式右边的两项都是偶数（\(2m\) 是偶数，且每个 \(d_v\) 都是偶数，因为我们对偶度顶点 \(v \notin V_{\text{odd}}(G)\) 求和）。因此，为了使左边 \(\sum_{v \in V_{\text{odd}}(G)} d_v\) 为偶数，求和中的项数必须为偶数，因为求和中的每一项都是奇数。因此，奇度顶点的个数必须是偶数，即 \(|V_{\text{odd}}(G)|\) 是偶数。</p>
+<p>(ii) 我们对 \(m \ge 0\) 使用归纳法。</p>
+<p>基础情形 \(m = 0\)：如果 \(G\) 中没有边，则所有顶点的度数都为 0，因此 \(V_{\text{odd}}(G) = \varnothing\)。</p>
+<p>归纳假设：假设对于所有具有 \(m\) 条边的图 \(G\)，\(|V_{\text{odd}}(G)|\) 都是偶数。</p>
+<p>归纳步骤：设 \(G\) 是一个具有 \(m + 1\) 条边的图。从 \(G\) 中移除任意一条边 \(\{u, v\}\)，所得图 \(G'\) 有 \(m\) 条边。由归纳假设，\(|V_{\text{odd}}(G')|\) 是偶数。现在加回边 \(\{u, v\}\) 以恢复原图 \(G\)。注意，\(u\) 在 \(G\) 中的度数比在 \(G'\) 中多 1，因此 \(u \in V_{\text{odd}}(G)\) 当且仅当 \(u \notin V_{\text{odd}}(G')\)。同理，\(v \in V_{\text{odd}}(G)\) 当且仅当 \(v \notin V_{\text{odd}}(G')\)。所有其他顶点在从 \(G'\) 到 \(G\) 的过程中度数不变。因此，
+\[
+V_{\text{odd}}(G) = \begin{cases}
+V_{\text{odd}}(G') \cup \{u, v\} &amp; \text{若 } u, v \notin V_{\text{odd}}(G') \\
+V_{\text{odd}}(G') \setminus \{u, v\} &amp; \text{若 } u, v \in V_{\text{odd}}(G') \\
+(V_{\text{odd}}(G') \setminus \{u\}) \cup \{v\} &amp; \text{若 } u \in V_{\text{odd}}(G'), v \notin V_{\text{odd}}(G') \\
+(V_{\text{odd}}(G') \setminus \{v\}) \cup \{u\} &amp; \text{若 } u \notin V_{\text{odd}}(G'), v \in V_{\text{odd}}(G')
+\end{cases}
+\]
+因此我们看到 \(|V_{\text{odd}}(G)| - |V_{\text{odd}}(G')| \in \{-2, 0, 2\}\)。由于 \(|V_{\text{odd}}(G')|\) 是偶数，我们得出 \(|V_{\text{odd}}(G)|\) 也是偶数。</p>
+<p>(iii) 我们对 \(n \ge 1\) 使用归纳法。</p>
+<p>基础情形 \(n = 1\)：如果 \(G\) 只有一个顶点，则该顶点的度数为 0，因此 \(V_{\text{odd}}(G) = \varnothing\)。</p>
+<p>归纳假设：假设对于所有具有 \(n\) 个顶点的图 \(G\)，\(|V_{\text{odd}}(G)|\) 都是偶数。</p>
+<p>归纳步骤：设 \(G\) 是一个具有 \(n + 1\) 个顶点的图。从 \(G\) 中移除一个顶点 \(v\) 及所有与它相邻的边。所得图 \(G'\) 有 \(n\) 个顶点，因此由归纳假设，\(|V_{\text{odd}}(G')|\) 是偶数。现在加回顶点 \(v\) 及所有与它相邻的边以恢复原图 \(G\)。设 \(N_v \subseteq V\) 表示 \(v\) 的邻居（即所有与 \(v\) 相邻的顶点）。在邻居 \(N_v\) 中，属于交集 \(A = N_v \cap V_{\text{odd}}(G')\) 的顶点在 \(G'\) 中度数为奇数，因此在 \(G\) 中度数变为偶数。另一方面，属于 \(B = N_v \cap V_{\text{odd}}(G')^c\) 的顶点在 \(G'\) 中度数为偶数，因此在 \(G\) 中度数变为奇数。顶点 \(v\) 本身的度数为 \(|N_v|\)，因此 \(v \in V_{\text{odd}}(G)\) 当且仅当 \(|N_v|\) 为奇数。我们现在考虑两种情况：</p>
+<p>(a) 假设 \(|N_v|\) 为偶数，因此 \(v \notin V_{\text{odd}}(G)\)。此时
+\[
+V_{\text{odd}}(G) = (V_{\text{odd}}(G') \setminus A) \cup B
+\]
+因此 \(|V_{\text{odd}}(G)| = |V_{\text{odd}}(G')| - |A| + |B|\)。注意 \(A\) 和 \(B\) 不相交且它们的并集等于 \(N_v\)，因此 \(|A| + |B| = |N_v|\)。于是我们可以将 \(|V_{\text{odd}}(G)|\) 写成
+\[
+|V_{\text{odd}}(G)| = |V_{\text{odd}}(G')| + |N_v| - 2|A|
+\]
+这是偶数，因为 \(|V_{\text{odd}}(G')|\) 由归纳假设是偶数，且 \(|N_v|\) 由假设是偶数。</p>
+<p>(b) 假设 \(|N_v|\) 为奇数，因此 \(v \in V_{\text{odd}}(G)\)。此时
+\[
+V_{\text{odd}}(G) = (V_{\text{odd}}(G') \setminus A) \cup B \cup \{v\}
+\]
+因此，再次利用关系 \(|A| + |B| = |N_v|\)，我们可以写出
+\[
+|V_{\text{odd}}(G)| = |V_{\text{odd}}(G')| - |A| + |B| + 1 = |V_{\text{odd}}(G')| + (|N_v| + 1) - 2|A|
+\]
+这是偶数，因为 \(|V_{\text{odd}}(G')|\) 由归纳假设是偶数，且 \(|N_v|\) 由假设是奇数。</p>
+<p>这完成了归纳步骤和证明。</p>
+<p>注意，这个证明比第 (ii) 部分的证明更复杂，尽管它们都使用了归纳法。这告诉我们，选择合适的归纳变量可以简化证明。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis02a-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis02a.pdf</code> · 2 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis02a.pdf</code></li>
+      <li><code>solutions/discussion/dis02a-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Exponential Lightbulbs, Gaussians, Conditioning on an Event — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 14a</p>
+    <h1>指数灯泡、高斯、事件条件化</h1>
+    <p class="lede">本节讨论课涵盖指数分布（灯泡寿命模型）、高斯分布的性质（独立高斯变量和的奇数阶矩、混合高斯分布的期望与方差）以及基于事件的条件概率密度函数计算。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>指数分布</li><li>高斯分布</li><li>条件概率</li><li>概率密度函数</li><li>期望</li><li>方差</li><li>无记忆性</li><li>混合分布</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis14a.pdf</code>、<code>solutions/discussion/dis14a-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis14a.pdf</code>、<code>solutions/discussion/dis14a-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>指数分布：灯泡</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>我们教室里刚刚安装了一个全新的灯泡，已知灯泡的寿命服从均值为 50 天的指数分布。</p>
+<p>(a) 假设一名电工计划在 30 天后检查灯泡，如果灯泡坏了就更换。求电工发现灯泡坏了的概率。</p>
+<p>(b) 假设电工发现灯泡坏了，并更换了一个新灯泡。求新灯泡至少能持续 30 天的概率。</p>
+<p>(c) 假设电工发现灯泡工作正常并离开。求灯泡至少能再持续 30 天的概率。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>回顾指数分布的无记忆性（memoryless property）：\(P(X &gt; s + t \mid X &gt; s) = P(X &gt; t)\)。同时注意指数分布的累积分布函数（CDF）为 \(F_X(x) = 1 - e^{-\lambda x}\)（\(x \geq 0\)），其中速率参数 \(\lambda = 1/\text{mean}\)。对于新灯泡，其寿命与旧灯泡独立同分布。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>设 \(X \sim \text{Exponential}(1/50)\) 为灯泡损坏前的时间。对于参数为 \(\lambda\) 的指数随机变量，其密度函数为 \(f_X(x) = \lambda e^{-\lambda x}\)（\(x &gt; 0\)）。因此这里 \(\lambda = 1/50\)。</p>
+<p>(a) 对密度函数积分，求灯泡在前 30 天内损坏的概率：
+\[
+P[X &lt; 30] = \int_0^{30} \frac{1}{50} e^{-x/50} \, dx = 1 - e^{-30/50} = 1 - e^{-3/5} \approx 0.451.
+\]</p>
+<p>(b) 新灯泡的等待时间 \(Y\) 与旧灯泡独立同分布（i.i.d.）。因此答案为
+\[
+P[Y &gt; 30] = 1 - P[Y &lt; 30] = 1 - (1 - e^{-3/5}) = e^{-3/5} \approx 0.549.
+\]</p>
+<p>(c) 指数分布具有无记忆性，因此灯泡在已经持续 30 天的条件下能持续 60 天的概率，等于它能持续 30 天的概率：
+\[
+P[X &gt; 60 \mid X &gt; 30] = P[X - 30 &gt; 30 \mid X &gt; 30] = P[X &gt; 30] = e^{-3/5} \approx 0.549.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis14a-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis14a.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>有趣的高斯分布</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>(a) 如果 \(X \sim N(0, \sigma_X^2)\) 和 \(Y \sim N(0, \sigma_Y^2)\) 是独立的，那么对于任意奇数 \(k \in \mathbb{N}\)，\(E[(X+Y)^k]\) 是多少？</p>
+<p>(b) 设 \(f_{\mu,\sigma}(x)\) 是 \(N(\mu, \sigma^2)\) 随机变量的密度函数，且 \(X\) 服从分布 \(\alpha f_{\mu_1,\sigma_1}(x) + (1-\alpha) f_{\mu_2,\sigma_2}(x)\)，其中 \(\alpha \in [0,1]\)。计算 \(E[X]\) 和 \(\text{Var}(X)\)。\(X\) 是否服从正态分布？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 回顾高斯分布的性质：独立高斯变量的和仍是高斯分布。对于均值为 0 的随机变量，其密度函数关于原点对称。考虑奇函数在对称区间上的积分性质。</p>
+<p>(b) 利用期望和方差的线性性质。对于混合分布，\(E[X]\) 是各成分期望的加权平均。计算 \(E[X^2]\) 时注意利用 \(\text{Var}(X) = E[X^2] - (E[X])^2\) 的关系。对于正态性判断，考虑密度函数的极值点数量。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) \(E[(X+Y)^k] = 0\)。</p>
+<p>由于 \(X\) 和 \(Y\) 都是高斯分布，因此 \(Z = X + Y\) 也是高斯分布。此外，由于 \(Z\) 的均值为 0，其密度函数 \(f_Z\) 关于原点对称，即 \(f_Z(x) = f_Z(-x)\) 对任意 \(x \in \mathbb{R}\) 成立。因此，
+\[
+E[(X+Y)^k] = E[Z^k] = \int_{-\infty}^{\infty} x^k f_Z(x) \, dx = \int_{-\infty}^{0} x^k f_Z(x) \, dx + \int_{0}^{\infty} x^k f_Z(x) \, dx = \int_{0}^{\infty} (-x)^k f_Z(-x) \, dx + \int_{0}^{\infty} x^k f_Z(x) \, dx = -\int_{0}^{\infty} x^k f_Z(x) \, dx + \int_{0}^{\infty} x^k f_Z(x) \, dx = 0,
+\]
+因为 \(k\) 是奇数。</p>
+<p>(b) \(E[X] = \alpha \mu_1 + (1-\alpha)\mu_2\)，\(\text{Var}(X) = \alpha(\sigma_1^2 + \mu_1^2) + (1-\alpha)(\sigma_2^2 + \mu_2^2) - (E[X])^2\)。不，\(X\) 不一定是正态分布。</p>
+<p>\[
+E[X] := \mu = \int_{-\infty}^{\infty} x \left( \alpha f_{\mu_1,\sigma_1}(x) + (1-\alpha) f_{\mu_2,\sigma_2}(x) \right) dx = \alpha \int_{-\infty}^{\infty} x f_{\mu_1,\sigma_1}(x) \, dx + (1-\alpha) \int_{-\infty}^{\infty} x f_{\mu_2,\sigma_2}(x) \, dx = \alpha \mu_1 + (1-\alpha)\mu_2.
+\]</p>
+<p>\[
+\text{Var}(X) := \sigma^2 = E[X^2] - \mu^2 = \alpha \int_{-\infty}^{\infty} x^2 f_{\mu_1,\sigma_1}(x) \, dx + (1-\alpha) \int_{-\infty}^{\infty} x^2 f_{\mu_2,\sigma_2}(x) \, dx - \mu^2 = \alpha(\sigma_1^2 + \mu_1^2) + (1-\alpha)(\sigma_2^2 + \mu_2^2) - \mu^2.
+\]</p>
+<p>我们知道 \(N(\mu, \sigma)\) 的密度函数在 \(x = \mu\) 处有唯一的极大值；然而，如果例如 \(\alpha = 1/2\)，\(\mu_1 = -10\)，\(\mu_2 = 10\)，\(\sigma_1 = \sigma_2 = 1\)，则 \(\alpha f_{\mu_1,\sigma_1} + (1-\alpha) f_{\mu_2,\sigma_2}\) 有两个极大值，因此不可能是高斯分布的密度函数。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis14a-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis14a.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>基于事件的条件分布</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>随机变量 \(X\) 的概率密度函数（PDF）为
+\[
+f_X(x) = \begin{cases} cx^{-2}, &amp; \text{如果 } 1 \leq x \leq 2, \\ 0, &amp; \text{其他情况.} \end{cases}
+\]</p>
+<p>(a) 确定常数 \(c\) 的值。</p>
+<p>(b) 设 \(A\) 为事件 \(\{X &gt; 1.5\}\)。计算 \(P[A]\) 和给定 \(A\) 发生时 \(X\) 的条件概率密度函数。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 利用概率密度函数的归一化性质：\(\int_{-\infty}^{\infty} f_X(x) \, dx = 1\)。注意积分区间是 \([1, 2]\)。</p>
+<p>(b) 计算 \(P(A)\) 需要在区间 \([1.5, 2]\) 上对 \(f_X(x)\) 积分。条件概率密度函数的定义为 \(f_{X|A}(x) = \frac{f_X(x)}{P(A)}\)（当 \(x \in A\) 时），否则为 0。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 积分：
+\[
+\int_{-\infty}^{\infty} f_X(x) \, dx = c \int_{1}^{2} x^{-2} \, dx = -c x^{-1} \Big|_{x=1}^{2} = -c \left( \frac{1}{2} - 1 \right) = \frac{c}{2} = 1,
+\]
+因此 \(c = 2\)。</p>
+<p>(b) 为求 \(P(A)\)，
+\[
+P(A) = \int_{1.5}^{2} f_X(x) \, dx = 2 \int_{1.5}^{2} x^{-2} \, dx = -2 x^{-1} \Big|_{x=1.5}^{2} = -2 \left( \frac{1}{2} - \frac{2}{3} \right) = \frac{1}{3}.
+\]
+因此条件概率密度函数为
+\[
+f_{X|A}(x) = \frac{f_X(x)}{P(A)} = 6x^{-2}, \quad x \in [1.5, 2].
+\]</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis14a-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis14a.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis14a.pdf</code></li>
+      <li><code>solutions/discussion/dis14a-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

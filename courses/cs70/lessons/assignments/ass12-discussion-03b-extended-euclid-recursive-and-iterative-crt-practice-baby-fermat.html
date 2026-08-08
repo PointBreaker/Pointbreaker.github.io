@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Extended Euclid (Recursive &amp; Iterative), CRT Practice, Baby Fermat — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 03b</p>
+    <h1>扩展欧几里得（递归与迭代）、CRT 练习、Baby Fermat</h1>
+    <p class="lede">本题探索扩展欧几里得算法的递归与迭代两种实现方式，通过将最大公因数表示为原始输入的线性组合，求出模算术下的乘法逆元。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Extended Euclidean Algorithm</li><li>乘法逆元</li><li>线性组合</li><li>模运算</li><li>最大公因数</li><li>Chinese Remainder Theorem</li><li>modular arithmetic</li><li>multiplicative inverse</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis03b.pdf</code>、<code>solutions/discussion/dis03b-sol.pdf</code></p></article></section>
+<hr class="rule">
+
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis03b.pdf</code>、<code>solutions/discussion/dis03b-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>扩展欧几里得算法：两种方法</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>1 扩展欧几里得算法：两种方法</strong></p>
+<p>注意 6 本题中，我们将探索扩展欧几里得算法（Extended Euclid's Algorithm）：首先是传统递归实现，其次是更快的迭代版本。两种方法得到相同的结果。</p>
+<p>(b) 和 (c) 部分探索传统的扩展欧几里得算法。下面加粗的数字用于跟踪哪些数值作为最大公因数（gcd）调用的输入出现。请记住，我们的目标是将最大公因数写成原始输入的线性组合，因此我们不希望意外化简表达式而消去输入。</p>
+<p>(a) 作为动机，假设我们已经找到 \(a\) 和 \(b\) 的值，使得 \(54a + 17b = 1\)。根据这一知识，\(17^{-1} \pmod{54}\) 是多少？</p>
+<p>(b) 注意，根据定义，\(x \bmod y\) 总是 \(x\) 减去 \(y\) 的某个倍数。因此，在执行欧几里得算法时，每个新引入的值总能表示为前两个值的「组合」，如下所示：</p>
+<p>\[
+\operatorname{gcd}(54,17) = \operatorname{gcd}(17,3) \quad 3 = 1 \times 54 - 3 \times 17
+\]
+\[
+\qquad = \operatorname{gcd}(3,2) \quad 2 = 1 \times 17 - \underline{\qquad} \times 3
+\]
+\[
+\qquad = \operatorname{gcd}(2,1) \quad 1 = 1 \times 3 - \underline{\qquad} \times 2
+\]
+\[
+\qquad = \operatorname{gcd}(1,0) \quad \bigl[0 = 1 \times 2 - \underline{\qquad} \times 1\bigr]
+\]
+\[
+\qquad = 1.
+\]</p>
+<p>（填空）</p>
+<p>(c) 回顾我们的目标是填出下式中的空白：</p>
+<p>\[
+1 = \underline{\qquad} \times 54 + \underline{\qquad} \times 17.
+\]</p>
+<p>为此，我们从底部向上回代，将上方的最大公因数表示为每一行两个参数的组合：</p>
+<p>\[
+1 = \underline{\qquad} \times 3 + \underline{\qquad} \times 2
+\]
+\[
+= \underline{\hspace{4cm}}
+\]
+\[
+= \underline{\qquad} \times 17 + \underline{\qquad} \times 3
+\]
+\[
+= \underline{\hspace{4cm}}
+\]
+\[
+= \underline{\qquad} \times 54 + \underline{\qquad} \times 17
+\]</p>
+<p>这在什么意义上给出了模 54 算术下 17 的乘法逆元（multiplicative inverse）？</p>
+<p>(d) 在前面的部分中，我们使用递归方法将 \(\operatorname{gcd}(54,17)\) 写成 54 和 17 的线性组合。我们也可以迭代地计算相同的结果——这是上述方法的替代方案，通常更快。我们首先写出初始参数 54 和 17 的方程，表示为它们自身的线性组合：</p>
+<p>\[
+54 = 1 \times 54 + 0 \times 17 \tag{E1}
+\]
+\[
+17 = 0 \times 54 + 1 \times 17 \tag{E2}
+\]</p>
+<p>然后我们可以使用这些初始方程（标记为 E1 和 E2 以便引用）迭代地将约化后的值写成 54 和 17 的线性组合，直到能够写出 \(\operatorname{gcd}(54,17)\) 的方程。</p>
+<p>具体而言，我们希望从第一个方程中减去第二个方程的尽可能多的倍数，以创建一个左边（LHS）值更小的新方程。我们可以持续迭代，直到左边变为 \(\operatorname{gcd}(54,17) = 1\)。</p>
+<p>\[
+\underline{\qquad} = \underline{\qquad} \times 54 + \underline{\qquad} \times 17 \tag{E3 = E1 - \underline{\qquad} \times E2}
+\]
+\[
+\underline{\qquad} = \underline{\qquad} \times 54 + \underline{\qquad} \times 17 \tag{E4 = E2 - \underline{\qquad} \times E3}
+\]
+\[
+1 = \underline{\qquad} \times 54 + \underline{\qquad} \times 17 \tag{E5 = E3 - \underline{\qquad} \times E4}
+\]</p>
+<p>这在什么意义上给出了模 54 算术下 17 的乘法逆元？验证你的答案与前面部分等价。</p>
+<p>(e) 计算 17 和 39 的最大公因数，并确定如何将此表示为 17 和 39 的「组合」。这在什么意义上给出了模 39 算术下 17 的乘法逆元？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 欧几里得算法正向过程：gcd 调用与线性组合的对齐表，包含待填空的系数</h4><table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>gcd 调用</th>
+<th>余数</th>
+<th>线性组合（待填空）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>gcd(54,17) → gcd(17,3)</td>
+<td>3</td>
+<td>3 = 1 × 54 − 3 × 17</td>
+</tr>
+<tr>
+<td>2</td>
+<td>gcd(17,3) → gcd(3,2)</td>
+<td>2</td>
+<td>2 = 1 × 17 − _ × 3</td>
+</tr>
+<tr>
+<td>3</td>
+<td>gcd(3,2) → gcd(2,1)</td>
+<td>1</td>
+<td>1 = 1 × 3 − _ × 2</td>
+</tr>
+<tr>
+<td>4</td>
+<td>gcd(2,1) → gcd(1,0)</td>
+<td>0</td>
+<td>[0 = 1 × 2 − _ × 1]</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>discussion/dis03b.pdf</code> · 1</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 迭代扩展欧几里得算法：方程 E1–E5 的系数表，包含待填空的左边值、系数与倍数</h4><table>
+<thead>
+<tr>
+<th>方程</th>
+<th>左边</th>
+<th>54 的系数</th>
+<th>17 的系数</th>
+<th>推导</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E1</td>
+<td>54</td>
+<td>1</td>
+<td>0</td>
+<td>初始</td>
+</tr>
+<tr>
+<td>E2</td>
+<td>17</td>
+<td>0</td>
+<td>1</td>
+<td>初始</td>
+</tr>
+<tr>
+<td>E3</td>
+<td>_</td>
+<td>_</td>
+<td>_</td>
+<td>E3 = E1 − _ × E2</td>
+</tr>
+<tr>
+<td>E4</td>
+<td>_</td>
+<td>_</td>
+<td>_</td>
+<td>E4 = E2 − _ × E3</td>
+</tr>
+<tr>
+<td>E5</td>
+<td>1</td>
+<td>_</td>
+<td>_</td>
+<td>E5 = E3 − _ × E4</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>discussion/dis03b.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>在欧几里得算法的正向过程中，每一步的除法 \(a = qb + r\) 都直接给出余数 \(r\) 作为 \(a\) 和 \(b\) 的线性组合，其中商 \(q = \lfloor a/b \rfloor\) 就是填空处的值。回代时，将每个中间量替换为它上方两个等式所给出的组合形式，并逐步合并同类项。</p>
+<p>对于迭代版本，始终将每个量维护为原始输入的线性组合；在从一等式减去另一一等式的倍数时，同步更新两个系数，即可在完成正向约化的同时得到反向回代的结果。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>解答：</strong></p>
+<p>(a) 将等式 \(54a + 17b = 1\) 对 54 取模，第一项为零（因为它是 54 的倍数）。于是剩下 \(17b \equiv 1 \pmod{54}\)，从而 \(17^{-1} \equiv b \pmod{54}\)。换句话说，扩展欧几里得算法给出的系数直接给出了乘法逆元。这是扩展欧几里得算法有用的主要原因之一。</p>
+<p>(b) 填空如下：</p>
+<p>\[
+3 = 1 \times 54 - 3 \times 17
+\]
+\[
+2 = 1 \times 17 - 5 \times 3
+\]
+\[
+1 = 1 \times 3 - 1 \times 2
+\]
+\[
+\bigl[0 = 1 \times 2 - 2 \times 1\bigr]
+\]</p>
+<p>可以将其改写为更易理解的形式：\(54 = 3 \times 17 + 3\)，等等；这直接对应正向过程中的 \(54 \bmod 17 = 3\) 运算，而所需的空白处来自 \(\lfloor 54/17 \rfloor\)。</p>
+<p>(c) 从下到上回代并代入，我们有</p>
+<p>\[
+1 = 1 \times 3 - 1 \times 2
+\]
+\[
+= 1 \times 3 - 1 \times (1 \times 17 - 5 \times 3)
+\]
+\[
+= -1 \times 17 + 6 \times 3
+\]
+\[
+= -1 \times 17 + 6 \times (1 \times 54 - 3 \times 17)
+\]
+\[
+= 6 \times 54 - 19 \times 17
+\]</p>
+<p>得到 17 模 54 的乘法逆元为 \(-19\)，或 \(35\)。注意 \(-19 \equiv 35 \pmod{54}\)。</p>
+<p>(d) 对方程进行如下操作：</p>
+<p>\[
+54 = 1 \times 54 + 0 \times 17 \tag{E1}
+\]
+\[
+17 = 0 \times 54 + 1 \times 17 \tag{E2}
+\]
+\[
+3 = 1 \times 54 - 3 \times 17 \tag{E3 = E1 - 3E2}
+\]
+\[
+2 = -5 \times 54 + 16 \times 17 \tag{E4 = E2 - 5E3}
+\]
+\[
+1 = 6 \times 54 - 19 \times 17 \tag{E5 = E3 - E4}
+\]</p>
+<p>注意左边也对应欧几里得算法正向过程中的约化；我们做相同的计算（即确定减去多少倍），同时也在做反向回代。这就是为什么迭代方法比前面各部分的递归方法更直观、更快。</p>
+<p>同样，我们得到 17 模 54 的乘法逆元为 \(-19\)，或 \(35\)。</p>
+<p>(e) 使用递归算法，我们有</p>
+<p>\[
+\operatorname{gcd}(39,17) = \operatorname{gcd}(17,5) \quad 5 = 1 \times 39 - 2 \times 17
+\]
+\[
+\quad\quad\quad\quad\quad\quad\quad = \operatorname{gcd}(5,2) \quad 2 = 1 \times 17 - 3 \times 5
+\]
+\[
+\quad\quad\quad\quad\quad\quad\quad = \operatorname{gcd}(2,1) \quad 1 = 1 \times 5 - 2 \times 2
+\]
+\[
+\quad\quad\quad\quad\quad\quad\quad = \operatorname{gcd}(1,0) \quad \bigl[0 = 1 \times 2 - 2 \times 1\bigr]
+\]</p>
+<p>从底部向上回代，我们有</p>
+<p>\[
+1 = 1 \times 5 - 2 \times 2
+\]
+\[
+= 1 \times 5 - 2 \times (1 \times 17 - 3 \times 5)
+\]
+\[
+= -2 \times 17 + 7 \times 5
+\]
+\[
+= -2 \times 17 + 7 \times (1 \times 39 - 2 \times 17)
+\]
+\[
+= 7 \times 39 - 16 \times 17
+\]</p>
+<p>最终得到 \(1 = 7 \times 39 - 16 \times 17\)，因此逆元为 \(17^{-1} \equiv -16 \equiv 23 \pmod{39}\)。</p>
+<p>使用迭代算法，我们有</p>
+<p>\[
+39 = 1 \times 39 + 0 \times 17 \tag{E1}
+\]
+\[
+17 = 0 \times 39 + 1 \times 17 \tag{E2}
+\]
+\[
+5 = 1 \times 39 - 2 \times 17 \tag{E3 = E1 - 2E2}
+\]
+\[
+2 = -3 \times 39 + 7 \times 17 \tag{E4 = E2 - 3E3}
+\]
+\[
+1 = 7 \times 39 - 16 \times 17 \tag{E5 = E3 - 2E4}
+\]</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis03b-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis03b.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>中国剩余定理练习</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在这个问题中，要求解满足下式的自然数 \(x\)：</p>
+<p>\[
+x \equiv 1 \pmod{3}
+\]
+\[
+x \equiv 3 \pmod{7} \tag{1}
+\]
+\[
+x \equiv 4 \pmod{11}
+\]</p>
+<p>(a) 假设你找到 \(3\) 个自然数 \(a, b, c\) 满足下列性质：</p>
+<p>\[
+a \equiv 1 \pmod{3}; \quad a \equiv 0 \pmod{7}; \quad a \equiv 0 \pmod{11}, \tag{2}
+\]
+\[
+b \equiv 0 \pmod{3}; \quad b \equiv 1 \pmod{7}; \quad b \equiv 0 \pmod{11}, \tag{3}
+\]
+\[
+c \equiv 0 \pmod{3}; \quad c \equiv 0 \pmod{7}; \quad c \equiv 1 \pmod{11}. \tag{4}
+\]</p>
+<p>说明如何利用关于 \(a, b, c\) 的知识计算一个满足 (1) 的 \(x\)。</p>
+<p>在后续小问中，你将计算满足上述 \(3\) 个条件的自然数 \(a, b, c\)，并用它们求出满足 (1) 的 \(x\)。</p>
+<p>(b) 求满足 (2) 的自然数 \(a\)。即 \(a \equiv 1 \pmod{3}\) 且 \(a\) 是 \(7\) 与 \(11\) 的倍数。</p>
+<p>提示：不妨先取一个既是 \(7\) 又是 \(11\) 的倍数的数；为了让它模 \(3\) 同余于 \(1\)，我们需要把它乘以什么？</p>
+<p>(c) 求满足 (3) 的自然数 \(b\)。即 \(b \equiv 1 \pmod{7}\) 且 \(b\) 是 \(3\) 与 \(11\) 的倍数。</p>
+<p>(d) 求满足 (4) 的自然数 \(c\)。即 \(c \equiv 1 \pmod{11}\) 且 \(c\) 是 \(3\) 与 \(7\) 的倍数。</p>
+<p>(e) 综合 (a)、(b)、(c)、(d) 的答案，给出一个满足 (1) 的 \(x\)。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>中国剩余定理的构造法核心是“正交基”：为每个同余式构造一个辅助数，它在对应模下为 \(1\)，在其他模下为 \(0\)。若 \(a\) 是 \(7\) 与 \(11\) 的公倍数，则它已满足模 \(7\) 和 \(11\) 为 \(0\)；再乘上适当的因子让它模 \(3\) 余 \(1\)，这个因子就是该公倍数在模 \(3\) 下的乘法逆元。对 \(b, c\) 同理。最后叠加 \(x = a + 3b + 4c\) 即得解。</p>
+<p>自检方向：代入三个同余式逐项验证，每个加项是否只在一个模下贡献所需余数、在另两个模下贡献 \(0\)；最终检查 \(x\) 是否同时满足 (1)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 观察可知</p>
+<p>\[
+a + 3b + 4c \equiv 1 + 0 + 0 \pmod{3},
+\]
+\[
+a + 3b + 4c \equiv 0 + 3 + 0 \pmod{7},
+\]
+\[
+a + 3b + 4c \equiv 0 + 0 + 4 \pmod{11}.
+\]</p>
+<p>因此 \(x = a + 3b + 4c\) 确实满足 (1) 中的所有条件。</p>
+<p>(b) 本小题要求找一个满足 \(0 \le a &lt; 3 \cdot 7 \cdot 11\) 的数，它能被 \(7\) 和 \(11\) 整除，且被 \(3\) 除余 \(1\)。</p>
+<p>从一个能被 \(7\) 和 \(11\) 整除的数出发，可取 \(7 \cdot 11 = 77\)。注意到我们可以再乘上一个模 \(3\) 的乘法逆元，使结果同余于 \(1 \pmod{3}\)。具体地，由于 \(77 \cdot 77^{-1} \equiv 1 \pmod{3}\)，我们只需计算</p>
+<p>\[
+77^{-1} \equiv 2^{-1} \equiv 2 \pmod{3}.
+\]</p>
+<p>于是得到 \(a = 77 \cdot 2 = 154\)。</p>
+<p>验证：</p>
+<p>\[
+154 = 3 \cdot 51 + 1 \equiv 1 \pmod{3},
+\]
+\[
+154 = 22 \cdot 7 \equiv 0 \pmod{7},
+\]
+\[
+154 = 14 \cdot 11 \equiv 0 \pmod{11}.
+\]</p>
+<p>退一步看，我们实际计算了</p>
+<p>\[
+a = (7 \cdot 11) \cdot (7 \cdot 11)^{-1} \bmod 3.
+\]</p>
+<p>其中第一项保证它是 \(7\) 和 \(11\) 的倍数，最后一项保证它模 \(3\) 余 \(1\)。</p>
+<p>(c) 采用类似方法，先取 \(3\) 与 \(11\) 的公倍数 \(3 \cdot 11 = 33\)。</p>
+<p>再乘上它在模 \(7\) 下的乘法逆元，使结果同余于 \(1 \pmod{7}\)。具体地，只需计算</p>
+<p>\[
+33^{-1} \equiv 5^{-1} \equiv 3 \pmod{7}.
+\]</p>
+<p>于是得到 \(b = 33 \cdot 3 = 99\)。</p>
+<p>同样地，我们实际计算了</p>
+<p>\[
+b = (3 \cdot 11) \cdot (3 \cdot 11)^{-1} \bmod 7.
+\]</p>
+<p>(d) 类似地，先取 \(3\) 与 \(7\) 的公倍数 \(3 \cdot 7 = 21\)。</p>
+<p>再乘上它在模 \(11\) 下的乘法逆元，使结果同余于 \(1 \pmod{11}\)。具体地，只需计算</p>
+<p>\[
+21^{-1} \equiv 10^{-1} \equiv 10 \pmod{11}.
+\]</p>
+<p>于是得到 \(c = 21 \cdot 10 = 210\)。</p>
+<p>同样地，我们实际计算了</p>
+<p>\[
+c = (3 \cdot 7) \cdot (3 \cdot 7)^{-1} \bmod 11.
+\]</p>
+<p>(e) 由 (b)、(c)、(d) 得到 \(a = 154\)、\(b = 99\)、\(c = 210\)，分别满足 (2)、(3)、(4)。再结合 (a)，可得</p>
+<p>\[
+x = a + 3b + 4c = 154 + 3 \cdot 99 + 4 \cdot 210 = 154 + 297 + 840 = 1291
+\]</p>
+<p>满足 (1) 中的要求。</p>
+<p>验证：</p>
+<p>\[
+1291 = 430 \cdot 3 + 1 \equiv 1 \pmod{3},
+\]
+\[
+1291 = 184 \cdot 7 + 3 \equiv 3 \pmod{7},
+\]
+\[
+1291 = 117 \cdot 11 + 4 \equiv 4 \pmod{11}.
+\]</p>
+<p>此外，该解在模 \(3 \cdot 7 \cdot 11 = 231\) 下唯一，因此</p>
+<p>\[
+x \equiv 1291 \equiv 136 \pmod{231}.
+\]</p>
+<p>注记：这里本质上是在构造只满足其中一个同余式、而不影响其余同余式的量。一般地，设同余方程组为 \(x \equiv a_i \pmod{m_i}\)，\(i = 1, \dots, k\)。对每个方程我们希望得到 \(b_i \equiv 1 \pmod{m_i}\) 且 \(b_i \equiv 0 \pmod{m_j}\)（\(j \ne i\)），使得 \(a_i b_i\) 只满足模 \(m_i\) 的同余式，而对其他模均为 \(0\)。于是把所有 \(a_i b_i\) 相加就得到满足全部同余式的量。</p>
+<p>每个 \(b_i\) 可按下式计算：</p>
+<p>\[
+b_i = \frac{M}{m_i} \cdot \left( \left( \frac{M}{m_i} \right)^{-1} \bmod m_i \right),
+\]</p>
+<p>其中 \(M = m_1 m_2 \cdots m_k\)。第一项保证 \(b_i \equiv 0 \pmod{m_j}\)（\(j \ne i\)），第二项保证 \(b_i \equiv 1 \pmod{m_i}\)。方程组的解可写成</p>
+<p>\[
+x \equiv \sum_{i=1}^{k} a_i b_i \pmod{M}.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis03b-sol.pdf</code> · 4-5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis03b.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>Baby Fermat（小费马）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>注意 6（Note 6） 假设 \(a\) 在模 \(m\) 下确实有乘法逆元。我们要证明：\(a\) 的乘法逆元可以写成 \(a^k \pmod m\) 的形式，其中 \(k \ge 0\)。</p>
+<p>(a) 考虑无穷序列 \(a, a^2, a^3, \ldots \pmod m\)。证明这个序列中存在重复。
+（提示：考虑鸽巢原理（Pigeonhole Principle）。）</p>
+<p>(b) 假设 \(a^i \equiv a^j \pmod m\)，其中 \(i &gt; j\)。\(a^{i-j} \pmod m\) 的值是多少？</p>
+<p>(c) 证明乘法逆元可以写成 \(a^k \pmod m\) 的形式。\(k\) 用 \(i\) 和 \(j\) 表示是什么？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>本题的核心是鸽巢原理与逆元的定义。模 \(m\) 下只有 \(m\) 个不同的余数，而序列 \(a, a^2, a^3, \ldots\) 是无穷的，因此必然会出现重复。</p>
+<p>在得到 \(a^i \equiv a^j\) 后，尝试在等式两边同时「消去」\(a^j\)（即乘以 \((a^*)^j\)），并观察结果与 \(1\) 的关系；再将结果改写为 \(a \cdot (\text{某式}) \equiv 1\) 的形式。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 模 \(m\) 下只有 \(m\) 个可能的取值，因此在第 \(m\) 项之后必然会出现重复。鸽巢原理（Pigeonhole Principle）在这里适用——我们有 \(m\) 个「盒子」，代表 \(a^k\) 在模 \(m\) 下可能取到的不同值；然后把 \(a, a^2, a^3, \ldots\) 这无穷多个「物品」放进这 \(m\) 个盒子里。一旦物品超过 \(m\) 个（即序列到达 \(a^{m+1}\)），鸽巢原理就保证了至少有两个数在模 \(m\) 下取相同的值，也就是出现了碰撞。</p>
+<p>(b) 为避免混淆，我们暂时用 \(a^*\) 表示 \(a\) 的乘法逆元。在等式两边同时乘以 \((a^*)^j\)，得到
+\[a^i \equiv a^j \pmod m,\]
+\[a^{i-j} \underbrace{a \cdots a}_{j \text{ 次}} \equiv \underbrace{a \cdots a}_{j \text{ 次}} \pmod m,\]
+\[a^{i-j} \underbrace{a \cdots a}_{j \text{ 次}} \cdot \underbrace{a^* \cdots a^*}_{j \text{ 次}} \equiv \underbrace{a \cdots a}_{j \text{ 次}} \cdot \underbrace{a^* \cdots a^*}_{j \text{ 次}} \pmod m,\]
+\[a^{i-j} \equiv 1 \pmod m.\]</p>
+<p>(c) 由 \(a^{i-j} \equiv 1 \pmod m\)，可以改写为 \(a^{i-j-1} \cdot a \equiv 1 \pmod m\)。因此 \(a^{i-j-1}\) 就是 \(a\) 在模 \(m\) 下的乘法逆元，即逆元可以写成 \(a^k\) 的形式，其中 \(k = i - j - 1\)。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis03b-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis03b.pdf</code> · 4 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis03b.pdf</code></li>
+      <li><code>solutions/discussion/dis03b-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

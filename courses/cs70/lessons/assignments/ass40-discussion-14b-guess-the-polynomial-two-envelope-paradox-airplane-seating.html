@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guess the Polynomial, Two Envelope Paradox, Airplane Seating — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 14b</p>
+    <h1>猜多项式、两信封悖论、飞机座位</h1>
+    <p class="lede">本次讨论课包含三个问题：(1) 仅利用两个点处的取值猜测一个系数为非负整数的秘密多项式；(2) 设计一种策略使得从两个金额成两倍关系的信封中选出金额较大的信封的概率严格大于 1/2；(3) 经典的飞机座位问题，求最后一名乘客坐到自己座位的概率。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>polynomial interpolation</li><li>base expansion</li><li>non-negative integer coefficients</li><li>two-envelope problem</li><li>probability</li><li>random threshold</li><li>airplane seating problem</li><li>strong induction</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis14b.pdf</code>、<code>solutions/discussion/dis14b-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis14b.pdf</code>、<code>solutions/discussion/dis14b-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>猜多项式</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>请记住这个口诀：“\(d + 1\) 个点唯一确定一个次数不超过 \(d\) 的多项式（\(d \in \mathbb{N}\)）”。你的助教（Teaching Assistant, TA）会在纸上写下一个秘密多项式（次数任意），其系数均为非负整数。你只能利用该多项式在两个点处的取值信息，猜出他们写下的确切多项式！</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先在一个点（例如 \(x = 1\)）处对多项式求值，由此估计系数可能有多大。再思考：如果选取一个比所有系数都大的整数作为进制基数，那么多项式在该较大点处的取值按该进制展开后，各位数字会与系数有什么关系？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>首先，请求出该多项式在 \(1\) 处的取值。设 \(x\) 为该多项式在 \(1\) 处的取值。接着，请求出该多项式在 \(x + 1\) 处的取值。将结果按 \(x + 1\) 进制展开，即可得到该多项式的所有系数。</p>
+<p>解释：若多项式为 \(P(X) = a_n X^n + \cdots + a_0\)，其中 \(n = \deg P\)，则 \(P(x + 1)\) 的 \(x + 1\) 进制展开是一个形如 \(d_n \cdots d_0\) 的数，满足
+\[
+P(x + 1) = \sum_{i=0}^{n} d_i (x + 1)^i.
+\]
+我们可以通过 \(x + 1\) 进制展开读出多项式的系数：展开中的每一位数字 \(d_i\) 就等于 \(a_i\)。</p>
+<p>这之所以成立，是因为我们知道 \(x + 1\) 大于该多项式的任意一个系数。由于 \(x = P(1) = a_n + \cdots + a_0\) 且所有系数均为非负数，因此 \(x + 1\) 严格大于任意一个系数。本质上，第一步的目的是估计系数的大小，而第二步只要选取一个比每个单独系数都大的点即可（例如，你也可以请求多项式在 \(x + 2\) 处的取值，但数字越大，计算越麻烦）。</p>
+<p>这并不与“\(d + 1\) 个点唯一确定一个次数不超过 \(d\) 的多项式”这一口诀矛盾。在此题中，我们限制了多项式的系数属于一个非常特殊的集合（非负整数），因此可以比请求 \(d + 1\) 个点做得更好。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis14b-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis14b.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>选信封</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你面前有两个装有现金的信封。已知其中一个信封里的钱是另一个的两倍（每个信封中的金额为整数）。你可以任选一个信封并查看其中有多少钱，然后根据这些信息决定是换成另一个信封，还是保留你已经拿到的信封。</p>
+<p>你能否设计一种策略，使得你选到钱更多的那个信封的概率严格大于 \(1/2\)？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>如果能在两个信封金额之间的“分界处”随机生成一个阈值，那么当你看到的金额低于该阈值时就换信封，高于该阈值时就保留信封。思考：当阈值恰好落在两个金额之间时，你的决策会如何？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>令人惊讶的是，答案是肯定的。</p>
+<p>首先，我们选取一个随机正整数 \(z\)。为了做到这一点，我们抛硬币！设 \(n\) 为你在首次出现正面之前需要抛硬币的次数。然后令 \(z = 2^{n-1} + 0.5\)（好吧我们撒了个谎；这不是整数，但加上 \(0.5\) 是为了在后续打破平局）。</p>
+<p>策略如下：查看你选中的信封中有多少钱。如果信封中的金额超过 \(z\)，则保留该信封；否则，换成另一个信封。</p>
+<p>假设 \(z\) 小于两个信封中的金额。那么你总会保留最初选中的信封，但由于你最初选中的信封是较有钱的那个的可能性相同，因此你选对信封的概率仍为 \(1/2\)。</p>
+<p>如果 \(z\) 大于两个信封中的金额，类似的分析也成立：此时你总会换信封，选对信封的概率仍为 \(1/2\)。</p>
+<p>然而，如果 \(z\) 恰好落在两个信封的金额之间会怎样？如果你最初选中的是钱较少的信封，你会换到较好的信封；如果你最初选中的是钱较多的信封，你会保留较好的信封。因此，在这种情况下，你保证最终拿到较好的信封！</p>
+<p>由于 \(z\) 落在两个信封金额之间具有正概率，该策略使得你选到较好信封的概率严格大于 \(1/2\)。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis14b-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis14b.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>飞机座位</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你是 100 名乘客中最后一个排队登机的，飞机上共有 100 个座位。队伍中第 \(i\) 名乘客被分配到座位号 \(i\)。第一名乘客随机选择一个座位坐下（均匀随机）。其余每名乘客如果自己的指定座位可用就坐在指定座位上，否则就在剩余座位中均匀随机地选一个坐下。求你（第 100 名乘客）坐到自己指定座位（座位号 100）的概率是多少？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑第一名乘客坐在不同位置时会发生什么。如果第一名乘客坐在座位 1 或座位 \(n+1\)，结果分别是什么？如果坐在中间的某个座位 \(i\)，后续过程会如何简化为一个规模更小的同类问题？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>设 \(p_n\) 为当飞机上有 \(n\) 名乘客时，最后一名乘客坐到自己座位的概率。我们通过强归纳法证明：对所有 \(n \geq 2\)，有 \(p_n = \frac{1}{2}\)。</p>
+<p>首先，显然 \(p_2 = \frac{1}{2}\)。现在，假设对于某个 \(n\)，对所有 \(2 \leq m \leq n\)，均有 \(p_m = \frac{1}{2}\)。我们证明 \(p_{n+1} = \frac{1}{2}\)。</p>
+<p>分三种情况讨论。</p>
+<ul>
+<li>
+<p>第一种情况，如果第一名乘客坐在座位 1，则最后一名乘客能够坐到自己座位的概率为 1。</p>
+</li>
+<li>
+<p>第二种情况，如果第一名乘客坐在座位 \(n + 1\)，则最后一名乘客能够坐到自己座位的概率为 0。</p>
+</li>
+<li>
+<p>最后，假设第一名乘客坐在座位 \(i\)，其中 \(2 \leq i \leq n\)。那么第 2 名到第 \(i - 1\) 名乘客都会坐在自己的指定座位上。当轮到第 \(i\) 名乘客时，第 \(i\) 名乘客会在剩余的 \(n - i + 2\) 把座位（座位 1，以及座位 \(i + 1, i + 2, \ldots, n + 1\)）中均匀随机地选择一把。我们可以将座位 1 重新标记为座位 \(i\)，并注意到结果与“第 \(i\) 名乘客是第一名乘客，且一开始共有 \(n - i + 2\) 名乘客”的情形相同（如果第 \(i\) 名乘客坐到了新的座位 \(i\)，则所有乘客都会坐到自己的指定座位；否则，我们重复与之前相同的过程）。换句话说，最后一名乘客坐到自己座位的概率为 \(p_{n-i+2}\)。</p>
+</li>
+</ul>
+<p>因此，若一开始有 \(n + 1\) 名乘客，最后一名乘客坐到自己座位的概率为
+\[
+p_{n+1} = \frac{1}{n + 1} \cdot 1 + \frac{1}{n + 1} \cdot 0 + \sum_{i=2}^{n} \frac{1}{n + 1} p_{n-i+2}
+= \frac{1}{n + 1} + \sum_{i=2}^{n} \frac{1}{n + 1} \cdot \frac{1}{2}
+= \frac{1}{n + 1} + \frac{n - 1}{n + 1} \cdot \frac{1}{2}
+= \frac{1}{2},
+\]
+其中第二个等号用到了归纳假设。由此我们得出结论：对所有 \(n\)，\(p_n = \frac{1}{2}\)，因此 \(p_{100} = \frac{1}{2}\)。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis14b-sol.pdf</code> · 2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis14b.pdf</code> · 2 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis14b.pdf</code></li>
+      <li><code>solutions/discussion/dis14b-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

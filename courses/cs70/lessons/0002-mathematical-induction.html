@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>数学归纳法 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 2 讲</p><h1>数学归纳法</h1><p class="lede">本讲系统训练数学归纳法的核心变体——普通归纳、强归纳、加强归纳假设、反向归纳与结构归纳——并通过伯努利不等式、二进制表示、斐波那契性质、AM-GM 不等式与硬币游戏等经典题目，帮助你掌握从递推到一般结论的证明范式。</p><div class="meta"><span>预计用时：150 分钟</span><span>难度：中等</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>能区分普通归纳与强归纳的适用场景，并正确书写归纳基例、归纳假设与归纳步骤</li><li>当原归纳假设"卡住"时，能识别何时需要加强归纳假设，并构造更强的不等式或等式命题</li><li>能在组合与递归结构（二进制表示、斐波那契数列、硬币拆分、树）中建立归纳不变量并完成证明</li><li>理解反向归纳与前推-后推技巧，能用它处理 AM-GM 不等式等非标准归纳形式</li><li>能识别常见归纳误区，如缺少基例、假设过弱、量词缺失与循环论证</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>自然数集 \(\mathbb{N}\) 与良序原理的基本概念（模块 1）</li><li>不等式运算与代数化简（模块 1 中的微积分复习）</li><li>逻辑量词 \(\forall, \exists\) 与反证法、逆否命题（模块 1）</li></ul><h2 id="ordinary-induction">归纳原理的基本框架</h2><p>数学归纳法用于证明形如 \(\forall n \in \mathbb{N}, P(n)\) 的命题，其合法性由自然数的良序原理保证。证明包含两个核心环节：（1）<strong>基例</strong>（base case）：验证 \(P(0)\) 或命题所定义的最小自然数成立；（2）<strong>归纳步骤</strong>（inductive step）：假设对某个任意固定的 \(k\) 有 \(P(k)\) 成立（称为<strong>归纳假设</strong>），并在此假设下证明 \(P(k+1)\) 成立。完成这两步后，即可由良序原理推出 \(\forall n \in \mathbb{N}, P(n)\)。</p>
+<p>直觉上，可以把归纳法看作多米诺骨牌：基例保证第一块骨牌倒下，归纳步骤保证第 \(k\) 块倒下时第 \(k+1\) 块也必然倒下。需要注意的是，归纳假设中的 \(k\) 是<strong>任意但固定</strong>的——我们不是对某个具体的数假设 \(P(k)\)，而是证明一个蕴含关系 \(P(k) \Rightarrow P(k+1)\) 对一切 \(k\) 成立。</p>
+<p>书写归纳证明时，建议遵循以下框架：明确声明 \(P(n)\) 是什么、验证基例、写出"假设 \(P(k)\) 对某个任意 \(k \geq\) 基例值成立"、在推导 \(P(k+1)\) 时显式引用归纳假设、最后声明"由数学归纳法，命题对所有 \(n\) 成立"。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>命题</strong>：对任意 \(n \in \mathbb{N}\)，前 \(n\) 个正奇数的和满足</p>
+<p>\[
+1 + 3 + 5 + \cdots + (2n-1) = n^2.
+\]</p>
+<p><strong>证明</strong>：设 \(P(n)\) 为等式 \(1 + 3 + \cdots + (2n-1) = n^2\)。</p>
+<p><em>基例</em>：\(n = 1\) 时，左边为 \(1\)，右边为 \(1^2 = 1\)，等式成立。</p>
+<p><em>归纳步骤</em>：假设 \(P(k)\) 对某个任意 \(k \geq 1\) 成立，即</p>
+<p>\[
+1 + 3 + \cdots + (2k-1) = k^2.
+\]</p>
+<p>考虑 \(n = k+1\)：</p>
+<p>\begin{align<em>}
+1 + 3 + \cdots + (2k-1) + (2(k+1)-1) &amp;= k^2 + (2k+1) \quad \text{(由归纳假设)} \
+&amp;= (k+1)^2.
+\end{align</em>}</p>
+<p>这恰好是 \(P(k+1)\)。</p>
+<p>由数学归纳法，\(\forall n \in \mathbb{N}\)，命题成立。</p></div></div><h2 id="strong-induction">强归纳法</h2><p>普通归纳法在归纳步骤中仅假设 \(P(k)\) 即可推导 \(P(k+1)\)。然而，许多递归定义的命题中，\(P(k+1)\) 依赖于多个前项，而非仅前一项。此时需要<strong>强归纳法</strong>（strong induction）：归纳步骤改为假设 \(P(1) \land P(2) \land \cdots \land P(k)\) 成立，再证明 \(P(k+1)\)。</p>
+<p>强归纳的合法性同样来自良序原理，且与普通归纳在逻辑上等价——任何强归纳证明都可以转化为普通归纳证明（通过重新定义命题 \(Q(n) = P(1) \land \cdots \land P(n)\)）。选择哪种归纳取决于哪种假设更便于推导。</p>
+<p>使用强归纳的关键是识别"递归深度"：如果 \(P(n)\) 的证明需要用到 \(P(m)\) 其中 \(m\) 可能远小于 \(n-1\)，则应使用强归纳。典型场景包括：整数的质因数分解、递归定义序列的性质、图与树的性质等。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>命题</strong>：每个整数 \(n \geq 12\) 都可以表示为 \(n = 4a + 5b\) 的形式，其中 \(a, b\) 为非负整数。</p>
+<p><strong>证明</strong>：对 \(n\) 使用强归纳法。设 \(P(n)\) 为"\(n\) 可表示为 \(4a + 5b\)"。</p>
+<p><em>基例</em>：需要验证 \(P(12), P(13), P(14), P(15)\)：</p>
+<ul>
+<li>
+<p>\(12 = 4 \cdot 3 + 5 \cdot 0\)</p>
+</li>
+<li>
+<p>\(13 = 4 \cdot 2 + 5 \cdot 1\)</p>
+</li>
+<li>
+<p>\(14 = 4 \cdot 1 + 5 \cdot 2\)</p>
+</li>
+<li>
+<p>\(15 = 4 \cdot 0 + 5 \cdot 3\)</p>
+</li>
+</ul>
+<p><em>归纳步骤</em>：假设 \(P(m)\) 对所有 \(12 \leq m \leq k\) 成立（其中 \(k \geq 15\)）。考虑 \(n = k+1\)。由于 \(k+1 \geq 16\)，有 \((k+1) - 4 = k - 3 \geq 12\)。由归纳假设，\(P(k-3)\) 成立，即 \(k-3 = 4a + 5b\)。于是</p>
+<p>\[
+k+1 = (k-3) + 4 = 4(a+1) + 5b,
+\]</p>
+<p>即 \(P(k+1)\) 成立。</p>
+<p>由强归纳法，\(\forall n \geq 12\)，命题成立。</p></div></div><h2 id="strengthening-hypothesis">加强归纳假设的艺术</h2><p>当直接用原命题 \(P(n)\) 作为归纳假设无法完成归纳步骤时，一个常见且合法的策略是<strong>加强归纳假设</strong>：构造一个更强的命题 \(Q(n)\)，使得 \(Q(n) \Rightarrow P(n)\)，并对 \(Q(n)\) 使用归纳法。关键在于 \(Q(n)\) 必须"刚好够强"——足以让归纳步骤通过，同时又"刚好够弱"——能被基例和归纳步骤证明。</p>
+<p>加强假设的常见模式包括：将不等式加强为等式（如 \(\sum &lt; c\) 改为 \(\sum = c - \text{余项}\)）、添加一个"缓冲项"、或将上界从 \(f(n)\) 收紧为 \(g(n) \leq f(n)\)。识别何时需要加强假设的经验法则是：如果在归纳步骤中出现"差一点就够"的情况（例如推出 \(P(k+1) + \varepsilon\) 而非 \(P(k+1)\)），通常意味着原假设太弱。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>命题</strong>：对任意正整数 \(n\)，</p>
+<p>\[
+\sum_{i=1}^{n} \frac{1}{2^i} &lt; 1.
+\]</p>
+<p><strong>为何直接归纳卡住</strong>：假设 \(\sum_{i=1}^{k} \frac{1}{2^i} &lt; 1\)，则</p>
+<p>\[
+\sum_{i=1}^{k+1} \frac{1}{2^i} &lt; 1 + \frac{1}{2^{k+1}},
+\]</p>
+<p>这无法推出 \(\sum_{i=1}^{k+1} \frac{1}{2^i} &lt; 1\)。</p>
+<p><strong>加强假设</strong>：改为证明等式命题 \(Q(n)\)：</p>
+<p>\[
+\sum_{i=1}^{n} \frac{1}{2^i} = 1 - \frac{1}{2^n}.
+\]</p>
+<p>显然 \(Q(n) \Rightarrow P(n)\)（因为 \(1 - \frac{1}{2^n} &lt; 1\)）。</p>
+<p><em>基例</em>：\(n=1\) 时，左边 \(= \frac{1}{2}\)，右边 \(= 1 - \frac{1}{2} = \frac{1}{2}\)。成立。</p>
+<p><em>归纳步骤</em>：假设 \(Q(k)\) 成立。则</p>
+<p>\begin{align<em>}
+\sum_{i=1}^{k+1} \frac{1}{2^i} &amp;= \left(1 - \frac{1}{2^k}\right) + \frac{1}{2^{k+1}} \
+&amp;= 1 - \frac{2}{2^{k+1}} + \frac{1}{2^{k+1}} = 1 - \frac{1}{2^{k+1}}.
+\end{align</em>}</p>
+<p>即 \(Q(k+1)\) 成立。</p>
+<p>由归纳法，\(\forall n, Q(n)\) 成立，从而 \(\forall n, P(n)\) 成立。</p></div></div><h2 id="invariants">归纳不变量与组合证明</h2><p>在涉及逐步变换的组合问题中，<strong>不变量</strong>（invariant）是一种在每一步操作下保持不变的量。归纳法常用于证明不变量的存在性：基例验证初始状态满足不变量，归纳步骤证明操作不改变不变量。最终状态的不变量值即为所求结论。</p>
+<p>硬币拆分游戏是此类证明的典型：从 \(n\) 枚硬币开始，每次将一堆拆分为两堆并累加两堆大小的乘积作为得分。虽然拆分策略多样，但总得分恒为 \(\frac{n(n-1)}{2}\)。这个不变量的证明使用强归纳：假设对所有 \(i \leq n\) 成立，对 \(n+1\) 枚硬币，第一次拆分为 \(s_1\) 和 \(s_2\)（\(s_1 + s_2 = n+1\)），总得分 \(= s_1 s_2 + \frac{s_1(s_1-1)}{2} + \frac{s_2(s_2-1)}{2} = \frac{(n+1)n}{2}\)。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>命题</strong>：任意具有 \(n\) 个顶点的树恰好有 \(n-1\) 条边。</p>
+<p><strong>证明</strong>：对顶点数 \(n\) 使用强归纳法。</p>
+<p><em>基例</em>：\(n = 1\) 时，单个顶点的树有 0 条边，\(1-1=0\)，成立。</p>
+<p><em>归纳步骤</em>：假设对所有 \(1 \leq m \leq k\)，具有 \(m\) 个顶点的树有 \(m-1\) 条边。考虑具有 \(k+1\) 个顶点的树 \(T\)。</p>
+<p>树至少有一个叶节点（度为 1 的顶点）\(v\)。移除 \(v\) 及其关联的边 \(e\)，得到树 \(T'\) 有 \(k\) 个顶点。由归纳假设，\(T'\) 有 \(k-1\) 条边。由于 \(T\) 比 \(T'\) 恰好多一条边 \(e\)，\(T\) 有 \((k-1) + 1 = k\) 条边，即 \((k+1) - 1\) 条边。</p>
+<p>由强归纳法，命题对所有 \(n \geq 1\) 成立。</p></div></div><h2 id="backward-induction">反向归纳与前推-后推技巧</h2><p>有些命题的正向步骤 \(P(n) \Rightarrow P(n+1)\) 难以直接证明，但"倍增"步骤 \(P(n) \Rightarrow P(2n)\) 却容易得多。<strong>反向归纳</strong>（backward induction）或<strong>前推-后推法</strong>（forward-backward induction）处理的就是这类情形：先证基例 \(P(2)\)，再证前推 \(P(2^k) \Rightarrow P(2^{k+1})\)，最后证后推 \(P(n) \Rightarrow P(n-1)\)。由于任意整数 \(n \geq 2\) 总落在某两个相邻 2 的幂之间，前推给出较大的 2 的幂，后推一路下降到 \(n\)。</p>
+<p>AM-GM 不等式的归纳证明是此技术的经典应用：先证 \(n=2\) 基例，再用配对技巧证 \(P(2^k) \Rightarrow P(2^{k+1})\)，最后通过代入算术平均作为第 \(k\) 个变量证 \(P(k) \Rightarrow P(k-1)\)。这种"先跳后填"的策略在不等式证明中极为有用。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>技术说明</strong>：前推-后推法的框架为——</p>
+<ol>
+<li><strong>基例</strong>：证明 \(P(n_0)\) 对某个起始值成立。</li>
+<li><strong>前推</strong>（forward）：证明 \(P(n) \Rightarrow P(2n)\)（或更一般的"跳跃"），从而得到 \(P(n_0 \cdot 2^k)\) 对所有 \(k\) 成立。</li>
+<li><strong>后推</strong>（backward）：证明 \(P(n) \Rightarrow P(n-1)\)，从而从较大的 2 的幂一路下降到任意 \(n\)。</li>
+</ol>
+<p>以 AM-GM 不等式 \(\frac{a_1 + \cdots + a_n}{n} \geq \sqrt[n]{a_1 \cdots a_n}\) 为例：基例 \(n=2\) 由 \((\sqrt{a_1} - \sqrt{a_2})^2 \geq 0\) 推出；前推步骤将 \(2^{k+1}\) 个数配成 \(2^k\) 对，每对用 \(n=2\) 的结论，再用一次 \(n=2\) 合并；后推步骤在 \(k\) 个数中令 \(a_k\) 等于前 \(k-1\) 个数的算术平均，代入 \(P(k)\) 化简即得 \(P(k-1)\)。</p></div></div><h2 id="structural-induction">递归结构的归纳</h2><p><strong>结构归纳</strong>（structural induction）用于证明递归定义集合上的性质。与自然数归纳类似，它包含：对每个<strong>基例对象</strong>验证性质成立；对每个<strong>构造规则</strong>，假设子对象满足性质，证明构造出的新对象也满足性质。</p>
+<p>斐波那契数列 \(F_1 = 1, F_2 = 1, F_n = F_{n-1} + F_{n-2}\) 是递归定义的典型。证明"每第三个斐波那契数为偶数"时，普通归纳 \(P(k) = \)"\(F_{3k}\) 为偶数"即可：基例 \(F_3 = 2\) 为偶数；归纳步骤利用 \(F_{3k+3} = 2F_{3k+1} + F_{3k}\)，由归纳假设 \(F_{3k}\) 为偶数，故 \(F_{3k+3}\) 为偶数。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>命题</strong>：长度为 \(n\) 且不含两个连续 0 的二进制串数量等于 \(F_{n+2}\)（其中 \(F_1 = 1, F_2 = 1\)）。</p>
+<p><strong>证明</strong>：对 \(n\) 使用强归纳法。设 \(a_n\) 为满足条件的串数。</p>
+<p><em>基例</em>：\(n=0\) 时，空串 1 个，\(F_2 = 1\)；\(n=1\) 时，串 0、1 共 2 个，\(F_3 = 2\)。成立。</p>
+<p><em>归纳步骤</em>：假设对所有 \(m \leq k\) 成立。考虑长度为 \(k+1\) 的串：</p>
+<ul>
+<li>
+<p>若以 1 开头，后跟任意长为 \(k\) 的有效串，共 \(a_k = F_{k+2}\) 个；</p>
+</li>
+<li>
+<p>若以 0 开头，则第二位必为 1，后跟任意长为 \(k-1\) 的有效串，共 \(a_{k-1} = F_{k+1}\) 个。</p>
+</li>
+</ul>
+<p>因此 \(a_{k+1} = a_k + a_{k-1} = F_{k+2} + F_{k+1} = F_{k+3}\)，即 \(P(k+1)\) 成立。</p>
+<p>由强归纳法，命题对所有 \(n \geq 0\) 成立。</p></div></div><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>只要验证了 P(0) 且 P(n)→P(n+1)，归纳就成立</h3><p>归纳步骤必须证明"对任意 k ≥ 基例值，P(k) ⇒ P(k+1)"这一全称命题，而非仅对某个具体 n 验证。同时必须显式声明归纳假设，否则证明不完整。</p></article><article class="summary-card"><h3>强归纳比普通归纳更强，所以应该总是用强归纳</h3><p>强归纳与普通归纳在逻辑上等价。选择哪种取决于哪种假设更方便推导——能用普通归纳完成的证明不必"升级"为强归纳。</p></article><article class="summary-card"><h3>加强归纳假设就是作弊，因为改了要证的结论</h3><p>加强后的命题 Q(n) 蕴含原命题 P(n)。只要证明 Q(n) 且 Q(n) ⇒ P(n)，就是合法证明。关键是 Q(n) 必须恰好能被归纳法证明。</p></article><article class="summary-card"><h3>归纳假设就是要证明的结论，所以可以直接假设结论成立</h3><p>归纳假设是"假设 P(k) 对某个任意 k 成立"，目标是"证明 P(k+1)"。直接假设结论 ∀n P(n) 成立是循环论证。</p></article><article class="summary-card"><h3>基例越多归纳越可靠</h3><p>基例只需覆盖归纳步骤的起点。过多基例不造成伤害但不必要；过少则可能导致归纳步骤在基例附近失效。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="b" data-correct="正确。质因数分解的归纳中，n = ab 的证明依赖于 a 和 b（都小于 n）的分解，需要强归纳假设。" data-incorrect='提示：考虑哪些命题的证明需要用到"多个前项"而不仅仅是"前一项"。' data-quiz="m2-q1"><p><strong>问题：</strong>下列哪种情形最可能需要使用强归纳而非普通归纳？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">证明 1 + 2 + ... + n = n(n+1)/2</button><button aria-pressed="false" data-choice="b">证明每个大于 1 的整数都可以分解为质因数的乘积</button><button aria-pressed="false" data-choice="c">证明 (1+x)^n ≥ 1+nx 对任意 x &gt; -1</button><button aria-pressed="false" data-choice="d">证明 n³ - n 总能被 3 整除</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。直接归纳只能得到 \(\sum_{i=1}^{k+1}2^{-i}&lt;1+2^{-(k+1)}\)，不能据此确认和仍小于 1，因此需要加强归纳命题。" data-incorrect="提示：写出归纳步骤，看看从假设到结论差了什么。" data-quiz="m2-q2"><p><strong>问题：</strong>在证明 \(\sum_{i=1}^{n}2^{-i}&lt;1\) 时，为什么直接归纳会"卡住"？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">因为基例 n = 1 不成立</button><button aria-pressed="false" data-choice="b">因为归纳假设 \(\sum_{i=1}^{k}2^{-i}&lt;1\) 无法推出 \(\sum_{i=1}^{k+1}2^{-i}&lt;1\)</button><button aria-pressed="false" data-choice="c">因为该不等式对某些 n 不成立</button><button aria-pressed="false" data-choice="d">因为必须使用强归纳</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。这是强归纳证明的不变量：第一次拆分为 s₁ 和 s₂ 后，总得分 = s₁s₂ + s₁(s₁-1)/2 + s₂(s₂-1)/2 = (n+1)n/2。" data-incorrect="提示：用强归纳法，考虑第一次拆分后的两部分各自得分之和。" data-quiz="m2-q3"><p><strong>问题：</strong>关于硬币拆分游戏（将 n 枚硬币的堆不断拆分，每次得分为两堆大小的乘积），下列哪项最准确？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">总得分依赖于拆分策略，先拆大堆得分更高</button><button aria-pressed="false" data-choice="b">总得分恒为 n(n-1)/2，与拆分方式无关</button><button aria-pressed="false" data-choice="c">总得分恒为 n(n+1)/2</button><button aria-pressed="false" data-choice="d">总得分恒为 n² - 1</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>数学归纳法的核心是"基例 + 归纳步骤"，其合法性由良序原理保证。</li><li>当 P(k) → P(k+1) 不够用时，可升级强归纳（假设所有前项）或加强归纳假设（构造更强的 Q(n)）。</li><li>加强假设的常见手法：将不等式加强为等式、添加缓冲项、收紧上界。</li><li>组合与递归结构中的不变量常用强归纳证明，关键是找到在操作下保持不变的量。</li><li>前推-后推法（反向归纳）适用于倍增容易但递推难的情形，如 AM-GM 不等式。</li><li>结构归纳用于递归定义集合，需对每个基例和构造规则分别验证。</li><li>书写归纳证明时要显式声明 P(n)、基例、归纳假设和归纳步骤，避免循环论证。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>discussion/dis01a.pdf</code> · 1 · confidence: high · Base Case: When n = 0, the claim holds since (1 + x)^0 ≥ 1 + 0x. Inductive Hypothesis: Assume that (1 + x)^k ≥ 1 + kx...</li><li><code>discussion/dis01a.pdf</code> · 1-2 · confidence: high · Let's try to prove that for every n ≥ 1, we have a_n ≤ 3^{2n} by induction... There is an extra +1 in the exponent...</li><li><code>discussion/dis01a.pdf</code> · 2 · confidence: high · Prove by strong induction on n. The key insight here is that if n is divisible by 2...</li><li><code>discussion/dis01a.pdf</code> · 3 · confidence: high · We want to prove that for all natural numbers k ≥ 1, F_{3k} is even... F_{3k+3} = 2F_{3k+1} + F_{3k}</li><li><code>homework/hw01.pdf</code> · 3 · confidence: high · Prove that no matter how you choose to split the stacks, your total score will always be n(n-1)/2.</li><li><code>homework/hw01.pdf</code> · 2-3 · confidence: high · We will do so by induction on n, but in an unusual way... (a) Prove for n=2... (b) P(2^k) → P(2^{k+1})... (c) P(k) → P(k-1)...</li><li><code>homework/hw01.pdf</code> · 2 · confidence: high · Prove by induction that there is an airport which has no airplanes destined for it.</li><li><code>homework/hw01.pdf</code> · 2 · confidence: high · try strengthening the inductive hypothesis. Can you prove an equality statement instead of an inequality?</li><li><code>cs70-cheatsheet.pdf</code> · 1 · confidence: medium · Induction base case then hypothesis assume n k weak or strong</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

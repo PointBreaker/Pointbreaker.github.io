@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Berlekamp-Welch Warm-Up, Algorithm Walk-Through, Fewer Errors — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 05a</p>
+    <h1>Berlekamp-Welch 预热、算法演练、少误差情形</h1>
+    <p class="lede">本讨论课介绍 Berlekamp-Welch 纠错码算法。第 1 题为热身问题，建立算法的代数框架：编码多项式与误差多项式的次数关系、关键恒等式 Q(i)=riE(i) 的成立理由，以及通过计数未知数与方程说明发送 n+2k 个数据包为何恰好足以求解。第 2 题在有限域 GF(5) 上完整实践 Berlekamp-Welch 算法：用拉格朗日插值构造编码多项式、建立线性方程组定位错误，并从中恢复原始消息。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Berlekamp-Welch</li><li>纠错码</li><li>多项式插值</li><li>拉格朗日插值</li><li>有限域</li><li>GF(5)</li><li>误差定位多项式</li><li>Reed-Solomon</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis05a.pdf</code>、<code>solutions/discussion/dis05a-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis05a.pdf</code>、<code>solutions/discussion/dis05a-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>Berlekamp-Welch 热身</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Berlekamp-Welch 热身</p>
+<p>Note 8 · Note 9</p>
+<p>设 \(P(i)\) 为发送前施加于输入 \(i\) 的原始编码多项式，\(r_i\) 为输入 \(i\) 对应的接收信息，它可能已被篡改，也可能未被篡改。</p>
+<p>(a) 若要发送一条长度为 \(n\) 的消息，\(P(x)\) 的次数应是多少？为什么？</p>
+<p>(b) 何时有 \(r_i = P(i)\)？何时有 \(r_i \neq P(i)\)？</p>
+<p>(c) 若至多发生 \(k\) 个擦除错误（erasure error），应发送多少个数据包？若至多发生 \(k\) 个一般错误（general error），应发送多少个数据包？（我们稍后再看这样做的理由。）现在起我们只考虑一般错误。</p>
+<p>(d) 误差多项式 \(E(x)\) 的根代表什么？接收方是否知道 \(E(x)\) 的根？若至多发生 \(k\) 个错误，\(E(x)\) 的最高次数是多少？利用 \(P(x)\) 与 \(E(x)\) 的次数信息，\(Q(x) = P(x)E(x)\) 的次数是多少？</p>
+<p>(e) 为何等式 \(Q(i) = P(i)E(i) = r_i E(i)\) 恒成立？（分别考虑 \(P(i) = r_i\) 与 \(P(i) \neq r_i\) 的情形。）</p>
+<p>(f) 多项式 \(Q(x)\) 与 \(E(x)\) 中共有多少个未知系数？（这些就是要求解的变量。想一想多项式的次数。）收到数据包后，你共有多少个方程？方程数量是否足以解出所有未知数？（回想前面那个问题的答案——现在我们发送这么多数据包的理由是否说得通了？）</p>
+<p>(g) 若已知 \(Q(x)\) 与 \(E(x)\)，如何恢复 \(P(x)\)？若已知 \(P(x)\)，如何恢复原始消息？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>本题意在建立 Berlekamp-Welch 算法的代数框架。对于 (a)，回忆拉格朗日插值中“点数与次数”的关系；对于 (e)，分别考虑 \(E(i) = 0\) 与 \(E(i) \neq 0\) 两种情形，观察等式两边如何同时为零。</p>
+<p>对于 (f)，分别统计 \(Q\) 与 \(E\) 的系数个数，注意 \(E\) 的首项系数是已知的，这减少了一个未知数；再把方程个数与未知数个数作比较，就能体会发送 \(n + 2k\) 个数据包的设计动机。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) \(P\) 的次数为 \(n - 1\)，因为 \(n\) 个点可以唯一确定一个次数为 \(n - 1\) 的多项式。</p>
+<p>(b) 当接收到的数据包正确时，\(r_i = P(i)\)。当接收到的数据包被篡改时，\(r_i \neq P(i)\)。</p>
+<p>(c) 当有 \(k\) 个擦除错误时，我们发送 \(n + k\) 个数据包；当有 \(k\) 个一般错误时，我们发送 \(n + 2k\) 个数据包。</p>
+<p>(d) 误差多项式 \(E(x)\) 的根代表被篡改数据包的位置。接收方不知道 \(E(x)\) 的根。\(E(x)\) 是接收方为了得到 \(P(x)\) 而需要计算的多项式。若至多发生 \(k\) 个错误，则 \(E(x)\) 的最高次数为 \(k\)。由于 \(P\) 的次数为 \(n - 1\) 且 \(E\) 的次数至多为 \(k\)，故 \(Q\) 的最高次数为 \((n - 1) + k = n + k - 1\)。</p>
+<p>(e) 若点 \(i\) 处没有错误，则 \(P(i) = r_i\)，等式两边同乘 \(E(i)\) 得 \(P(i)E(i) = r_i E(i)\)。若点 \(i\) 处有错误，则 \(E(i) = 0\)，从而 \(P(i)E(i) = r_i E(i) = 0\)。</p>
+<p>(f) \(Q(x)\) 的最高次数为 \(n + k - 1\)，因此未知数个数为 \(n + k\)。\(E(x)\) 的最高次数为 \(k\)，这意味着会有 \(k + 1\) 个未知数。然而，我们知道 \(E(x)\) 中 \(x^k\) 的系数为 \(1\)，因此未知数个数为 \(k\)。未知数总数为 \((n + k) + k = n + 2k\)。共有 \(n + 2k\) 个方程，足以解出 \(n + 2k\) 个未知数。</p>
+<p>(g) 我们可以用等式 \(P(x) = Q(x)/E(x)\) 计算 \(P(x)\)。要恢复消息，我们计算 \(P(i)\)，其中 \(1 \le i \le n\)。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis05a-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis05a.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>Berlekamp-Welch 算法</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Berlekamp-Welch 算法</p>
+<p>Note 8 · Note 9</p>
+<p>在本题中，我们要发送长度为 \(n = 3\) 的消息 \((m_0, m_1, m_2) = (1, 1, 4)\)。我们将针对 \(k = 1\) 个一般错误使用纠错码，并在 \(GF(5)\) 上进行运算。</p>
+<p>(a) 在模 \(5\) 意义下构造一个次数至多为 \(2\) 的多项式 \(P(x)\)，使得
+\[P(0) = 1,\quad P(1) = 1,\quad P(2) = 4.\]
+发送的消息 \((c_0, c_1, c_2, c_3, c_4)\) 是什么？</p>
+<p>(b) 假设消息被篡改，\(c_0\) 被改为 \(0\)。建立 Berlekamp-Welch 算法中的线性方程组以求出 \(Q(x)\) 与 \(E(x)\)。</p>
+<p>(c) 假设解出 (b) 中的方程后得到 \(Q(x) = 4x^3 + x^2 + x\) 与 \(E(x) = x\)。展示如何从 \(Q\) 与 \(E\) 恢复原始消息。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (a)，使用拉格朗日插值公式在 \(GF(5)\) 上构造 \(P(x)\)，注意模 \(5\) 下的逆元（如 \(2^{-1} \equiv 3 \pmod{5}\)），并记得添加冗余点以得到发送的消息。</p>
+<p>对于 (b)，将 \(Q(i) = R(i)E(i)\) 对每个接收点展开，注意 \(E(x)\) 是首一多项式（首项系数为 1），这可减少一个未知数。对于 (c)，利用 \(P(x) = Q(x)/E(x)\) 恢复多项式，再通过求值恢复消息。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 我们使用拉格朗日插值法构造满足 \(P(0) = m_0 = 1\)、\(P(1) = m_1 = 1\)、\(P(2) = m_2 = 4\) 的唯一二次多项式 \(P(x)\)。所有运算在 \(GF(5)\) 上进行，因此例如 \(2^{-1} = 3 \pmod{5}\)。</p>
+<p>\[\Delta_0(x) = \frac{(x - 1)(x - 2)}{(0 - 1)(0 - 2)} = \frac{x^2 - 3x + 2}{2} \equiv 3(x^2 - 3x + 2) \pmod{5}\]</p>
+<p>\[\Delta_1(x) = \frac{(x - 0)(x - 2)}{(1 - 0)(1 - 2)} = \frac{x^2 - 2x}{-1} \equiv 4(x^2 - 2x) \pmod{5}\]</p>
+<p>\[\Delta_2(x) = \frac{(x - 0)(x - 1)}{(2 - 0)(2 - 1)} = \frac{x^2 - x}{2} \equiv 3(x^2 - x) \pmod{5}\]</p>
+<p>\[P(x) = m_0\Delta_0(x) + m_1\Delta_1(x) + m_2\Delta_2(x) = 1\cdot\Delta_0(x) + 1\cdot\Delta_1(x) + 4\cdot\Delta_2(x) \equiv 4x^2 + x + 1 \pmod{5}\]</p>
+<p>对于最终消息，我们需要添加 \(P\) 的 \(2\) 个冗余点。由于 \(3\) 与 \(4\) 是 \(GF(5)\) 中尚未使用的仅有的两个点，我们计算得 \(P(3) = 0\)、\(P(4) = 4\)，因此我们的消息为 \((1, 1, 4, 0, 4)\)。</p>
+<p>(b) 接收到的消息为 \((c'_0, c'_1, c'_2, c'_3, c'_4) = (0, 1, 4, 0, 4)\)。设 \(R(x)\) 为满足 \(R(i) = c'_i\)（\(0 \le i &lt; 5\)）的函数。设 \(E(x) = x + b_0\) 为误差定位多项式，\(Q(x) = P(x)E(x) = a_3 x^3 + a_2 x^2 + a_1 x + a_0\)。</p>
+<p>由于对 \(0 \le i &lt; 5\) 有 \(Q(i) = P(i)E(i) = R(i)E(i)\)，我们得到以下等式（模 \(5\)）：</p>
+<p>\[Q(0) = 0 \cdot E(0)\]
+\[Q(1) = 1 \cdot E(1)\]
+\[Q(2) = 4 \cdot E(2)\]
+\[Q(3) = 0 \cdot E(3)\]
+\[Q(4) = 4 \cdot E(4)\]</p>
+<p>可改写为线性方程组：</p>
+<p>\[a_0 = 0\]
+\[a_3 + a_2 + a_1 + a_0 - b_0 = 1\]
+\[8a_3 + 4a_2 + 2a_1 + a_0 - 4b_0 = 8\]
+\[27a_3 + 9a_2 + 3a_1 + a_0 = 0\]
+\[64a_3 + 16a_2 + 4a_1 + a_0 - 4b_0 = 1\]</p>
+<p>(c) 由解可知 \(Q(x) = 4x^3 + x^2 + x\)，\(E(x) = x + b_0 = x\)。由于 \(Q(x) = P(x)E(x)\)，接收方可计算 \(P(x) = Q(x)/E(x) = 4x^2 + x + 1\)，即发送方在 (a) 中使用的多项式 \(P(x)\)。误差定位多项式 \(E(x)\) 为一次，因此仅有一个错误，且由于 \(E(x) = x = x - 0\)，被篡改的是第一个比特。为纠正此错误，我们计算 \(P(0) = 1\)，并将其与两个未篡改的比特 \(m_1, m_2\) 组合，得到原始消息 \((m_0, m_1, m_2) = (1, 1, 4)\)。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis05a-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis05a.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>Berlekamp-Welch 算法在错误较少时的表现</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在课堂上我们已经推导出：若传输 \(n+2k\) 个点，则 Berlekamp-Welch 算法可纠正 \(k\) 个一般错误（general errors）。然而在现实中，通常很难预先确定会发生多少个错误。如果实际错误数少于 \(k\) 会怎样？这是笔记中所留习题的延续。</p>
+<p>假设 Alice 要向 Bob 发送 1 条消息，并希望防范 1 个一般错误。她决定用 \(P(x)=4\)（在 \(\mathrm{GF}(7)\) 上）对消息进行编码，使得 \(P(0)=4\) 是她想要发送的消息。随后她将 \(P(0),P(1),P(2)=(4,4,4)\) 发送给 Bob。</p>
+<p>(a) 假设 Bob 收到的消息为 \((4,5,4)\)。在不显式执行高斯消元的前提下，找出 \(E(x)\) 与 \(Q(x)\)。</p>
+<p>(b) 现在假设没有发生一般错误，Bob 收到的是原始消息 \((4,4,4)\)。证明你在 (a) 中找到的 \(Q(x)\)、\(E(x)\) 仍对所有 \(i=0,1,2\) 满足 \(Q(i)=r_i E(i)\)。</p>
+<p>(c) 验证 \(E(x)=x\)，\(Q(x)=4x\) 是另一组可能的多项式，对所有 \(i=0,1,2\) 满足 \(Q(i)=r_i E(i)\)。</p>
+<p>(d) 假设你实际上要解码收到的消息 \((4,4,4)\)。基于前两个小问的结论，当试图求解未知元时，高斯消元过程中会发生什么？</p>
+<p>(e) 证明：一般而言，无论 \(Q(x)\) 与 \(E(x)\) 的解是哪一组，恢复出的 \(P(x)\) 始终相同。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 先观察哪一个接收到的值与 \(P(x)\) 在该点的真值不同，再据此猜测错误位置多项式的根，并利用 \(Q(i)=r_iE(i)\) 确定 \(Q\)。</p>
+<p>(e) 考虑两组解 \((Q,E)\) 与 \((Q',E')\)，考察多项式 \(Q'E-QE'\) 的零点个数与其次数之间的关系。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 错误出现在 \(i=1\) 处（\(r_1=5\neq P(1)=4\)），因此错误位置多项式以 \(1\) 为根：\(E(x)=x-1\)。由 \(Q(x)=P(x)E(x)=4(x-1)=4x-4\)（在 \(\mathrm{GF}(7)\) 上），得 \(Q(x)=4x-4\)。</p>
+<p>(b) 由于没有错误，对所有 \(i=0,1,2\) 都有 \(P(i)=r_i\)。而 \(Q(i)=P(i)E(i)=r_iE(i)\)，故 \(Q(i)=r_iE(i)\) 仍成立。</p>
+<p>(c) 因为对所有 \(i=0,1,2\) 都有 \(P(i)=r_i=4\)，代入 \(E(x)=x\)、\(Q(x)=4x\) 可得 \(Q(i)=4i\)，\(r_iE(i)=4\cdot i=4i\)，二者相等，故 \(E(x)=x\)、\(Q(x)=4x\) 也是满足条件的解。</p>
+<p>(d) 方程组存在多组解（例如 (a) 与 (c) 给出的两组解都满足约束）。因此在高斯消元过程中会出现自由变量，从而得到无穷多组解。</p>
+<p>(e) 设有两组解 \((Q'(x),E'(x))\) 与 \((Q(x),E(x))\)。由定义，对所有 \(1\le i\le n+2k\) 有 \(Q'(i)=r_iE'(i)\) 且 \(Q(i)=r_iE(i)\)，于是 \(Q'(i)E(i)=Q(i)E'(i)=r_iE(i)E'(i)\)。但 \(Q'(x)E(x)-Q(x)E'(x)\) 是一个次数不超过 \(n+2k-1\) 的多项式，却在 \(n+2k\) 个点处取值为 \(0\)。非零多项式的零点个数不超过其次数，故该多项式必为零多项式，即 \(Q'(x)E(x)=Q(x)E'(x)\) 对所有 \(x\) 成立。于是</p>
+<p>\[\frac{Q'(x)}{E'(x)}=\frac{Q(x)}{E(x)},\]</p>
+<p>这说明无论取哪一组解，最终恢复出的 \(P(x)=Q(x)/E(x)\) 都相同。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis05a-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis05a.pdf</code> · 3-4 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis05a.pdf</code></li>
+      <li><code>solutions/discussion/dis05a-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

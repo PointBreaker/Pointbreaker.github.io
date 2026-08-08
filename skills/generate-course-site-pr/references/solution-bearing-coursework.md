@@ -10,11 +10,12 @@ Use these rules when local official discussion or homework solutions are availab
 - Read the PDF page when extracted text loses a diagram, table, handwritten annotation, or mathematical symbol.
 - Use local question files for the statement and local official solution files for the answer. Do not reconstruct an “official” answer from lecture notes.
 
-## LongCat batching
+## Claude Code batching
 
-- Use `scripts/run_longcat_extraction.py` with `LongCat-2.0[1M]`, the bundled `work-item-extraction.schema.json`, and read-only tools.
+- Use `scripts/run_claude_extraction.py` with an explicitly selected, machine-verified model and the bundled `work-item-extraction.schema.json`. Do not require a particular model family from every user.
 - Batch one long homework with its solution, or at most four short discussion/solution pairs.
-- Start with inventory-extracted text; open only visually incomplete PDF pages. Split a batch that reaches the configured timeout without producing an artifact.
+- Embed inventory-extracted text and use `--no-tools` for the main extraction. Run a separate, small `Read`-enabled pass only for visually incomplete PDF pages. Split a batch that reaches the configured timeout without producing an artifact.
+- For a single long handout that still times out, shard by problem number and merge only disjoint, schema-valid results with `scripts/merge_extraction_shards.py`. Never concatenate model prose or resolve conflicting shard identities automatically.
 - Keep all results and run metadata under `.course-build/claude-extraction/`; never pass the full extraction through the primary context merely to save it.
 
 ## Page structure
@@ -28,6 +29,14 @@ Render in this order:
 5. Question and solution provenance with local filename, page, and extraction confidence.
 
 If no local official solution exists, show that status and omit the solution disclosure. Do not manufacture an answer merely for visual consistency.
+
+## Implementation handouts without solutions
+
+- Use `kind: Assignment` or `kind: Lab` for long programming handouts. The shared schema and renderer support both without requiring an answer key.
+- Preserve every stable problem identifier, interface, tensor shape, formula, permitted dependency, command, deliverable, point value, runtime target, and acceptance test needed to implement the assignment without reopening the PDF.
+- Translate the handout's explanatory context as well as its task sentences. A list of deliverables alone is not a self-contained handout.
+- Keep `solutionStatus: no-local-solution` and `solutionMarkdown` empty unless a publishable official solution is actually present and authorized. Non-answer hints may clarify prerequisites, debugging order, and validation strategy, but must not provide submit-ready code.
+- Render these pages as `完整 Handout：任务、约束与验收`; retain the existing assignment guide above the generated task outline.
 
 ## Algorithm-course interactives
 

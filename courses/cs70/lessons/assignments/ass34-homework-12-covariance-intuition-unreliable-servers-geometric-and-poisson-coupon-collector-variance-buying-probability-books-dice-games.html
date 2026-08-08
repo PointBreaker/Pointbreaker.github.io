@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Covariance Intuition, Unreliable Servers, Geometric &amp; Poisson, Coupon Collector Variance, Buying Probability Books, Dice Games — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 作业 12</p>
+    <h1>协方差直觉、不可靠服务器、几何与泊松、优惠券收集方差、买概率书、骰子游戏</h1>
+    <p class="lede">再次检验你的直觉。涵盖协方差、方差、相关性与独立性的判断与证明，以及一道几何分布与泊松分布比较的概率题、优惠券收集问题的方差推导、购书场景下的条件分布与条件期望方差、若干掷骰子系统下的期望计算。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>covariance</li><li>variance</li><li>correlation</li><li>independence</li><li>geometric distribution</li><li>Poisson distribution</li><li>coupon collector</li><li>conditional distribution</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>homework/hw12.pdf</code>、<code>solutions/homework/hw12-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 7 道大题。本地官方解答已收录 6/7 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>homework/hw12.pdf</code>、<code>solutions/homework/hw12-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">协作说明</span><strong>协作说明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在开始撰写最终作业提交之前，请简要说明你是如何完成这份作业的。你还与谁一起完成？请列出姓名和电子邮件地址。（如果是在作业讨论会中协作，只需描述该小组即可。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>如实记录协作对象与协作方式；每位同学仍应独立组织并撰写自己的最终答案。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>homework/hw12.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">1</span><strong>再次检验你的直觉</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>再次检验你的直觉。</p>
+<p><strong>(a)</strong> 掷一枚公平的六面骰子，记录结果为 \(X\)。再掷一次骰子，记录结果为 \(Y\)。</p>
+<p> (i) 求 \(\operatorname{cov}(X + Y, X - Y)\)。</p>
+<p> (ii) 证明 \(X + Y\) 与 \(X - Y\) 不独立。</p>
+<p>对于以下各小题，若你认为答案是“是”，请给出证明；若你认为答案是“否”，请给出反例。</p>
+<p><strong>(b)</strong> 若 \(X\) 是一个随机变量且 \(\operatorname{Var}(X) = 0\)，那么 \(X\) 一定是常数吗？</p>
+<p><strong>(c)</strong> 若 \(X\) 是一个随机变量且 \(c\) 是一个常数，那么 \(\operatorname{Var}(cX) = c\operatorname{Var}(X)\) 吗？</p>
+<p><strong>(d)</strong> 若 \(A\) 与 \(B\) 是标准差均非零的随机变量，且 \(\operatorname{Corr}(A, B) = 0\)，那么 \(A\) 与 \(B\) 独立吗？</p>
+<p><strong>(e)</strong> 若 \(X\) 与 \(Y\) 是未必独立的随机变量，但 \(\operatorname{Corr}(X, Y) = 0\)，且 \(X\) 与 \(Y\) 的标准差均非零，那么 \(\operatorname{Var}(X + Y) = \operatorname{Var}(X) + \operatorname{Var}(Y)\) 吗？</p>
+<p><strong>(f)</strong> 若 \(X\) 与 \(Y\) 是随机变量，那么 \(\mathbb{E}[\max(X, Y)\min(X, Y)] = \mathbb{E}[XY]\) 吗？</p>
+<p><strong>(g)</strong> 若 \(X\) 与 \(Y\) 是标准差均非零的相互独立随机变量，那么 \(\operatorname{Corr}(\max(X, Y), \min(X, Y)) = \operatorname{Corr}(X, Y)\) 吗？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a)(i) 利用协方差的双线性展开 \(\operatorname{cov}(X+Y, X-Y)\)，并注意 \(\operatorname{cov}(X,Y) = \operatorname{cov}(Y,X)\)。(a)(ii) 找一个事件对，使得联合概率不等于边缘概率的乘积。</p>
+<p>(b)–(g) 回顾方差 \(\operatorname{Var}(X) = \mathbb{E}[(X-\mu)^2]\)、\(\operatorname{Var}(cX) = c^2\operatorname{Var}(X)\)、相关系数与协方差的关系 \(\operatorname{Corr}(X,Y) = \frac{\operatorname{cov}(X,Y)}{\sigma_X\sigma_Y}\)，以及“不相关推不出独立”的典型反例。对于 (f)，先比较 \(\max(x,y)\min(x,y)\) 与 \(xy\) 在任意取值 \(x,y\) 下的关系。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> (i) 由协方差的双线性，有
+\[\operatorname{cov}(X + Y, X - Y) = \operatorname{cov}(X, X) + \operatorname{cov}(X, Y) - \operatorname{cov}(Y, X) - \operatorname{cov}(Y, Y).\]
+利用 \(\operatorname{cov}(X, Y) = \operatorname{cov}(Y, X)\)，可得
+\[\operatorname{cov}(X + Y, X - Y) = \operatorname{cov}(X, X) - \operatorname{cov}(Y, Y) = \operatorname{Var}(X) - \operatorname{Var}(Y).\]
+由于 \(X\) 与 \(Y\) 是同分布的公平骰子点数，\(\operatorname{Var}(X) = \operatorname{Var}(Y)\)，因此
+\[\operatorname{cov}(X + Y, X - Y) = 0.\]</p>
+<p>(ii) 注意到 \(P[X + Y = 7, X - Y = 0] = 0\)，因为若 \(X - Y = 0\)，则两枚骰子的点数之和必为偶数，不可能等于 \(7\)。然而 \(P[X + Y = 7]\) 与 \(P[X - Y = 0]\) 均非零，故
+\[P[X + Y = 7, X - Y = 0] \neq P[X + Y = 7] \cdot P[X - Y = 0],\]
+因此 \(X + Y\) 与 \(X - Y\) 不独立。</p>
+<p><strong>(b)</strong> 是。设 \(\mu = \mathbb{E}[X]\)，则
+\[0 = \operatorname{Var}(X) = \mathbb{E}[(X - \mu)^2].\]
+由于完全平方非负，\((X - \mu)^2\) 必须恒等于 \(0\)，因此 \(X = \mu\)，即 \(X\) 是一个常数。</p>
+<p><strong>(c)</strong> 否。我们有
+\[\operatorname{Var}(cX) = \mathbb{E}[(cX - \mathbb{E}[cX])^2] = c^2\mathbb{E}[(X - \mathbb{E}[X])^2] = c^2\operatorname{Var}(X).\]
+因此，若 \(\operatorname{Var}(X) \neq 0\) 且 \(c \neq 0\) 且 \(c \neq 1\)，则 \(\operatorname{Var}(cX) \neq c\operatorname{Var}(X)\)。不过这确实证明了 \(\sigma(cX) = c\sigma(X)\)。</p>
+<p><strong>(d)</strong> 否。令 \(A = X + Y\)，\(B = X - Y\)，其中 \(X, Y\) 为题 (a) 中的两枚骰子点数。由于 \(A\) 与 \(B\) 不是常数，由 (b) 可知它们的方差非零，从而标准差也非零。题 (a) 已给出 \(\operatorname{cov}(A, B) = 0\)，即 \(A\) 与 \(B\) 不相关，同时 \(A\) 与 \(B\) 不独立。课堂知识表明其逆命题成立：独立必不相关，但反之不然。</p>
+<p><strong>(e)</strong> 是。若 \(\operatorname{Corr}(X, Y) = 0\)，则 \(\operatorname{cov}(X, Y) = 0\)。于是
+\[\operatorname{Var}(X + Y) = \operatorname{cov}(X + Y, X + Y) = \operatorname{Var}(X) + \operatorname{Var}(Y) + 2\operatorname{cov}(X, Y) = \operatorname{Var}(X) + \operatorname{Var}(Y).\]</p>
+<p><strong>(f)</strong> 是。对任意取值 \(x, y\)，都有 \(\max(x, y)\min(x, y) = xy\)。因此
+\[\mathbb{E}[\max(X, Y)\min(X, Y)] = \mathbb{E}[XY].\]</p>
+<p><strong>(g)</strong> 否。虽然 \((\max(x, y), \min(x, y))\) 总是 \((x, y)\) 或 \((y, x)\)，且 \(\operatorname{Corr}(X, Y) = \operatorname{Corr}(Y, X)\)，但 \((\max(X, Y), \min(X, Y))\) 并不总是等于 \((X, Y)\) 或总是等于 \((Y, X)\)，这种不一致会影响相关系数。\(X\) 与 \(Y\) 独立时，\(\max(X, Y)\) 与 \(\min(X, Y)\) 未必独立。</p>
+<p>取一个具体例子：设 \(X\) 以 \(\frac{1}{2}\) 的概率取 \(0\) 或 \(1\)，\(Y\) 独立地服从同一分布。则 \(\operatorname{Corr}(X, Y) = 0\)，因为 \(X\) 与 \(Y\) 独立。然而，若已知 \(\max(X, Y) = 0\)，则必有 \(\min(X, Y) = 0\)。更正式地，\(\max(X, Y) = 1\) 的概率为 \(\frac{3}{4}\)，为 \(0\) 的概率为 \(\frac{1}{4}\)；\(\min(X, Y) = 1\) 的概率为 \(\frac{1}{4}\)，为 \(0\) 的概率为 \(\frac{3}{4}\)。于是
+\[\mathbb{E}[\max(X, Y)] = 1 \cdot \frac{3}{4} + 0 \cdot \frac{1}{4} = \frac{3}{4}, \quad \mathbb{E}[\min(X, Y)] = 1 \cdot \frac{1}{4} + 0 \cdot \frac{3}{4} = \frac{1}{4}.\]
+因此
+\[\operatorname{cov}(\max(X, Y), \min(X, Y)) = \mathbb{E}[\max(X, Y)\min(X, Y)] - \frac{3}{16} = \frac{1}{4} - \frac{3}{16} = \frac{1}{16} \neq 0.\]
+故 \(\operatorname{Corr}(\max(X, Y), \min(X, Y)) \neq 0 = \operatorname{Corr}(X, Y)\)。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw12-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw12.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>不可靠的服务器</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>某谷歌竞争对手拥有一个由极大量服务器组成的数据中心（服务器集群）。在任意给定的一天，集群中每台服务器都以相同的概率独立地宕机或保持在线，且与其他服务器的状态独立，也与任意其他天发生的事件独立。平均而言，该集群每天有 \(4\) 台服务器宕机。</p>
+<p><strong>(a)</strong> 对某一集群在任意给定的一天里发生宕机的服务器数量，合适的分布模型是什么？（给出分布名称与参数。）</p>
+<p><strong>(b)</strong> 计算该集群在任意给定的一天里宕机服务器数量的期望与方差。</p>
+<p><strong>(c)</strong> 计算该集群在任意给定的一天里宕机服务器数量严格少于 \(3\) 台的概率。</p>
+<p><strong>(d)</strong> 计算该集群在任意给定的一天里至少有 \(3\) 台服务器宕机的概率。</p>
+<p><strong>(e)</strong> 计算该集群在给定的一个两天期间内恰好有 \(6\) 台服务器宕机的概率。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 每台服务器独立且同概率地宕机，故给定一天内的宕机台数服从二项分布；再利用“服务器数量极大”与“平均每天 \(4\) 台”给出泊松近似。</p>
+<p>(b)–(d) 回顾泊松分布 \(\operatorname{Poisson}(\lambda)\) 的期望、方差与概率质量函数 \(P[X=i] = \frac{\lambda^i}{i!}e^{-\lambda}\)。(e) 利用独立泊松随机变量之和仍为泊松分布，参数相加。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 由于各台服务器独立且同概率地宕机，给定一天内的宕机台数服从二项分布 \(\operatorname{Binomial}(n, p)\)，其中 \(n\) 为服务器总数，\(p\) 为单台服务器在给定一天内宕机的概率。</p>
+<p>由“平均每天 \(4\) 台宕机”可得 \(np = 4\)，即 \(p = \frac{4}{n}\)。又已知集群中服务器数量极大，因此 \(n \gg p\)，可将给定一天内的宕机台数用参数 \(\lambda = 4\) 的泊松分布来近似。</p>
+<p><strong>(b)</strong> 参数为 \(\lambda\) 的泊松分布的期望与方差均等于 \(\lambda\)，此处 \(\lambda = 4\)，故
+\[\mathbb{E}[X] = 4, \quad \operatorname{Var}(X) = 4.\]</p>
+<p><strong>(c)</strong> 宕机台数少于 \(3\) 的概率为 \(0\) 台、\(1\) 台与 \(2\) 台宕机概率之和。泊松分布的概率质量函数为 \(P[X=i] = \frac{\lambda^i}{i!}e^{-\lambda}\)，于是
+\[P[X = 0 \text{ 或 } X = 1 \text{ 或 } X = 2] = e^{-4} + 4e^{-4} + \frac{4^2}{2}e^{-4} = e^{-4} + 4e^{-4} + 8e^{-4} = 13e^{-4}.\]</p>
+<p><strong>(d)</strong> 至少有 \(3\) 台服务器宕机的概率等于“少于 \(3\) 台宕机”的补事件概率：
+\[P[\text{至少 } 3 \text{ 台宕机}] = 1 - P[\text{少于 } 3 \text{ 台宕机}] = 1 - 13e^{-4}.\]</p>
+<p><strong>(e)</strong> 设 \(X_1\) 为第 \(1\) 天的宕机台数，\(X_2\) 为第 \(2\) 天的宕机台数。每天的宕机台数可建模为泊松随机变量，故 \(X_1 \sim \operatorname{Poisson}(\lambda_1 = 4)\)，\(X_2 \sim \operatorname{Poisson}(\lambda_2 = 4)\)，且 \(X_1\) 与 \(X_2\) 相互独立。</p>
+<p>两天的总宕机台数为 \(Y = X_1 + X_2\)。独立泊松随机变量之和仍为泊松分布，参数为 \(\lambda = \lambda_1 + \lambda_2 = 4 + 4 = 8\)。因此，这两天恰好发生 \(6\) 次宕机的概率为
+\[P[Y = 6] = \frac{8^6}{6!}e^{-8}.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw12-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw12.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>几何分布与泊松分布</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>设 \(X \sim \operatorname{Geometric}(p)\) 与 \(Y \sim \operatorname{Poisson}(\lambda)\) 为相互独立的随机变量。计算 \(P[X &gt; Y]\)。</p>
+<p>最终答案不应含有求和符号。</p>
+<p>提示：使用全概率公式。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对 \(Y\) 进行条件化，利用几何分布的良好性质：\(P[X &gt; k] = (1-p)^k\)。写出关于 \(Y\) 的全概率展开，再将泊松分布的概率质量函数代入，观察级数是否可以利用泊松分布归一性或指数函数的泰勒展开求和。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>对 \(Y\) 进行条件化，并利用几何分布的性质 \(P[X &gt; k] = (1-p)^k\)，可得
+\[P[X &gt; Y] = \sum_{y=0}^{\infty} P[X &gt; Y \mid Y = y] \cdot P[Y = y] = \sum_{y=0}^{\infty} (1-p)^y \cdot \frac{e^{-\lambda}\lambda^y}{y!}.\]</p>
+<p>将最后求和式中的 \(e^{-\lambda}\) 提出，并把 \(p\) 乘入，可得
+\[P[X &gt; Y] = e^{-\lambda}p \sum_{y=0}^{\infty} \frac{e^{-\lambda(1-p)}(\lambda(1-p))^y}{y!}.\]</p>
+<p>注意到该求和正是参数为 \(\lambda(1-p)\) 的泊松随机变量的全部概率之和，等于 \(1\)。亦可利用泰勒展开 \(e^x = \sum_{k=0}^{\infty} \frac{x^k}{k!}\) 求和。于是
+\[P[X &gt; Y] = e^{-\lambda}p.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw12-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw12.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>优惠券收集者的方差</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>又到了每年的这个时候——Safeway 正在开展它的 Monopoly Card（垄断卡）促销活动。每次光顾 Safeway 时，你都会以相等的概率获得 \(n\) 张不同的 Monopoly Card 中的一张。你需要集齐全部 \(n\) 张才能兑换大奖。</p>
+<p>设 \(X\) 为你在能够兑换大奖之前需要光顾的次数。证明：
+\[\operatorname{Var}(X) = n^2\left(\sum_{i=1}^{n} i^{-2}\right) - \mathbb{E}[X].\]</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>将 \(X\) 分解为若干独立几何随机变量之和：\(X_i\) 表示在已收集 \(i-1\) 张不同卡片的前提下，为获得第 \(i\) 张新卡片所需的光顾次数。每个 \(X_i\) 服从参数 \(p = \frac{n-i+1}{n}\) 的几何分布，再利用几何分布的方差公式 \(\operatorname{Var}(X_i) = \frac{1-p}{p^2}\)，并对指标换元。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>这正是优惠券收集问题，但此处要求方差。设 \(X_i\) 为在已经收集到 \(i-1\) 张不同 Monopoly Card 的条件下，为实际获得第 \(i\) 张新卡片所需要的光顾次数。于是 \(X = \sum_{i=1}^{n} X_i\)，且每个 \(X_i\) 服从参数 \(p = \frac{n-i+1}{n}\) 的几何分布。此外，这些几何随机变量相互独立，因为每次收集新卡片时都相当于“从头开始”。</p>
+<p>由于 \(X_i\) 相互独立，
+\[\operatorname{Var}(X) = \sum_{i=1}^{n} \operatorname{Var}(X_i).\]
+几何分布的方差为 \(\frac{1-p}{p^2}\)，故
+\[\operatorname{Var}(X) = \sum_{i=1}^{n} \frac{1 - \frac{n-i+1}{n}}{\left(\frac{n-i+1}{n}\right)^2}.\]</p>
+<p>令 \(j = n-i+1\)，则 \(j\) 取遍 \(1\) 到 \(n\)，于是
+\[\operatorname{Var}(X) = \sum_{j=1}^{n} \frac{1 - \frac{j}{n}}{\left(\frac{j}{n}\right)^2} = \sum_{j=1}^{n} \frac{n(n-j)}{j^2} = \sum_{j=1}^{n} \frac{n^2}{j^2} - \sum_{j=1}^{n} \frac{n}{j} = n^2\left(\sum_{j=1}^{n} \frac{1}{j^2}\right) - \mathbb{E}[X],\]
+其中最后一步利用了优惠券收集问题的期望公式 \(\mathbb{E}[X] = \sum_{j=1}^{n} \frac{n}{j}\)。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw12-sol.pdf</code> · 4-5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw12.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>概率购书</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Chuck 将花 \(K\) 小时购买概率书。这里 \(K\) 是一个随机变量，且等可能地取 \(1\)、\(2\) 或 \(3\)。他购买的书籍数量 \(N\) 是随机的，且依赖于购物时长。已知
+\[P[N = n \mid K = k] = \begin{cases} \frac{c}{k}, &amp; n = 1, \dots, k, \\ 0, &amp; \text{其他情况}, \end{cases}\]
+其中 \(c\) 为某常数。</p>
+<p><strong>(a)</strong> 计算 \(c\)。</p>
+<p><strong>(b)</strong> 求 \(K\) 与 \(N\) 的联合分布。</p>
+<p><strong>(c)</strong> 求 \(N\) 的边缘分布。</p>
+<p><strong>(d)</strong> 求在 \(N = 1\) 的条件下 \(K\) 的条件分布。</p>
+<p><strong>(e)</strong> 现告知他至少买了 \(1\) 本、至多买了 \(2\) 本书。求在这一信息下 \(K\) 的条件均值与条件方差。（提示：对随机变量 \(X\) 与事件 \(A\)，有 \(\operatorname{Var}(X \mid A) = \mathbb{E}[X^2 \mid A] - \mathbb{E}[X \mid A]^2\)。）</p>
+<p><strong>(f)</strong> 每本书的价格是一个均值为 \(3\) 的随机变量。求他总花费的期望。提示：对事件 \(N = 1\)、\(N = 2\)、\(N = 3\) 进行条件化，并使用全期望公式。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 小题 (b) 的联合分布表，行对应 n=1,2,3，列对应 k=1,2,3。</h4><table>
+<thead>
+<tr>
+<th>k</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>n=1</td>
+<td>1/3</td>
+<td>1/6</td>
+<td>1/9</td>
+</tr>
+<tr>
+<td>n=2</td>
+<td>0</td>
+<td>1/6</td>
+<td>1/9</td>
+</tr>
+<tr>
+<td>n=3</td>
+<td>0</td>
+<td>0</td>
+<td>1/9</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>homework/hw12.pdf</code> · 5-6</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 对任意固定的 \(k\)，条件概率之和必为 \(1\)，即 \(\sum_{n=1}^{k} P[N=n \mid K=k] = 1\)。</p>
+<p>(b) 用 \(P[N=n, K=k] = P[N=n \mid K=k]P[K=k]\)，其中 \(P[K=k] = \frac{1}{3}\)。</p>
+<p>(c) 对 \(k\) 求全概率。(d) 用贝叶斯公式 \(P[K=k \mid N=1] = \frac{P[K=k, N=1]}{P[N=1]}\)。</p>
+<p>(e) 先求 \(P[K=k \mid N=1 \cup N=2]\)，再套用提示公式。(f) 用全期望公式 \(\mathbb{E}[X] = \sum_{n} \mathbb{E}[X \mid N=n]P[N=n]\)，并注意 \(\mathbb{E}[X \mid N=n] = 3n\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 对任意 \(k\)，以 \(K=k\) 为条件的概率之和必为 \(1\)，即
+\[\sum_{n} P[N = n \mid K = k] = 1.\]
+因此
+\[1 = \sum_{n=1}^{k} P[N = n \mid K = k] = k \cdot \frac{c}{k} = c,\]
+故 \(c = 1\)。</p>
+<p><strong>(b)</strong> 联合分布为 \(P[N = n, K = k]\)。由乘法公式
+\[P[N = n, K = k] = P[N = n \mid K = k]P[K = k],\]
+且 \(P[K=k] = \frac{1}{3}\)（因为 \(k \in \{1,2,3\}\) 等可能）。对每个 \(n,k\) 计算并列表如下：</p>
+<table>
+<thead>
+<tr>
+<th>\(k\)</th>
+<th>\(1\)</th>
+<th>\(2\)</th>
+<th>\(3\)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>\(n=1\)</td>
+<td>\(\frac{1}{3}\)</td>
+<td>\(\frac{1}{6}\)</td>
+<td>\(\frac{1}{9}\)</td>
+</tr>
+<tr>
+<td>\(n=2\)</td>
+<td>\(0\)</td>
+<td>\(\frac{1}{6}\)</td>
+<td>\(\frac{1}{9}\)</td>
+</tr>
+<tr>
+<td>\(n=3\)</td>
+<td>\(0\)</td>
+<td>\(0\)</td>
+<td>\(\frac{1}{9}\)</td>
+</tr>
+</tbody>
+</table>
+<p>亦可写出带定义域的公式：当 \(k \in \{1,2,3\}\)，\(n \in \{1,\dots,k\}\) 时，
+\[P[N = n, K = k] = \frac{1}{k} \cdot \frac{1}{3} = \frac{1}{3k},\]
+否则为 \(0\)。</p>
+<p><strong>(c)</strong> \(N\) 的边缘分布为 \(P[N=n]\)。由全概率公式，
+\[P[N = n] = P[N = n, K = 1] + P[N = n, K = 2] + P[N = n, K = 3].\]
+于是
+\[P[N = n] = \begin{cases} \frac{1}{3} + \frac{1}{6} + \frac{1}{9} = \frac{11}{18}, &amp; n = 1, \\ \frac{1}{6} + \frac{1}{9} = \frac{5}{18}, &amp; n = 2, \\ \frac{1}{9} = \frac{2}{18}, &amp; n = 3. \end{cases}\]</p>
+<p><strong>(d)</strong> 由条件概率定义，\(P[K = k \mid N = 1] = \frac{P[K=k, N=1]}{P[N=1]}\)。分子来自 (b) 的联合分布，分母来自 (c) 的边缘分布。代入可得
+\[P[K = k \mid N = 1] = \begin{cases} \frac{1/3}{11/18} = \frac{6}{11}, &amp; k = 1, \\ \frac{1/6}{11/18} = \frac{3}{11}, &amp; k = 2, \\ \frac{1/9}{11/18} = \frac{2}{11}, &amp; k = 3. \end{cases}\]</p>
+<p><strong>(e)</strong> 先计算 \(P[K = k \mid N = 1 \cup N = 2]\)，方法同 (d)：
+\[P[K = k \mid N = 1 \cup N = 2] = \begin{cases} \frac{1/3}{16/18} = \frac{3}{8}, &amp; k = 1, \\ \frac{1/6 + 1/6}{16/18} = \frac{3}{8}, &amp; k = 2, \\ \frac{1/9 + 1/9}{16/18} = \frac{2}{8}, &amp; k = 3. \end{cases}\]</p>
+<p>于是条件均值为
+\[\mathbb{E}[K \mid N = 1 \cup N = 2] = 1 \cdot \frac{3}{8} + 2 \cdot \frac{3}{8} + 3 \cdot \frac{2}{8} = \frac{15}{8},\]
+条件方差为
+\[\operatorname{Var}(K \mid N = 1 \cup N = 2) = \mathbb{E}[K^2 \mid N = 1 \cup N = 2] - \mathbb{E}[K \mid N = 1 \cup N = 2]^2\]
+\[= 1^2 \cdot \frac{3}{8} + 2^2 \cdot \frac{3}{8} + 3^2 \cdot \frac{2}{8} - \left(\frac{15}{8}\right)^2 = \frac{39}{64} \approx 0.61.\]</p>
+<p><strong>(f)</strong> 设 \(X\) 为他的总花费。由全期望公式，
+\[\mathbb{E}[X] = \mathbb{E}[X \mid N = 1]P[N = 1] + \mathbb{E}[X \mid N = 2]P[N = 2] + \mathbb{E}[X \mid N = 3]P[N = 3].\]
+由于每本书期望价格为 \(3\)，故 \(\mathbb{E}[X \mid N = n] = 3n\)，从而
+\[\mathbb{E}[X] = 3 \cdot \frac{11}{18} + 6 \cdot \frac{5}{18} + 9 \cdot \frac{2}{18} = \frac{9}{2}.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw12-sol.pdf</code> · 5-7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw12.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>骰子游戏</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>(a)</strong> Alice 与 Bob 正在玩一个游戏。Alice 在 \(0\) 到 \(100\) 之间（含端点）均匀地随机选取一个整数 \(X\)。Bob 再在 \(0\) 到 \(X\) 之间（含端点）均匀地随机选取一个整数 \(Y\)。求 \(\mathbb{E}[Y]\)。</p>
+<p><strong>(b)</strong> Alice 持续掷骰子，直到掷出 \(1\) 为止。设 \(X\) 为她总共掷骰子的次数（含最后一次），\(Y\) 为她掷出偶数点数的次数。计算 \(\mathbb{E}[Y \mid X = x]\)，并利用它求 \(\mathbb{E}[Y]\)。</p>
+<p><strong>(c)</strong> Bob 玩一个游戏：起初他拥有一枚骰子。在每个时间步，他掷出他当前拥有的全部骰子。对每一枚骰子，若掷出的点数为奇数，则将该枚骰子放回，并额外加入与点数相等枚数的骰子到他的收藏中（例如，若他在第一步掷出 \(1\)，则将该枚骰子放回，并额外加入一枚骰子）。然而，若掷出的点数为偶数，则将该枚骰子从收藏中移除。</p>
+<p>求经过 \(n\) 个时间步后，Bob 期望拥有多少枚骰子？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 先计算 \(\mathbb{E}[Y \mid X=x]\)，再用全期望公式对 \(X\) 求平均。</p>
+<p>(b) 在总共掷 \(x\) 次的前提下，前 \(x-1\) 次都不是 \(1\)，每次独立地以 \(\frac{3}{5}\) 的概率为偶数，故 \(Y\) 的条件分布是二项分布。再利用几何分布 \(p=\frac{1}{6}\) 求 \(\mathbb{E}[X]\)。</p>
+<p>(c) 设 \(X_k\) 为第 \(k\) 个时间步后的骰子数，\(X_0=1\)。对 \(X_{k-1}=m\) 条件化，计算单枚骰子在下一代期望留下多少枚骰子，再利用全期望公式建立递推。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 先计算 \(\mathbb{E}[Y \mid X = x]\)。在 \(X=x\) 的条件下，\(Y\) 在 \(\{0,1,\dots,x\}\) 上均匀分布，故 \(\mathbb{E}[Y \mid X = x] = \frac{x}{2}\)。</p>
+<p>由全期望公式，
+\[\mathbb{E}[Y] = \sum_{x} \mathbb{E}[Y \mid X = x]P[X = x] = \sum_{x} \frac{x}{2} \cdot P[X = x] = \frac{1}{2}\mathbb{E}[X].\]
+由于 \(X\) 在 \(\{0,1,\dots,100\}\) 上均匀分布，\(\mathbb{E}[X] = 50\)，因此
+\[\mathbb{E}[Y] = \frac{1}{2} \cdot 50 = 25.\]</p>
+<p><strong>(b)</strong> 计算 \(\mathbb{E}[Y \mid X = x]\)。若 Alice 共掷 \(x\) 次，则在掷出 \(1\) 之前有 \(x-1\) 次不是 \(1\)。这些掷骰相互独立，每次掷出偶数（\(2,4,6\)）的概率为 \(\frac{3}{5}\)，故 \(Y\) 的条件分布为 \(\operatorname{Binomial}(n = x-1, p = \frac{3}{5})\)，且
+\[\mathbb{E}[Y \mid X = x] = \frac{3}{5}(x-1).\]</p>
+<p>由全期望公式，
+\[\mathbb{E}[Y] = \sum_{x} \mathbb{E}[Y \mid X = x]P[X = x] = \sum_{x} \frac{3}{5}(x-1)P[X = x] = \frac{3}{5}\mathbb{E}[X] - \frac{3}{5}.\]</p>
+<p>由于 \(X\) 服从参数 \(p = \frac{1}{6}\) 的几何分布，\(\mathbb{E}[X] = 6\)，故
+\[\mathbb{E}[Y] = \frac{3}{5} \cdot 6 - \frac{3}{5} = 3.\]</p>
+<p><strong>(c)</strong> 设 \(X_k\) 为第 \(k\) 个时间步后的骰子数，则 \(X_0 = 1\)。为求第 \(k\) 步的骰子数，先对 \(X_{k-1} = m\) 进行条件化。对每一枚骰子，其期望留下的骰子数为
+\[\frac{1}{2} \cdot 0 + \frac{1}{6} \cdot 2 + \frac{1}{6} \cdot 4 + \frac{1}{6} \cdot 6 = 2,\]
+因为掷出偶数（\(2,4,6\)）时该骰子被移除（留下 \(0\) 枚），掷出奇数 \(1,3,5\) 时分别留下 \(2,4,6\) 枚，每种情况的概率均为 \(\frac{1}{6}\)。</p>
+<p>因此 \(\mathbb{E}[X_k \mid X_{k-1} = m] = 2m\)。由全期望公式，
+\[\mathbb{E}[X_k] = \sum_{m} \mathbb{E}[X_k \mid X_{k-1} = m]P[X_{k-1} = m] = \sum_{m} 2m \cdot P[X_{k-1} = m] = 2\mathbb{E}[X_{k-1}].\]</p>
+<p>由此递推可得
+\[\mathbb{E}[X_n] = 2\mathbb{E}[X_{n-1}] = 2^2\mathbb{E}[X_{n-2}] = \cdots = 2^n\mathbb{E}[X_0] = 2^n.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw12-sol.pdf</code> · 8-9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw12.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>homework/hw12.pdf</code></li>
+      <li><code>solutions/homework/hw12-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

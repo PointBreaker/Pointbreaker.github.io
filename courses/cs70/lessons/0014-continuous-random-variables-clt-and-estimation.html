@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>连续随机变量、CLT 与估计 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 14 讲</p><h1>连续随机变量、CLT 与估计</h1><p class="lede">本讲深化连续随机变量理论，涵盖 Poisson 过程的空间落点分布、高斯噪声信道下的贝叶斯决策（条件于零测事件）、Chebyshev 不等式与中心极限定理在尾概率估计上的对比，以及均匀分布参数的估计与置信区间构造。最后通过猜多项式、两信封悖论与飞机座位问题回顾概率思辨技巧。</p><div class="meta"><span>预计用时：180 分钟</span><span>难度：较难</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>掌握 Poisson 过程的空间均匀落点性质，推导区间内鱼数分布与首次遇到鱼的距离分布</li><li>理解连续随机变量条件于零测事件的处理方法，掌握高斯信道下的后验概率计算与 MAP 决策规则</li><li>比较 Chebyshev 不等式与 CLT 在尾概率近似上的差异，理解为何 CLT 对独立和给出更紧的界</li><li>掌握均匀分布参数的估计方法，利用平方观测构造 theta^2 的无偏估计及置信区间</li><li>通过概率谜题训练思辨能力，理解随机化策略如何突破直觉局限</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>离散与连续随机变量的期望、方差与条件概率（模块 11）</li><li>Poisson 分布、指数分布、正态分布的基本性质（模块 13）</li><li>Chebyshev 不等式与中心极限定理的陈述</li><li>PDF 与 CDF 的关系，以及条件 PDF 的定义</li></ul><h2 id="exp-gaussian-conditioning">指数无记忆性、高斯混合与事件条件化</h2><p>指数分布的核心特征是无记忆性：设 \(X\sim\operatorname{Exp}(\lambda)\)，参数 \(\lambda&gt;0\)，则对任意 \(s,t&gt;0\) 有 \(\Pr(X&gt;s+t\mid X&gt;s)=\Pr(X&gt;t)\)。这意味着已等待 \(s\) 时间后，剩余等待时间的分布与全新灯泡相同。该性质在讨论灯泡检查、Poisson 过程间隔时反复出现。</p>
+<p>高斯分布在线性运算下封闭：若 \(X\sim N(\mu_X,\sigma_X^2)\) 与 \(Y\sim N(\mu_Y,\sigma_Y^2)\) 独立，则 \(Z=X+Y\sim N(\mu_X+\mu_Y,\sigma_X^2+\sigma_Y^2)\)。特别地，当 \(\mu_X=\mu_Y=0\) 时，\(Z\) 的密度关于原点对称，故对任意奇数 \(k\) 有 \(\mathbb{E}[Z^k]=0\)。</p>
+<p>高斯混合未必是高斯。设 \(f_{\mu,\sigma}(x)\) 为 \(N(\mu,\sigma^2)\) 的密度，取 \(\alpha\in[0,1]\)，令 \(X\) 的密度为 \(\alpha f_{\mu_1,\sigma_1}(x)+(1-\alpha) f_{\mu_2,\sigma_2}(x)\)。则 \(\mathbb{E}[X]=\alpha\mu_1+(1-\alpha)\mu_2\)，方差为 \(\alpha(\sigma_1^2+\mu_1^2)+(1-\alpha)(\sigma_2^2+\mu_2^2)-(\mathbb{E}[X])^2\)。当 \(\mu_1\) 与 \(\mu_2\) 远离且 \(\alpha=1/2\) 时，该密度呈双峰，故不是高斯。</p>
+<p>对事件 \(A\) 条件化时，条件 PDF 定义为 \(f_{X\mid A}(x)=f_X(x)/\Pr(A)\)（当 \(x\in A\)）。这是离散条件概率的连续类比：将概率质量替换为密度，归一化常数由 \(\Pr(A)\) 给出。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(X\) 的 PDF 为 \(f_X(x)=3x^2\)，其中 \(0\le x\le 1\)，否则为 \(0\)。令事件 \(A=\{X&gt;0.5\}\)。</p>
+<p>首先求 \(\Pr(A)\)：对 \(x\) 从 \(0.5\) 到 \(1\) 积分 \(3x^2\,\mathrm{d}x\)，得 \([x^3]_{0.5}^1=1-0.125=0.875=7/8\)。</p>
+<p>于是条件 PDF 为 \(f_{X\mid A}(x)=f_X(x)/\Pr(A)=3x^2/(7/8)=24x^2/7\)，其中 \(0.5&lt;x\le 1\)，否则为 \(0\)。</p>
+<p>验证归一性：对 \(x\) 从 \(0.5\) 到 \(1\) 积分 \(24x^2/7\,\mathrm{d}x\) 等于 \((24/7)\cdot(1-0.125)=(24/7)\cdot(7/8)=3\)，再乘以 \(1/3\) 的缩放... 实际计算 \((24/7)\cdot(7/8)=3\)，注意原密度在 \([0.5,1]\) 积分是 \(7/8\)，除以 \(7/8\) 后新密度积分恰为 \(1\)。</p></div></div><h2 id="poisson-process">Poisson 过程与空间落点</h2><p>Poisson 过程描述空间中随机事件的到达。设鱼以速率 \(\lambda\)（每英里条数）落在路上，满足：不相交区间内落鱼数独立；长度为 \(L\) 的区间内落鱼数 \(\sim\operatorname{Poisson}(\lambda L)\)；每条鱼在所在区间内均匀分布。</p>
+<p>对区间 \([a,b]\)（长度 \(b-a\)），落鱼数 \(\sim\operatorname{Poi}((b-a)\lambda)\)。这是因为：将 \([a,b]\) 拆成子区间，每个子区间落鱼数独立 \(\operatorname{Poi}(\lambda\cdot\text{子长})\)，独立 Poisson 变量之和仍为 Poisson，参数相加得 \((b-a)\lambda\)。</p>
+<p>首次遇到鱼的距离 \(X\) 服从指数分布：\(\Pr(X\ge t)=\Pr([0,t]\text{ 内无鱼})=\Pr(\operatorname{Poi}(\lambda t)=0)=e^{-\lambda t}\)，故 \(X\sim\operatorname{Exp}(\lambda)\)。由指数无记忆性，在距离 \(x\) 处遇到下一条鱼后，到下一条鱼的距离仍 \(\sim\operatorname{Exp}(\lambda)\)。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设鱼以速率 \(\lambda=2\) 条/英里落下。</p>
+<p>(1) 求首次遇到鱼所需距离不超过 \(0.3\) 英里的概率。
+由 \(X\sim\operatorname{Exp}(2)\)，有 \(\Pr(X\le 0.3)=1-e^{-2\cdot 0.3}=1-e^{-0.6}\)。</p>
+<p>(2) 求 \([0,1]\) 内无鱼但 \([1,2]\) 内至少有一条鱼的概率。
+两区间独立，所求为 \(\Pr(\operatorname{Poi}(2)=0)\cdot\Pr(\operatorname{Poi}(2)\ge 1)=e^{-2}\cdot(1-e^{-2})\)。</p></div></div><h2 id="gaussian-channel">高斯信道与贝叶斯决策</h2><p>设发送二元消息 \(X\in\{0,1\}\)，先验 \(\Pr(X=1)=p\)。接收 \(X+\varepsilon\)，\(\varepsilon\sim N(0,\sigma^2)\) 独立于 \(X\)。这是加性高斯白噪声信道模型。</p>
+<p>条件于零测事件 \(\{Y=y\}\) 时，不能直接套离散 Bayes。标准做法：考虑 \(\{Y\in[y,y+\delta]\}\)，当 \(\delta\to 0\) 时，\(\Pr(Y\in[y,y+\delta]\mid X=x)\) 约等于 \(f_{Y\mid x}(y)\cdot\delta\)。于是后验比为：
+\[
+\frac{\Pr(X=1\mid Y=y)}{\Pr(X=0\mid Y=y)}=\frac{p\cdot f_{Y\mid 1}(y)}{(1-p)\cdot f_{Y\mid 0}(y)}.
+\]</p>
+<p>其中 \(f_{Y\mid 0}\) 是 \((0,\sigma^2)\) 密度，\(f_{Y\mid 1}\) 是 \(N(1,\sigma^2)\) 密度。MAP（最大后验）决策规则：当 \(\Pr(X=1\mid Y=y)\ge 1/2\) 时判为 \(1\)，等价于似然比 \(\ge (1-p)/p\)。</p>
+<p>正确概率 \(=\Pr(X=0)\Pr(Y\le\tau\mid X=0)+\Pr(X=1)\Pr(Y&gt;\tau\mid X=1)\)，其中 \(\tau\) 为阈值。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(\Pr(X=1)=0.4\)，\(\sigma^2=1\)。求 MAP 阈值与正确概率。</p>
+<p>似然比：\(f_{Y\mid 1}(y)/f_{Y\mid 0}(y)=\exp(-(y-1)^2/2)/\exp(-y^2/2)=\exp((1-2y)/2)\)。</p>
+<p>MAP 判 \(1\) 当 \(0.4\cdot\exp((1-2y)/2)\ge 0.6\)，即 \(\exp((1-2y)/2)\ge 1.5\)，取对数得 \((1-2y)/2\ge\ln(1.5)\)，即 \(y\le(1-2\ln(1.5))/2\)。</p>
+<p>数值上 \(\ln(1.5)\sim 0.4055\)，阈值 \(\tau\sim(1-0.811)/2\sim 0.0945\)。</p>
+<p>正确概率 \(=0.6\cdot\Pr(N(0,1)\le 0.0945)+0.4\cdot\Pr(N(1,1)&gt;0.0945)\)。利用 \(\Phi\) 函数计算即可。</p></div></div><h2 id="chebyshev-vs-clt">Chebyshev 不等式 vs CLT</h2><p>Chebyshev 不等式：对任意随机变量 \(Z\) 与 \(k&gt;0\)，\(\Pr(\lvert Z-\mathbb{E}[Z]\rvert\ge k)\le\operatorname{Var}(Z)/k^2\)。它普适但宽松，因为不依赖分布形状。</p>
+<p>中心极限定理：设 \(X_i\) i.i.d.，\(\mathbb{E}[X_i]=\mu\)，\(\operatorname{Var}(X_i)=\sigma^2&gt;0\)，则 \(Z_n=(\sum X_i-n\mu)/(\sigma\sqrt{n})\) 依分布收敛到 \(N(0,1)\)。</p>
+<p>对尾概率 \(\Pr(S_n/n&gt;\mu+\delta)\)，Chebyshev 给出 \(\mathcal{O}(1/(n\delta^2))\) 量级上界；CLT 给出近似 \(\sim 1-\Phi(\delta\sqrt{n}/\sigma)\)，衰减为指数级 \(e^{-n\delta^2/(2\sigma^2)}\)。CLT 更紧因为它利用了“独立和”这一特殊结构。</p>
+<p>例：\(n=1000\) 比特，每比特擦除概率 \(p\)，要求 \(\Pr(\text{擦除数}\ge 200)\le 10^{-6}\)。Chebyshev 给出 \(p\le\sim 4\cdot 10^{-5}\)；CLT 给出 \(p\le\sim 0.147\)。真实值 \(\sim 0.146\)，可见 CLT 远优于 Chebyshev。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(X_i\) i.i.d.，\(\Pr(X_i=1)=\Pr(X_i=-1)=1/2\)，\(n=100\)。求 \(\Pr(S_n\ge 10)\) 的两种近似。</p>
+<p>Chebyshev：\(\mathbb{E}[S_n]=0\)，\(\operatorname{Var}(S_n)=100\)。\(\Pr(S_n\ge 10)\le\Pr(\lvert S_n\rvert\ge 10)\le 100/100=1\)（平凡上界）。</p>
+<p>CLT：\(S_n\sim N(0,100)\) 近似。\(\Pr(S_n\ge 10)\sim\Pr(N(0,1)\ge 1)\sim 1-\Phi(1)\sim 0.1587\)。</p>
+<p>对比可见 Chebyshev 对尾概率几乎无信息，而 CLT 给出合理近似。</p></div></div><h2 id="uniform-estimation">均匀分布参数估计</h2><p>设 \(U_i\) iid \(\sim\operatorname{Uniform}(-\theta,\theta)\)，\(\theta&gt;0\) 未知。样本均值 \(\mathbb{E}[U_i]=0\)，不能估计 \(\theta\)。</p>
+<p>考虑 \(U_i^2\)：其 CDF 为 \(\Pr(U_i^2\le t)=\Pr(-\sqrt{t}\le U_i\le\sqrt{t})=\sqrt{t}/\theta\)（当 \(0&lt;t&lt;\theta^2\)）。求导得 PDF \(f(t)=1/(2\theta\sqrt{t})\)，其中 \(0&lt;t&lt;\theta^2\)。</p>
+<p>计算 \(\mathbb{E}[U_i^2]=\theta^2/3\)，\(\operatorname{Var}(U_i^2)=4\theta^4/45\)。令 \(V=(1/n)\sum U_i^2\)，则 \(\mathbb{E}[V]=\theta^2/3\)。由 CLT，\(V\sim N(\theta^2/3,4\theta^4/(45n))\) 近似。</p>
+<p>无偏估计：\(3V\) 是 \(\theta^2\) 的无偏估计。</p>
+<p>置信水平 \(\delta\) 的置信区间：
+(i) Chebyshev：\(\Pr(\lvert 3V-\theta^2\rvert\ge c)\le\operatorname{Var}(3V)/c^2=(9\cdot 4\theta^4/(45n))/c^2\)。令等于 \(\delta\) 解 \(c\)。
+(ii) CLT：\(3V\sim N(\theta^2,9\cdot 4\theta^4/(45n))\)，即 \(N(\theta^2,4\theta^4/(5n))\)。置信区间为 \(3V\pm z_{\delta/2}\cdot\sqrt{4\theta^4/(5n)}\)，其中 \(z_{\delta/2}=\Phi^{-1}(1-\delta/2)\)。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(n=100\)，观测得 \(V=0.12\)。求 \(\theta^2\) 的 95% CLT 置信区间。</p>
+<p>点估计：\(3V=0.36\)。</p>
+<p>标准误：\(\sqrt{4\theta^4/(5n)}\)。用 \(\theta^2\sim 3V=0.36\) 代入，\(\theta^4\sim 0.1296\)。标准误 \(\sim\sqrt{4\cdot 0.1296/500}=\sqrt{0.0010368}\sim 0.0322\)。</p>
+<p>\(z_{0.025}\sim 1.96\)。置信区间 \(\sim 0.36\pm 1.96\cdot 0.0322\sim 0.36\pm 0.063\sim[0.297,0.423]\)。</p>
+<p>注意这是近似区间，因为用估计值替代了真实 \(\theta\)。</p></div></div><h2 id="probability-paradoxes">概率思辨：悖论与谜题</h2><p>猜多项式：TA 写下非负整系数多项式 \(P(x)\)。策略：先问 \(P(1)=x_0\)（系数和），再问 \(P(x_0+1)\)，将结果写成 \(x_0+1\) 进制，各位数字即系数。原理：\(x_0+1\) 大于任一系数，故进制展开唯一且不进位。</p>
+<p>两信封悖论：两信封金额分别为 \(M\) 和 \(2M\)。策略：随机选整数 \(z\)（如抛硬币直到正面，\(z=2^{n-1}+0.5\)）。看手中金额 \(a\)，若 \(a\ge z\) 则保留，否则换。当 \(z\) 落在两金额之间时必取较大者；否则 \(1/2\)。因 \(z\) 有正概率落在中间，总概率 \(&gt;1/2\)。</p>
+<p>飞机座位：100 乘客，第 1 人随机坐，其余优先坐自己座位，否则随机。最后一人坐到自己座位的概率 \(=1/2\)。归纳证明：\(p_n=1/2\) 对所有 \(n\ge 2\)。第 1 人坐座位 1（概率 \(1/n\)，最后成功），坐座位 \(n\)（概率 \(1/n\)，失败），坐座位 \(i\)（概率 \(1/n\)，化为 \(n-i+2\) 子问题）。由归纳假设得 \(p_n=1/2\)。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>猜多项式实例：设 \(P(x)=2x^2+3x+1\)。</p>
+<p>第一步：\(P(1)=2+3+1=6\)，故 \(x_0=6\)。</p>
+<p>第二步：\(P(7)=2\cdot 49+21+1=120\)。</p>
+<p>将 120 写成 7 进制：\(120=2\cdot 49+3\cdot 7+1=2\cdot 7^2+3\cdot 7+1\)，即 \(231_7\)。</p>
+<p>各位数字 \(2,3,1\) 恰为系数。原理：因 \(x_0=6\) 大于每个系数，7 进制展开不会进位，故系数被完整保留。</p></div></div><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>两个独立高斯变量之和的高斯混合仍是高斯分布</h3><p>混合（mixture）与求和（sum）不同。求和 \(Z=X+Y\) 仍是高斯；但混合密度 \(\alpha f_1+(1-\alpha) f_2\) 当 \(\mu_1\) 与 \(\mu_2\) 远离时呈双峰，不是高斯。</p></article><article class="summary-card"><h3>对连续随机变量条件于 \(Y=y\) 无定义，因为概率为零</h3><p>通过极限过程定义：考虑 \(\{Y\in[y,y+\delta]\}\)，利用密度 \(f_Y(y)\) 替代零概率。后验比由密度比给出，与离散 Bayes 形式一致。</p></article><article class="summary-card"><h3>Chebyshev 与 CLT 给出的尾概率界差不多</h3><p>Chebyshev 给出多项式衰减 \(\mathcal{O}(1/n)\)，CLT 给出指数衰减 \(\mathrm{e}^{-cn}\)。对独立和尾概率，CLT 远紧于 Chebyshev。</p></article><article class="summary-card"><h3>样本均值总能估计分布的参数</h3><p>对 \(\operatorname{Uniform}(-\theta,\theta)\)，\(\mathbb{E}[U_i]=0\)，样本均值估计 \(0\) 而非 \(\theta\)。需借助 \(U_i^2\) 的矩估计 \(\theta^2\)。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。无记忆性指剩余寿命分布与已等待时间无关，即 \(\Pr(X&gt;s+t\mid X&gt;s)=\Pr(X&gt;t)\)。" data-incorrect="无记忆性是条件概率等式，不是期望、方差或概率加法。选 a。" data-quiz="m14-q1"><p><strong>问题：</strong>设 \(X\sim\operatorname{Exp}(\lambda)\)。下列哪个等式体现了无记忆性？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\Pr(X&gt;s+t\mid X&gt;s)=\Pr(X&gt;t)\)</button><button aria-pressed="false" data-choice="b">\(\mathbb{E}[X\mid X&gt;s]=\mathbb{E}[X]\)</button><button aria-pressed="false" data-choice="c">\(\operatorname{Var}(X\mid X&gt;s)=0\)</button><button aria-pressed="false" data-choice="d">\(\Pr(X&gt;s+t)=\Pr(X&gt;s)+\Pr(X&gt;t)\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。MAP（最大后验）判决在二元通信中最小化错误概率。" data-incorrect="MAP 准则的目标是最小化错误概率，不是方差、均值或熵。选 a。" data-quiz="m14-q2"><p><strong>问题：</strong>在高斯信道 \(Y=X+\varepsilon\) 中，MAP 决策规则最小化下列哪个量？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">错误概率 \(\Pr(\text{判决}\neq X)\)</button><button aria-pressed="false" data-choice="b">接收信号的方差 \(\operatorname{Var}(Y)\)</button><button aria-pressed="false" data-choice="c">发送信号的均值 \(\mathbb{E}[X]\)</button><button aria-pressed="false" data-choice="d">噪声的熵 \(H(\varepsilon)\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。对称均匀分布的均值为 \(0\)，样本均值是 \(0\) 的估计，与 \(\theta\) 无关。" data-incorrect="均匀分布有均值，且为 \(0\)。样本均值不能反映 \(\theta\)，因为分布关于 \(0\) 对称。选 a。" data-quiz="m14-q3"><p><strong>问题：</strong>对 \(\operatorname{Uniform}(-\theta,\theta)\) 的样本，为何样本均值不能估计 \(\theta\)？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">因为 \(\mathbb{E}[U_i]=0\)，样本均值趋于 \(0\) 而非 \(\theta\)</button><button aria-pressed="false" data-choice="b">因为样本均值方差太大</button><button aria-pressed="false" data-choice="c">因为均匀分布没有均值</button><button aria-pressed="false" data-choice="d">因为 \(\theta\) 必须是整数</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>指数分布无记忆性：\(\Pr(X&gt;s+t\mid X&gt;s)=\Pr(X&gt;t)\)，是 Poisson 过程间隔分布的基础</li><li>独立高斯之和仍为高斯；高斯混合（加权和）未必是高斯，双峰情形即为反例</li><li>条件于零测事件 \(\{Y=y\}\) 时，用密度比替代概率比，后验由 Bayes 密度形式给出</li><li>MAP 判决规则最小化二元通信错误概率，阈值由先验与似然比决定</li><li>CLT 对独立和给出指数级尾概率衰减，远优于 Chebyshev 的多项式衰减</li><li>对 \(\operatorname{Uniform}(-\theta,\theta)\)，用 \(U_i^2\) 的矩估计 \(\theta^2\)，样本均值无效</li><li>概率谜题：多项式用进制展开、两信封用随机阈值、飞机座位用归纳法</li></ul><h2 id="sources">一手资料</h2><ul><li><code>homework/hw14.pdf</code> · 1-2 · confidence: high · For each \(n\in\mathbb{N}\), the number of fish that land on the segment \([n,n+1]\) is independently \(\operatorname{Poisson}(\lambda)\)</li><li><code>homework/hw14.pdf</code> · 3-4 · confidence: high · \(Y=X+\varepsilon\), where \(\varepsilon\) is independent Gaussian noise with mean \(0\) and variance \(0.49\)</li><li><code>homework/hw14.pdf</code> · 5-6 · confidence: high · Use Chebyshev's Inequality to find an upper bound \(b\) for \(\Pr[\lvert Z_n\rvert\ge 2]\)</li><li><code>homework/hw14.pdf</code> · 7-9 · confidence: high · \(U_i\) iid \(\sim\operatorname{Uniform}(-\theta,\theta)\); \(V=(1/n)\sum U_i^2\)</li><li><code>discussion/dis14a.pdf</code> · 1 · confidence: high · the life span of a lightbulb is exponentially distributed with a mean of 50 days</li><li><code>discussion/dis13b.pdf</code> · 1 · confidence: high · If \(X\sim N(0,\sigma_X^2)\) and \(Y\sim N(0,\sigma_Y^2)\) are independent, then \(\mathbb{E}[(X+Y)^k]\) for odd \(k\)</li><li><code>discussion/dis14b.pdf</code> · 1-3 · confidence: high · \(d+1\) points uniquely determine a degree \(\le d\) polynomial; two envelopes; airplane seating</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RSA Warm-Up, RSA with Multiple Keys, RSA for Concert Tickets — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 04a</p>
+    <h1>RSA 预热、多密钥 RSA、演唱会门票 RSA</h1>
+    <p class="lede">本讨论课围绕 RSA 公钥加密方案展开：第一题复习 RSA 密钥对生成、加密与解密的基本计算，包括利用中国剩余定理加速解密；第二题研究同一明文使用相同指数、不同模数多次加密时的攻击方法，包括公共因子攻击与中国剩余定理攻击；第三题讨论明文空间过小时如何利用穷举或代数关系恢复消息。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>RSA</li><li>公钥加密</li><li>中国剩余定理</li><li>欧几里得算法</li><li>扩展欧几里得算法</li><li>公共因子攻击</li><li>小明文空间攻击</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis04a.pdf</code>、<code>solutions/discussion/dis04a-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis04a.pdf</code>、<code>solutions/discussion/dis04a-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>RSA 热身</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>注意 7 考虑一个 RSA 方案，其模数为 \(N = pq\)，其中 \(p\) 和 \(q\) 是大于 3 的两个不同素数。</p>
+<p>(a) 在 RSA 公钥中使用指数 \(e = 2\) 有什么问题？</p>
+<p>(b) 回顾：\(e\) 必须与 \(p - 1\) 和 \(q - 1\) 分别互素。找出关于 \(p\) 和 \(q\) 的一个条件，使得 \(e = 3\) 是一个合法指数。</p>
+<p>(c) 现在设 \(p = 5\)，\(q = 17\)，\(e = 3\)。公钥是什么？</p>
+<p>(d) 私钥是什么？</p>
+<p>(e) Alice 想发送消息 \(x = 10\) 给 Bob。使用公钥，她发送的加密消息 \(E(x)\) 是什么？</p>
+<p>(f) 假设 Bob 从 Alice 处收到消息 \(y = 24\)。他会使用什么方程来解密消息？解密后的消息是什么？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>回顾 RSA 密钥生成对指数 \(e\) 的约束：\(e\) 必须与 \((p-1)(q-1)\) 互素。思考当 \(p, q\) 为大于 3 的奇素数时，\((p-1)(q-1)\) 的奇偶性，以及它能否被 3 整除。</p>
+<p>对于计算题，先求出 \(N\) 与 \((p-1)(q-1)\)，再用扩展欧几里得算法求模逆元得到私钥 \(d\)；加密和解密都是模 \(N\) 的幂运算，需要时可借助中国剩余定理（CRT）分别在模 \(p\) 和模 \(q\) 下计算后再合并。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 要从公钥 \((N, e)\) 求出私钥 \(d\)，需要 \(\gcd(e, (p - 1)(q - 1)) = 1\)。然而，由于 \(p, q\) 是不同的奇素数，\((p - 1)(q - 1)\) 必然是偶数，因此若 \(e = 2\)，则 \(\gcd(e, (p - 1)(q - 1)) = 2\)，私钥不存在。（注意：这更一般地表明 \(e\) 绝不应为偶数。）</p>
+<p>(b) \(p\) 和 \(q\) 都必须是 \(3k + 2\) 的形式。若 \(p = 3k + 1\) 会有问题，因为此时 \(p - 1\) 含有因子 3。若 \(p = 3k\) 也有问题，因为此时 \(p\) 不是素数。</p>
+<p>(c) \(N = p \cdot q = 85\) 与 \(e = 3\) 被公开。注意：在实际中，\(p\) 和 \(q\) 应当大得多（512 位）。这里选小数仅为便于手算。</p>
+<p>(d) 需要 \(ed = 3d \equiv 1 \pmod{64}\)，因此 \(d = 43\)。提醒：可通过 \(x = 64\)、\(y = 3\) 的扩展最大公因数算法求得：\(\gcd(x, y) = 1 = ax + by\)，其中 \(a = 1\)、\(b = -21\)。</p>
+<p>(e) 加密函数为 \(E(x) = x^3 \pmod{85}\)。\(10^3 \equiv 65 \pmod{85}\)，所以 \(E(x) = 65\)。</p>
+<p>(f) 解密函数为 \(D(y) = y^{43} \pmod{85}\)，它是 \(E(x)\) 的逆。
+\[x \equiv 24^{43} \pmod{85}\]
+由中国剩余定理（CRT），对于互素的 \(p\) 和 \(q\)，若
+\[x \equiv a \pmod p\]
+\[x \equiv b \pmod q\]
+则
+\[x = a q q_1 + b p p_1 \pmod{pq}\]
+其中 \(p_1 = p^{-1} \pmod q\)，\(q_1 = q^{-1} \pmod p\)。</p>
+<p>在此题中，\(p = 5\)，\(q = 17\)。于是
+\[x \equiv 24^{43} \equiv (-1)^{43} \equiv -1 \equiv 4 \pmod 5\]
+以及
+\[x = 24^{43} \pmod{17}\]
+\[x = 7^{43} \pmod{17}\]
+\[x = (7^2)^{21} \cdot 7 \pmod{17}\]
+\[x \equiv (-2)^{21} \cdot 7 \pmod{17}\]
+\[x = ((-2)^4)^5 \cdot (-2) \cdot 7 \pmod{17}\]
+\[x \equiv (-1)^5 \cdot (-14) \pmod{17}\]
+\[x \equiv 14 \pmod{17}\]</p>
+<p>因此
+\[x \equiv a = 4 \pmod 5\]
+\[x \equiv b = 14 \pmod{17}\]
+且
+\[p_1 = p^{-1} \pmod{17} = 5^{-1} \pmod{17} = 7\]
+\[q_1 = q^{-1} \pmod 5 = 17^{-1} \pmod 5 = 3\]
+所以
+\[x \equiv a q q_1 + b p p_1 \pmod{pq}\]
+\[x = 4 \cdot 17 \cdot 3 + 14 \cdot 5 \cdot 7 \pmod{85}\]
+\[x = 4 \cdot 17 \cdot 3 + 490 \pmod{85}\]
+\[x = 17 \cdot 12 + 490 \pmod{85}\]
+\[x = 17 \cdot (10 + 2) + 490 \pmod{85}\]
+\[x \equiv 34 + (-20) \pmod{85}\]
+\[x = 14 \pmod{85}\]
+所以 \(D(y) = 14\)。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis04a-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis04a.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>多密钥 RSA</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>注意 7 一个秘密社团的成员知道一个秘密单词。他们多次互相传输这个秘密单词 \(x\)，每次都使用 RSA 方法加密。窃听所有通信的 Eve 注意到，他们使用的所有公钥中指数 \(e\) 都相同。因此所使用的公钥形如 \((N_1, e), \ldots, (N_k, e)\)，其中任意两个 \(N_i\) 都不相同。假设消息 \(x\) 满足对每个 \(i\) 都有 \(0 \leq x &lt; N_i\)。</p>
+<p>(a) 假设 Eve 看到公钥 \((p_1 q_1, 7)\) 和 \((p_1 q_2, 7)\) 以及相应的传输。Eve 能否利用这一知识破解加密？如果能，怎么做？假设 Eve 不能高效计算素因子。把 \(p_1, q_1, q_2\) 想象成巨大的 1024 位数。假设 \(p_1, q_1, q_2\) 两两不同且都是可用于 RSA 的合法素数。</p>
+<p>(b) 秘密社团识破了 Eve 并改变了 \(N\) 的选择，同时改变了他们的单词 \(x\)。现在 Eve 看到密钥 \((p_1 q_1, 3)\)、\((p_2 q_2, 3)\)、\((p_3 q_3, 3)\) 以及相应的传输。论证为什么 Eve 无法再用与上面相同的方法破解加密。假设 \(p_1, p_2, p_3, q_1, q_2, q_3\) 两两不同且都是可用于 RSA 的合法素数。</p>
+<p>(c) 假设秘密 \(x\) 没有改变（\(e = 3\)），所以他们使用了与以前相同的公钥，但没有发送不同的消息。Eve 如何能求出 \(x\)？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑两个含有公共素因子的 RSA 模数：欧几里得算法能高效地找出什么？</p>
+<p>当所有模数两两互素时，思考同一个明文的多次加密在不同模数下的剩余之间有什么关系，以及中国剩余定理能否把这些剩余重新组合。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 通常，破解 RSA 的难度取决于分解大整数的公认难度。如果只给 Eve \(p_1 q_1\)，她（大概）无法求出因子。</p>
+<p>然而，Eve 有两个公钥，所以是的，她能求出。注意 \(\gcd(p_1 q_1, p_1 q_2) = p_1\)。求最大公因数实际上是一种高效运算，这得益于欧几里得算法。因此，她能求出 \(p_1\) 的值，然后利用已有的 \(p_1 q_1\) 和 \(p_1 q_2\) 求出 \(q_1\) 和 \(q_2\) 的值。</p>
+<p>(b) 由于任意两个 \(N\) 都没有公共因子，她无法通过求 GCD 来约去任何一个 \(N\)。因此上述方法行不通。</p>
+<p>(c) Eve 观察到 \(x^3 \pmod{N_1}\)、\(x^3 \pmod{N_2}\)、\(x^3 \pmod{N_3}\)。由于 \(N_1, N_2, N_3\) 两两互素，Eve 可使用中国剩余定理求出 \(x^3 \pmod{N_1 N_2 N_3}\)。然而，一旦她得到该结果，由于 \(x &lt; N_1\)、\(x &lt; N_2\)、\(x &lt; N_3\)，可得 \(x^3 &lt; N_1 N_2 N_3\)，所以她可以直接对 CRT 结果开立方根求得 \(x\)。糟糕！</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis04a-sol.pdf</code> · 2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis04a.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>音乐会的 RSA</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>注意 7 Alice 想告诉 Bob 她的演唱会门票号码 \(m\)，它是一个介于 0 到 100（含）之间的整数。她希望在一个 Eve 能窃听的不安全信道上告诉 Bob，但 Alice 不想让 Eve 知道她的门票号码。</p>
+<p>(a) Bob 公布他的公钥 \((N = pq, e)\)，其中 \(N\) 很大（512 位）。Alice 使用 RSA 加密她的消息。Eve 看到加密消息，并弄清了 Alice 的门票号码。她是怎么做到的？</p>
+<p>(b) Alice 决定做得更复杂一些。她选取一个 256 位的随机数 \(r\)，使其难以猜测。她将 \(r\) 加密后发送给 Bob，同时计算 \(rm\)，将其加密后也发送给 Bob。Eve 知道 Alice 做了什么，但不知道 \(r\) 的值。她如何能求出 \(m\)？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>当明文空间非常小时，攻击者可以采取什么穷举策略？</p>
+<p>注意第二个方案中 \(r^e \pmod N\) 与 \((rm)^e \pmod N\) 之间的关系：能否通过已知的代数运算消去未知的 \(r\)？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) Alice 的门票号码只有 101 种可能取值，所以 Eve 可以尝试用 Bob 的公钥加密所有 101 个值，找出与 Alice 发送的那个相匹配的那一个。</p>
+<p>(b) Alice 发送 \(x = r^e \pmod{pq}\)，以及 \(y = (rm)^e = r^e m^e = x m^e \pmod{pq}\)。我们可用扩展欧几里得算法求出 \(x^{-1} \pmod N\)，再乘以 \(y\) 得到 \(m^e \pmod N\)。然后按前一问的方法求出 \(m\)。</p>
+<p>另一种方法是，对所有 101 个 \(m\) 值计算 \(x m^e\)，与 \(y\) 比较，检查哪一个匹配。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis04a-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis04a.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis04a.pdf</code></li>
+      <li><code>solutions/discussion/dis04a-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

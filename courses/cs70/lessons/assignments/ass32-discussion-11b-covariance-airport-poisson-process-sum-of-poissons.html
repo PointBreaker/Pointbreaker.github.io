@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Covariance, Airport Poisson Process, Sum of Poissons — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 11b</p>
+    <h1>协方差、机场 Poisson 过程、Poisson 变量和</h1>
+    <p class="lede">本节讨论协方差与泊松过程：从袋中无放回抽球的协方差、两袋间转移抽球的协方差，以及机场独立泊松到达的分布、条件概率与无记忆性等待时间。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>covariance</li><li>indicator random variable</li><li>hypergeometric sampling</li><li>Poisson process</li><li>conditional probability</li><li>memoryless property</li><li>sum of independent Poissons</li><li>Poisson distribution</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis11b.pdf</code>、<code>solutions/discussion/dis11b-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis11b.pdf</code>、<code>solutions/discussion/dis11b-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>协方差</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>我们讨论两个关于协方差（covariance）的问题。回顾协方差定义为 \(\operatorname{cov}(X,Y) = \mathbb{E}[XY] - \mathbb{E}[X]\mathbb{E}[Y]\)。</p>
+<p>(a) 一个袋中有 5 个红球和 5 个蓝球。我们从袋中均匀随机地无放回（without replacement）取出两个球。令 \(X_1\) 和 \(X_2\) 分别为指示第一次取球为红球和第二次取球为红球的示性随机变量（indicator random variables）。求 \(\operatorname{cov}(X_1, X_2)\)。</p>
+<p>(b) 现有两个袋子 \(A\) 和 \(B\)，每个袋子各有 5 个红球和 5 个蓝球。先从 \(A\) 中均匀随机取一个球，记录其颜色后放入 \(B\)；再从 \(B\) 中均匀随机取一个球并记录其颜色。令 \(X_1\) 和 \(X_2\) 分别为指示第一次取球和第二次取球为红球的示性随机变量。求 \(\operatorname{cov}(X_1, X_2)\)。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 袋子示意图：(a) 一个袋中 5 红 5 蓝共 10 球；(b) 两个袋子 A 与 B，各有 5 红 5 蓝，并标注「从 A 取一球记录颜色后放入 B」的转移箭头。</h4><p>(a) Bag: {5 red, 5 blue}, draw 2 without replacement.
+(b) Bag A: {5 red, 5 blue}; Bag B: {5 red, 5 blue}. Draw 1 from A, record, place into B; then draw 1 from B, record.</p><p class="problem-source">来源：<code>discussion/dis11b.pdf</code> · 1</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 分别求 \(\mathbb{E}[X_1]\)、\(\mathbb{E}[X_2]\) 与 \(\mathbb{E}[X_1 X_2]\)。注意 \(X_1 X_2 = 1\) 当且仅当两次都取到红球。</p>
+<p>(b) 对第二次取球用全概率公式：分第一次取到红球与蓝球两种情形，分别计算此时 \(B\) 中红球数与总球数，再求 \(\mathbb{E}[X_2]\) 与 \(\mathbb{E}[X_1 X_2]\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 由公式 \(\operatorname{cov}(X_1, X_2) = \mathbb{E}[X_1 X_2] - \mathbb{E}[X_1]\mathbb{E}[X_2]\) 计算。</p>
+<p>\[
+\mathbb{E}[X_1] = \frac{5}{10} \cdot 1 + \frac{5}{10} \cdot 0 = \frac{1}{2}, \quad
+\mathbb{E}[X_2] = \frac{5}{10} \cdot 1 + \frac{5}{10} \cdot 0 = \frac{1}{2}.
+\]</p>
+<p>\(\mathbb{E}[X_1 X_2]\) 等于两次都取到红球的概率：</p>
+<p>\[
+\mathbb{E}[X_1 X_2] = \frac{5}{10} \cdot \frac{4}{9} \cdot 1 + \Bigl(1 - \frac{5}{10} \cdot \frac{4}{9}\Bigr) \cdot 0 = \frac{2}{9}.
+\]</p>
+<p>因此</p>
+<p>\[
+\operatorname{cov}(X_1, X_2) = \frac{2}{9} - \frac{1}{2} \cdot \frac{1}{2} = -\frac{1}{36}.
+\]</p>
+<p>(b) 同样使用公式 \(\operatorname{cov}(X_1, X_2) = \mathbb{E}[X_1 X_2] - \mathbb{E}[X_1]\mathbb{E}[X_2]\)。</p>
+<p>\[
+\mathbb{E}[X_1] = \frac{5}{10} \cdot 1 + \frac{5}{10} \cdot 0 = \frac{1}{2}.
+\]</p>
+<p>对 \(\mathbb{E}[X_2]\) 用全概率公式：若第一次取到红球（概率 \(5/10\)），则 \(B\) 中有 6 红 5 蓝共 11 球，第二次取到红球的概率为 \(6/11\)；若第一次取到蓝球（概率 \(5/10\)），则 \(B\) 中有 5 红 6 蓝共 11 球，第二次取到红球的概率为 \(5/11\)。故</p>
+<p>\[
+\mathbb{E}[X_2] = \Bigl(\frac{5}{10} \cdot \frac{6}{11} + \frac{5}{10} \cdot \frac{5}{11}\Bigr) \cdot 1 + \Bigl(\frac{5}{10} \cdot \frac{5}{11} + \frac{5}{10} \cdot \frac{6}{11}\Bigr) \cdot 0 = \frac{1}{2}.
+\]</p>
+<p>\[
+\mathbb{E}[X_1 X_2] = \frac{5}{10} \cdot \frac{6}{11} \cdot 1 = \frac{30}{110}.
+\]</p>
+<p>因此</p>
+<p>\[
+\mathbb{E}[X_1 X_2] - \mathbb{E}[X_1]\mathbb{E}[X_2] = \frac{30}{110} - \frac{1}{4} = \frac{1}{44}.
+\]</p>
+<p>注意：在 (a) 中，若一个事件发生，则另一个事件更不易发生，因此协方差为负；在 (b) 中，若一个事件发生，则另一个事件更可能发生，因此协方差为正。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis11b-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis11b.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>机场班车与出租车</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>（对应讲义 Note 19）旧金山机场 3 号航站楼前有一个接客区，班车（shuttles）与出租车（taxis）的到达分别服从泊松分布（Poisson distribution）。班车到达率为 \(\lambda_1 = 1/20\)（即每 20 分钟 1 辆班车），出租车到达率为 \(\lambda_2 = 1/10\)（即每 10 分钟 1 辆出租车），均从 00:00 开始。班车与出租车独立到达。</p>
+<p>(a) 下列随机变量各服从什么分布？</p>
+<p>(i) 在 00:00 到 00:20 之间到达的出租车数量。</p>
+<p>(ii) 在 00:00 到 00:20 之间到达的班车数量。</p>
+<p>(iii) 在 00:00 到 00:20 之间到达的接客车辆总数。</p>
+<p>(b) 在 00:00 到 00:20 之间，恰好有 1 辆班车和 3 辆出租车到达的概率是多少？</p>
+<p>(c) 已知在 00:00 到 00:20 之间恰好有 1 辆接客车辆到达，求该车辆是出租车的条件概率。</p>
+<p>(d) 假设你在 00:20 到达接客区，得知在这 20 分钟内错过了 3 辆出租车和 1 辆班车。求你需要等待超过 10 分钟才会有下一辆班车或出租车（以先到达者为准）到达的概率。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 时间轴示意图：标注 00:00、00:20、00:30；在 [0,20] 上标注「错过 3 辆出租车 + 1 辆班车」；在 [20,30] 上标注「等待 &gt; 10 分钟」的等价事件「无车到达」；并标注班车率 λ₁=1/20 与出租车率 λ₂=1/10。</h4><p>时间线：00:00 至 00:20 为已观察区间；00:20 至 00:30 为接下来 10 分钟。</p>
+<p>到达率：班车 \(\lambda_1=1/20\) 辆/分钟，出租车 \(\lambda_2=1/10\) 辆/分钟，且两过程独立。</p>
+<p>已知：前 20 分钟错过 3 辆出租车和 1 辆班车。</p>
+<p>目标：求下一辆车的等待时间超过 10 分钟的条件概率，即接下来 10 分钟没有任何车辆到达的概率。</p><p class="problem-source">来源：<code>discussion/dis11b.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a)-(b) 利用泊松分布的可加性：独立泊松随机变量之和仍为泊松分布，参数为各参数之和；区间 \([0,t]\) 上的计数服从 \(\operatorname{Pois}(\lambda t)\)。</p>
+<p>(c) 用条件概率公式 \(P(A\mid B) = P(A\cap B)/P(B)\)，其中 \(A\) 为「恰好 1 辆出租车到达」，\(B\) 为「恰好 1 辆车到达」。利用 (a)(b) 中已求得的分布。</p>
+<p>(d) 等待超过 10 分钟等价于在 \([20,30]\) 区间内无车到达。回顾泊松过程的无记忆性（memoryless property）：不相交区间上的到达相互独立，故所求概率与已错过的车辆数无关。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) (i) 设 \(T([0,20])\) 为 00:00 到 00:20 之间到达的出租车数量。该区间长 20 分钟，故 \(T([0,20]) \sim \operatorname{Pois}(\lambda_2 \cdot 20) = \operatorname{Pois}(2)\)，即</p>
+<p>\[
+P[T([0,20]) = t] = \frac{2^t e^{-2}}{t!}, \quad t = 0,1,2,\dots.
+\]</p>
+<p>(ii) 设 \(S([0,20])\) 为 00:00 到 00:20 之间到达的班车数量。该区间长 20 分钟，故 \(S([0,20]) \sim \operatorname{Pois}(\lambda_1 \cdot 20) = \operatorname{Pois}(1)\)，即</p>
+<p>\[
+P[S([0,20]) = s] = \frac{1^s e^{-1}}{s!}, \quad s = 0,1,2,\dots.
+\]</p>
+<p>(iii) 设 \(N([0,20]) = S([0,20]) + T([0,20])\) 为 00:00 到 00:20 之间到达的接客车辆总数。由独立泊松随机变量之和仍为泊松分布、参数为各参数之和，得 \(N([0,20]) \sim \operatorname{Pois}(3)\)，即</p>
+<p>\[
+P[N([0,20]) = n] = \frac{3^n e^{-3}}{n!}, \quad n = 0,1,2,\dots.
+\]</p>
+<p>(b) 由 (a) 得</p>
+<p>\[
+P[T([0,20]) = 3] = \frac{2^3 e^{-2}}{3!}, \quad P[S([0,20]) = 1] = \frac{1^1 e^{-1}}{1!}.
+\]</p>
+<p>由于出租车与班车独立到达，所求概率为二者之积：</p>
+<p>\[
+\frac{2^3 e^{-2}}{3!} \cdot \frac{1^1 e^{-1}}{1!} = \frac{4}{3} e^{-3} \approx 0.0664.
+\]</p>
+<p>(c) 设 \(A\) 为「00:00 到 00:20 之间恰好有 1 辆出租车到达」，\(B\) 为「00:00 到 00:20 之间恰好有 1 辆车到达」。则</p>
+<p>\[
+P[B] = \frac{3^1 e^{-3}}{1!}.
+\]</p>
+<p>事件 \(A \cap B\) 为「恰好 1 辆出租车且 0 辆班车到达」，故</p>
+<p>\[
+P[A \cap B] = \frac{2^1 e^{-2}}{1!} \cdot \frac{1^0 e^{-1}}{0!}.
+\]</p>
+<p>因此</p>
+<p>\[
+P[A \mid B] = \frac{P[A \cap B]}{P[B]} = \frac{2}{3}.
+\]</p>
+<p>(d) 从 00:20 起等待超过 10 分钟，等价于在 00:20 到 00:30 之间无车到达。设 \(N([20,30])\) 为该区间内到达的车辆数。该区间长 10 分钟，故 \(N([20,30]) \sim \operatorname{Pois}((\lambda_1 + \lambda_2) \cdot 10) = \operatorname{Pois}(3/2)\)。由泊松过程在不相交区间上的独立性，</p>
+<p>\[
+P[N([20,30]) = 0 \mid T([0,20]) = 3, S([0,20]) = 1] = P[N([20,30]) = 0] = \frac{(1.5)^0 e^{-1.5}}{0!} = e^{-1.5} \approx 0.2231.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis11b-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis11b.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>泊松变量之和</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>假设给定两个相互独立的泊松（Poisson）随机变量 \(X_1, X_2\)。设第一个随机变量的均值为 \(\lambda_1\)，第二个随机变量的均值为 \(\lambda_2\)。证明：\(X_1 + X_2\) 是一个均值为 \(\lambda_1 + \lambda_2\) 的泊松随机变量。</p>
+<p>提示：回顾二项式定理（binomial theorem）</p>
+<p>\[(x + y)^n = \sum_{k=0}^{n} \binom{n}{k} x^k y^{n-k}\]</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑使用全概率公式对 \(\Pr[(X_1 + X_2) = i]\) 进行展开：枚举所有满足 \(k + (i-k) = i\) 的 \(k\)。</p>
+<p>在化简求和式时，注意把 \(\frac{1}{k!(i-k)!}\) 改写成 \(\frac{1}{i!} \cdot \frac{i!}{k!(i-k)!}\)，从而凑出二项式系数的形式。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>要证明 \(X_1 + X_2\) 是均值为 \(\lambda_1 + \lambda_2\) 的泊松随机变量，只需证明</p>
+<p>\[\Pr[(X_1 + X_2) = i] = \frac{(\lambda_1 + \lambda_2)^i}{i!} e^{-(\lambda_1+\lambda_2)}.\]</p>
+<p>推导过程如下：</p>
+<p>\[
+\begin{aligned}
+\Pr[(X_1 + X_2) = i] &amp;= \sum_{k=0}^{i} \Pr[X_1 = k,\; X_2 = (i - k)] \\
+&amp;= \sum_{k=0}^{i} \frac{\lambda_1^k}{k!} e^{-\lambda_1} \cdot \frac{\lambda_2^{i-k}}{(i - k)!} e^{-\lambda_2} \\
+&amp;= e^{-\lambda_1} e^{-\lambda_2} \sum_{k=0}^{i} \frac{1}{k!(i - k)!} \lambda_1^k \lambda_2^{i-k} \\
+&amp;= e^{-\lambda_1} e^{-\lambda_2} \frac{1}{i!} \sum_{k=0}^{i} \frac{i!}{k!(i - k)!} \lambda_1^k \lambda_2^{i-k} \\
+&amp;= \frac{e^{-(\lambda_1+\lambda_2)}}{i!} \sum_{k=0}^{i} \binom{i}{k} \lambda_1^k \lambda_2^{i-k} \\
+&amp;= \frac{e^{-(\lambda_1+\lambda_2)}}{i!} (\lambda_1 + \lambda_2)^i.
+\end{aligned}\]</p>
+<p>在最后一行中我们使用了二项式展开。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis11b-sol.pdf</code> · 3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis11b.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis11b.pdf</code></li>
+      <li><code>solutions/discussion/dis11b-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

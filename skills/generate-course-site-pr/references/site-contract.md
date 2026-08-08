@@ -121,7 +121,7 @@ Each lecture and work-item page must:
 - Give each quiz a unique `data-quiz` and a valid container `data-answer`.
 - Give every interactive a course-local JSON spec and exactly one static fallback image with meaningful alt text. Use only Interactive v1 kinds documented in `references/interactive-content.md`.
 - Include a primary-source reference section.
-- Contain no placeholder, Drive/Docs URL, remote font dependency, or unsupported dollar math.
+- Contain no placeholder, remote font dependency, or unsupported dollar math.
 
 ## Catalog contract
 

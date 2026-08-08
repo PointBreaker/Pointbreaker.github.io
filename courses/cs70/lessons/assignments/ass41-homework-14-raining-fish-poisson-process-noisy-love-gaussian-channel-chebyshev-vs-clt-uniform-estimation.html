@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Raining Fish (Poisson Process), Noisy Love (Gaussian Channel), Chebyshev vs CLT, Uniform Estimation — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 作业 14</p>
+    <h1>鱼雨（Poisson 过程）、Noisy Love（高斯信道）、Chebyshev vs CLT、均匀估计</h1>
+    <p class="lede">本题组涵盖四个主题：(1) 泊松过程与指数分布，通过鱼落在无限长路上的模型推导计数分布与首次到达距离；(2) 高斯噪声信道下的贝叶斯推断，利用密度函数在连续随机变量上条件化；(3) 切比雪夫不等式与中心极限定理的比较，对同一随机变量给出不同精度的尾概率界；(4) 均匀分布参数的估计，利用中心极限定理和切比雪夫不等式构造置信区间。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>泊松过程</li><li>指数分布</li><li>高斯分布</li><li>贝叶斯法则</li><li>切比雪夫不等式</li><li>中心极限定理</li><li>均匀分布</li><li>置信区间</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>homework/hw14.pdf</code>、<code>solutions/homework/hw14-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 道大题。本地官方解答已收录 4/5 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>homework/hw14.pdf</code>、<code>solutions/homework/hw14-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">协作说明</span><strong>协作说明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在开始撰写最终作业提交之前，请简要说明你是如何完成这份作业的。你还与谁一起完成？请列出姓名和电子邮件地址。（如果是在作业讨论会中协作，只需描述该小组即可。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>如实记录协作对象与协作方式；每位同学仍应独立组织并撰写自己的最终答案。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>homework/hw14.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">1</span><strong>下鱼了</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>一场飓风刚刚掠过海岸，将一群鱼抛到了海滩附近的路上。这条路从你家出发，无限长。我们将路上的一个点标记为它到你家的距离（以英里为单位）。对于每个 \(n \in \mathbb{N}\)，落在路段 \([n, n+1]\) 中的鱼的数量独立地服从 \(\text{Poisson}(\lambda)\) 分布，且被抛入该路段的每条鱼在路段内均匀随机落地。请记住，你可以引用课堂或讨论课中的任何结论而无需证明。</p>
+<p>(a) 对于某个 \(n \in \mathbb{N}\)，到达路段 \([0, n]\) 的鱼的数量的分布是什么？</p>
+<p>(b) 设 \([a, b]\) 是 \([0,1]\) 中的一个区间。落在路段 \([a, b]\) 中的鱼的数量的分布是什么？</p>
+<p>(c) 设 \([a, b]\) 是任意满足 \(a \geq 0\) 的区间。落在 \([a, b]\) 中的鱼的数量的分布是什么？</p>
+<p>(d) 假设你沿着这条路散步。你走到遇到第一条鱼时所走的距离（以英里为单位）的分布是什么？</p>
+<p>(e) 假设你在距离 \(x\) 处遇到一条鱼。你走到遇到下一条鱼时所走的距离的分布是什么？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>回顾泊松分布的可加性：独立泊松随机变量之和仍为泊松分布，参数为各参数之和。对于连续区间上的计数，考虑将区间分解为整数段与剩余段，并利用二项 thinning 的思想。对于首次遇到鱼的距离，可利用「无鱼区间」的概率与指数分布的生存函数之间的联系。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 从课堂中我们了解到，如果 \(X\) 和 \(Y\) 独立，且 \(X \sim \text{Poisson}(\lambda)\) 且 \(Y \sim \text{Poisson}(\mu)\)，则 \(X + Y \sim \text{Poisson}(\lambda + \mu)\)。我们知道落在路段 \([0, n]\) 中的鱼的数量等于落在每个 \([i, i+1]\)（\(i \in \{0, 1, \ldots, n-1\}\)）中的鱼的数量之和。因此，\([0, n]\) 中的鱼的数量服从 \(\text{Poisson}(n\lambda)\)。</p>
+<p>(b) 直观地，某条特定鱼落在区间 \([a, b]\) 中的概率是 \(b - a\)，因为它的位置在 \([0,1]\) 上均匀分布。因此，分布为 \(\text{Poisson}((b-a)\lambda)\)。</p>
+<p>更严格地，假设我们要求 \(k\) 条鱼落在区间 \([a, b]\) 中的概率。这只有在总共有某个 \(i \geq k\) 条鱼且其中恰好 \(k\) 条鱼落在子区间中时才会发生。</p>
+<p>一般来说，在区间 \([0,1]\) 中得到 \(i\) 条鱼的概率为 \(\frac{\lambda^i}{i!} e^{-\lambda}\)，因为这服从 \(\text{Poisson}(\lambda)\)。这些鱼中恰好 \(k\) 条落在 \([a, b]\) 中的概率是二项的，服从 \(\text{Binomial}(i, b-a)\)，因为总共有 \(i\) 条鱼，每条鱼落在区间中的概率为 \(b-a\)（因为鱼是均匀分布的）。</p>
+<p>\(k\) 条鱼落在区间 \([a, b]\) 中的概率是所有可能的 \(i \geq k\) 上的求和：</p>
+<p>\[P[Y=k] = \sum_{i=k}^{\infty} \frac{\lambda^i}{i!} e^{-\lambda} \binom{i}{k} (b-a)^k (1-b+a)^{i-k}\]</p>
+<p>\[= \frac{(b-a)^k e^{-\lambda}}{k!} \sum_{i=k}^{\infty} \frac{\lambda^i (1-b+a)^{i-k}}{(i-k)!}\]</p>
+<p>换元并令 \(j = i - k\) 即 \(i = j + k\)，我们有</p>
+<p>\[P[Y=k] = \frac{(b-a)^k}{k!} e^{-\lambda} \sum_{j=0}^{\infty} \frac{\lambda^{j+k} (1-b+a)^j}{j!}\]</p>
+<p>\[= \frac{(b-a)^k \lambda^k}{k!} e^{-\lambda} \sum_{j=0}^{\infty} \frac{(\lambda(1-b+a))^j}{j!}\]</p>
+<p>\[= \frac{(b-a)^k \lambda^k}{k!} e^{-\lambda} e^{\lambda(1-b+a)} \quad (\text{由 } e^u \text{ 的泰勒展开})\]</p>
+<p>\[= \frac{(\lambda(b-a))^k}{k!} e^{-\lambda(b-a)}\]</p>
+<p>这是均值为 \(\lambda(b-a)\) 的泊松分布的 PMF，即 \(\text{Poisson}(\lambda(b-a))\)。</p>
+<p>(c) 答案仍是 \(\text{Poisson}((b-a)\lambda)\)。显然，如果 \([a, b]\) 包含在某个区间 \([n, n+1]\) 中，则这是成立的。如果不是，则令 \(i\) 为满足 \(i \geq a\) 的最小整数，\(j\) 为满足 \(j \leq b\) 的最大整数。那么分布为
+\(\text{Poisson}((i-a)\lambda) + \text{Poisson}((j-i)\lambda) + \text{Poisson}((b-j)\lambda) = \text{Poisson}((b-a)\lambda)\)。</p>
+<p>(d) 距离是 \(\text{Exp}(\lambda)\)。为了证明这一点，只需证明 CDF 与指数 CDF 匹配。设 \(X\) 为第一条鱼到房子的距离。注意 \(P[X \geq t] = P[\text{在 } [0,t] \text{ 中无鱼}]\)。由前面的部分，我们知道 \([0,t]\) 中的鱼的数量服从 \(\text{Poisson}(\lambda t)\)，其等于 0 的概率为 \(\frac{(\lambda t)^0 e^{-\lambda t}}{0!} = e^{-\lambda t}\)。
+因此，我们有 \(P[X &lt; t] = 1 - e^{-\lambda t}\)，这正是指数 CDF。</p>
+<p>(e) 仍然是 \(\text{Exp}(\lambda)\)。使用与前一相同的逻辑，我们有 \(P[X \geq t]\) 等于没有鱼落在路段 \([x, x+t]\) 中的概率。这又等于 \(e^{-\lambda t}\)，因为该路段中的鱼的数量服从 \(\text{Poisson}(\lambda t)\)。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw14-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw14.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>噪声爱情</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>噪声爱情（Noisy Love）。假设你在情人节向心仪对象表白了，正在等待回复。你的心仪对象试图给你发送一条二进制消息：「0」表示对方对你没有兴趣，而「1」表示对方回应了你的感情。设 \(X\) 是对方发给你的消息，你当前对 \(X\) 的最佳猜测为 \(\mathbb{P}(X = 0) = 0.7\)，\(\mathbb{P}(X = 1) = 0.3\)。不幸的是，对方通过一条噪声信道发送消息，因此你收到的不是 \(X\)，而是 \(Y = X + \varepsilon\)，其中 \(\varepsilon\) 是独立的高斯噪声（Gaussian noise），均值为 \(0\)，方差为 \(0.49\)。</p>
+<p>(a) 首先，你采用如下规则：若观测到 \(Y &gt; 0.5\)，则认定对方也喜欢你；若观测到 \(Y \leq 0.5\)，则认定对方对你没有兴趣。求采用该规则时你判断正确的概率？（答案请用标准高斯分布的累积分布函数 \(\Phi(z) = \mathbb{P}(N(0,1) \leq z)\) 表示，并进一步给出数值结果。）</p>
+<p>(b) 假设你观测到 \(Y = 0.6\)。求对方喜欢你的概率是多少？
+[提示：本题需要对一个概率为 \(0\) 的事件——即事件 \(\{Y = 0.6\}\)——做条件概率。思考时可改为对事件 \(\{Y \in [0.6, 0.6 + \delta]\}\) 做条件，其中 \(\delta &gt; 0\) 充分小，使得 \(f_Y(0.6) \cdot \delta \approx \mathbb{P}(Y \in [0.6, 0.6 + \delta])\)，再应用贝叶斯法则（Bayes Rule）。]</p>
+<p>(c) 假设你观测到 \(Y = y\)。对于哪些 \(y\) 值，对方喜欢你的可能性大于不喜欢的可能性？[提示：同前，可考虑事件 \(\{Y \in [y, y + \delta]\}\)（\(\delta &gt; 0\) 充分小）。即何时满足 \(\mathbb{P}(X = 1 \mid Y \in [y, y + \delta]) \geq \mathbb{P}(X = 0 \mid Y \in [y, y + \delta])\)？]</p>
+<p>(d) 你的新规则是：当且仅当根据所观测到的 \(Y\) 值，对方喜欢你的可能性大于不喜欢时，才认定对方喜欢你。求采用这一新规则时你判断正确的概率。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 将「判断正确」拆分为 \(X=0\) 与 \(X=1\) 两种情形，分别利用正态分布标准化后再用 \(\Phi\) 表示。(b)(c) 对连续变量做条件概率时，用密度替代概率质量函数，贝叶斯公式仍然成立；注意先验比 \(\mathbb{P}(X=1)/\mathbb{P}(X=0)\) 与似然比的比较。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 判断正确的概率为
+\[
+\mathbb{P}(\text{正确}) = \mathbb{P}(X = 0)\,\mathbb{P}(Y \leq 0.5 \mid X = 0) + \mathbb{P}(X = 1)\,\mathbb{P}(Y &gt; 0.5 \mid X = 1).
+\]
+当 \(X = 0\) 时，\(Y = \varepsilon \sim N(0, 0.49)\)；当 \(X = 1\) 时，\(Y = 1 + \varepsilon \sim N(1, 0.49)\)。于是
+\[
+\mathbb{P}(\text{正确}) = 0.7\,\mathbb{P}\bigl(N(0, 0.49) \leq 0.5\bigr) + 0.3\,\mathbb{P}\bigl(N(1, 0.49) &gt; 0.5\bigr)
+= 0.7\,\mathbb{P}\!\left(N(0,1) \leq \frac{0.5}{0.7}\right) + 0.3\,\mathbb{P}\!\left(N(0,1) &gt; \frac{-0.5}{0.7}\right)
+= 0.7\,\Phi\!\left(\frac{5}{7}\right) + 0.3\,\Phi\!\left(\frac{5}{7}\right)
+= \Phi\!\left(\frac{5}{7}\right) \approx 0.762.
+\]</p>
+<p>(b) 对事件 \(\{Y \in [0.6, 0.6 + \delta]\}\) 应用贝叶斯法则：
+\[
+\mathbb{P}(X = 1 \mid Y \in [0.6, 0.6 + \delta]) = \frac{\mathbb{P}(X = 1)\,f_{Y\mid 1}(0.6)}{\mathbb{P}(X = 0)\,f_{Y\mid 0}(0.6) + \mathbb{P}(X = 1)\,f_{Y\mid 1}(0.6)},
+\]
+其中 \(f_{Y\mid 0}\) 为 \(N(0, 0.49)\) 的密度，\(f_{Y\mid 1}\) 为 \(N(1, 0.49)\) 的密度。代入数值：
+\[
+\mathbb{P}(X = 1 \mid Y = 0.6) = \frac{0.3 \cdot (2\pi)^{-1/2} \exp\!\bigl(-0.4^2/(2 \cdot 0.49)\bigr)}{0.7 \cdot (2\pi)^{-1/2} \exp\!\bigl(-0.6^2/(2 \cdot 0.49)\bigr) + 0.3 \cdot (2\pi)^{-1/2} \exp\!\bigl(-0.4^2/(2 \cdot 0.49)\bigr)} \approx 0.345.
+\]
+可见，观测到 \(Y = 0.6\) 后，对方喜欢你的信念由先验的 \(0.3\) 上升至约 \(0.345\)。</p>
+<p>(c) 要求
+\[
+\mathbb{P}(X = 1 \mid Y \in [y, y + \delta]) \geq \mathbb{P}(X = 0 \mid Y \in [y, y + \delta]),
+\]
+这等价于
+\[
+\mathbb{P}(X = 1 \mid Y \in [y, y + \delta]) \geq \frac{1}{2}.
+\]
+由 (b) 的方法，
+\[
+\mathbb{P}(X = 1 \mid Y \in [y, y + \delta]) = \frac{0.3 \exp\!\bigl(-(1-y)^2/0.98\bigr)}{0.7 \exp\!\bigl(-y^2/0.98\bigr) + 0.3 \exp\!\bigl(-(1-y)^2/0.98\bigr)} = \frac{1}{1 + \frac{0.7}{0.3}\exp\!\bigl(((1-y)^2 - y^2)/0.98\bigr)}.
+\]
+令其 \(\geq 1/2\)：
+\[
+\frac{0.7}{0.3}\exp\!\left(\frac{(1-y)^2 - y^2}{0.98}\right) \leq 1
+\;\Longrightarrow\;
+\exp\!\left(\frac{1 - 2y}{0.98}\right) \leq \frac{3}{7}
+\;\Longrightarrow\;
+1 - 2y \leq 0.98 \ln\!\frac{3}{7}
+\;\Longrightarrow\;
+y \geq \frac{1}{2}\left(1 - 0.98 \ln\!\frac{3}{7}\right) \approx 0.915.
+\]
+因此，新规则为：当且仅当观测到的消息 \(Y \geq 0.915\) 时，认定对方喜欢你。</p>
+<p>(d) 同 (a) 的分解：
+\[
+\mathbb{P}(\text{正确}) = 0.7\,\mathbb{P}(Y \leq 0.915 \mid X = 0) + 0.3\,\mathbb{P}(Y &gt; 0.915 \mid X = 1)
+\]
+\[
+= 0.7\,\mathbb{P}\!\left(N(0,1) \leq \frac{0.915}{0.7}\right) + 0.3\,\mathbb{P}\!\left(N(0,1) &gt; \frac{-0.085}{0.7}\right)
+= 0.7\,\Phi\!\left(\frac{0.915}{0.7}\right) + 0.3\,\Phi\!\left(\frac{0.085}{0.7}\right) \approx 0.798.
+\]
+可见该策略优于 (a) 中的规则。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw14-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw14.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>切比雪夫不等式与中心极限定理</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>切比雪夫不等式（Chebyshev's Inequality）与中心极限定理（Central Limit Theorem）。设 \(n\) 为正整数。设 \(X_1, X_2, \ldots, X_n\) 为独立同分布（i.i.d.）随机变量，分布如下：
+\[
+\mathbb{P}[X_i = -1] = \frac{1}{12};\quad \mathbb{P}[X_i = 1] = \frac{9}{12};\quad \mathbb{P}[X_i = 2] = \frac{2}{12}.
+\]</p>
+<p>(a) 计算 \(X_1\)、\(\sum_{i=1}^n X_i\)、\(\sum_{i=1}^n (X_i - \mathbb{E}[X_i])\) 以及
+\[
+Z_n = \frac{\sum_{i=1}^n (X_i - \mathbb{E}[X_i])}{\sqrt{n/2}}
+\]
+的期望与方差。</p>
+<p>(b) 利用切比雪夫不等式，求 \(\mathbb{P}[|Z_n| \geq 2]\) 的一个上界 \(b\)。</p>
+<p>(c) 能否用 \(b\) 来分别估计 \(\mathbb{P}[Z_n \geq 2]\) 和 \(\mathbb{P}[Z_n \leq -2]\) 的上界？</p>
+<p>(d) 当 \(n \to \infty\) 时，\(Z_n\) 的极限分布是什么？</p>
+<p>(e) 已知若 \(Z \sim N(0,1)\)，则 \(\mathbb{P}[|Z| \leq 2] = \Phi(2) - \Phi(-2) \approx 0.9545\)。当 \(n \to \infty\) 时，能否给出 \(\mathbb{P}[Z_n \geq 2]\) 与 \(\mathbb{P}[Z_n \leq -2]\) 的近似值？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 先算 \(\mathbb{E}[X_1]\) 与 \(\mathbb{E}[X_1^2]\)，再利用独立性求和式的期望与方差；注意 \(Z_n\) 只是和式的线性变换。(b) 切比雪夫不等式为 \(\mathbb{P}[|Z_n - \mathbb{E}[Z_n]| \geq k] \leq \operatorname{Var}(Z_n)/k^2\)。(d)(e) 中心极限定理给出标准化和的极限分布，再利用正态分布的对称性。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) \[
+\mathbb{E}[X_1] = (-1)\cdot\frac{1}{12} + 1\cdot\frac{9}{12} + 2\cdot\frac{2}{12} = \frac{-1 + 9 + 4}{12} = 1,
+\]
+\[
+\operatorname{Var}(X_1) = \frac{1}{12}\cdot(-1-1)^2 + \frac{9}{12}\cdot(1-1)^2 + \frac{2}{12}\cdot(2-1)^2 = \frac{1}{12}\cdot 2^2 + \frac{9}{12}\cdot 0^2 + \frac{2}{12}\cdot 1^2 = \frac{1}{2}.
+\]
+由期望与方差的线性性质（\(X_1, \ldots, X_n\) 独立），
+\[
+\mathbb{E}\!\left[\sum_{i=1}^n X_i\right] = n,\qquad \operatorname{Var}\!\left(\sum_{i=1}^n X_i\right) = \frac{n}{2}.
+\]
+再由期望的线性性，\(\mathbb{E}\!\left[\sum_{i=1}^n (X_i - \mathbb{E}[X_i])\right] = n - n = 0\)。减去常数不改变方差，故 \(\operatorname{Var}\!\left(\sum_{i=1}^n (X_i - \mathbb{E}[X_i])\right) = n/2\)。</p>
+<p>利用期望与方差的缩放性质，
+\[
+\mathbb{E}[Z_n] = \frac{0}{\sqrt{n/2}} = 0,\qquad \operatorname{Var}(Z_n) = \frac{n/2}{n/2} = 1.
+\]</p>
+<p>(b) 由切比雪夫不等式，
+\[
+\mathbb{P}[|Z_n| \geq 2] \leq \frac{\operatorname{Var}(Z_n)}{2^2} = \frac{1}{4}.
+\]
+故上界 \(b = 1/4\)。</p>
+<p>(c) 对两者均有上界 \(1/4\)，因为 \(\mathbb{P}[Z_n \geq 2] \leq \mathbb{P}[|Z_n| \geq 2]\) 且 \(\mathbb{P}[Z_n \leq -2] \leq \mathbb{P}[|Z_n| \geq 2]\)。</p>
+<p>(d) 由中心极限定理，\(Z_n \to N(0,1)\)，即标准正态分布。</p>
+<p>(e) 由于 \(Z_n \to N(0,1)\)，可近似 \(\mathbb{P}[|Z_n| \geq 2] \approx 1 - 0.9545 = 0.0455\)。由正态分布的对称性，
+\[
+\mathbb{P}[Z_n \geq 2] = \mathbb{P}[Z_n \leq -2] \approx \frac{0.0455}{2} = 0.02275.
+\]
+值得注意的是，中心极限定理给出的结果远小于切比雪夫不等式给出的上界。这是因为中心极限定理适用于特定类型的随机变量（即大量随机变量之和的标准化形式），而切比雪夫不等式对任意随机变量都成立，因此给出的界更弱。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw14-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw14.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>均匀分布估计</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>均匀分布估计 (Uniform Estimation)</p>
+<p>Note 17 | Note 21</p>
+<p>设 \(U_1, \ldots, U_n \stackrel{\text{iid}}{\sim} \text{Uniform}(-\theta, \theta)\)，其中 \(\theta \in \mathbb{R}\)，\(\theta &gt; 0\) 且未知。我们希望从数据 \(U_1, \ldots, U_n\) 中估计 \(\theta\)。</p>
+<p>(a) 为什么在这种情况下使用样本均值 \(\bar{U} = \frac{1}{n}\sum_{i=1}^n U_i\) 会失败？</p>
+<p>(b) 求 \(U_i^2\) 的概率密度函数（PDF），其中 \(i \in \{1, \ldots, n\}\)。</p>
+<p>(c) 考虑以下方差估计量：
+\[V = \frac{1}{n}\sum_{i=1}^n U_i^2.\]
+证明当 \(n\) 充分大时，\(V\) 的分布近似于某个常见分布，并给出该分布的名称和参数。</p>
+<p>(d) 利用 (c) 的结果，构造一个使用全部数据的 \(\theta^2\) 的无偏估计量。</p>
+<p>(e) 设 \(\sigma^2 = \text{Var}[U_i^2]\)。我们希望为 \(\theta^2\) 构造一个显著性水平为 \(\delta\) 的置信区间，其中 \(0 &lt; \delta &lt; 1\)。</p>
+<p>(i) 在不对 \(n\) 的大小做任何假设的情况下，利用 (d) 中的估计量构造一个显著性水平为 \(\delta\) 的 \(\theta^2\) 的置信区间。</p>
+<p>(ii) 假设 \(n\) 很大。利用 (d) 中的估计量构造一个近似的显著性水平为 \(\delta\) 的 \(\theta^2\) 的置信区间。答案可以用 \(\Phi\) 和 \(\Phi^{-1}\)（标准正态分布的分布函数及其反函数）表示。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (b)，先求 \(U_i^2\) 的分布函数（CDF），再求导得到 PDF。对于 (c)，对 \(nV = \sum_{i=1}^n U_i^2\) 应用中心极限定理（CLT），并计算 \(U_1^2\) 的期望与方差。</p>
+<p>对于 (d)，利用 (c) 中 \(V\) 的期望来构造无偏估计。对于 (e)(i)，使用切比雪夫不等式；对于 (e)(ii)，在大样本下利用正态近似。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 样本均值作为 \(\theta\) 的估计量效果不好，因为它的期望值为 0，而不是 \(\theta\)。</p>
+<p>(b) 我们先求 \(U_i^2\) 的分布函数（CDF），再求导得到 PDF。首先注意 \(0 \leq U_i^2 \leq \theta^2\)，因此当 \(t \leq 0\) 时 \(P[U_i^2 \leq t] = 0\)，当 \(t \geq \theta^2\) 时 \(P[U_i^2 \leq t] = 1\)。当 \(0 &lt; t &lt; \theta^2\) 时，
+\[P[U_i^2 \leq t] = P[-\sqrt{t} \leq U_i \leq \sqrt{t}] = \frac{\sqrt{t}}{\theta},\]
+因此 \(U_i^2\) 的 CDF 为
+\[F(t) = \begin{cases} 0 &amp; \text{if } t \leq 0, \\ \frac{\sqrt{t}}{\theta} &amp; \text{if } 0 &lt; t &lt; \theta^2, \\ 1 &amp; \text{if } t \geq \theta^2. \end{cases}\]
+最后求导得到 PDF：
+\[f(t) = F'(t) = \begin{cases} \frac{1}{2\theta\sqrt{t}} &amp; \text{if } 0 &lt; t &lt; \theta^2, \\ 0 &amp; \text{otherwise}. \end{cases}\]</p>
+<p>(c) 我们可以看出 \(nV = \sum_{i=1}^n U_i^2\)，因此由中心极限定理（CLT），当 \(n\) 充分大时，
+\[\frac{nV - nE[U_1^2]}{\sqrt{n\text{Var}(U_1^2)}} \xrightarrow{d} N(0,1).\]
+因此，通过乘法和加法运算可以看出
+\[V \xrightarrow{d} N\left(E[U_1^2], \frac{1}{n}\text{Var}(U_1^2)\right).\]
+现在需要计算 \(U_1^2\) 的期望和方差。我们有
+\[E[U_1^2] = \text{Var}(U_1) + E[U_1]^2 = \text{Var}(U_1) = \frac{\theta^2}{3},\]
+且
+\[\text{Var}(U_1^2) = E[U_1^4] - E[U_1^2]^2 = \int_{-\theta}^{\theta} \frac{t^4}{2\theta} dt - \frac{\theta^4}{9} = \frac{\theta^4}{5} - \frac{\theta^4}{9} = \frac{4\theta^4}{45},\]
+因此 \(V \sim N\left(\frac{\theta^2}{3}, \frac{4\theta^4}{45n}\right)\)。</p>
+<p>或者，我们可以利用前一小节推导出的 \(U_1^2\) 的分布来计算。我们有
+\[E[U_1^2] = \int_0^{\theta^2} t \cdot \frac{1}{2\theta\sqrt{t}} dt = \int_0^{\theta^2} \frac{\sqrt{t}}{2\theta} dt = \frac{\theta^2}{3},\]
+且
+\[\text{Var}(U_1^2) = \int_0^{\theta^2} t^2 \cdot \frac{1}{2\theta\sqrt{t}} dt - \frac{\theta^4}{9} = \int_0^{\theta^2} \frac{t^{3/2}}{2\theta} dt - \frac{\theta^4}{9} = \frac{4\theta^4}{45},\]
+因此同样有 \(V \sim N\left(\frac{\theta^2}{3}, \frac{4\theta^4}{45n}\right)\)。</p>
+<p>(d) 我们可以使用 \(3V\) 作为无偏估计量，因为 \(E[3V] = \theta^2\) 且 \(\text{Var}(3V) = \frac{4\theta^4}{5n} \to 0\)（当 \(n \to \infty\) 时）。</p>
+<p>(e)(i) 我们将使用切比雪夫不等式来约束偏离均值的概率。首先计算
+\[\text{Var}(3V) = 9\text{Var}(V) = \frac{9\sigma^2}{n}.\]
+进一步地，
+\[P[|3V - \theta^2| \geq c] \leq \frac{\text{Var}(3V)}{c^2} = \frac{9\sigma^2}{nc^2},\]
+因此为了保证该概率小于 \(\delta\)，我们需要
+\[\frac{9\sigma^2}{nc^2} \leq \delta \implies c \geq \frac{3\sigma}{\sqrt{\delta n}},\]
+所以我们的置信区间为 \(\left[3V - \frac{3\sigma}{\sqrt{\delta n}}, 3V + \frac{3\sigma}{\sqrt{\delta n}}\right]\)。</p>
+<p>(ii) 在 \(n\) 很大的假设下，由 CLT 可知 \(3V \sim N\left(\theta^2, \frac{9\sigma^2}{n}\right)\)，因此特别地，\(\frac{\sqrt{n}(3V - \theta^2)}{3\sigma}\) 是标准正态分布。于是
+\[P[|3V - \theta^2| &gt; c] = P\left[\frac{\sqrt{n}|3V - \theta^2|}{3\sigma} &gt; \frac{c\sqrt{n}}{3\sigma}\right] = 1 - \Phi\left(\frac{c\sqrt{n}}{3\sigma}\right) + \Phi\left(-\frac{c\sqrt{n}}{3\sigma}\right).\]
+我们可以进一步化简右边：
+\[P[|3V - \theta^2| &gt; c] = 2\Phi\left(-\frac{c\sqrt{n}}{3\sigma}\right),\]
+因此为了得到显著性水平 \(\delta\)，我们可以令
+\[2\Phi\left(-\frac{c\sqrt{n}}{3\sigma}\right) = \delta \implies c = -3\sigma\sqrt{n}\Phi^{-1}\left(\frac{\delta}{2}\right).\]
+因此，我们的置信区间为
+\[\left[3V + 3\sigma\sqrt{n}\Phi^{-1}\left(\frac{\delta}{2}\right), 3V - 3\sigma\sqrt{n}\Phi^{-1}\left(\frac{\delta}{2}\right)\right].\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw14-sol.pdf</code> · 6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw14.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>homework/hw14.pdf</code></li>
+      <li><code>solutions/homework/hw14-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

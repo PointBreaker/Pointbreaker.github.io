@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Probability Warm-Up, Five Up, Past Probabilified, Cliques in Random Graphs, PIE Extended, Independent Complements — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 作业 08</p>
+    <h1>概率热身、Five Up、往昔概率化、随机图团、PIE 推广、独立补</h1>
+    <p class="lede">本次作业涵盖概率热身（二项分布与超几何分布）、五次抛掷的概率计算、以概率视角回顾模运算/随机图/稳定匹配等旧主题、随机图中 k-团的存在概率、容斥原理的推广形式，以及事件独立性与补事件的关系。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>probability</li><li>counting</li><li>binomial</li><li>hypergeometric</li><li>sample space</li><li>random graph</li><li>clique</li><li>union bound</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>homework/hw08.pdf</code>、<code>solutions/homework/hw08-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 7 道大题。本地官方解答已收录 6/7 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>homework/hw08.pdf</code>、<code>solutions/homework/hw08-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">协作说明</span><strong>协作说明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在开始撰写最终作业提交之前，请简要说明你是如何完成这份作业的。你还与谁一起完成？请列出姓名和电子邮件地址。（如果是在作业讨论会中协作，只需描述该小组即可。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>如实记录协作对象与协作方式；每位同学仍应独立组织并撰写自己的最终答案。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>homework/hw08.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">1</span><strong>概率热身</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 13</p>
+<p>(a) 设一个桶中有 30 个绿球和 70 个橙球。若从桶中均匀地取出 15 个球，求恰好得到 \(k\) 个绿球的概率（假设 \(0 \leq k \leq 15\)），如果抽样是<strong>有放回</strong>的，即取出一个球后将其放回桶中再进行下一轮抽取？</p>
+<p>(b) 与 (a) 相同，但抽样是<strong>无放回</strong>的，即取出一个球后不将其放回桶中。</p>
+<p>(c) 掷一个普通的 6 面骰子 5 次。求至少有一个值被观察到多于一次的概率是多少？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 每次抽取相互独立，抽到绿球的概率为 \(30/100 = 3/10\)，考虑二项分布模型。</p>
+<p>(b) 用组合数计数：从 30 个绿球中选 \(k\) 个、从 70 个橙球中选 \(15-k\) 个，总选法数为 \(\binom{100}{15}\)。</p>
+<p>(c) 考虑对立事件——5 次掷骰结果全部不同的概率，再取补。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 设 \(A\) 为恰好得到 \(k\) 个绿球的事件。将每个球视为可区分，则共有 \(100^{15}\) 种可能的 15 球序列。要使序列中恰好有 \(k\) 个绿球，需先从 15 个位置中选出 \(k\) 个（有 \(\binom{15}{k}\) 种选法），再为绿球分配具体的球（共 \(30^k\) 种），为橙球分配具体的球（共 \(70^{15-k}\) 种）。因此</p>
+<p>\[
+P[A] = \frac{\binom{15}{k} \cdot 30^k \cdot 70^{15-k}}{100^{15}} = \binom{15}{k} \left(\frac{3}{10}\right)^k \left(\frac{7}{10}\right)^{15-k}.
+\]</p>
+<p>(b) 此时样本空间的大小为 \(\binom{100}{15}\)。要构成事件 \(A\)，需从 30 个绿球中取 \(k\) 个，从 70 个橙球中取 \(15-k\) 个，故 \(|A| = \binom{30}{k}\binom{70}{15-k}\)。因此</p>
+<p>\[
+P[A] = \frac{\binom{30}{k}\binom{70}{15-k}}{\binom{100}{15}}.
+\]</p>
+<p>(c) 设 \(B\) 为至少有一个值被观察到多于一次的事件。则 \(P[B] = 1 - P[\overline{B}]\)，其中 \(\overline{B}\) 表示 5 次掷骰结果互不相同。该概率为</p>
+<p>\[
+P[\overline{B}] = \frac{6!}{6^5} = \frac{5!}{6^4}.
+\]</p>
+<p>因此</p>
+<p>\[
+P[B] = 1 - \frac{5!}{6^4}.
+\]</p>
+<p><strong>另解</strong>：得到五个不同结果的方法数为 \(6 \times 5 \times 4 \times 3 \times 2\)，样本空间大小为 \(6^5\)，故 \(P[\overline{B}] = \frac{6 \cdot 5 \cdot 4 \cdot 3 \cdot 2}{6^5}\)，同样得到 \(P[B] = 1 - \frac{5!}{6^4}\)。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw08-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw08.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>抛掷五次</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 13 抛一枚硬币五次，记录结果。对于以下三个问题，假设结果的顺序是有区别的，且正面的概率为某个满足 \(0 &lt; p &lt; 1\) 的 \(p\)，但<strong>不必</strong>是公平硬币（\(p = 0.5\)）。</p>
+<p>(a) 样本空间的大小 \(|\Omega|\) 是多少？</p>
+<p>(b) \(\Omega\) 中有多少个元素恰好包含三次正面？</p>
+<p>(c) \(\Omega\) 中有多少个元素包含三次或更多正面？</p>
+<p>对于接下来的三个问题，假设硬币是公平的（即正面概率为 \(p = 0.5\)，反面为 \(1-p\)）。</p>
+<p>(d) 观察到序列 HHHTT 的概率是多少？HHHHT 呢？</p>
+<p>(e) 观察到至少一次正面的概率是多少？</p>
+<p>(f) 观察到三次或更多正面的概率是多少？</p>
+<p>对于最后三个问题，假设硬币是不公平的，正面概率为 \(p = \frac{2}{3}\)。</p>
+<p>(g) 观察到结果 HHHTT 的概率是多少？HHHHT 呢？</p>
+<p>(h) 观察到至少一次正面的概率是多少？</p>
+<p>(i) 观察到 \(\geq 3\) 次正面的概率是多少？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a)-(c) 利用计数原理：每次抛掷有 2 种结果，5 次抛掷共有 \(2^5\) 种序列；恰好 \(i\) 次正面需从 5 个位置中选 \(i\) 个。</p>
+<p>(d)-(f) 公平硬币下每个序列等可能，概率为 \(1/2^5\)；至少一次正面考虑对立事件（全反面）。</p>
+<p>(g)-(i) 非公平硬币下，恰有 \(i\) 次正面的序列概率为 \(p^i(1-p)^{5-i}\)，需分别计算 \(i = 3, 4, 5\) 再求和。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 每次抛掷有正面或反面两种结果，故共有 \(|\Omega| = 2^5\) 种可能结果。</p>
+<p>(b) 恰好有三次正面时，区别仅在于正面出现的位置。从 5 个位置中选 3 个，有 \(\binom{5}{3}\) 种。</p>
+<p>(c) 需要分别考虑恰好 3 次、4 次、5 次正面的情况：</p>
+<p>\[
+\binom{5}{3} + \binom{5}{4} + \binom{5}{5} = 16.
+\]</p>
+<p>另一种思路：设 \(A\) 为有 3 次或更多正面的结果集合。将 \(A\) 中每个结果的每枚硬币翻转，得到有 2 次或更少正面的结果集合 \(\overline{A}\)。则 \(|A| = |\overline{A}|\) 且 \(|A| + |\overline{A}| = 2^5\)，故 \(|A| = 2^5/2 = 16\)。</p>
+<p>(d) 每次抛掷独立，每次概率为 \(1/2\)，故该序列的概率为 \((1/2)^5 = 1/2^5\)。这对 HHHTT 和 HHHHT 都成立，因为正面和反面的概率相同。</p>
+<p>(e) 考虑对立事件（没有正面，即全为反面）。全反面的概率为 \(1/2^5\)，故至少一次正面的概率为 \(1 - 1/2^5\)。</p>
+<p>(f) 每个结果等可能，故概率为</p>
+<p>\[
+\frac{\binom{5}{3}+\binom{5}{4}+\binom{5}{5}}{2^5}.
+\]</p>
+<p>(g) 由独立性，对 HHHTT：</p>
+<p>\[
+\left(\frac{2}{3}\right)^3 \cdot \left(\frac{1}{3}\right)^2 = \frac{2^3}{3^5}.
+\]</p>
+<p>对 HHHHT：</p>
+<p>\[
+\left(\frac{2}{3}\right)^4 \cdot \frac{1}{3} = \frac{2^4}{3^5}.
+\]</p>
+<p>(h) 先求对立事件（没有正面）的概率：\((1/3)^5\)，故至少一次正面的概率为 \(1 - 1/3^5\)。</p>
+<p>(i) 由于概率空间不均匀，需分别考虑恰好 3、4、5 次正面：</p>
+<p>\[
+P[\geq 3 \text{ Heads}] = \binom{5}{3}\left(\frac{2}{3}\right)^3\left(\frac{1}{3}\right)^2 + \binom{5}{4}\left(\frac{2}{3}\right)^4\left(\frac{1}{3}\right) + \binom{5}{5}\left(\frac{2}{3}\right)^5.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw08-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw08.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>往昔的概率化回顾</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 13 本问题以概率视角回顾 CS70 中的一些旧主题。对于以下实验，请：</p>
+<p>i. 定义一个合适的样本空间 \(\Omega\)。</p>
+<p>ii. 给出概率函数 \(P[\omega]\)。</p>
+<p>iii. 计算 \(P[E_1]\)。</p>
+<p>iv. 计算 \(P[E_2]\)。</p>
+<p>(a) 取定一个素数 \(q &gt; 2\)，从 \(\{0, \ldots, q-1\}\) 中有放回地均匀抽样两次（假设有两个 \(\{0, \ldots, q-1\}\) 面的公平骰子，将它们掷出）。然后将这两个数对 \(q\) 取模相乘。</p>
+<p>设 \(E_1\) = 乘积为 0。</p>
+<p>设 \(E_2\) = 乘积为 \((q-1)/2\)。</p>
+<p>(b) 构造一个 \(v\) 个顶点的图，从所有可能的边中均匀随机抽样。这里假设对每条边抛一枚公平硬币；若为正面则包含该边，否则不包含。</p>
+<p>设 \(E_1\) = 图是完全图。</p>
+<p>设 \(E_2\) = 顶点 \(v_1\) 的度为 \(d\)。</p>
+<p>(c) 构造一个随机稳定匹配实例：让每个人的偏好列表是对方列表的均匀随机排列（让每个职位和每个候选人的偏好列表都是对方列表的随机排列）。最后，通过将职位和候选人均匀随机配对来构造一个均匀随机的配对（注意，在此配对中，(1) 一个候选人不能与两个不同的职位配对，一个职位也不能与两个不同的候选人配对；(2) 该配对不必是稳定的）。</p>
+<p>设 \(E_1\) = 所有职位都有不同的首选候选人。</p>
+<p>设 \(E_2\) = 所得的配对是候选人最优的稳定配对。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 样本空间为 \(\text{GF}(q) \times \text{GF}(q)\) 中的有序对；乘积为零当且仅当至少一个因子为零；乘积为 \((q-1)/2\) 时，非零的 \(i\) 唯一确定 \(j\)。</p>
+<p>(b) 共有 \(\binom{v}{2}\) 条可能的边，每条边独立地以 \(1/2\) 概率出现；完全图唯一；顶点 \(v_1\) 的度为 \(d\) 需从其 \(v-1\) 条邻接边中恰好选 \(d\) 条。</p>
+<p>(c) 样本空间追踪 \(2n\) 个偏好排列加一个配对排列 \(\rho\)；\(E_1\) 要求 \(n\) 个职位的首选互不相同；\(E_2\) 要求配对恰好是唯一的候选人最优稳定配对。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) i. \(\Omega = \{(i, j) : i, j \in \text{GF}(q)\}\)。</p>
+<p>ii. 共有 \(q^2\) 对，故 \(P[(i,j)] = 1/q^2\)。</p>
+<p>iii. 要使乘积 \(i \cdot j = 0\)，至少有一个为 0。这样的对恰好有 \(2q-1\) 个，故 \(P[E_1] = \frac{2q-1}{q^2}\)。</p>
+<p>iv. 要使 \(i \cdot j = (q-1)/2\)，只要 \(i \neq 0\) 且 \(j \equiv i^{-1}(q-1)/2 \pmod{q}\)。故 \(|E_2| = q-1\)，\(P[E_2] = \frac{q-1}{q^2}\)。</p>
+<p>\(P[E_2]\) 的另解：\((q-1)/2\) 并不特殊，对任意 \(k \in \text{GF}(q)\) 都有 \(P[i \cdot j = (q-1)/2] = P[i \cdot j = k]\)。由</p>
+<p>\[
+1 = \sum_{k=0}^{q-1} P[i \cdot j = k] = P[i \cdot j = 0] + (q-1)P[i \cdot j = (q-1)/2] = \frac{2q-1}{q^2} + (q-1)P[i \cdot j = (q-1)/2]
+\]</p>
+<p>解得 \(P[E_2] = \frac{q-1}{q^2}\)。</p>
+<p>(b) i. \(\Omega\) 为所有 \(v\) 顶点图的集合。</p>
+<p>ii. 共有 \(N = 2^{\binom{v}{2}}\) 个图，故 \(P[g] = 1/N\)。</p>
+<p>iii. 完全图唯一，故 \(P[E_1] = 1/N\)。</p>
+<p>iv. 要使 \(v_1\) 的度为 \(d\)，需从其 \(v-1\) 条可能的邻接边中恰好选出 \(d\) 条。有 \(\binom{v-1}{d}\) 种选法，对每种选法，有 \(2^{\binom{v}{2}-(v-1)}\) 个图。故</p>
+<p>\[
+P[E_2] = \frac{\binom{v-1}{d} \cdot 2^{\binom{v}{2}-(v-1)}}{2^{\binom{v}{2}}} = \binom{v-1}{d} \left(\frac{1}{2}\right)^{v-1}.
+\]</p>
+<p>(c) i. 需要追踪随机偏好列表和随机配对。第 \(i\) 个人的偏好列表表示为 \(\{1,\ldots,n\}\) 的一个排列 \(\sigma_i\)，配对本身编码为另一个排列 \(\rho\)（表示职位 \(i\) 与候选人 \(\rho(i)\) 配对）。故 \(\Omega = \{(\sigma_1, \ldots, \sigma_{2n}, \rho) : \sigma_i, \rho \in S_n\}\)，其中 \(S_n\) 为 \(\{1,\ldots,n\}\) 的排列集合。</p>
+<p>ii. \(|\Omega| = (n!)^{2n+1}\)，故 \(P[P] = 1/|\Omega|\)。</p>
+<p>iii. 对于 \(E_1\)，所有职位有 \(n!\) 种不同的首选候选人配置，每个职位对其余候选人有 \((n-1)!\) 种排序方式，候选人的偏好列表有 \((n!)^n\) 种，\(\rho\) 有 \(n!\) 种。故</p>
+<p>\[
+|E_1| = n! \cdot [(n-1)!]^n \cdot (n!)^n \cdot n!,
+\]</p>
+<p>\[
+P[E_1] = \frac{n! \cdot [(n-1)!]^n \cdot (n!)^n \cdot n!}{(n!)^{2n+1}} = \frac{n!}{n^n}.
+\]</p>
+<p>iv. 无论 \(\sigma_1, \ldots, \sigma_{2n}\) 如何，恰好存在一个候选人最优配对，故</p>
+<p>\[
+P[E_2] = \frac{(n!)^{2n}}{(n!)^{2n+1}} = \frac{1}{n!}.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw08-sol.pdf</code> · 4-5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw08.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>随机图中的团</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 13</p>
+<p>Note 14</p>
+<p>考虑在 \(n\) 个顶点上由以下随机过程生成的图 \(G = (V, E)\)：对每一对顶点 \(u\) 和 \(v\)，抛一枚公平硬币，当且仅当硬币为正面时在 \(u\) 和 \(v\) 之间放置一条（无向）边。</p>
+<p>(a) 样本空间的大小是多少？</p>
+<p>(b) 图中的一个 \(k\)-团（\(k\)-clique）是一个包含 \(k\) 个顶点的集合 \(S\)，其中每对顶点都相邻（即每对顶点之间都有一条边）。例如，3-团就是一个三角形。设 \(E_S\) 为集合 \(S\) 构成一个团的事件。对于一个特定的包含 \(k\) 个顶点的集合 \(S\)，\(E_S\) 的概率是多少？</p>
+<p>(c) 设 \(V_1 = \{v_1, \ldots, v_\ell\}\) 和 \(V_2 = \{w_1, \ldots, w_k\}\) 为两个任意顶点集合。\(V_1\) 和 \(V_2\) 必须满足什么条件才能使 \(E_{V_1}\) 和 \(E_{V_2}\) 独立？证明你的答案。</p>
+<p>(d) 证明 \(\binom{n}{k} \leq n^k\)。（这可能在 (e) 中有用）</p>
+<p>(e) 证明：对于 \(k \geq 4\log_2 n + 1\)，图包含一个 \(k\)-团的概率至多为 \(1/n\)。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(b) 固定的 \(k\) 个顶点之间有 \(\binom{k}{2}\) 对，每对都需要有边。</p>
+<p>(c) 考虑 \(V_1\) 和 \(V_2\) 是否共享边（即是否共享两个或更多顶点）。</p>
+<p>(e) 对所有大小为 \(k\) 的子集使用联合界（union bound），并结合 (d) 的不等式。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 每对顶点间要么有边要么没有。共有 \(\binom{n}{2}\) 对顶点，每对有两种选择，故样本空间大小为 \(2^{\binom{n}{2}}\)。</p>
+<p>(b) 要使固定的 \(k\) 个顶点成为 \(k\)-团，这 \(k\) 个顶点之间的所有 \(\binom{k}{2}\) 对都必须有边相连。该事件的概率为 \((1/2)^{\binom{k}{2}}\)。</p>
+<p>(c) \(E_{V_1}\) 和 \(E_{V_2}\) 独立当且仅当 \(V_1\) 和 \(V_2\) 至多共享一个顶点。</p>
+<p><strong>证明</strong>：若 \(V_1\) 和 \(V_2\) 至多共享一个顶点，则由于各边独立添加，</p>
+<p>\[
+P[E_{V_1} \cap E_{V_2}] = \left(\frac{1}{2}\right)^{\binom{|V_1|}{2}} \cdot \left(\frac{1}{2}\right)^{\binom{|V_2|}{2}} = P[E_{V_1}] \cdot P[E_{V_2}].
+\]</p>
+<p>反之，若 \(V_1\) 和 \(V_2\) 共享至少两个顶点，则交集 \(V_3 = V_1 \cap V_2\) 至少有两个元素，故</p>
+<p>\[
+P[E_{V_1} \cap E_{V_2}] = \left(\frac{1}{2}\right)^{\binom{|V_1|}{2}+\binom{|V_2|}{2}-\binom{|V_3|}{2}} \neq P[E_{V_1}] \cdot P[E_{V_2}].
+\]</p>
+<p>(d) 由 \(\binom{n}{k}\) 的定义：</p>
+<p>\[
+\binom{n}{k} = \frac{n!}{(n-k)!k!} = \frac{n \cdot (n-1) \cdots (n-k+1)}{k!} \leq n \cdot (n-1) \cdots (n-k+1) \leq n^k.
+\]</p>
+<p>(e) 设 \(A_S\) 为 \(S\) 是 \(k\)-团的事件，其中 \(S \subseteq V\) 且 \(|S| = k\)。则图包含 \(k\)-团的事件可描述为所有大小为 \(k\) 的 \(S\) 对应的 \(A_S\) 的并集。由联合界，</p>
+<p>\[
+P\left[\bigcup_{S \subseteq V, |S|=k} A_S\right] \leq \sum_{S \subseteq V, |S|=k} P[A_S] = \sum_{S \subseteq V, |S|=k} \frac{1}{2^{\binom{k}{2}}}.
+\]</p>
+<p>共有 \(\binom{n}{k}\) 种方式选择大小为 \(k\) 的子集 \(S\)，故右边等于</p>
+<p>\[
+\frac{\binom{n}{k}}{2^{\binom{k}{2}}} \leq \frac{n^k}{2^{k(k-1)/2}} \leq \frac{n^k}{(2^{(4\log_2 n+1-1)/2})^k} = \frac{n^k}{(2^{2\log_2 n})^k} = \frac{n^k}{n^{2k}} = \frac{1}{n^k} \leq \frac{1}{n}.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw08-sol.pdf</code> · 6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw08.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>容斥原理的推广</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 14 容斥原理（Principle of Inclusion and Exclusion, PIE）得到的一个有趣结果是：对于概率空间中的任意事件 \(A_1, A_2, \ldots, A_n\)，</p>
+<p>\[
+\sum_{i=1}^{n} P[A_i] - \sum_{i&lt;j\leq n} P[A_i \cap A_j] + \sum_{i&lt;j&lt;k\leq n} P[A_i \cap A_j \cap A_k] - \cdots + (-1)^{n-1}P[A_1 \cap A_2 \cap \cdots \cap A_n] \geq 0
+\]</p>
+<p>（注意由 PIE 知左边等于 \(P[\bigcup_{i=1}^n A_i]\)，而概率非负）。</p>
+<p>证明：对于概率空间中的任意事件 \(A_1, A_2, \ldots, A_n\)，</p>
+<p>\[
+\sum_{i=1}^{n} P[A_i] - 2\sum_{i&lt;j\leq n} P[A_i \cap A_j] + 4\sum_{i&lt;j&lt;k\leq n} P[A_i \cap A_j \cap A_k] - \cdots + (-2)^{n-1}P[A_1 \cap A_2 \cap \cdots \cap A_n] \geq 0
+\]</p>
+<p>（提示：考虑定义一个事件 \(B\) 表示「\(A_1, \ldots, A_n\) 中有奇数个发生」）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>定义 \(B\) 为「\(A_1, \ldots, A_n\) 中有奇数个发生」的事件。考虑将 \(P[B]\) 用 PIE 表达，或分析右边每个结果 \(\omega\) 的概率被计入了多少次。</p>
+<p>对于属于 \(m\) 个事件的 \(\omega\)，其被计入的次数为 \(\sum_{k=1}^{m} (-2)^{k-1}\binom{m}{k}\)，利用二项式定理可化简为 \((1-(-1)^m)/2\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>对于概率空间中的事件 \(A_1, A_2, \ldots, A_n\)，设 \(B\) 表示「\(A_1, \ldots, A_n\) 中有奇数个发生」的事件。</p>
+<p>若我们能证明</p>
+<p>\[
+P[B] = \sum_{i=1}^{n} P[A_i] - 2\sum_{i&lt;j\leq n} P[A_i \cap A_j] + 4\sum_{i&lt;j&lt;k\leq n} P[A_i \cap A_j \cap A_k] - \cdots + (-2)^{n-1}P[A_1 \cap \cdots \cap A_n],
+\]</p>
+<p>则由概率的非负性立即得到欲证结论。</p>
+<p>我们采用组合论证来证明该等式（类似于 PIE 的证明，也可用数学归纳法）。对于任意结果 \(\omega\)，考虑指标集 \(M \subseteq \{1, \ldots, n\}\)，其中</p>
+<p>\[
+M = \{i \in \{1, \ldots, n\} \mid \omega \in A_i\}.
+\]</p>
+<p>即 \(M\) 为所有使得结果 \(\omega\) 属于事件 \(A_i\) 的指标 \(i\) 的集合。设 \(|M| = m\)。对任意 \(S \subseteq M\)，有 \(\omega \in \bigcap_{i \in S} A_i\)。由于大小为 \(k\) 的子集 \(S\) 有 \(\binom{m}{k}\) 个，且右边对应的概率项的乘性因子为 \((-2)^{k-1}\)，故结果 \(\omega\) 的概率在右边被计入的次数为</p>
+<p>\[
+\sum_{k=1}^{m} \sum_{S \subseteq M, |S|=k} (-2)^{k-1} = \sum_{k=1}^{m} (-2)^{k-1}\binom{m}{k} = -\frac{1}{2}\left[\sum_{k=0}^{m} (-2)^k\binom{m}{k} - (-2)^0\binom{m}{0}\right] = -\frac{1}{2}[(1+(-2))^m - 1] = \frac{1-(-1)^m}{2} = \begin{cases} 1, &amp; m \text{ 为奇数} \\ 0, &amp; \text{否则} \end{cases}.
+\]</p>
+<p>第二行是代数变形，第三行使用了二项式定理。</p>
+<p>因此，每个属于奇数个事件 \(A_1, \ldots, A_n\) 的结果 \(\omega\) 其概率在右边恰好被计入一次，而其他结果的概率被抵消为零，证毕。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw08-sol.pdf</code> · 7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw08.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>独立的补事件</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 14 设 \(\Omega\) 为一个样本空间，\(A, B \subseteq \Omega\) 为两个独立事件。</p>
+<p>(a) 证明或反驳：\(A\) 与 \(\overline{B}\) 必须独立。</p>
+<p>(b) 证明或反驳：\(\overline{A}\) 与 \(\overline{B}\) 必须独立。</p>
+<p>(c) 证明或反驳：\(A\) 与 \(\overline{A}\) 必须独立。</p>
+<p>(d) 证明或反驳：\(A = B\) 是可能的。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 和 (b) 利用独立性的定义和集合代数（德摩根律或集合差）来证明。</p>
+<p>(c) 考虑 \(0 &lt; P[A] &lt; 1\) 时 \(P[A \cap \overline{A}]\) 与 \(P[A]P[\overline{A}]\) 的关系。</p>
+<p>(d) 考虑极端概率（如 0 或 1）的情况。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 真。\(A\) 与 \(\overline{B}\) 必须独立：</p>
+<p>\[
+P[A \cap \overline{B}] = P[\overline{A \cup B}] \quad \text{（由德摩根律）}
+\]
+\[
+= 1 - P[A \cup B] \quad \text{（因对所有 } E \text{ 有 } P[\overline{E}] = 1 - P[E]\text{）}
+\]
+\[
+= 1 - (P[A] + P[B] - P[A \cap B]) \quad \text{（重叠事件的并）}
+\]
+\[
+= 1 - P[A] - P[B] + P[A]P[B] \quad \text{（因 } A, B \text{ 独立）}
+\]
+\[
+= (1 - P[A])(1 - P[B])
+\]
+\[
+= P[A]P[\overline{B}] \quad \text{（因对所有 } E \text{ 有 } P[\overline{E}] = 1 - P[E]\text{）}.
+\]</p>
+<p>(b) 真。\(\overline{A}\) 与 \(\overline{B}\) 必须独立：</p>
+<p>\[
+P[\overline{A} \cap \overline{B}] = P[\overline{A} - (\overline{A} \cap B)]
+\]
+\[
+= P[\overline{A}] - P[\overline{A} \cap B]
+\]
+\[
+= P[\overline{A}] - P[\overline{A}]P[B]
+\]
+\[
+= P[\overline{A}](1 - P[B])
+\]
+\[
+= P[\overline{A}]P[\overline{B}].
+\]</p>
+<p>（其中 \(P[\overline{A} \cap B] = P[\overline{A}]P[B]\) 由 (a) 的对称性得到。）</p>
+<p>(c) 一般情况下为假。若 \(0 &lt; P[A] &lt; 1\)，则 \(P[A \cap \overline{A}] = P[\emptyset] = 0\)，但 \(P[A]P[\overline{A}] &gt; 0\)，故 \(P[A \cap \overline{A}] \neq P[A]P[\overline{A}]\)；因此在此情况下 \(A\) 与 \(\overline{A}\) 不独立。</p>
+<p>(d) 真。举一个例子：若 \(P[A] = P[B] = 0\)，则 \(P[A \cap B] = 0 = 0 \times 0 = P[A]P[B]\)，故在此情况下 \(A\) 与 \(B\) 独立。（另一个例子：若 \(A = B\) 且 \(P[A] = 1\)，则 \(A\) 与 \(B\) 独立。）</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw08-sol.pdf</code> · 8-9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw08.pdf</code> · 4 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>homework/hw08.pdf</code></li>
+      <li><code>solutions/homework/hw08-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

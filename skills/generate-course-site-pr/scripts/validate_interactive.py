@@ -23,7 +23,6 @@ CONSTANTS = {"e", "pi", "x"}
 ID_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 EXPRESSION_RE = re.compile(r"^[0-9A-Za-z_+\-*/^().,\s]+$")
 TOKEN_RE = re.compile(r"\s*(?:(\d*\.?\d+(?:e[+-]?\d+)?)|([A-Za-z_][A-Za-z0-9_]*)|([()+\-*/^,]))", re.IGNORECASE)
-DRIVE_RE = re.compile(r"https?://(?:drive|docs)\.google\.com", re.IGNORECASE)
 MAX_SPEC_BYTES = 256_000
 MAX_FALLBACK_BYTES = 2_000_000
 
@@ -345,8 +344,6 @@ def validate_spec(spec_path: Path, course: Path, label: str) -> list[str]:
     source_url = source.get("url") if isinstance(source, dict) else ""
     if not isinstance(source_url, str) or not source_url.strip():
         errors.append(f"{label}: source requires a URL")
-    elif DRIVE_RE.search(source_url):
-        errors.append(f"{label}: source contains a forbidden Google Drive/Docs URL")
     else:
         split = urlsplit(source_url)
         if split.netloc and not split.scheme:

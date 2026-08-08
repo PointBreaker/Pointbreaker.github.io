@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>概率基础、条件概率与独立性 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 9 讲</p><h1>概率基础、条件概率与独立性</h1><p class="lede">本讲从样本空间与概率公理出发，建立古典概型、条件概率与独立性的严格框架；通过 PIE、贝叶斯定理与随机图模型，训练概率计算与证明能力。</p><div class="meta"><span>预计用时：150 分钟</span><span>难度：中高</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>严格定义样本空间、事件与概率函数，区分等可能与非等可能模型</li><li>运用超几何与二项分布计算有/无放回抽样概率</li><li>应用容斥原理与补集技巧处理复杂事件</li><li>使用条件概率、全概率公式与贝叶斯定理分析反直觉案例</li><li>判断并证明事件独立性及独立补性质</li><li>通过联合界证明随机图大团存在概率的上界</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>模块 7 计数：排列组合、二项系数、组合恒等式</li><li>集合运算：并、交、补、德摩根律</li><li>等可能概率模型 P[E] = |E|/|Ω|</li><li>两集合容斥原理 P[A∪B] = P[A] + P[B] − P[A∩B]</li></ul><h2 id="sec-9-1">样本空间、事件与概率公理</h2><p>一个概率实验由样本空间 \(\Omega\)（所有可能结果的集合）与事件（\(\Omega\) 的子集）组成。在 CS70 的框架下，我们通常假设 \(\Omega\) 有限，并引入概率函数 \(P:\mathcal{F}\to[0,1]\) 满足三条公理：(i) 非负性 \(\forall E\in\mathcal{F},\;P[E]\ge 0\)；(ii) 归一化 \(P[\Omega]=1\)；(iii) 有限可加性：若 \(E_1,\dots,E_k\) 两两不交，则 \(P[\bigcup_{i=1}^k E_i]=\sum_{i=1}^k P[E_i]\)。</p>
+<p>当 \(\Omega\) 有限且每个结果等可能时，古典概型给出 \(P[E]=|E|/|\Omega|\)。这是 DIS 7B 掷币与抽样问题的核心工具：三次抛币的样本空间为 \(\{(X_1,X_2,X_3):X_i\in\{H,T\}\}\)，\(|\Omega|=2^3=8\)，每个结果概率为 \(1/8\)。</p>
+<p>事件必须严格是 \(\Omega\) 的子集。DIS 7B 第 2(b) 题的关键观察是：\(\{(H,H,T),(H,H),(T)\}\) 不是事件，因为 \((H,H)\) 与 \((T)\) 不是三次抛币实验的可能结果——它们不在 \(\Omega\) 中。补集、并、交都是对 \(\Omega\) 子集的运算，补集 \(\overline{E}=\Omega\setminus E\) 且 \(P[\overline{E}]=1-P[E]\)。</p>
+<p>概率函数的另一直接推论：对任意 \(A,B\)，有 \(P[A\cup B]=P[A]+P[B]-P[A\cap B]\)（两集合 PIE）。当 \(A,B\) 不交时退化为可加性。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>掷一枚均匀骰子两次，记录有序对 \((X_1,X_2)\in\{1,\dots,6\}^2\)。令 \(A\) 为第一次掷出素数（\(\{2,3,5\}\)），\(B\) 为两次之和为 7。求 \(P[A],P[B],P[A\cap B],P[A\cup B]\)。</p>
+<p>解：\(|\Omega|=36\)，每个结果概率 \(1/36\)。\(|A|=3\cdot 6=18\)，故 \(P[A]=1/2\)。\(B=\{(1,6),(2,5),(3,4),(4,3),(5,2),(6,1)\}\)，\(|B|=6\)，\(P[B]=1/6\)。\(A\cap B=\{(2,5),(4,3),(6,1)\}\)，\(|A\cap B|=3\)，\(P[A\cap B]=1/12\)。由 PIE：\(P[A\cup B]=1/2+1/6-1/12=7/12\)。</p></div></div><h2 id="sec-9-2">计数与古典概型：有/无放回抽样</h2><p>两种基本抽样方案：</p>
+<p><strong>有放回抽样</strong>：每次抽取后放回，各次独立。从 \(n\) 个物品中抽 \(k\) 次，样本空间大小为 \(n^k\)（有序）。DIS 7B 第 3 题：从 \(\{1,\dots,n\}\) 有放回抽两球，\(P[(1,2)]=1/n^2\)，\(P[\text{第二球}&lt;\text{第一球}]=\binom{n}{2}/n^2=(n-1)/(2n)\)。</p>
+<p><strong>无放回抽样</strong>：抽取后不放回。有序样本空间大小为 \(n!/(n-k)!\)，无序为 \(\binom{n}{k}\)。超几何分布：从 \(N\) 个物品（含 \(K\) 个“成功”）无放回抽 \(k\) 个，恰好 \(j\) 个成功的概率为 \(\binom{K}{j}\binom{N-K}{k-j}/\binom{N}{k}\)。</p>
+<p><strong>二项分布</strong>：\(k\) 次独立试验，每次成功概率 \(p\)，恰好 \(j\) 次成功的概率为 \(\binom{k}{j}p^j(1-p)^{k-j}\)。HW 08 第 1(a) 题（有放回抽绿球）即二项模型，第 1(b) 题（无放回）即超几何模型。</p>
+<p>关键对比：DIS 7B 第 3(d) 题中，无放回时 \(P[\text{第二球}&lt;\text{第一球}]=1/2\)（由对称性，排除相等后两方向等可能），与有放回时的 \((n-1)/(2n)\) 不同。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>一个盒子中有 5 个红球、7 个蓝球。无放回地抽取 3 个，求恰好 2 个红球的概率。</p>
+<p>解：\(|\Omega|=\binom{12}{3}=220\)。有利结果数：\(\binom{5}{2}\cdot\binom{7}{1}=10\cdot 7=70\)。故 \(P=70/220=7/22\)。</p>
+<p>若改为有放回抽取 3 次，则服从二项分布 \(\text{Binomial}(3,5/12)\)：\(P=\binom{3}{2}(5/12)^2(7/12)=3\cdot 25/144\cdot 7/12=525/1728=35/1152\approx 0.174\)。两种模型结果不同，选择取决于抽样方式。</p></div></div><h2 id="sec-9-3">容斥原理 (PIE)</h2><p>对事件 \(A_1,\dots,A_n\)，容斥原理给出：</p>
+<p>\[P\left[\bigcup_{i=1}^n A_i\right]=\sum_{i} P[A_i]-\sum_{i&lt;j} P[A_i\cap A_j]+\sum_{i&lt;j&lt;k} P[A_i\cap A_j\cap A_k]-\cdots+(-1)^{n-1}P\left[\bigcap_{i=1}^n A_i\right]\]</p>
+<p>核心思想：通过交错加减，使每个结果恰好被计数一次。两集合情形 \(P[A\cup B]=P[A]+P[B]-P[A\cap B]\) 是基础。</p>
+<p>DIS 8A 扑克牌问题展示 PIE 的灵活运用：</p>
+<ul>
+<li>
+<p>\(P[\text{ace or red}]=4/52+26/52-2/52=28/52=7/13\)</p>
+</li>
+<li>
+<p>\(P[\text{ace or spade but not both}]=4/52+13/52-2\cdot 1/52=15/52\)（减去两倍交集以排除“既是 ace 又是 spade”的情形）</p>
+</li>
+</ul>
+<p>补集技巧常与 PIE 配合：\(P[\text{at least one}]=1-P[\text{none}]\)。DIS 8A 第 1(e)(f) 题用补集求“至少一张 ace”与“至少一张 ace 或红心”的概率。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>从 \(\{1,\dots,100\}\) 中均匀随机选一个整数，求它被 2、3 或 5 整除的概率。</p>
+<p>解：令 \(A_2,A_3,A_5\) 分别为被 2、3、5 整除。\(|A_2|=50,|A_3|=33,|A_5|=20\)。\(|A_2\cap A_3|=|A_6|=16\)，\(|A_2\cap A_5|=|A_{10}|=10\)，\(|A_3\cap A_5|=|A_{15}|=6\)。\(|A_2\cap A_3\cap A_5|=|A_{30}|=3\)。</p>
+<p>由 PIE：\(|A_2\cup A_3\cup A_5|=50+33+20-16-10-6+3=74\)。故 \(P=74/100=37/50\)。</p></div></div><h2 id="sec-9-4">条件概率与贝叶斯定理</h2><p>定义（\(P[B]&gt;0\)）：\(P[A\mid B]=P[A\cap B]/P[B]\)。直观上，条件概率将样本空间“限制”到 \(B\) 内。</p>
+<p><strong>全概率公式</strong>：若 \(B_1,\dots,B_k\) 构成 \(\Omega\) 的划分，则 \(P[A]=\sum_i P[A\mid B_i]\cdot P[B_i]\)。</p>
+<p><strong>贝叶斯定理</strong>：\(P[B_j\mid A]=\dfrac{P[A\mid B_j]P[B_j]}{\sum_i P[A\mid B_i]P[B_i]}\)。它让我们“反转”条件方向，是医学诊断、垃圾过滤等推断问题的核心。</p>
+<p>DIS 8A 气象学家问题：\(P[\text{snow}]=0.1\)，\(P[\text{predict snow}\mid\text{snow}]=0.7\)，\(P[\text{predict no snow}\mid\text{no snow}]=0.95\)。则 \(P[\text{predict snow}]=0.7\cdot 0.1+0.05\cdot 0.9=0.115\)，故 \(P[\text{snow}\mid\text{predict snow}]=0.07/0.115=14/23\approx 0.609\)。即使预测下雪，实际下雪的概率仅约 61%，因为不下雪的日子远多于下雪天（基础比率效应）。</p>
+<p>DIS 8A 弹珠盒问题：看到蓝球后，来自盒 1 的后验概率为 \(1/6\)，远低于先验 \(1/2\)，因为盒 2 的蓝球比例更高。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>某疾病发病率 1%。检测准确率 95%：患者 95% 阳性，健康人 95% 阴性（即假阳性率 5%）。若检测为阳性，求实际患病的概率。</p>
+<p>解：令 \(D\) 为患病，\(+\) 为阳性。\(P[D]=0.01\)，\(P[+\mid D]=0.95\)，\(P[+\mid \overline{D}]=0.05\)。</p>
+<p>\(P[+]=P[+\mid D]P[D]+P[+\mid \overline{D}]P[\overline{D}]=0.95\cdot 0.01+0.05\cdot 0.99=0.0095+0.0495=0.059\)。</p>
+<p>\(P[D\mid +]=0.0095/0.059\approx 0.161\)。即使检测阳性，实际患病概率仅约 16%，因为健康人群的假阳性绝对数量远大于真阳性。</p></div></div><h2 id="sec-9-5">独立性与独立补</h2><p>定义：\(A,B\) 独立当且仅当 \(P[A\cap B]=P[A]\cdot P[B]\)。这一定义是对条件概率的“对称化”：若 \(A,B\) 独立且 \(P[B]&gt;0\)，则 \(P[A\mid B]=P[A]\)。</p>
+<p><strong>独立补性质</strong>（HW 08 第 6 题）：若 \(A,B\) 独立，则 \(A\) 与 \(\overline{B}\) 独立，\(\overline{A}\) 与 \(B\) 独立，\(\overline{A}\) 与 \(\overline{B}\) 独立。证明：\(P[A\cap\overline{B}]=P[A]-P[A\cap B]=P[A]-P[A]P[B]=P[A](1-P[B])=P[A]P[\overline{B}]\)。</p>
+<p><strong>注意</strong>：\(A\) 与自身一般不独立。\(P[A\cap A]=P[A]\)，而 \(P[A]P[A]=P[A]^2\)，二者相等仅当 \(P[A]\in\{0,1\}\)。</p>
+<p><strong>独立 \(\neq\) 互斥</strong>：互斥（\(A\cap B=\varnothing\)）通常意味着依赖（除非某事件概率为 0）。独立要求概率“相乘”，互斥要求“不重叠”，二者本质不同。</p>
+<p>多个事件的独立性要求所有子集满足乘积公式，比两两独立更强。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>同时抛两枚独立公平硬币。令 \(A\) 为第一枚正面，\(B\) 为第二枚正面。验证独立性，并求 \(P[A\cup B]\) 与 \(P[A\mid \overline{B}]\)。</p>
+<p>解：\(P[A]=P[B]=1/2\)，\(A\cap B=\{(H,H)\}\)，\(P[A\cap B]=1/4=P[A]P[B]\)，故独立。</p>
+<p>\(P[A\cup B]=1/2+1/2-1/4=3/4\)。</p>
+<p>\(P[A\mid \overline{B}]=P[A\cap\overline{B}]/P[\overline{B}]=(1/4)/(1/2)=1/2=P[A]\)，符合独立性的直观：\(B\) 不发生不影响 \(A\) 的概率。</p></div></div><h2 id="sec-9-6">PIE 推广与随机图团</h2><p><strong>PIE 的奇数发生推广</strong>（HW 08 第 5 题）：对任意事件 \(A_1,\dots,A_n\)，</p>
+<p>\[\sum_i P[A_i]-2\sum_{i&lt;j} P[A_i\cap A_j]+4\sum_{i&lt;j&lt;k} P[A_i\cap A_j\cap A_k]-\cdots+(-2)^{n-1}P[\cap_i A_i]\ge 0\]</p>
+<p>证明思路：令 \(B=\)"\(A_1,\dots,A_n\) 中有奇数个发生"。对每个结果 \(\omega\)，设它属于其中 \(m\) 个事件，则 RHS 中 \(\omega\) 被计数 \(\sum_{k=1}^m \binom{m}{k}(-2)^{k-1}=\frac{1-(-1)^m}{2}\) 次（二项定理），即奇数时 1 次、偶数时 0 次。故 RHS 等于 \(P[B]\ge 0\)。</p>
+<p><strong>随机图 \(G(n,1/2)\)</strong>（HW 08 第 4 题）：对 \(n\) 个顶点的每一对独立抛币决定边。样本空间大小为 \(2^{\binom{n}{2}}\)。</p>
+<p>对特定 \(k\) 元顶点集 \(S\)，\(P[S \text{ 是 } k\text{-clique}]=(1/2)^{\binom{k}{2}}\)（所有 \(\binom{k}{2}\) 条边须存在）。</p>
+<p><strong>联合界</strong>：\(P[\text{存在 } k\text{-clique}]\le \binom{n}{k}(1/2)^{\binom{k}{2}}\)。利用 \(\binom{n}{k}\le n^k\)，当 \(k\ge 4\log_2 n+1\) 时，该上界 \(\le 1/n\)。这表明大团极不可能存在。</p>
+<p>独立性关键：两个顶点集的团事件独立当且仅当它们至多共享一个顶点（共享的边会耦合两个事件）。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>在 \(G(10,1/2)\) 中，求特定 4 个顶点构成 4-clique 的概率，并估计存在 4-clique 的概率上界。</p>
+<p>解：4-clique 需 \(\binom{4}{2}=6\) 条边都存在，\(P=(1/2)^6=1/64\)。</p>
+<p>存在 4-clique 的上界：\(\binom{10}{4}\cdot(1/2)^6=210/64\approx 3.28\)。联合界此时给出平凡上界（\(\ge 1\)），说明 \(k=4\) 不够大。当 \(k\ge 4\log_2 10+1\approx 14.3\) 时，上界才 \(\le 1/10\)。这展示了联合界在“稀有事件并”中的威力与局限。</p></div></div><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>独立就是互斥：若 A、B 独立则 A∩B=∅</h3><p>恰恰相反。独立要求 P[A∩B]=P[A]P[B]（通常 &gt;0），而互斥要求 A∩B=∅。非零概率的互斥事件必然不独立——一个发生会排除另一个。</p></article><article class="summary-card"><h3>P[A|B] = P[B|A]：条件概率可以随意交换</h3><p>一般 P[A|B]≠P[B|A]。贝叶斯定理精确给出二者关系：P[A|B]=P[B|A]P[A]/P[B]。气象学家问题中 P[snow|predict]=14/23 远大于 P[predict|snow]=7/10 的基础比率影响。</p></article><article class="summary-card"><h3>有放回与无放回在小样本下差别不大，可以混用</h3><p>两种模型给出不同概率。DIS 7B 第 3 题：P[第二球比第一球小]在有放回时为 (n-1)/(2n)，无放回时为 1/2。选择取决于实际抽样机制。</p></article><article class="summary-card"><h3>A 与自身总是独立的</h3><p>P[A∩A]=P[A]，而 P[A]P[A]=P[A]^2。二者相等仅当 P[A]∈{0,1}。一般情形下 A 与自身不独立。</p></article><article class="summary-card"><h3>多个事件两两独立就意味着它们相互独立</h3><p>两两独立（每对满足乘积公式）弱于相互独立（所有子集满足乘积公式）。存在三事件两两独立但不相互独立的经典反例。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。|Ω|=36，和为 7 的有 (1,6),(2,5),(3,4),(4,3),(5,2),(6,1) 共 6 个，P=6/36=1/6。" data-incorrect="注意枚举所有和为 7 的有序对，不要遗漏对称情形。" data-quiz="m9-quiz-9-1"><p><strong>问题：</strong>同时掷两个公平骰子，求两个点数之和为 7 的概率。</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">1/6</button><button aria-pressed="false" data-choice="b">1/12</button><button aria-pressed="false" data-choice="c">5/36</button><button aria-pressed="false" data-choice="d">1/8</button><button aria-pressed="false" data-choice="e">1/9</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。P[D|+]=(0.95·0.01)/(0.95·0.01+0.05·0.99)≈0.0095/0.059≈16.1%。基础比率低时，假阳性绝对数量会压倒真阳性。" data-incorrect="这是贝叶斯定理的经典应用。不要混淆 P[+|D]=95% 与 P[D|+]；后者需要考虑发病率基础比率。" data-quiz="m9-quiz-9-2"><p><strong>问题：</strong>某疾病发病率 1%，检测假阳性率 5%、假阴性率 5%。若检测为阳性，实际患病的概率最接近哪个值？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">16%</button><button aria-pressed="false" data-choice="b">50%</button><button aria-pressed="false" data-choice="c">95%</button><button aria-pressed="false" data-choice="d">1%</button><button aria-pressed="false" data-choice="e">5%</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。P[A∪B]=P[A]+P[B]−P[A]P[B]=0.4+0.5−0.2=0.7。独立性给出 P[A∩B]=P[A]P[B]。" data-incorrect="独立时 P[A∩B]=P[A]P[B]=0.2，不是 0。用 PIE：0.4+0.5−0.2=0.7。" data-quiz="m9-quiz-9-3"><p><strong>问题：</strong>设 A,B 为独立事件，P[A]=0.4，P[B]=0.5。求 P[A∪B]。</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">0.7</button><button aria-pressed="false" data-choice="b">0.9</button><button aria-pressed="false" data-choice="c">0.2</button><button aria-pressed="false" data-choice="d">0.6</button><button aria-pressed="false" data-choice="e">0.8</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。|A₂|=50，|A₃|=33，|A₂∩A₃|=|A₆|=16。PIE：50+33−16=67，P=67/100。" data-incorrect="用 PIE：P[2∪3]=P[2]+P[3]−P[6]=1/2+1/3−1/6=67/100。注意减去被重复计数的 6 的倍数。" data-quiz="m9-quiz-9-4"><p><strong>问题：</strong>从 1 到 100 中均匀随机选一个整数，求它被 2 或 3 整除的概率。</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">2/3</button><button aria-pressed="false" data-choice="b">67/100</button><button aria-pressed="false" data-choice="c">17/25</button><button aria-pressed="false" data-choice="d">3/5</button><button aria-pressed="false" data-choice="e">1/2</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>概率三公理：非负性、归一化 P[Ω]=1、有限可加性（不交并）</li><li>古典概型 P[E]=|E|/|Ω| 适用于等可能有限样本空间</li><li>有放回抽样对应二项分布，无放回抽样对应超几何分布</li><li>PIE 通过交错加减使每个结果恰好计数一次</li><li>条件概率 P[A|B]=P[A∩B]/P[B] 限制样本空间到 B</li><li>贝叶斯定理反转条件方向，基础比率效应常导致反直觉结果</li><li>独立要求 P[A∩B]=P[A]P[B]；独立补、奇数发生 PIE 不等式与随机图团界是进阶应用</li></ul><h2 id="sources">一手资料</h2><ul><li><code>discussion/dis07b.pdf</code> · 2 · confidence: high · An event must be a subset of Ω, meaning that it must consist of possible outcomes.</li><li><code>discussion/dis07b.pdf</code> · 4 · confidence: high · By symmetry, it is equally likely for the first ball to have a greater number and for the second ball to have a greater number.</li><li><code>discussion/dis08a.pdf</code> · 2 · confidence: high · P[S|T] = (1/10 × 7/10) / (1/10 × 7/10 + 9/10 × 5/100) = 14/23</li><li><code>discussion/dis08a.pdf</code> · 1-2 · confidence: high · P[A1|B] = (0.1 × 0.5) / (0.5 × 0.1 + 0.5 × 0.5) = 1/6</li><li><code>homework/hw08.pdf</code> · 8 · confidence: high · P[A ∩ B] = P[A − (A ∩ B)] = P[A] − P[A]P[B] = P[A]P[B]</li><li><code>homework/hw08.pdf</code> · 7 · confidence: high · Let B represent an odd number of A1,...,An occur... P[B] equals the alternating sum with factors (−2)^{k−1}.</li><li><code>homework/hw08.pdf</code> · 6 · confidence: high · P[∪ A_S] ≤ Σ P[A_S] = (n choose k)/2^(k choose 2) ≤ n^k / n^{2k} = 1/n</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

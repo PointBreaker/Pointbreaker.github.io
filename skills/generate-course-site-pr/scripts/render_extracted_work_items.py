@@ -18,7 +18,7 @@ import markdown
 
 START_MARKER = "<!-- COMPLETE_SOURCE_OUTLINE_START -->"
 END_MARKER = "<!-- COMPLETE_SOURCE_OUTLINE_END -->"
-FORBIDDEN = ("drive.google.com", "docs.google.com", "<script", "<iframe", "javascript:")
+FORBIDDEN = ("<script", "<iframe", "javascript:")
 ALLOWED_TAGS = {
     "p", "ul", "ol", "li", "strong", "em", "code", "pre", "blockquote",
     "table", "thead", "tbody", "tr", "th", "td", "h3", "h4", "hr", "br",
@@ -43,9 +43,22 @@ def protect_math(value: str) -> tuple[str, dict[str, str]]:
     return pattern.sub(replace, value), replacements
 
 
+def normalize_math_delimiters(value: str) -> str:
+    """Convert common model-emitted dollar math into CourseStack delimiters."""
+    display = re.compile(r"(?<!\\)\$\$\s*([\s\S]*?)\s*(?<!\\)\$\$")
+    inline = re.compile(r"(?<!\\)\$(?!\s)([^\n$]*?\S)(?<!\\)\$")
+    value = display.sub(lambda match: rf"\[{match.group(1)}\]", value)
+    return inline.sub(lambda match: rf"\({match.group(1)}\)", value)
+
+
 def render_markdown(value: str) -> str:
     if not value.strip():
         return ""
+    value = normalize_math_delimiters(value)
+    # Structured extraction often places a list directly after a sentence.
+    # Python-Markdown requires a blank line there; insert it mechanically so
+    # subparts render as semantic lists instead of hyphen-filled paragraphs.
+    value = re.sub(r"(?m)(\S[^\n]*)\n(?=[ \t]*[-*+]\s+)", r"\1\n\n", value)
     lowered = value.lower()
     if any(fragment in lowered for fragment in FORBIDDEN):
         raise ValueError("forbidden URL or executable markup in extracted Markdown")
@@ -92,7 +105,7 @@ def visual_markup(requirements: list[dict]) -> str:
         return ""
     rows = []
     for item in useful:
-        description = html.escape(str(item.get("descriptionZh", "")))
+        description = html.escape(normalize_math_delimiters(str(item.get("descriptionZh", ""))))
         source = html.escape(str(item.get("sourceFile", "")))
         page = html.escape(str(item.get("pageOrSlide", "")))
         data = render_markdown(str(item.get("requiredDataMarkdown", "")))
@@ -105,15 +118,29 @@ def visual_markup(requirements: list[dict]) -> str:
     return "".join(rows)
 
 
-def problem_markup(problem: dict, index: int) -> str:
-    identifier = html.escape(str(problem.get("id") or f"Q{index}"))
-    title = html.escape(str(problem.get("titleZh") or identifier))
+def problem_markup(problem: dict, index: int, document_kind: str) -> str:
+    raw_identifier = str(problem.get("id") or f"Q{index}")
+    if raw_identifier.casefold().endswith("sundry"):
+        display_identifier = "协作说明"
+    else:
+        trailing_number = re.search(r"(?:^|[-_])(\d+[a-z]?)$", raw_identifier, re.I)
+        display_identifier = trailing_number.group(1) if trailing_number else raw_identifier
+    identifier = html.escape(display_identifier)
+    title = html.escape(normalize_math_delimiters(str(problem.get("titleZh") or identifier)))
     statement = render_markdown(str(problem.get("statementMarkdown", "")))
     hint = render_markdown(str(problem.get("hintMarkdown", "")))
     solution = render_markdown(str(problem.get("solutionMarkdown", "")))
     official = problem.get("solutionStatus") == "official"
-    badges = ["<span>官方题面翻译</span>", '<span class="offline-ready">可离线作答</span>']
-    badges.append("<span>官方解答已收录</span>" if official else "<span>无本地官方解答</span>")
+    is_assignment = document_kind in {"Assignment", "Lab"}
+    badges = [
+        "<span>Handout 完整本土化</span>" if is_assignment else "<span>官方题面翻译</span>",
+        '<span class="offline-ready">可离线实施</span>' if is_assignment else '<span class="offline-ready">可离线作答</span>',
+    ]
+    badges.append(
+        "<span>官方解答已收录</span>"
+        if official
+        else ("<span>不含参考实现</span>" if is_assignment else "<span>无本地官方解答</span>")
+    )
     hint_markup = ""
     if hint:
         hint_markup = (
@@ -130,6 +157,11 @@ def problem_markup(problem: dict, index: int) -> str:
             f'<p class="problem-source">解答来源：{evidence_label(problem.get("solutionEvidence"))}</p>'
             "</details>"
         )
+    elif is_assignment:
+        solution_markup = (
+            '<div class="problem-method"><strong>实现边界</strong>'
+            "<p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div>"
+        )
     else:
         solution_markup = (
             '<div class="problem-method"><strong>答案状态</strong>'
@@ -140,11 +172,11 @@ def problem_markup(problem: dict, index: int) -> str:
         "<summary>"
         f'<span class="problem-number">{identifier}</span>'
         f"<strong>{title}</strong>"
-        '<span class="problem-topics">题目 · 提示 · 答案</span>'
+        f'<span class="problem-topics">{"任务 · 提示 · 验收" if is_assignment else "题目 · 提示 · 答案"}</span>'
         "</summary>"
         '<div class="problem-body">'
         f'<div class="problem-badges">{"".join(badges)}</div>'
-        f'<section class="problem-subsection"><h4>完整题面</h4>{statement}</section>'
+        f'<section class="problem-subsection"><h4>{"完整任务" if is_assignment else "完整题面"}</h4>{statement}</section>'
         f"{visual_markup(problem.get('visualRequirements') or [])}"
         f"{hint_markup}{solution_markup}"
         f'<p class="problem-source-note">题面来源：{evidence_label(problem.get("questionEvidence"))}</p>'
@@ -153,12 +185,15 @@ def problem_markup(problem: dict, index: int) -> str:
 
 
 def outline_markup(document: dict) -> str:
-    kind = html.escape(str(document["kind"]))
+    kind_label = html.escape({"Homework": "作业", "Discussion": "讨论课", "Assignment": "编程作业", "Lab": "实验"}.get(
+        str(document["kind"]), str(document["kind"])
+    ))
+    is_assignment = document["kind"] in {"Assignment", "Lab"}
     count = len(document.get("problems") or [])
     source_files = list(dict.fromkeys(document.get("sourceFiles", []) + document.get("solutionSourceFiles", [])))
     sources = "、".join(f"<code>{html.escape(path)}</code>" for path in source_files)
     problem_rows = "".join(
-        problem_markup(problem, index)
+        problem_markup(problem, index, str(document["kind"]))
         for index, problem in enumerate(document.get("problems") or [], 1)
     )
     official_count = sum(
@@ -173,16 +208,22 @@ def outline_markup(document: dict) -> str:
             "其余题目会明确标注无本地官方解答。"
         )
     else:
-        solution_note = "本地资料未包含官方解答；提示只用于指出切入点。"
+        solution_note = (
+            "本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。"
+            if is_assignment
+            else "本地资料未包含官方解答；提示只用于指出切入点。"
+        )
+    heading = "完整 Handout：任务、约束与验收" if is_assignment else "完整题目、提示与答案"
+    unit = "个任务" if is_assignment else "道大题"
     return (
         f"{START_MARKER}\n"
         '<section class="source-outline" id="complete-source-outline">'
-        f'<p class="eyebrow">Complete local extraction · {kind}</p>'
-        '<h2 id="complete-problems">完整题目、提示与答案</h2>'
-        f'<p class="source-outline-intro">本节按本地一手资料完整整理，共 {count} 道大题。{solution_note}</p>'
+        f'<p class="eyebrow">本地一手资料完整提取 · {kind_label}</p>'
+        f'<h2 id="complete-problems">{heading}</h2>'
+        f'<p class="source-outline-intro">本节按本地一手资料完整整理，共 {count} {unit}。{solution_note}</p>'
         '<div class="source-outline-notes"><h3>使用说明</h3><ul>'
-        '<li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li>'
-        '<li>题目与答案分层展示，展开答案前可先查看提示。</li>'
+        f'<li>{"Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。" if is_assignment else "所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。"}</li>'
+        f'<li>{"任务与非答案式提示分层展示，不包含可直接提交的参考实现。" if is_assignment else "题目与答案分层展示，展开答案前可先查看提示。"}</li>'
         f"<li>本地来源：{sources}</li>"
         "</ul></div>"
         f'<div class="problem-outline">{problem_rows}</div>'
@@ -196,10 +237,11 @@ def replace_or_insert_outline(page: str, outline: str) -> str:
         pattern = re.compile(
             re.escape(START_MARKER) + r"[\s\S]*?" + re.escape(END_MARKER)
         )
-        return pattern.sub(outline, page, count=1)
+        return pattern.sub(lambda _match: outline, page, count=1)
     anchors = [
         '<h2 id="quiz">',
         '<h2 id="logistics">',
+        '<h2 id="sources">',
         '<div class="nav">',
         "<footer>",
     ]
@@ -210,10 +252,60 @@ def replace_or_insert_outline(page: str, outline: str) -> str:
     raise ValueError("could not find an insertion point for extracted work items")
 
 
+def hydrate_stub_guide(page: str, document: dict, item: dict | None = None) -> str:
+    number = html.escape(str(document["number"]))
+    title = html.escape(normalize_math_delimiters(str(
+        (item or {}).get("titleZh")
+        or document.get("titleZh")
+        or (item or {}).get("title")
+        or document.get("titleEn")
+        or "课程练习"
+    )))
+    kind_label = {"Homework": "作业", "Discussion": "讨论课", "Assignment": "编程作业", "Lab": "实验"}.get(
+        str(document.get("kind")), str(document.get("kind", "练习"))
+    )
+    eyebrow_match = re.search(r'<p class="eyebrow">([^<]*)</p>', page)
+    if eyebrow_match:
+        course_code = eyebrow_match.group(1).split("·", 1)[0].strip()
+        page = re.sub(
+            r'<p class="eyebrow">[^<]*</p>',
+            f'<p class="eyebrow">{course_code} · {kind_label} {number}</p>',
+            page,
+            count=1,
+        )
+    page = re.sub(r'<h1>[^<]*</h1>', f'<h1>{title}</h1>', page, count=1)
+    if "COURSE_CONTENT_TODO" not in page:
+        return page
+    summary = html.escape(str(document.get("summaryZh", "")))
+    topics = [html.escape(str(item)) for item in document.get("topicKeywords", [])]
+    topic_items = "".join(f"<li>{item}</li>" for item in topics[:8]) or "<li>按题目顺序建立所需概念。</li>"
+    source_items = list(dict.fromkeys(document.get("sourceFiles", []) + document.get("solutionSourceFiles", [])))
+    source_text = "、".join(f"<code>{html.escape(path)}</code>" for path in source_items)
+    guide = (
+        f'<p class="lede">{summary}</p>\n'
+        '    <section class="assignment-guide-grid" aria-label="练习导读">'
+        '<article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2>'
+        f'<ul>{topic_items}</ul></article>'
+        '<article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2>'
+        '<p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article>'
+        '<article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2>'
+        f'<p>题面与解答均由本地一手资料整理：{source_text}</p></article>'
+        '</section>'
+    )
+    pattern = re.compile(
+        r'<p class="lede">COURSE_CONTENT_TODO：请依据列出的一手资料完成本页。</p>\s*'
+        r'<!-- COURSE_CONTENT_TODO -->'
+    )
+    hydrated, replacements = pattern.subn(guide, page, count=1)
+    if replacements != 1:
+        raise ValueError("could not hydrate scaffolded work-item guide")
+    return hydrated
+
+
 def generated_page(course: dict, document: dict, relative_assets: str) -> str:
     code = html.escape(str(course.get("code") or course.get("courseCode") or course.get("id", "")))
     number = html.escape(str(document["number"]))
-    title = html.escape(str(document.get("titleZh") or document.get("titleEn") or f"Discussion {number}"))
+    title = html.escape(normalize_math_delimiters(str(document.get("titleZh") or document.get("titleEn") or f"Discussion {number}")))
     summary = html.escape(str(document.get("summaryZh", "")))
     topics = " · ".join(html.escape(str(item)) for item in document.get("topicKeywords", [])[:5])
     outline = outline_markup(document)
@@ -223,14 +315,14 @@ def generated_page(course: dict, document: dict, relative_assets: str) -> str:
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{document["kind"]} {number}：{title} — {code}</title>
-  <link rel="stylesheet" href="../../assets/course.css">
-  <link rel="stylesheet" href="../../assets/prism.css">
-  <link rel="stylesheet" href="../../assets/katex.min.css">
-  <script defer src="../../assets/katex.min.js"></script>
-  <script defer src="../../assets/katex-auto-render.min.js"></script>
-  <script defer src="../../assets/math-render.js"></script>
-  <link rel="stylesheet" href="{relative_assets}assets/course/lesson.css?v=20260808a">
-  <link rel="stylesheet" href="{relative_assets}assets/course/interactive.css?v=20260806e">
+  <link rel="stylesheet" href="{relative_assets}assets/course/base.css">
+  <link rel="stylesheet" href="{relative_assets}assets/vendor/prism.css">
+  <link rel="stylesheet" href="{relative_assets}assets/vendor/katex.min.css">
+  <script defer src="{relative_assets}assets/vendor/katex.min.js"></script>
+  <script defer src="{relative_assets}assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="{relative_assets}assets/course/math-render.js"></script>
+  <link rel="stylesheet" href="{relative_assets}assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="{relative_assets}assets/course/interactive.css?v=20260808b">
 </head>
 <body>
   <div class="page">
@@ -243,12 +335,12 @@ def generated_page(course: dict, document: dict, relative_assets: str) -> str:
     {outline}
     <footer><p>{html.escape(str(course.get("course", code)))} · {html.escape(str(course.get("term", "")))}</p></footer>
   </div>
-  <script src="../../assets/prism.js"></script>
-  <script src="../../assets/prism-python.js"></script>
-  <script src="../../assets/prism-bash.js"></script>
-  <script src="../../assets/quiz.js"></script>
-  <script defer src="{relative_assets}assets/course/lesson-ui.js?v=20260806e"></script>
-  <script defer src="{relative_assets}assets/course/interactive.js?v=20260806e"></script>
+  <script src="{relative_assets}assets/vendor/prism.js"></script>
+  <script src="{relative_assets}assets/vendor/prism-python.js"></script>
+  <script src="{relative_assets}assets/vendor/prism-bash.js"></script>
+  <script src="{relative_assets}assets/course/quiz.js"></script>
+  <script defer src="{relative_assets}assets/course/lesson-ui.js?v=20260808b"></script>
+  <script defer src="{relative_assets}assets/course/interactive.js?v=20260808b"></script>
 </body>
 </html>
 '''
@@ -260,6 +352,8 @@ def document_key(document: dict) -> tuple[str, str]:
 
 def item_key(item: dict) -> tuple[str, str]:
     kind = str(item.get("kind", "")).lower()
+    if not kind and item.get("assGuideFile"):
+        kind = "assignment"
     number = item.get("displayNumber", item.get("resourceNumber", item.get("number", "")))
     title = str(item.get("title", ""))
     match = re.search(r"\b(?:HW|Homework|Discussion)\s*0*([0-9]+[a-z]?)\b", title, re.I)
@@ -316,11 +410,21 @@ def main() -> int:
             next_number += 1
             assignments.append(item)
             existing[key] = item
+        preserved_dependencies = (
+            item["dependsOn"]
+            if "dependsOn" in item
+            else document.get("suggestedDependsOn") or []
+        )
+        preserved_title = item.get("title") or document.get("titleEn") or f'{document["kind"]} {document["number"]}'
+        preserved_title_zh = item.get("titleZh") or document.get("titleZh") or preserved_title
         item.update({
-            "title": document.get("titleEn") or f'{document["kind"]} {document["number"]}',
-            "titleZh": document.get("titleZh") or document.get("titleEn"),
+            "title": preserved_title,
+            "titleZh": preserved_title_zh,
             "description": document.get("summaryZh", ""),
-            "dependsOn": document.get("suggestedDependsOn") or item.get("dependsOn") or [],
+            # Curricular placement is a reviewed structural decision. Model output
+            # may suggest a dependency only when a genuinely new item is created;
+            # it must never overwrite an existing course plan.
+            "dependsOn": preserved_dependencies,
             "sourceFiles": list(dict.fromkeys(document.get("sourceFiles", []) + document.get("solutionSourceFiles", []))),
             "problemCount": len(document["problems"]),
             "solutionAvailable": any(problem.get("solutionStatus") == "official" for problem in document["problems"]),
@@ -332,6 +436,7 @@ def main() -> int:
             relative = item["assGuideFile"]
             page_path = course_dir / relative
             page = page_path.read_text(encoding="utf-8")
+            page = hydrate_stub_guide(page, document, item)
             page = replace_or_insert_outline(page, outline_markup(document))
             page_path.write_text(page, encoding="utf-8")
         else:
@@ -339,9 +444,12 @@ def main() -> int:
             if document["kind"] == "Homework":
                 filename = f'hw{number_slug}-{slugify(document.get("titleEn", ""))}.html'
                 relative = f"lessons/assignments/{filename}"
-            else:
+            elif document["kind"] == "Discussion":
                 filename = f'dis{number_slug}-{slugify(document.get("titleEn", ""))}.html'
                 relative = f"lessons/discussions/{filename}"
+            else:
+                filename = f'ass{number_slug}-{slugify(document.get("titleEn", ""))}.html'
+                relative = f"lessons/assignments/{filename}"
             item["assGuideFile"] = relative
             page_path = course_dir / relative
             page_path.parent.mkdir(parents=True, exist_ok=True)
@@ -349,7 +457,7 @@ def main() -> int:
         rendered.append(str(page_path))
 
     info["assignments"] = assignments
-    info["workItemLabel"] = "讨论课 / 作业 / 实验"
+    info["workItemLabel"] = "讨论课 / 作业 / 编程作业 / 实验"
     info_path.write_text(json.dumps(info, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"documents": len(documents), "pages": rendered, "courseInfo": str(info_path)}, ensure_ascii=False))
     return 0

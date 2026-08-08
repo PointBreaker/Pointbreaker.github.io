@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Universal Preference, Partial Matching, Merging Stable Pairings, Build-Up Error, Graph Proofs, Bipartite Graphs — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 作业 02</p>
+    <h1>全局偏好、部分匹配、合并稳定配对、积累错误、图证明、二分图</h1>
+    <p class="lede">本课程作业（CS 70 Spring 2023 HW 02）涵盖稳定匹配与图论两大主题。稳定匹配部分探讨全局一致偏好下的 Gale-Shapley 算法输出、允许未配对实体时的稳定配对存在性以及两个稳定配对合并运算的性质；图论部分讨论归纳法中的搭建错误（build-up error）、竞赛图与欧拉回路的证明，以及二分图的等价条件。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>stable matching</li><li>Gale-Shapley</li><li>universal preference</li><li>induction</li><li>graph theory</li><li>bipartite graph</li><li>Eulerian tour</li><li>proof</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>homework/hw02.pdf</code>、<code>solutions/homework/hw02-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 7 道大题。本地官方解答已收录 6/7 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>homework/hw02.pdf</code>、<code>solutions/homework/hw02-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">协作说明</span><strong>协作说明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在开始撰写最终作业提交之前，请简要说明你是如何完成本次作业的。你还与谁一起合作？请列出姓名和电子邮箱地址。（如果是 homework party，只需描述小组情况即可。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>简要描述你的作业完成过程，包括是否独立完成、是否与同学讨论、是否参加 homework party 等。如有合作者，请提供其姓名与电子邮箱地址。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>homework/hw02.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">1</span><strong>一致偏好</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 4 假设在一个稳定匹配实例中，偏好是一致的（universal）：所有 \(n\) 个工作岗位共享相同的偏好序 \(C_1 &gt; C_2 &gt; \cdots &gt; C_n\)，且所有候选人共享相同的偏好序 \(J_1 &gt; J_2 &gt; \cdots &gt; J_n\)。</p>
+<p>(a) 运行工作岗位求婚的算法，得到的配对是什么？你能证明这对所有 \(n\) 都成立吗？</p>
+<p>(b) 运行候选人求婚的算法，得到的配对是什么？</p>
+<p>(c) 这告诉我们关于稳定配对的数量什么结论？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑对 \(n\) 使用数学归纳法。在归纳步骤中，注意所有工作岗位（或候选人）第一天都向谁求婚，以及被拒绝后剩余实例的结构是否与原问题同构。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 配对结果为：对每个 \(i \in \{1, 2, \ldots, n\}\)，都有 \((C_i, J_i)\)。这一结果可以用归纳法证明：</p>
+<p>基础情况：当 \(n = 1\) 时，唯一的配对是 \((C_1, J_1)\)，因此基础情况显然成立。</p>
+<p>现在假设这对某个 \(n \in \mathbb{N}\) 成立。在 \(n + 1\) 个工作岗位和 \(n + 1\) 个候选人的情况下，第一天所有 \(n + 1\) 个工作岗位都会向 \(C_1\) 求婚。\(C_1\) 最偏好 \(J_1\)，其余工作岗位被拒绝。这剩下 \(n\) 个未配对的工作岗位和 \(n\) 个未配对的候选人，他们的偏好与之前相同（在 \((C_1, J_1)\) 配对之后）。由归纳假设，第 \(i\) 偏好的候选人将与第 \(i\) 偏好的工作岗位配对。</p>
+<p>(b) 配对结果仍为：对每个 \(i \in \{1, 2, \ldots, n\}\)，都有 \((J_i, C_i)\)。这可以用与上述相同的归纳法证明，只需将"工作岗位"与"候选人"互换。</p>
+<p>(c) 我们知道工作岗位求婚产生的是对候选人而言最差（candidate-pessimal）的稳定配对。我们也知道候选人求婚产生的是对候选人而言最优（candidate-optimal）的稳定配对。我们发现候选人最优配对与候选人最差配对是相同的。这意味着只有一个稳定配对，因为对候选人而言最好和最坏的配对是同一个配对。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw02-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw02.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>宁缺毋滥：允许保持单身的稳定匹配</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在稳定匹配问题中，假设某些工作和候选人有硬性要求，可能不愿意将就接受任何对象。换句话说，每个工作/候选人宁愿保持单身，也不愿与偏好列表中位于某个阈值以下的对象匹配。这里用术语「实体」（entity）指代候选人或工作。一个匹配最终可能是部分匹配（partial matching），即有些实体将会且应当保持单身。</p>
+<p>因此，稳定性的概念在此需要稍作调整，以体现工作单方面解雇员工和/或员工直接离职的自主权。一个匹配是稳定的，当且仅当：</p>
+<ul>
+<li>
+<p>不存在某个已匹配的实体，其宁愿保持单身而不愿与当前伴侣在一起；</p>
+</li>
+<li>
+<p>不存在某个已匹配（已招满）的工作与某个单身的候选人，他们彼此都更偏好与对方在一起而非保持当前状态；</p>
+</li>
+<li>
+<p>不存在某个已匹配的工作与某个已匹配的候选人，他们彼此都更偏好与对方在一起而非与各自的当前伴侣在一起；</p>
+</li>
+<li>
+<p>同样地，不存在某个单身的工作与某个已匹配的候选人，他们彼此都更偏好与对方在一起而非保持当前状态；</p>
+</li>
+<li>
+<p>不存在某个单身的工作与某个单身的候选人，他们彼此都更偏好与对方在一起而非保持单身。</p>
+</li>
+</ul>
+<p>(a) 证明在允许存在单身实体的情况下，稳定配对仍然存在。</p>
+<p>(b) 正如课堂中所见，我们可能有不同的稳定匹配。但有趣的是，如果一个实体在某个稳定匹配中保持单身，那么它在任何其他稳定匹配中也必然保持单身。请用反证法证明这一事实。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 尝试为每个实体引入一个虚构伴侣（机器人），当该实体单身时就与该机器人匹配。思考机器人与其主人在偏好列表中应处于什么位置——机器人应比主人不愿匹配的任何实体都更受偏好，但比主人愿意匹配的实体更不受偏好。</p>
+<p>(b) 从某工作 \(j_1\) 在一个稳定匹配 \(S\) 中匹配而在另一个稳定匹配 \(T\) 中单身出发，利用稳定性条件构造一条交替链，最终导出 \(j_1\) 在 \(T\) 中也匹配的矛盾。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 我们按如下方式构造一个标准稳定匹配问题的实例。按照提示，为每个实体 \(e\) 引入一个虚构伴侣 \(r_e\)（不妨称之为机器人）。注意，我们为每个实体各引入一个机器人，即机器人的数量等于候选人与工作的总数。为简便起见，称每个机器人 \(r_e\) 由引入它的实体 \(e\) 所拥有。</p>
+<p>每个机器人 \(r_e\) 最偏好其主人 \(e\)，即将其主人放在其偏好列表的首位。其偏好列表的其余部分可以是任意的，包含所有其他主人以及另一类实体的机器人。实体 \(e\) 将机器人 \(r_e\) 放在其偏好列表中恰好位于它愿意匹配的最后一个实体之后。也就是说，主人对机器人的喜欢程度高于它不愿意匹配的任何实体，但低于它愿意匹配的实体。其他机器人可以按任意顺序排在 \(e\) 的列表中。</p>
+<p>对于这个我们称之为机器人实例 \(I\) 的稳定匹配问题实例，求婚-拒绝算法会给出一个稳定匹配 \(M\)。</p>
+<p>为了提取所需的部分匹配，我们只需移除 \(M\) 中所有至少包含一个机器人的配对（两个机器人可能互相匹配）。我们将每个未被匹配的实体称为单身。我们观察到，实体 \(e\) 永远不会与另一个实体 \(e'\) 的机器人 \(r_{e'}\) 匹配，因为此时 \(e\) 和它的机器人 \(r_e\) 会构成一个 rogue couple（\(r_e\) 比其他主人更偏好 \(e\)，而 \(e\) 比其他机器人更偏好 \(r_e\)）。剩下的就是要证明这满足题目中规定的稳定性：</p>
+<ul>
+<li>
+<p>不存在某个已匹配的实体 \(e\) 宁愿保持单身而不愿与当前伴侣在一起，因为否则 \(e\) 和 \(r_e\) 会在 \(M\) 中构成一个 rogue couple；</p>
+</li>
+<li>
+<p>不存在某个已匹配/已招满的工作 \(j\) 与某个单身的候选人 \(c\) 彼此都更偏好与对方匹配，因为否则 \(j\) 和 \(c\) 会在 \(M\) 中构成一个 rogue couple；</p>
+</li>
+<li>
+<p>不存在某个已匹配的工作 \(j\) 与某个已匹配的候选人 \(c\) 彼此都更偏好与对方而非当前伴侣匹配，因为否则 \(j\) 和 \(c\) 会在 \(M\) 中构成一个 rogue couple；</p>
+</li>
+<li>
+<p>同样地，不存在某个单身的工作 \(j\) 与某个已匹配的候选人 \(c\) 彼此都更偏好与对方匹配而非保持当前状态，因为否则 \(j\) 和 \(c\) 会在 \(M\) 中构成一个 rogue couple；</p>
+</li>
+<li>
+<p>不存在某个单身的工作 \(j\) 与某个单身的候选人 \(c\) 彼此都更偏好与对方在一起而非保持单身，因为否则 \(j\) 和 \(c\) 会在 \(M\) 中构成一个 rogue couple。</p>
+</li>
+</ul>
+<p>因此，所得的部分匹配是稳定的。</p>
+<p>(b) 我们使用反证法。假设存在某个工作 \(j_1\)，在稳定配对 \(S\) 中与候选人 \(c_1\) 配对，但在稳定配对 \(T\) 中单身。在稳定配对 \(S\) 中 \(j_1\) 和 \(c_1\) 配对意味着 \(j_1\) 和 \(c_1\) 都更偏好与对方在一起而非保持单身。由于 \(T\) 是稳定配对且 \(j_1\) 单身，\(c_1\) 在 \(T\) 中必然与某个工作 \(j_2\) 配对，且 \(c_1\) 对 \(j_2\) 的偏好高于 \(j_1\)。（如果 \(c_1\) 在 \(T\) 中单身，或者与一个 \(c_1\) 不比对 \(j_1\) 更偏好的工作配对，那么 \((j_1, c_1)\) 就会在 \(T\) 中构成一个 rogue couple，矛盾。）</p>
+<p>由于 \(j_2\) 在 \(T\) 中与 \(c_1\) 配对，它在 \(S\) 中必然与某个候选人 \(c_2\) 配对，且 \(j_2\) 对 \(c_2\) 的偏好高于 \(c_1\)。这个过程继续下去（\(c_2\) 在 \(T\) 中必须与某个 \(j_3\) 配对，\(j_3\) 在 \(S\) 中必须与某个 \(c_3\) 配对，等等），其规律是 \((c_i, j_i)\) 在 \(S\) 中，而 \((j_i, c_{i-1})\) 在 \(T\) 中。由于工作在数量上是有限的，该过程必然在某个时刻 \(i\) 遇到 \(j_1\)。此时 \((j_1 = j_i, c_{i-1})\) 在 \(T\) 中，这意味着 \(j_1\) 在 \(T\) 中是匹配的。</p>
+<p>对候选人也可以给出类似的论证。</p>
+<p>这与 \(j_1\) 在 \(T\) 中单身的假设矛盾。由于没有任何工作或候选人可以在一个稳定配对中匹配而在另一个稳定配对中单身，每个工作或候选人要么在所有稳定配对中都匹配，要么在所有稳定配对中都单身。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw02-sol.pdf</code> · 1-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw02.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>更优的稳定配对</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在本题中，我们考察一种将稳定匹配问题的两个不同解合并的简单方法。设 \(R, R'\) 是两个不同的稳定配对。如下定义新配对 \(R \wedge R'\)：</p>
+<p>对于每个工作 \(j\)，\(j\) 在 \(R \wedge R'\) 中的伴侣是它在 \(R\) 和 \(R'\) 中伴侣里（按 \(j\) 的偏好列表）更好的那一个。</p>
+<p>此外，如果某个工作/候选人在 \(R\) 中的伴侣优于其在 \(R'\) 中的伴侣，我们就说该工作/候选人对配对 \(R\) 的偏好高于配对 \(R'\)。</p>
+<p>(a) 仅针对本题这一部分，考虑以下例子：</p>
+<table>
+<thead>
+<tr>
+<th>工作</th>
+<th>偏好列表</th>
+<th>候选人</th>
+<th>偏好列表</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>1 &gt; 2 &gt; 3 &gt; 4</td>
+<td>1</td>
+<td>D &gt; C &gt; B &gt; A</td>
+</tr>
+<tr>
+<td>B</td>
+<td>2 &gt; 1 &gt; 4 &gt; 3</td>
+<td>2</td>
+<td>C &gt; D &gt; A &gt; B</td>
+</tr>
+<tr>
+<td>C</td>
+<td>3 &gt; 4 &gt; 1 &gt; 2</td>
+<td>3</td>
+<td>B &gt; A &gt; D &gt; C</td>
+</tr>
+<tr>
+<td>D</td>
+<td>4 &gt; 3 &gt; 2 &gt; 1</td>
+<td>4</td>
+<td>A &gt; B &gt; D &gt; C</td>
+</tr>
+</tbody>
+</table>
+<p>\(R = \{(A,4), (B,3), (C,1), (D,2)\}\) 和 \(R' = \{(A,3), (B,4), (C,2), (D,1)\}\) 是上述例子的稳定配对。试计算 \(R \wedge R'\) 并证明它也是稳定的。</p>
+<p>(b) 证明：对于任意配对 \(R\) 和 \(R'\)，没有任何工作对 \(R\) 或 \(R'\) 的偏好高于 \(R \wedge R'\)。</p>
+<p>(c) 证明：对于任意稳定配对 \(R\) 和 \(R'\)，若 \(j\) 和 \(c\) 在 \(R\) 中是伴侣但在 \(R'\) 中不是，则以下之一成立：</p>
+<ul>
+<li>
+<p>\(j\) 偏好 \(R\) 甚于 \(R'\)，且 \(c\) 偏好 \(R'\) 甚于 \(R\)；或</p>
+</li>
+<li>
+<p>\(j\) 偏好 \(R'\) 甚于 \(R\)，且 \(c\) 偏好 \(R\) 甚于 \(R'\)。</p>
+</li>
+</ul>
+<p>（即使你在本题这一部分没有证明该结论，在下一部分中你也可以使用它。）</p>
+<p>(d) 证明一个有趣的结论：对于任意稳定配对 \(R\) 和 \(R'\)，(i) \(R \wedge R'\) 是一个配对，且 (ii) 它也是稳定的。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 工作与候选人偏好列表对照表及两个稳定配对 R 与 R&#x27; 的集合表示</h4><table>
+<thead>
+<tr>
+<th>工作</th>
+<th>偏好列表</th>
+<th>候选人</th>
+<th>偏好列表</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>1 &gt; 2 &gt; 3 &gt; 4</td>
+<td>1</td>
+<td>D &gt; C &gt; B &gt; A</td>
+</tr>
+<tr>
+<td>B</td>
+<td>2 &gt; 1 &gt; 4 &gt; 3</td>
+<td>2</td>
+<td>C &gt; D &gt; A &gt; B</td>
+</tr>
+<tr>
+<td>C</td>
+<td>3 &gt; 4 &gt; 1 &gt; 2</td>
+<td>3</td>
+<td>B &gt; A &gt; D &gt; C</td>
+</tr>
+<tr>
+<td>D</td>
+<td>4 &gt; 3 &gt; 2 &gt; 1</td>
+<td>4</td>
+<td>A &gt; B &gt; D &gt; C</td>
+</tr>
+</tbody>
+</table>
+<p>\(R = \{(A,4), (B,3), (C,1), (D,2)\}\)，\(R' = \{(A,3), (B,4), (C,2), (D,1)\}\)</p><p class="problem-source">来源：<code>homework/hw02.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 逐个检查所有可能的 rogue couple 组合，利用偏好列表逐一排除。(b) 注意 \(R \wedge R'\) 对每个工作总是取其在 \(R\) 与 \(R'\) 中更偏好的伴侣。(c) 设 \(J, C\) 分别为偏好 \(R\) 甚于 \(R'\) 的工作和候选人集合，\(J', C'\) 分别为偏好 \(R'\) 甚于 \(R\) 的工作和候选人集合，利用 rogue couple 的不存在性建立基数不等式 \(|J| \le |C'|\) 与 \(|J'| \le |C|\)，结合 \(|J| + |J'| = |C| + |C'|\) 推出等号成立。(d) 利用 (c) 的结论说明冲突不可能发生；对稳定性，假设存在 rogue couple 并导出矛盾。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) \(R \wedge R' = \{(A,3), (B,4), (C,1), (D,2)\}\)。通过考虑工作与候选人的不同组合可以看出该配对是稳定的。例如，\(A\) 对 \(2\) 的偏好高于其当前伴侣 \(3\)。然而，\(2\) 对当前伴侣 \(D\) 的偏好高于 \(A\)。类似地，\(A\) 最偏好 \(1\)，但 \(1\) 对当前伴侣 \(C\) 的偏好高于 \(A\)。我们可以通过类似地考察其余配对来证明该配对的稳定性。</p>
+<p>(b) 设 \(j\) 是一个工作，它在 \(R\) 和 \(R'\) 中的伴侣分别为 \(c\) 和 \(c'\)，不妨设 \(c\) 在 \(j\) 的列表中排在 \(c'\) 之前（即 \(j\) 更偏好 \(c\)）。那么 \(j\) 在 \(R \wedge R'\) 中的伴侣就是 \(c\)，\(j\) 对 \(c\) 的偏好高于 \(c'\)。然而，若 \(j\) 对 \(R\) 或 \(R'\) 的偏好高于 \(R \wedge R'\)，则 \(j\) 必须对 \(c\) 或 \(c'\) 的偏好高于 \(c\)，这是不可能的（因为 \(c\) 在 \(j\) 的列表中排在 \(c'\) 之前）。</p>
+<p>(c) 设 \(J\) 和 \(C\) 分别为偏好 \(R\) 甚于 \(R'\) 的工作和候选人的集合，\(J'\) 和 \(C'\) 分别为偏好 \(R'\) 甚于 \(R\) 的工作和候选人的集合。注意 \(|J| + |J'| = |C| + |C'|\)，因为左边是在两个配对中伴侣不同的工作的数量，右边是在两个配对中伴侣不同的候选人的数量。</p>
+<p>现在，在 \(R\) 中不可能存在一对 \((j, c)\) 使得 \(j \in J\) 且 \(c \in C\)，因为这样 \((j, c)\) 在 \(R'\) 中就会构成一个 rogue couple。因此，\(J\) 中每个工作在 \(R\) 中的伴侣必须属于 \(C'\)，从而 \(|J| \le |C'|\)。类似地，\(J'\) 中每个工作在 \(R'\) 中的伴侣必须属于 \(C\)，从而 \(|J'| \le |C|\)。</p>
+<p>由于 \(|J| + |J'| = |C| + |C'|\)，这两个不等式必须同时取等号，因此 \(|J'| = |C|\) 且 \(|J| = |C'|\)。结论就很显然了：如果工作 \(j\) 与候选人 \(c\) 在其中一个配对中是伴侣但在另一个中不是，那么</p>
+<ul>
+<li>
+<p>要么 \(j \in J\) 且 \(c \in C'\)，即 \(j\) 偏好 \(R\) 甚于 \(R'\) 且 \(c\) 偏好 \(R'\) 甚于 \(R\)，</p>
+</li>
+<li>
+<p>要么 \(j \in J'\) 且 \(c \in C\)，即 \(j\) 偏好 \(R'\) 甚于 \(R\) 且 \(c\) 偏好 \(R\) 甚于 \(R'\)。</p>
+</li>
+</ul>
+<p>(d) (i) 如果 \(R \wedge R'\) 不是一个配对，那么原因必是两个工作得到了同一个候选人，或两个候选人得到了同一个工作。不妨设是前者，即 \((j, c) \in R\) 且 \((j', c) \in R'\) 导致了冲突。因此 \(j\) 偏好 \(R\) 甚于 \(R'\)，\(j'\) 偏好 \(R'\) 甚于 \(R\)。利用 (c) 部分的结论，这意味着 \(c\) 对 \(R'\) 的偏好高于 \(R\)，同时也对 \(R\) 的偏好高于 \(R'\)，矛盾。</p>
+<p>(ii) 现在假设 \(R \wedge R'\) 中存在一个 rogue couple \((j, c)\)。那么 \(j\) 对 \(c\) 的严格偏好高于其在 \(R\) 和 \(R'\) 中的伴侣。此外，\(c\) 对 \(j\) 的偏好高于其在 \(R \wedge R'\) 中的伴侣。设 \(c\) 在 \(R\) 和 \(R'\) 中的伴侣分别为 \(j_1\) 和 \(j_2\)。如果 \(c\) 最终与 \(j_1\) 匹配，则 \((j, c)\) 是 \(R\) 中的 rogue couple；如果 \(c\) 最终与 \(j_2\) 匹配，则 \((j, c)\) 是 \(R'\) 中的 rogue couple。由于 \(c\) 的伴侣只有这两种可能，无论哪种情况都导出矛盾。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw02-sol.pdf</code> · 3-5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw02.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>Build-Up Error?（累加误差）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>下面的「证明」错在哪里？除了找出一个反例外，你还应当从根本上说明这种方法的错误之处，以及它为何体现了 build-up error（累加误差）的危害。</p>
+<p><strong>False Claim（假命题）：</strong> 若一个无向图中每个顶点的度数都至少为 \(1\)，则该图是连通的。</p>
+<p><strong>Proof?（证明？）</strong> 我们对顶点数 \(n \ge 1\) 进行归纳。</p>
+<p><strong>Base case（基础情形）：</strong> 只有一个顶点的图只有一张，且该顶点的度数为 \(0\)。因此基础情形空洞地为真（vacuously true），因为前提（if-part）为假。</p>
+<p><strong>Inductive hypothesis（归纳假设）：</strong> 假设命题对某个 \(n \ge 1\) 成立。</p>
+<p><strong>Inductive step（归纳步骤）：</strong> 我们证明命题对 \(n+1\) 也成立。考虑一张 \(n\) 个顶点的无向图，其中每个顶点的度数都至少为 \(1\)。由归纳假设，该图是连通的。现在再添加一个顶点 \(x\)，得到一张 \((n+1)\) 个顶点的图，如下图所示。</p>
+<p>（图示：一张 \(n\) 个顶点的连通图，以及一个通过边 \(\{x, y\}\) 与其相连的新顶点 \(x\)，另有一顶点 \(z\) 用于说明路径。）</p>
+<p>剩下只需检验从 \(x\) 到其他任意顶点 \(z\) 都存在一条路径。由于 \(x\) 的度数至少为 \(1\)，存在一条边从 \(x\) 连向某个其他顶点，记为 \(y\)。于是，我们可以通过把边 \(\{x, y\}\) 接在从 \(y\) 到 \(z\) 的路径之后，得到一条从 \(x\) 到 \(z\) 的路径。这就证明了命题对 \(n+1\) 成立。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 归纳步骤示意图：一张 n 个顶点的连通图，新顶点 x 通过边 {x, y} 与原图相连，另有顶点 z 用于说明路径拼接。</h4><p>图包含：一个标为「n-vertex graph」的云形区域；区域外右侧一个标为 x 的顶点；x 与区域内顶点 y 之间有一条边 {x, y}；区域内另有一个顶点 z（用于说明从 x 经 y 到 z 的路径）。</p><p class="problem-source">来源：<code>homework/hw02.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>注意归纳步骤的起点：证明是否真正从「任意一张 \((n+1)\) 个顶点且最小度数至少为 \(1\) 的图」开始？还是只考虑了那些能由 \(n\) 顶点图「搭建」出来的图？尝试构造一张最小度数为 \(1\) 但不能从任何 \(n\) 顶点、最小度数为 \(1\) 的图添加一个顶点得到的图。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>错误在于下述论证：「每个 \((n+1)\) 个顶点且最小度数为 \(1\) 的图都可以从一个 \(n\) 个顶点且最小度数为 \(1\) 的图再添加 \(1\) 个顶点得到」。证明并没有从任意一张 \((n+1)\) 个顶点的图出发，而只是考虑了那些可以从 \(n\) 顶点、最小度数为 \(1\) 的图构造出来的 \((n+1)\) 顶点图。</p>
+<p>作为一个反例，考虑一张 \(4\) 个顶点的图，顶点集为 \(V = \{1, 2, 3, 4\}\)，边集为 \(E = \{\{1, 2\}, \{3, 4\}\}\)。该图中每个顶点的度数都是 \(1\)，但不可能从任何一张 \(3\) 个顶点且最小度数为 \(1\) 的图构造出这张 \(4\) 顶点的图。</p>
+<p>更一般地，这是数学归纳法中 <strong>build-up error（累加误差）</strong> 的一个例子。它通常源于一个错误假设：每个具有某种性质的 \(n+1\) 规模图都可以从具有同样性质的 \(n\) 规模图「累加」得到。（这一假设对某些性质成立，但对另一些性质——比如上述论证中的性质——并不成立。）</p>
+<p>避免意外 build-up error 的一种方法是：在归纳步骤中使用「<strong>shrink down, grow back</strong>（先缩小、再长大）**」的过程——从一张 \(n+1\) 规模的图开始，移除一个顶点（或一条边），把归纳假设 \(P(n)\) 应用到较小的图上，然后再把该顶点（或边）加回来，并论证 \(P(n+1)\) 成立。</p>
+<p>我们来看看若用这种方法尝试证明上述命题会发生什么。在归纳步骤中，我们必须证明：对所有 \(n \ge 1\)，\(P(n)\) 蕴含 \(P(n+1)\)。考虑一张 \((n+1)\) 个顶点的图 \(G\)，其中每个顶点的度数至少为 \(1\)。移除任意一个顶点 \(v\)，留下一张 \(n\) 个顶点的图 \(G'\)，其中每个顶点的度数……呃——糟糕！简化后的图 \(G'\) 中可能出现度数为 \(0\) 的顶点，使得归纳假设 \(P(n)\) 无法适用！我们卡住了——这恰恰说明原命题是错误的。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw02-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw02.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>Proofs in Graphs（图论证明）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>Note 5</strong></p>
+<p><strong>(a)</strong> 在从旧金山交通习惯到洛杉矶交通习惯的坐标轴上，Old California 更靠近旧金山那一端：也就是说，更文明些。在 Old California，所有道路都是单行道。假设 Old California 有 \(n\) 个城市（\(n \ge 2\)），使得对每一对城市 \(X\) 和 \(Y\)，要么 \(X\) 有一条道路通向 \(Y\)，要么 \(Y\) 有一条道路通向 \(X\)。</p>
+<p>证明：存在一个城市，从其他任意城市出发最多经过 \(2\) 条道路就能到达它。</p>
+<p>[提示：归纳法]</p>
+<p><strong>(b)</strong> 设 \(G\) 是一张具有 \(n\) 个顶点的连通图，其中恰好有 \(2m\) 个奇度顶点，且 \(m &gt; 0\)。证明：存在 \(m\) 条 walks（步道），它们共同覆盖 \(G\) 的所有边（即 \(G\) 的每条边恰好出现在这 \(m\) 条步道中的一条里，且每条步道不得将任何一条特定边包含超过一次）。</p>
+<p>[提示：课堂上我们已经证明，一张连通无向图存在 Eulerian tour（欧拉游走）当且仅当每个顶点的度数都是偶数。这一事实在证明中可能有用。]</p>
+<p><strong>(c)</strong> 证明：一张图 \(G\) 是二分图，当且仅当它没有奇数长度的 tour（游走）。</p>
+<p>[提示：在其中一个方向上，考虑从某一给定顶点出发的路径长度。]</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 对城市数 \(n\) 归纳：移除一个城市 \(d\) 得到 \(k\) 城市的归纳假设，再把 \(d\) 加回来，按 \(d\) 与「中心城市及其直接前驱集合」之间的道路方向分两类讨论。</p>
+<p>(b) 把 \(2m\) 个奇度顶点配成 \(m\) 对，每对之间添加一条边（允许重边），使所有顶点度数变为偶数，再利用欧拉游走定理，最后去掉添加的 \(m\) 条边。</p>
+<p>(c) 二分图情形：从某一顶点出发沿游走走，观察所在顶点所属部分的下标奇偶性；反之，按最短路径长度的奇偶性把顶点划分到两个集合，再反证同一集合内不存在边。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 我们对城市数 \(n\) 进行归纳。</p>
+<p><strong>Base case（基础情形）：</strong> 当 \(n = 2\) 时，两个城市之间总有一条道路从一个城市通向另一个城市。</p>
+<p><strong>Inductive hypothesis（归纳假设）：</strong> 设有 \(k\) 个城市时，存在一个城市 \(c\)，从其他任意城市出发最多经过 \(2\) 条道路就能到达 \(c\)。</p>
+<p><strong>Inductive step（归纳步骤）：</strong> 考虑 \(k+1\) 个城市的情形。移除其中一个城市 \(d\) 以及所有与 \(d\) 相连的道路。现在剩下 \(k\) 个城市，由归纳假设，存在某个城市 \(c\)，从其他任意城市出发最多经过 \(2\) 条道路就能到达 \(c\)。令 \(A\) 为有一条道路通向 \(c\) 的城市集合，\(B\) 为从 \(c\) 出发经过 \(2\) 条道路才能到达的城市集合。归纳假设表明，这 \(k\) 个城市构成的集合 \(S\) 满足 \(S = \{c\} \cup A \cup B\)。</p>
+<p>现在把 \(d\) 以及所有与 \(d\) 相连的道路加回来。</p>
+<p>在 \(d\) 与 \(S\) 中每个城市之间，必定有一条道路从一个城市通向另一个城市。</p>
+<ul>
+<li>
+<p>若至少存在一条道路从 \(d\) 通向 \(\{c\} \cup A\) 中的某个城市，则 \(c\) 仍然可以从 \(d\) 出发最多经过 \(2\) 条道路到达。</p>
+</li>
+<li>
+<p>否则，若所有来自 \(\{c\} \cup A\) 的道路都指向 \(d\)，则 \(d\) 可以从 \(B\) 中的任意城市出发最多经过 \(2\) 条道路到达，因为 \(B\) 中的每个城市都可以先走一条道路到达 \(A\) 中的某个城市，再走一条道路到达 \(d\)。</p>
+</li>
+</ul>
+<p>无论哪种情形，新的 \(k+1\) 个城市中都存在一个城市，从其他任意城市出发最多经过 \(2\) 条道路就能到达。</p>
+<p><strong>(b)</strong> 把 \(2m\) 个奇度顶点配成 \(m\) 对，并在每一对之间添加一条边，共计添加 \(m\) 条边。（这里允许出现重边，即两个顶点之间可以有多条边。）注意到此时图中所有顶点的度数都变为偶数。由欧拉定理，所得图存在一条 Eulerian tour。移除所添加的 \(m\) 条边后，该游走被拆分为 \(m\) 条 walks，它们共同覆盖原图的所有边，且每条边恰好属于其中一条 walk。</p>
+<p><strong>(c)</strong> 要证明该命题，需证两个方向：若 \(G\) 是二分图，则它不含奇数长度的 tour；以及若 \(G\) 不含奇数长度的 tour，则它必为二分图。</p>
+<p><strong>方向一（二分图 \(\Rightarrow\) 无奇长度 tour）：</strong> 设 \(G\) 是二分图，\(L\) 和 \(R\) 是顶点的一个二分划分，使得 \(L\) 内任意两个顶点之间、以及 \(R\) 内任意两个顶点之间都不存在边。再设 \(G\) 中某条 tour 从顶点 \(v_0 \in L\) 开始遍历。</p>
+<p>由于 \(G\) 中的每条边都连接 \(L\) 中的一个顶点与 \(R\) 中的一个顶点，该 tour 的第一条边把起点 \(v_0\) 连接到某个顶点 \(v_1 \in R\)。类似地，第二条边把 \(v_1 \in R\) 连接到 \(v_2 \in L\)。一般地，第 \(2k\) 条边把顶点 \(v_{2k-1} \in R\) 连接到 \(v_{2k} \in L\)，第 \(2k+1\) 条边把顶点 \(v_{2k} \in L\) 连接到 \(v_{2k+1} \in R\)。</p>
+<p>由于只有偶数编号的边连接到 \(L\) 中的顶点，而我们又从 \(L\) 中的顶点出发，因此该 tour 必定以偶数条边结束。</p>
+<p><strong>方向二（无奇长度 tour \(\Rightarrow\) 二分图）：</strong> 设 \(G\) 不含奇数长度的 tour。不妨考虑 \(G\) 的某一个连通分支；下述推理可应用于 \(G\) 的所有连通分支。</p>
+<p>设 \(v\) 是 \(G\) 中任意一个顶点。我们把 \(G\) 的所有顶点划分到两个不相交的集合中：</p>
+<p>\[L = \{u \mid \text{从 } u \text{ 到 } v \text{ 的最短路径长度为偶数}\}\]
+\[R = \{u \mid \text{从 } u \text{ to } v \text{ 的最短路径长度为奇数}\}\]</p>
+<p>我们断言：\(L\) 中任意两个顶点都不相邻。反设存在相邻的顶点 \(u_1, u_2 \in L\)。考虑如下构成的 tour：</p>
+<ul>
+<li>
+<p>从 \(v\) 到 \(u_1\) 的最短路径（奇数长度）；</p>
+</li>
+<li>
+<p>边 \((u_1, u_2)\)（长度 \(1\)）；</p>
+</li>
+<li>
+<p>从 \(u_2\) 到 \(v\) 的最短路径（奇数长度）。</p>
+</li>
+</ul>
+<p>该 tour 的长度为奇数，与假设「\(G\) 不含奇数长度的 tour」矛盾。因此 \(L\) 中任意两个顶点都不相邻。</p>
+<p>类似地，我们断言：\(R\) 中任意两个顶点都不相邻。反设存在相邻的顶点 \(u_1, u_2 \in R\)。考虑如下构成的 tour：</p>
+<ul>
+<li>
+<p>从 \(v\) 到 \(u_1\) 的最短路径（偶数长度）；</p>
+</li>
+<li>
+<p>边 \((u_1, u_2)\)（长度 \(1\)）；</p>
+</li>
+<li>
+<p>从 \(u_2\) 到 \(v\) 的最短路径（偶数长度）。</p>
+</li>
+</ul>
+<p>该 tour 的长度为奇数，与假设矛盾。因此 \(R\) 中任意两个顶点都不相邻。</p>
+<p>我们已经证明了：\(L\) 内任意两个顶点之间没有边，且 \(R\) 内任意两个顶点之间也没有边。若 \(G\) 有多个连通分支，同样的划分可应用于所有分支。综上，\(G\) 是二分图。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw02-sol.pdf</code> · 6-8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw02.pdf</code> · 3-4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>二部图</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>6 二部图</p>
+<p>Note 5 一个无向图是二部图（bipartite graph），如果它的顶点可以划分成两个不相交的集合 \(L\) 与 \(R\)，使得每条边都连接 \(L\) 中的一个顶点与 \(R\) 中的一个顶点（即不存在连接两个 \(L\) 中顶点或两个 \(R\) 中顶点的边）。</p>
+<p>(a) 设图 \(G\) 是二部图，\(L\) 与 \(R\) 是顶点的一个二部划分。证明：
+\[\sum_{v\in L}\deg(v)=\sum_{v\in R}\deg(v).\]</p>
+<p>(b) 设图 \(G\) 是二部图，\(L\) 与 \(R\) 是顶点的一个二部划分。设 \(s\) 与 \(t\) 分别是 \(L\) 与 \(R\) 中顶点的平均度数。证明：
+\[\frac{s}{t}=\frac{|R|}{|L|}.\]</p>
+<p>(c) 证明：一个图是二部图，当且仅当它可以 2-染色（2-colored）。（一个图可以 2-染色，是指每个顶点可以被指定两种颜色之一，使得任意两个相邻顶点颜色不同。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 每条边恰好向 \(L\) 中一个顶点的度数贡献 1，同时也向 \(R\) 中一个顶点的度数贡献 1。从边的总数来考虑两边的度数之和。</p>
+<p>(b) 利用 (a) 的结论，把度数之和用平均度数与集合大小表示，再做代数变形。</p>
+<p>(c) 一个方向：从二部划分出发，对两侧分别染不同颜色。另一个方向：任取一个顶点，按最短路径长度的奇偶性把所有顶点分成两个集合，再检验同集合内是否存在边。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 由于 \(G\) 是二部图，每条边连接 \(L\) 中的一个顶点与 \(R\) 中的一个顶点。每条边对 \(\sum_{v\in L}\deg(v)\) 与 \(\sum_{v\in R}\deg(v)\) 的贡献相等，因此这两个值必须相等。</p>
+<p>(b) 由 (a) 知 \(\sum_{v\in L}\deg(v)=\sum_{v\in R}\deg(v)\)。于是 \(|L|\cdot s=|R|\cdot t\)。稍作代数变形即得
+\[\frac{s}{t}=\frac{|R|}{|L|}.\]</p>
+<p>(c) 给定一个二部图，将 \(L\) 中所有顶点染成一种颜色，\(R\) 中所有顶点染成另一种颜色，即得到一个 2-染色。反之，给定一个 2-染色图（称两种颜色为红色与蓝色），红色顶点之间没有边相连，蓝色顶点之间也没有边相连。于是取 \(L\) 为红色顶点集，\(R\) 为蓝色顶点集，即构成一个二部划分。因此该图是二部图。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw02-sol.pdf</code> · 9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw02.pdf</code> · 4 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>homework/hw02.pdf</code></li>
+      <li><code>solutions/homework/hw02-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

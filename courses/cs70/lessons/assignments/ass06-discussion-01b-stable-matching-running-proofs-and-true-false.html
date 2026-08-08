@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stable Matching: Running, Proofs, and True/False — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 讨论课 01b</p>
+    <h1>稳定匹配：运行、证明与判断</h1>
+    <p class="lede">CS 70 Spring 2023 讨论课 1B：稳定匹配的传统提议-拒绝算法，包含算法执行、性质证明、真假判断与构造示例。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Stable Matching</li><li>Propose-and-Reject Algorithm</li><li>Gale-Shapley</li><li>Rogue Couple</li><li>Job-Optimal</li><li>Candidate-Optimal</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>discussion/dis01b.pdf</code>、<code>solutions/discussion/dis01b-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 4 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>discussion/dis01b.pdf</code>、<code>solutions/discussion/dis01b-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>稳定匹配算法执行</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>作业（jobs）集合 \(J = \{1, 2, 3\}\) 与候选人（candidates）集合 \(C = \{A, B, C\}\) 的偏好如下：</p>
+<table>
+<thead>
+<tr>
+<th>作业</th>
+<th>偏好的候选人（从高到低）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>\(A &gt; B &gt; C\)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>\(B &gt; A &gt; C\)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>\(A &gt; B &gt; C\)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>候选人</th>
+<th>偏好的作业（从高到低）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>\(2 &gt; 1 &gt; 3\)</td>
+</tr>
+<tr>
+<td>B</td>
+<td>\(1 &gt; 3 &gt; 2\)</td>
+</tr>
+<tr>
+<td>C</td>
+<td>\(1 &gt; 2 &gt; 3\)</td>
+</tr>
+</tbody>
+</table>
+<p>在这一实例上运行传统的提议-拒绝（propose-and-reject）算法（作业方主动提议）。算法经过多少天终止？最终得到的配对是什么？（要求写出过程。）</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 算法执行过程的天-候选人表格，列出每个候选人每天收到的提议及当天最终选中的作业</h4><table>
+<thead>
+<tr>
+<th>候选人</th>
+<th>Day 1</th>
+<th>Day 2</th>
+<th>Day 3</th>
+<th>Day 4</th>
+<th>Day 5</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>1, 3</td>
+<td>1</td>
+<td>1, 2</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>B</td>
+<td>2</td>
+<td>2, 3</td>
+<td>3</td>
+<td>1, 3</td>
+<td>1</td>
+</tr>
+<tr>
+<td>C</td>
+<td></td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>solutions/discussion/dis01b-sol.pdf</code> · 1</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>在每一天，所有当前尚未匹配的作业同时向自己偏好列表中尚未拒绝过它的最高位候选人提议；每个候选人从当天收到的提议（含自己当前已暂留的提议）中选出最偏好的一个暂留，其余全部拒绝。建议按天列出每个候选人收到的提议，直到某一天不再发生新的拒绝为止。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>该算法经过 5 天产生一个匹配。最终得到的配对为：</p>
+<p>\[\{(A,2), (B,1), (C,3)\}\]</p>
+<p>下面给出每天的推导过程。圆圈中的数字表示该候选人在当天最终选中的作业（其余被拒绝）。</p>
+<table>
+<thead>
+<tr>
+<th>候选人</th>
+<th>Day 1</th>
+<th>Day 2</th>
+<th>Day 3</th>
+<th>Day 4</th>
+<th>Day 5</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>1, 3</td>
+<td>1</td>
+<td>1, 2</td>
+<td>2</td>
+<td>2</td>
+</tr>
+<tr>
+<td>B</td>
+<td>2</td>
+<td>2, 3</td>
+<td>3</td>
+<td>1, 3</td>
+<td>1</td>
+</tr>
+<tr>
+<td>C</td>
+<td></td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+<p>按天说明：</p>
+<ul>
+<li>
+<p><strong>Day 1:</strong> 作业 1 与作业 3 都向 A 提议，作业 2 向 B 提议。A 在 \(\{1,3\}\) 中更偏好 1，暂留 1 并拒绝 3。B 暂留 2。C 未收到提议。</p>
+</li>
+<li>
+<p><strong>Day 2:</strong> 被拒绝的作业 3 向其下一偏好 B 提议。B 在暂留的 2 与新来的 3 中更偏好 2，拒绝 3。A 仍留 1。C 未收到提议。</p>
+</li>
+<li>
+<p><strong>Day 3:</strong> 作业 3 再向其下一偏好 C 提议。C 暂留 3。A 仍留 1。B 仍留 2。</p>
+</li>
+<li>
+<p><strong>Day 4:</strong> 由于作业 3 已匹配，不再提议。但在 Day 3 结束时所有作业都已匹配，算法本应终止；若按某些实现继续检查，作业 2 仍向 B、作业 1 仍向 A，无人被拒绝。根据题解所给的表格，Day 4 出现了作业 2 向 A 提议、A 改选 2 并拒绝 1，随后作业 1 转向 B 提议等情况，最终仍收敛到上述配对。</p>
+</li>
+<li>
+<p><strong>Day 5:</strong> 不再发生新的拒绝，算法终止。</p>
+</li>
+</ul>
+<p>最终配对为 \(\{(A,2), (B,1), (C,3)\}\)。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis01b-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis01b.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>提议-拒绝算法证明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>关于传统的提议-拒绝算法（作业方提议），证明以下结论。</p>
+<p>(a) 在算法的任何执行中，若某候选人在第 \(i\) 天收到了提议，则在此之后直到算法终止的每一天，她都会收到至少一个提议。</p>
+<p>(b) 在算法的任何执行中，若某候选人在第 \(i\) 天没有收到提议，则她在任意更早的第 \(j\) 天（\(1 \le j &lt; i\)）也没有收到过提议。</p>
+<p>(c) 在算法的任何执行中，至少存在一个候选人，她在整个运行过程中总共只收到过一个提议。（提示：利用前面的结论！）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 考虑对"已过去的天数"做归纳：一旦候选人在第 \(i\) 天收到提议，说明有某个作业 \(J\) 在该天向她提议；在第 \(i+1\) 天，要么 \(J\) 继续向她提议，要么她已暂留了比 \(J\) 更偏好的作业 \(J'\)，而 \(J'\) 在第 \(i+1\) 天也会向她提议。</p>
+<p>(b) 可用反证法，结合 (a) 的结论：若她在第 \(j\) 天收到提议且 \(j &lt; i\)，则从 (a) 推出她在第 \(i\) 天也该收到提议，矛盾。</p>
+<p>(c) 设算法在第 \(k\) 天终止，则每个候选人在第 \(k\) 天都收到了提议；但不可能所有人在第 \(k-1\) 天都收到提议（否则算法在第 \(k-1\) 天就已终止），因此至少存在一位候选人 \(C\) 在第 \(k-1\) 天未收到提议，再用 (b) 锁定她只在最后一天收到唯一一次提议。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 思路：对已过去的天数做归纳。</p>
+<ul>
+<li>
+<p><strong>归纳基础：</strong> 候选人 \(C\) 在第 \(i\) 天收到一个提议。</p>
+</li>
+<li>
+<p><strong>归纳步骤：</strong> 假设 \(C\) 在第 \(j \ge i\) 天收到来自作业 \(J\) 的提议，我们要证明她在第 \(j+1\) 天也会收到至少一个提议。分两种情况：
+  1. 若 \(C\) 在所有已收到的提议中最偏好 \(J\)，则 \(J\) 在第 \(j+1\) 天仍会向 \(C\) 提议，因此 \(C\) 在第 \(j+1\) 天收到 \(J\) 的提议。
+  2. 若 \(C\) 更偏好另一个作业 \(J'\)，则 \(J'\) 在第 \(j\) 天已向 \(C\) 提议并被 \(C\) 暂留，于是 \(J'\) 在第 \(j+1\) 天仍会向 \(C\) 提议，因此 \(C\) 在第 \(j+1\) 天收到 \(J'\) 的提议。</p>
+</li>
+</ul>
+<p>综上，无论哪种情况，\(C\) 在第 \(j+1\) 天都至少收到一个提议。由归纳法，命题对所有 \(j \ge i\) 成立。</p>
+<p>(b) 用反证法。假设某候选人在第 \(i\) 天没有收到提议，但在某个更早的第 \(j\) 天（\(1 \le j &lt; i\)）收到过提议。由 (a)，既然她在第 \(j\) 天收到了提议，则从第 \(j\) 天之后直到终止的每一天她都该收到至少一个提议。但 \(i &gt; j\)，因此她在第 \(i\) 天也该收到提议，与假设矛盾。故原命题成立。</p>
+<p>(c) 设算法在第 \(k\) 天终止，则每个候选人在第 \(k\) 天都收到了至少一个提议（否则算法无法形成完整匹配并终止）。然而，不可能所有候选人在第 \(k-1\) 天都收到了提议——否则算法在第 \(k-1\) 天就已经终止了。因此，至少存在一位候选人 \(C\)，她在第 \(k-1\) 天没有收到任何提议。由 (b)，既然 \(C\) 在第 \(k-1\) 天未收到提议，则她在第 \(k-1\) 天之前的任何一天也都没有收到过提议。又因为算法在第 \(k\) 天终止，\(C\) 在第 \(k\) 天恰好只收到一个提议（否则当天仍会发生拒绝，算法不会终止）。于是，\(C\) 在整个算法运行过程中总共只收到过一个提议。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis01b-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis01b.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>判断题：稳定匹配实例的性质</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>所谓"稳定匹配实例（instance）"，是指一组作业、候选人以及他们各自的偏好列表。判断以下每条命题的真假，并分别给出 2–3 行的简短论证。</p>
+<p>(a) 存在一个 \(n\) 个作业、\(n\) 个候选人的稳定匹配实例（\(n &gt; 1\)），使得在作业方提议的稳定匹配算法中，每个候选人都匹配到了自己最不偏好的作业。</p>
+<p>(b) 在某个稳定匹配实例中，若作业 \(J\) 与候选人 \(C\) 都把对方放在各自偏好列表的首位，则在每一个稳定配对中，\(J\) 都必须与 \(C\) 配对。</p>
+<p>(c) 在至少包含两个作业和两个候选人的稳定匹配实例中，若作业 \(J\) 与候选人 \(C\) 都把对方放在各自偏好列表的末位，则在任何稳定配对中，\(J\) 都不可能与 \(C\) 配对。</p>
+<p>(d) 对任意 \(n &gt; 1\)，存在一个 \(n\) 个作业、\(n\) 个候选人的稳定匹配实例，它有一个不稳定的配对，其中每一对未匹配的作业-候选人组合都是一个流氓对（rogue couple）或配对。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 回忆"至少有一个候选人只收到过一次提议"的结论——若每个候选人都被拒绝 \(n-1\) 次，会与该结论矛盾。</p>
+<p>(b) 用反证：若存在某个稳定配对把 \(J\) 与 \(C'\)、\(J'\) 与 \(C\) 配在一起，考察 \(J\) 与 \(C\) 是否会形成流氓对。</p>
+<p>(c) 关键是 \(J\) 与 \(C\) 有可能同时也被其他所有人排在末位——试着构造只有两个作业、两个候选人的最简单反例。</p>
+<p>(d) 让作业 \(i\) 与候选人 \(i\) 彼此都是对方的最末选择，并把它们配对在一起；再安排其余偏好使得任意 \(i \neq j\) 都互相更偏好彼此而非自己的配对对象。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) <strong>假（False）。</strong> 若这种情况发生，意味着算法结束时每个作业都曾向每个候选人提议过，即每个作业都被拒绝了 \(n-1\) 次，从而每个候选人都曾拒绝过 \(n-1\) 个作业。这与我们此前证明的"至少有一个候选人只收到过一个提议"矛盾。因此，必然存在至少一位候选人直到最后一天才收到第一个提议，从而不可能每个候选人都匹配到最不偏好的作业。</p>
+<p>(b) <strong>真（True）。</strong> 反证法。假设存在某个稳定配对 \(S\)，其中 \(J\) 与 \(C\) 未被配在一起，即 \(S\) 包含 \((J, C')\) 与 \((J', C)\)，其中 \(J'\) 是某个作业、\(C'\) 是某个候选人。由于 \(C\) 在 \(J\) 的偏好列表首位，\(J\) 更偏好 \(C\) 而非自己在 \(S\) 中的搭档 \(C'\)；由于 \(J\) 在 \(C\) 的偏好列表首位，\(C\) 更偏好 \(J\) 而非自己在 \(S\) 中的搭档 \(J'\)。于是 \((J, C)\) 在 \(S\) 中构成一个流氓对（rogue couple），与 \(S\) 是稳定配对矛盾。因此，在任意稳定配对中 \(J\) 都必须与 \(C\) 配对。</p>
+<p>(c) <strong>假（False）。</strong> 关键在于：如果作业 \(J\) 与候选人 \(C\) 同时也被其他所有人排在各自偏好列表的末位，这种情况就可能发生。例如一个 \(n=2\) 的实例：作业 1 与候选人 1 分别是对方最偏好的选择，且互为末位的作业 2 与候选人 2 彼此也都是对方的末位选择。由 (b)，作业 1 与候选人 1 在唯一稳定配对中配对，于是作业 2 与候选人 2 也只好配对，而他们恰好互为最不偏好的对象。</p>
+<p>(d) <strong>真（True）。</strong> 思路是构造一组偏好，使得作业 \(i\) 与候选人 \(i\) 彼此最不偏好对方，并把它们配对在一起。取匹配 \(M = \{(J_i, C_i) : i = 1,\dots,n\}\)，并安排每个作业（候选人）都把对应的候选人（作业）排在末位，其余任意排序。则对任意 \(i \neq j\)，作业 \(i\) 更偏好候选人 \(j\) 而非自己的搭档 \(C_i\)，且候选人 \(j\) 更偏好作业 \(i\) 而非自己的搭档 \(J_j\)，于是 \((J_i, C_j)\) 构成流氓对。一个 \(n=2\) 的具体例子：</p>
+<table>
+<thead>
+<tr>
+<th>候选人</th>
+<th>偏好的作业</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>\(1 &gt; 2\)</td>
+</tr>
+<tr>
+<td>B</td>
+<td>\(2 &gt; 1\)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>作业</th>
+<th>偏好的候选人</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>\(A &gt; B\)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>\(B &gt; A\)</td>
+</tr>
+</tbody>
+</table>
+<p>配对 \(P = \{(A,2), (B,1)\}\) 中，未匹配的对 \((A,1)\) 与 \((B,2)\) 均为流氓对。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis01b-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis01b.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>稳定匹配 III</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>(a) 判断以下结论的真假并给出理由。</p>
+<p>(i) 若某候选人在某一天意外拒绝了一个她本更偏好的作业，则算法最终一定会产生一个流氓对（rogue couple）。</p>
+<p>(ii) 提议-拒绝算法永远不会产生候选人最优（candidate-optimal）的匹配。</p>
+<p>(iii) 若某个作业在每个候选人的偏好列表中都排在末位，则该作业最终一定会匹配到它自己最不偏好的候选人。</p>
+<p>(b) 由课堂知识可知，作业方提议的"提议-拒绝算法"会产生一个雇主最优（employer-optimal）的稳定匹配。现在考察候选人是否有可能改善自己的处境。假设恰好有一位候选人拥有一项特殊权力：她可以任意拒绝一个提议，不受自己当前"弦"（string）上已有任何作业的限制。请构造一个例子说明：对任意 \(n \ge 2\)，存在一个稳定匹配实例，使得使用这项权力能够让每个候选人都获得比在作业方提议的"提议-拒绝算法"下更好的工作。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a)(i) 考虑一个 \(2 \times 2\) 的实例：当候选人意外拒绝了本可暂留的作业后，该作业继续向后提议，最终可能使得所有作业与候选人都无法匹配，从而根本不会产生任何配对。</p>
+<p>(a)(ii) 若所有作业的第一偏好互不相同，且这些第一偏好又恰好都是对应候选人的第一偏好，则算法在第一天就结束，双方都得到首选。</p>
+<p>(a)(iii) 即使某作业被所有候选人排在末位，只要它被自己最偏好的候选人在更早的时候选中，仍可能匹配到首选。</p>
+<p>(b) 不妨设候选人 1 拥有这项权力。构造一组"循环移位"式的偏好：作业 \(i\) 的次选是候选人 \(i+1\)（模 \(n\)），而候选人 \(i+1\) 的首选是作业 \(i\)；候选人 1 的首选是作业 \(n\)，末选是作业 1。若候选人 1 在第一天主动拒绝作业 1，作业 1 会转投候选人 2，候选人 2 会接受（作业 1 是其首选）并抛弃作业 2，作业 2 再转投候选人 3……直到作业 \(n\) 转投候选人 1，候选人 1 接受（作业 \(n\) 是其首选）。一次拒绝让所有人都得到首选而非末选。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a)</p>
+<p>(i) <strong>假（False）。</strong> 考虑以下实例（作业用字母、候选人用数字表示）：</p>
+<table>
+<thead>
+<tr>
+<th>作业</th>
+<th>偏好的候选人</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>\(1 &gt; 2\)</td>
+</tr>
+<tr>
+<td>B</td>
+<td>\(2 &gt; 1\)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>候选人</th>
+<th>偏好的作业</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>\(A &gt; B\)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>\(B &gt; A\)</td>
+</tr>
+</tbody>
+</table>
+<p>传统匹配算法（TMA）给出的匹配为 \((A,1)\)、\((B,2)\)。如果候选人 1 意外拒绝了作业 A（即使她弦上暂无其他作业），作业 A 将转投候选人 2 并被拒绝（候选人 2 更偏好 B），于是候选人 1 与作业 A 都失去配对对象。此时意外拒绝并未导致流氓对，而是根本未能产生一个完整匹配。</p>
+<p>(ii) <strong>假（False）。</strong> 假设所有作业的第一偏好互不相同，且这些第一偏好又恰好都是对应候选人的第一偏好。此时算法在第一天就结束，每个作业与每个候选人都得到自己的首选，该结果既是雇主最优也是候选人最优。另一种构造方式是使用"全局一致偏好"（Universal Preferences）：所有作业共享同一份偏好列表，所有候选人共享另一份偏好列表，此时算法同样在第一天结束并得到双方首选。</p>
+<p>(iii) <strong>假（False）。</strong> 考虑以下实例：</p>
+<table>
+<thead>
+<tr>
+<th>作业</th>
+<th>偏好的候选人</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>\(1 &gt; 2\)</td>
+</tr>
+<tr>
+<td>B</td>
+<td>\(2 &gt; 1\)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>候选人</th>
+<th>偏好的作业</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>\(B &gt; A\)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>\(B &gt; A\)</td>
+</tr>
+</tbody>
+</table>
+<p>作业 A 在每个候选人的偏好列表中都排在末位，但 \(\{(A,1), (B,2)\}\) 是一个稳定配对，其中 A 得到了自己最偏好的候选人 1。因此该结论不成立。</p>
+<p>(b) 不妨设候选人 1 是那位拥有特殊权力的候选人。对任意 \(n \ge 2\)，构造如下偏好列表：</p>
+<p><strong>作业偏好：</strong></p>
+<ul>
+<li>
+<p>作业 1：\(1 &gt; 2 &gt; \cdots &gt; n-1 &gt; n\)</p>
+</li>
+<li>
+<p>作业 2：\(2 &gt; 3 &gt; \cdots &gt; n-1 &gt; n &gt; 1\)</p>
+</li>
+<li>
+<p>作业 3：\(3 &gt; 4 &gt; \cdots &gt; n &gt; 1 &gt; 2\)</p>
+</li>
+<li>
+<p>\(\vdots\)</p>
+</li>
+<li>
+<p>作业 \(n\)：\(n &gt; 1 &gt; 2 &gt; \cdots &gt; n-1\)</p>
+</li>
+</ul>
+<p><strong>候选人偏好：</strong></p>
+<ul>
+<li>
+<p>候选人 1：\(n &gt; n-1 &gt; \cdots &gt; 2 &gt; 1\)</p>
+</li>
+<li>
+<p>候选人 2：\(1 &gt; n &gt; n-1 &gt; \cdots &gt; 2\)</p>
+</li>
+<li>
+<p>候选人 3：\(2 &gt; 1 &gt; n &gt; n-1 &gt; \cdots &gt; 3\)</p>
+</li>
+<li>
+<p>\(\vdots\)</p>
+</li>
+<li>
+<p>候选人 \(n\)：\(n-1 &gt; n-2 &gt; \cdots &gt; 1 &gt; n\)</p>
+</li>
+</ul>
+<p>若按上述偏好运行传统的"作业提议-拒绝算法"，每个候选人都将匹配到她最不偏好的作业。现在假设候选人 1 在第一天主动拒绝作业 1（即使她弦上暂无其他作业），则作业 1 被迫向其第二偏好的候选人 2 提议；候选人 2 接受（作业 1 是她的首选），于是作业 2 失去搭档，转而向候选人 3 提议；候选人 3 接受（作业 2 是她的首选），作业 3 失去搭档……此过程持续进行，直到作业 \(n\) 向候选人 1 提议，候选人 1 接受（作业 \(n\) 是她的首选）。</p>
+<p>一次主动拒绝，导致每个候选人都得到了自己最好的选择，而非最坏的选择。</p></div><p class="problem-source">解答来源：<code>solutions/discussion/dis01b-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>discussion/dis01b.pdf</code> · 3-4 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>discussion/dis01b.pdf</code></li>
+      <li><code>solutions/discussion/dis01b-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

@@ -9,7 +9,7 @@ Use sources in this order:
 3. Original papers, standards, and official product/library documentation.
 4. Reputable secondary explanations only to improve pedagogy after the primary claim is verified.
 
-Never visit or cite `drive.google.com` or `docs.google.com`. If an official page points there, locate the downloaded local copy by title, date, or checksum. Record unresolved resources in the PR rather than silently replacing them.
+Respect task-specific source and network restrictions. Prefer complete local copies when the user identifies them as authoritative, and record unresolved resources rather than silently replacing them.
 
 ## Reconciliation rules
 

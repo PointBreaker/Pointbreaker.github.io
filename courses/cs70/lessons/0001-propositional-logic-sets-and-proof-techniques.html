@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>命题逻辑、集合与证明技术 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 1 讲</p><h1>命题逻辑、集合与证明技术</h1><p class="lede">从真值表与命题翻译起步，训练逆命题/否命题/逆否命题、量词等价、集合的原像与像运算；结合鸽巢原理等基础组合推理，建立严谨的证明写作规范。</p><div class="meta"><span>预计用时：150 分钟</span><span>难度：入门</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>熟练使用真值表验证命题等价，识别分配律、德摩根律等常见等价式</li><li>准确区分原命题、逆命题、否命题、逆否命题，并用反例判断其真假</li><li>掌握量词对合取与析取的分配规则以及量词顺序的重要性</li><li>理解函数像与原像的定义，证明原像保持并/交/补运算而像仅保持并运算</li><li>运用直接证明、逆否证明与反证法撰写严谨的数学论证</li><li>应用鸽巢原理进行基本的组合存在性推理</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>高中数学基本的集合与函数概念</li><li>整除、奇偶性等整数基本性质</li><li>基本的逻辑阅读能力</li></ul><h2 id="propositional-logic-truth-tables">命题逻辑与真值表</h2><p>一个命题（proposition）是一个具有确定真值（真 \(T\) 或假 \(F\)）的陈述句。给定命题变元 \(P, Q, R, \ldots\)，我们通过逻辑联结词构造复合命题：否定（negation）\(\neg P\) 当且仅当 \(P\) 为假时为真；合取（conjunction）\(P \wedge Q\) 当且仅当二者同时为真时为真；析取（disjunction）\(P \vee Q\) 当二者至少一个为真时为真（包含性或）；蕴含（implication）\(P \to Q\) 当 \(P\) 真且 \(Q\) 假时为假，其余情况为真；双条件（biconditional）\(P \leftrightarrow Q\) 当二者真值相同时为真。</p>
+<p>真值表（truth table）列出命题变元所有可能的真值指派及对应的复合命题真值。两个命题 \(\phi\) 与 \(\psi\) 逻辑等价（记作 \(\phi \equiv \psi\)），当且仅当在每一行指派下真值相同。真值表在有限变元下给出判定等价性的充分必要条件。</p>
+<p>常用的逻辑等价式包括分配律 \(P \wedge (Q \vee R) \equiv (P \wedge Q) \vee (P \wedge R)\) 与 \(P \vee (Q \wedge R) \equiv (P \vee Q) \wedge (P \vee R)\)、德摩根律 \(\neg(P \wedge Q) \equiv \neg P \vee \neg Q\) 与 \(\neg(P \vee Q) \equiv \neg P \wedge \neg Q\)、以及蕴含重言式 \(P \to Q \equiv \neg P \vee Q\)。这些等价式既是验证工具，也是化简与推导的基础。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>验证 \((P \to Q) \vee (P \to R) \equiv P \to (Q \vee R)\)。</p>
+<p>列出 \(2^3 = 8\) 行真值指派：</p>
+<p>\[
+\begin{array}{ccc|cccc}
+P &amp; Q &amp; R &amp; P \to Q &amp; P \to R &amp; (P \to Q) \vee (P \to R) &amp; Q \vee R &amp; P \to (Q \vee R) \\
+\hline
+T &amp; T &amp; T &amp; T &amp; T &amp; T &amp; T &amp; T \\
+T &amp; T &amp; F &amp; T &amp; F &amp; T &amp; T &amp; T \\
+T &amp; F &amp; T &amp; F &amp; T &amp; T &amp; T &amp; T \\
+T &amp; F &amp; F &amp; F &amp; F &amp; F &amp; F &amp; F \\
+F &amp; T &amp; T &amp; T &amp; T &amp; T &amp; T &amp; T \\
+F &amp; T &amp; F &amp; T &amp; T &amp; T &amp; T &amp; T \\
+F &amp; F &amp; T &amp; T &amp; T &amp; T &amp; T &amp; T \\
+F &amp; F &amp; F &amp; T &amp; T &amp; T &amp; F &amp; T \\
+\end{array}
+\]</p>
+<p>第六列与第八列在所有行中真值相同，因此两命题等价。</p>
+<p>观察：当 \(P\) 为真时，左边退化为 \(Q \vee R\)，右边也是 \(Q \vee R\)；当 \(P\) 为假时，两边均为真。按主联结元分类讨论，在手工验证时能减少计算量。</p></div></div><h2 id="implication-four-forms">蕴含与四种命题形式</h2><p>蕴含 \(P \to Q\) 是数学论证的核心。围绕它衍生出四种命题形式：原命题 \(P \to Q\)、逆命题（converse）\(Q \to P\)、否命题（inverse）\(\neg P \to \neg Q\)、逆否命题（contrapositive）\(\neg Q \to \neg P\)。</p>
+<p>关键等价关系：原命题与逆否命题逻辑等价（\(P \to Q \equiv \neg Q \to \neg P\)）；逆命题与否命题逻辑等价（\(Q \to P \equiv \neg P \to \neg Q\)）。原命题与逆命题之间没有必然的真值关系——原命题为真时，逆命题可真可假。</p>
+<p>判断蕴含式真假的标准方法：寻找一个反例（counterexample），即一个使前件真而后件假的实例。若存在反例则命题为假；若不存在则为真，此时需要给出一般性论证。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>原命题："若整数 \(n\) 能被 15 整除，则 \(n\) 能被 5 整除。"</p>
+<ul>
+<li>
+<p>原命题 \((\forall n \in \mathbb{Z})(15 \mid n \to 5 \mid n)\)：真。若 \(n = 15k\)，则 \(n = 5(3k)\)，故 \(5 \mid n\)。</p>
+</li>
+<li>
+<p>逆命题 \((\forall n \in \mathbb{Z})(5 \mid n \to 15 \mid n)\)：假。反例 \(n = 5\) 能被 5 整除但不能被 15 整除。</p>
+</li>
+<li>
+<p>否命题 \((\forall n \in \mathbb{Z})(15 \nmid n \to 5 \nmid n)\)：假。反例 \(n = 10\) 不能被 15 整除但能被 5 整除。</p>
+</li>
+<li>
+<p>逆否命题 \((\forall n \in \mathbb{Z})(5 \nmid n \to 15 \nmid n)\)：真。与原命题等价，亦可用直接论证：若 \(5 \nmid n\)，则 \(n\) 不是 5 的倍数，从而也不可能是 15 的倍数。</p>
+</li>
+</ul></div></div><h2 id="quantifier-equivalences">量词与逻辑等价</h2><p>全称量词 \(\forall\)（"对所有"）与存在量词 \(\exists\)（"存在"）用于量化命题函数 \(P(x)\) 在某个论域（universe）上的真假。</p>
+<p>量词对逻辑联结词的分配律：\(\forall x\, (P(x) \wedge Q(x)) \equiv (\forall x\, P(x)) \wedge (\forall x\, Q(x))\)（全称对合取可分配）；\(\exists x\, (P(x) \vee Q(x)) \equiv (\exists x\, P(x)) \vee (\exists x\, Q(x))\)（存在对析取可分配）。</p>
+<p>但以下两式一般不成立：\(\forall x\, (P(x) \vee Q(x)) \not\equiv (\forall x\, P(x)) \vee (\forall x\, Q(x))\)；\(\exists x\, (P(x) \wedge Q(x)) \not\equiv (\exists x\, P(x)) \wedge (\exists x\, Q(x))\)。</p>
+<p>量词顺序至关重要。\(\forall x \exists y\, P(x, y)\)（对每个 \(x\) 都存在对应的 \(y\)）与 \(\exists y \forall x\, P(x, y)\)（存在一个 \(y\) 对所有 \(x\) 成立）含义不同，前者通常弱于后者。</p>
+<p>量词的否定规则（德摩根律的量词形式）：\(\neg(\forall x\, P(x)) \equiv \exists x\, \neg P(x)\)；\(\neg(\exists x\, P(x)) \equiv \forall x\, \neg P(x)\)。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>取论域为整数集 \(\mathbb{Z}\)，令 \(P(x, y)\) 表示 \(x + y = 0\)。</p>
+<ul>
+<li>
+<p>\(\forall x \exists y\, P(x, y)\)：真。对任意 \(x\)，取 \(y = -x\) 即可。</p>
+</li>
+<li>
+<p>\(\exists y \forall x\, P(x, y)\)：假。不存在一个固定的 \(y\) 使得对所有 \(x\) 都有 \(x + y = 0\)。</p>
+</li>
+</ul>
+<p>因此 \(\forall x \exists y\, P(x, y) \not\equiv \exists y \forall x\, P(x, y)\)。量词顺序决定了"依赖性"：\(\forall x \exists y\) 允许 \(y\) 依赖于 \(x\)，而 \(\exists y \forall x\) 要求 \(y\) 独立于 \(x\)。</p></div></div><h2 id="image-preimage-set-operations">像与原像的集合运算保持性</h2><p>设函数 \(f: X \to Y\)。对于子集 \(A \subseteq X\) 和 \(B \subseteq Y\)，定义像 \(f(A) = \{y \in Y \mid \exists x \in A,\, f(x) = y\}\) 与原像 \(f^{-1}(B) = \{x \in X \mid f(x) \in B\}\)。</p>
+<p>原像完全保持集合运算：\(f^{-1}(A \cup B) = f^{-1}(A) \cup f^{-1}(B)\)、\(f^{-1}(A \cap B) = f^{-1}(A) \cap f^{-1}(B)\)、\(f^{-1}(A \setminus B) = f^{-1}(A) \setminus f^{-1}(B)\)。</p>
+<p>证明策略：利用 \(X = Y \iff X \subseteq Y \wedge Y \subseteq X\) 以及 \(X \subseteq Y \iff (\forall z)(z \in X \to z \in Y)\)。对原像，从 \(x \in f^{-1}(\cdot)\) 出发，由定义转化为 \(f(x) \in \cdot\)，再逐层拆解。</p>
+<p>像仅保持并运算 \(f(A \cup B) = f(A) \cup f(B)\)。对交与差，一般只有单向包含：\(f(A \cap B) \subseteq f(A) \cap f(B)\)、\(f(A \setminus B) \supseteq f(A) \setminus f(B)\)。等号不成立的根源是函数可能将 \(A\) 和 \(B\) 中不同元素映射到同一个像，造成"碰撞"。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(f: \mathbb{R} \to \mathbb{R}\)，\(f(x) = x^2\)。取 \(A = [1, 4]\)，\(B = [-4, -1]\)。</p>
+<ul>
+<li>
+<p>\(A \cap B = \varnothing\)，故 \(f(A \cap B) = \varnothing\)。</p>
+</li>
+<li>
+<p>\(f(A) = [1, 16]\)，\(f(B) = [1, 16]\)，故 \(f(A) \cap f(B) = [1, 16]\)。</p>
+</li>
+</ul>
+<p>因此 \(f(A \cap B) = \varnothing \subsetneq [1, 16] = f(A) \cap f(B)\)，等号不成立。原因是 \(f(2) = f(-2) = 4\)，即 \(A\) 中的 2 与 \(B\) 中的 \(-2\) 碰撞到同一像。</p></div></div><h2 id="proof-techniques">证明技术</h2><p>数学证明要求从已知前提出发，经由有效推理规则达到结论。本节介绍三种基本技术：</p>
+<p>直接证明（direct proof）：假设前提 \(P\) 为真，通过定义、已知定理和逻辑推导直接得出结论 \(Q\)。结构为 \(P \implies \cdots \implies Q\)。</p>
+<p>逆否证明（proof by contraposition）：要证 \(P \to Q\)，改为证其逆否命题 \(\neg Q \to \neg P\)。由于 \(P \to Q \equiv \neg Q \to \neg P\)，两者等价。适用场景：当 \(\neg Q\) 比 \(P\) 提供更丰富的可用信息时。</p>
+<p>反证法（proof by contradiction）：要证命题 \(S\)，假设 \(\neg S\) 为真，推导出矛盾（某命题 \(R\) 与 \(\neg R\) 同时成立）。由此断定 \(S\) 为真。</p>
+<p>关于整数的常用引理：\(n\) 为奇数当且仅当存在 \(k \in \mathbb{Z}\) 使 \(n = 2k + 1\)；为偶数当且仅当存在 \(k \in \mathbb{Z}\) 使 \(n = 2k\)。奇偶性分析是反证法与逆否证明的常见入口。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>命题：若 \(n^3\) 是偶数，则 \(n\) 是偶数（\(n \in \mathbb{Z}\)）。</p>
+<p>用逆否证明。逆否命题：若 \(n\) 是奇数，则 \(n^3\) 是奇数。</p>
+<p>设 \(n = 2k + 1\)，其中 \(k \in \mathbb{Z}\)。则
+\[
+n^3 = (2k + 1)^3 = 8k^3 + 12k^2 + 6k + 1 = 2(4k^3 + 6k^2 + 3k) + 1.
+\]
+令 \(m = 4k^3 + 6k^2 + 3k \in \mathbb{Z}\)，则 \(n^3 = 2m + 1\) 为奇数。</p>
+<p>逆否命题得证，故原命题成立。</p></div></div><h2 id="pigeonhole-principle">鸽巢原理与组合存在性推理</h2><p>鸽巢原理（Pigeonhole Principle）是组合数学中最基本的存在性工具。</p>
+<p>基本形式：若 \(n\) 个物品放入 \(m\) 个容器，且 \(n &gt; m\)，则至少有一个容器包含多于一个物品。</p>
+<p>一般形式：若 \(n\) 个物品放入 \(m\) 个容器，则至少一个容器包含至少 \(\lceil n/m \rceil\) 个物品。</p>
+<p>鸽巢原理的证明通常采用反证法：假设每个容器至多一个物品，则总物品数不超过 \(m\)，与 \(n &gt; m\) 矛盾。</p>
+<p>应用的关键是正确识别"物品"与"容器"，并注意容器实际可用数量的约束——某些容器可能因条件互斥而无法同时被占用。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>命题：在边长为 1 的正方形内任取 5 个点，必有两点之间的距离不超过 \(\sqrt{2}/2\)。</p>
+<p>将正方形分成 4 个边长为 \(1/2\) 的小正方形（4 个容器）。5 个点（5 个物品）放入 4 个小正方形，由鸽巢原理，至少有一个小正方形包含至少 2 个点。</p>
+<p>边长为 \(1/2\) 的正方形中，任意两点最远距离为其对角线长度 \(\sqrt{(1/2)^2 + (1/2)^2} = \sqrt{2}/2\)。因此这两点距离不超过 \(\sqrt{2}/2\)。</p></div></div><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>原命题与逆命题等价，因此原命题为真可推出逆命题为真</h3><p>原命题与逆否命题等价，逆命题与否命题等价。原命题为真时逆命题可真可假，必须独立判断。</p></article><article class="summary-card"><h3>量词可以随意交换顺序，\(\forall x \exists y\) 与 \(\exists y \forall x\) 含义相同</h3><p>量词顺序决定依赖性。\(\forall x \exists y\) 允许 \(y\) 依赖于 \(x\)，而 \(\exists y \forall x\) 要求同一个 \(y\) 对所有 \(x\) 成立，后者一般强于前者。</p></article><article class="summary-card"><h3>像运算与原像运算都保持并、交、补运算</h3><p>原像完全保持并/交/补运算，但像仅保持并运算；对交与差一般只有单向包含，等号不成立的根源是不同元素可映射到同一像。</p></article><article class="summary-card"><h3>反证法就是逆否证明</h3><p>逆否证明直接证 \(\neg Q \to \neg P\)，不需要导出矛盾；反证法假设结论假（并保持前提真），推导出任何矛盾即可。两者逻辑结构不同。</p></article><article class="summary-card"><h3>鸽巢原理应用中容器数量就是所有可能取值个数</h3><p>某些容器可能因条件互斥而无法同时被占用（如朋友数中 0 和 \(n-1\) 不能共存），实际可用容器数可能少于表面取值个数。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="c" data-correct="正确。全称量词 \(\forall\) 对合取 \(\wedge\) 可分配，即 \(\forall x\, (P(x) \wedge Q(x)) \equiv \forall x\, P(x) \wedge \forall x\, Q(x)\)。其余选项均不成立：\(\forall\) 对 \(\vee\) 不可分配，\(\exists\) 对 \(\wedge\) 不可分配。" data-incorrect="错误。回顾量词分配律：\(\forall\) 仅对 \(\wedge\) 可分配，\(\exists\) 仅对 \(\vee\) 可分配。可通过构造反例验证其他选项不成立，例如取论域为 \(\{1,2\}\) 并适当设置真值。" data-quiz="m1-quiz-quantifier-distribution"><p><strong>问题：</strong>设 \(P(x)\) 与 \(Q(x)\) 为命题函数。下列哪个逻辑等价式是正确的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\forall x\, (P(x) \vee Q(x)) \equiv \forall x\, P(x) \vee \forall x\, Q(x)\)</button><button aria-pressed="false" data-choice="b">\(\exists x\, (P(x) \wedge Q(x)) \equiv \exists x\, P(x) \wedge \exists x\, Q(x)\)</button><button aria-pressed="false" data-choice="c">\(\forall x\, (P(x) \wedge Q(x)) \equiv \forall x\, P(x) \wedge \forall x\, Q(x)\)</button><button aria-pressed="false" data-choice="d">\(\exists x\, (P(x) \vee Q(x)) \equiv \exists x\, P(x) \wedge \exists x\, Q(x)\)</button><button aria-pressed="false" data-choice="e">\(\forall x\, (P(x) \vee Q(x)) \equiv \forall x\, P(x) \wedge \forall x\, Q(x)\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。原像完全保持并运算：\(f^{-1}(A \cup B) = f^{-1}(A) \cup f^{-1}(B)\)。原像实际上保持并、交、补全部三种运算。" data-incorrect="错误。回顾像与原像的保持性：原像完全保持并/交/补运算（都是等号）；像保持并运算（等号），但对交只有 \(\subseteq\)，对差只有 \(\supseteq\)。选项 b、c、d、e 的不等号方向或强度都不对。" data-quiz="m1-quiz-preimage-image"><p><strong>问题：</strong>设函数 \(f: X \to Y\)，\(A, B \subseteq Y\)。下列哪个命题对所有函数 \(f\) 都成立？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(f^{-1}(A \cup B) = f^{-1}(A) \cup f^{-1}(B)\)</button><button aria-pressed="false" data-choice="b">\(f^{-1}(A \cap B) \supseteq f^{-1}(A) \cap f^{-1}(B)\)</button><button aria-pressed="false" data-choice="c">\(f(A \cup B) \subseteq f(A) \cup f(B)\)</button><button aria-pressed="false" data-choice="d">\(f(A \cap B) = f(A) \cap f(B)\)</button><button aria-pressed="false" data-choice="e">\(f(A \setminus B) \subseteq f(A) \setminus f(B)\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct='正确。原命题形式为 \((\forall n \in \mathbb{N})(P(n) \to Q(n))\)，其中 \(P(n)\) 为"\(n^2\) 是奇数"，\(Q(n)\) 为"\(n\) 是奇数"。逆否命题为 \(\neg Q(n) \to \neg P(n)\)，即"若 \(n\) 不是奇数，则 \(n^2\) 不是奇数"。' data-incorrect="错误。逆否命题需同时否定结论并交换前后件：\(\neg Q \to \neg P\)。选项 a 是逆命题，选项 c 是否命题（仅否定不交换），选项 d 是原命题的否定，选项 e 是双条件命题。" data-quiz="m1-quiz-contrapositive"><p><strong>问题：</strong>命题"对所有自然数 \(n\)，若 \(n^2\) 是奇数，则 \(n\) 是奇数"的逆否命题是：</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">对所有自然数 \(n\)，若 \(n\) 是奇数，则 \(n^2\) 是奇数</button><button aria-pressed="false" data-choice="b">对所有自然数 \(n\)，若 \(n\) 不是奇数，则 \(n^2\) 不是奇数</button><button aria-pressed="false" data-choice="c">对所有自然数 \(n\)，若 \(n^2\) 不是奇数，则 \(n\) 不是奇数</button><button aria-pressed="false" data-choice="d">存在自然数 \(n\)，使得 \(n^2\) 是奇数但 \(n\) 不是奇数</button><button aria-pressed="false" data-choice="e">对所有自然数 \(n\)，\(n^2\) 是奇数当且仅当 \(n\) 是奇数</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct='正确。选项 b 需要额外的几何分析（将平面区域分割为小区域后应用鸽巢原理），不能仅由"5 个点"直接得出距离结论，缺少容器划分的关键步骤。其余选项都直接对应物品与容器的计数关系。' data-incorrect="错误。鸽巢原理的直接应用要求明确物品与容器的计数。选项 a（367 &gt; 366）、c（3 &gt; 2）、d（30 &gt; 28）都直接满足 \(n &gt; m\)。选项 b 需要额外的几何划分步骤，不是直接应用。" data-quiz="m1-quiz-pigeonhole"><p><strong>问题：</strong>下列哪个情境不能直接由鸽巢原理得出？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">367 人中至少两人生日相同（假设一年 366 天）</button><button aria-pressed="false" data-choice="b">在平面上任意画 5 个点，必然存在至少两点距离小于 1</button><button aria-pressed="false" data-choice="c">一个抽屉里有 10 只红袜子和 10 只蓝袜子，至少拿出 3 只才能保证配成一双同色</button><button aria-pressed="false" data-choice="d">班上有 30 名学生，至少有两人在同一天参加讨论课（讨论课共安排在 28 天）</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>真值表是验证命题等价的穷举方法：两命题等价当且仅当在所有真值指派下真值相同</li><li>原命题与逆否命题等价；逆命题与否命题等价；原命题与逆命题无必然真值关系</li><li>\(\forall\) 仅对 \(\wedge\) 可分配，\(\exists\) 仅对 \(\vee\) 可分配；量词顺序决定依赖关系</li><li>原像 \(f^{-1}\) 完全保持并/交/补运算；像 \(f\) 仅保持并运算，对交与差一般只有单向包含</li><li>直接证明、逆否证明与反证法是三种基本证明技术，逆否证明利用 \(P \to Q \equiv \neg Q \to \neg P\)</li><li>鸽巢原理：\(n\) 个物品放入 \(m\) 个容器且 \(n &gt; m\) 时，至少一个容器包含多于一个物品</li></ul><h2 id="sources">一手资料</h2><ul><li><code>discussion/dis00a.pdf</code> · 1 · confidence: high · Determine whether the following equivalences hold, by writing out truth tables. (a) P ∧ (Q ∨ P) ≡ P ∧ Q; (b) (P ∨ Q) ∧ R ≡ (P ∧ R) ∨ (Q ∧ R); (c) (P ∧ Q) ∨ R ≡ (P ∨ R) ∧ (Q ∨ R)</li><li><code>discussion/dis00a.pdf</code> · 2 · confidence: high · The inverse of an implication P =⇒ Q is ¬P =⇒ ¬Q. ... The contrapositive of an implication P =⇒ Q is ¬Q =⇒ ¬P.</li><li><code>discussion/dis00a.pdf</code> · 2-4 · confidence: high · (a) ∀x (P(x) ∧ Q(x)) ≡ ∀x P(x) ∧ ∀x Q(x) 正确；(b) ∀x (P(x) ∨ Q(x)) ≡ ∀x P(x) ∨ ∀x Q(x) 错误；(c) ∃x (P(x) ∨ Q(x)) ≡ ∃x P(x) ∨ ∃x Q(x) 正确；(d) ∃x (P(x) ∧ Q(x)) ≡ ∃x P(x) ∧ ∃x Q(x) 错误</li><li><code>discussion/dis00b.pdf</code> · 1 · confidence: high · Prove that if n² is odd, then n must also be odd. ... We will proceed by a proof by contraposition; the contrapositive is "if n is even, then n² is also even".</li><li><code>discussion/dis00b.pdf</code> · 1 · confidence: high · Prove that if there are n ≥ 2 people at a party, then at least 2 of them have the same number of friends at the party. ... containers 0, n − 1 or both must be empty since these two containers cannot be occupied at the same time. This means that we are assigning n people to at most n − 1 containers</li><li><code>discussion/dis00b.pdf</code> · 2 · confidence: high · f⁻¹(A ∪ B) = f⁻¹(A) ∪ f⁻¹(B). Suppose x ∈ f⁻¹(A∪B) which means that f(x) ∈ A∪B. Then either f(x) ∈ A, in which case x ∈ f⁻¹(A), or f(x) ∈ B, in which case x ∈ f⁻¹(B)</li><li><code>homework/hw00.pdf</code> · 3-4 · confidence: high · (a) f⁻¹(A ∩ B) = f⁻¹(A) ∩ f⁻¹(B); (b) f⁻¹(A \ B) = f⁻¹(A) \ f⁻¹(B); (c) f(A ∩ B) ⊆ f(A) ∩ f(B), and give an example where equality does not hold; (d) f(A \ B) ⊇ f(A) \ f(B), and give an example where equality does not hold</li><li><code>homework/hw00.pdf</code> · 3 · confidence: high · (a) ∃x∃yQ(x,y) =⇒ ∃y∃xQ(x,y) True; (b) ∀x∃yQ(x,y) =⇒ ∃y∀xQ(x,y) False; (c) ∃x∀yQ(x,y) =⇒ ∀y∃xQ(x,y) True; (d) ∃x∃yQ(x,y) =⇒ ∀y∃xQ(x,y) False</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

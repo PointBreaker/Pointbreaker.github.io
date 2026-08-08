@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>离散随机变量及其分布 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 10 讲</p><h1>离散随机变量及其分布</h1><p class="lede">从概率空间走向可计算的量：本讲把随机结果映射为实数，用分布律、期望与方差刻画离散随机变量的行为，并通过二项分布、几何分布、超几何分布、Balls-and-Bins 以及成对独立 vs 相互独立等核心模型，建立离散概率的算法直觉。</p><div class="meta"><span>预计用时：165 分钟</span><span>难度：中高（需要熟悉计数、条件概率与全概率公式）</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>写出离散随机变量的分布律（PMF）与累积分布（CDF），并用全概率公式验证归一性</li><li>计算二项分布、几何分布、超几何分布的期望与方差，辨析有放回 vs 无放回抽样</li><li>用指标随机变量与线性期望解决 Balls-and-Bins 与计数问题，避免直接枚举</li><li>区分成对独立与相互独立，构造反例并判断事件的独立性</li><li>在 Monty Hall、Mario 硬币等模型中正确运用贝叶斯更新与条件概率</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>样本空间、事件与概率公理（Module 7–8）</li><li>条件概率、全概率公式与贝叶斯公式（Module 8–9）</li><li>二项式系数、组合计数与 Union Bound（Module 9）</li><li>离散求和与基本渐近直觉</li></ul><h2 id="sec-rv-pmf">离散随机变量、分布律与累积分布</h2><p>设 \((\Omega, \mathcal{F}, \mathbb{P})\) 为概率空间。<strong>离散随机变量</strong> \(X: \Omega \to \mathbb{R}\) 是一个只取有限个或可列个实数值的函数；我们通常关心它的<strong>分布律</strong>（probability mass function, PMF），定义为对每个 \(x \in \mathbb{R}\),</p>
+<p>\[
+p_X(x) = \mathbb{P}[X = x] = \sum_{\omega \in \Omega: X(\omega)=x} \mathbb{P}[\omega].
+\]</p>
+<p>PMF 必须满足非负性 \(p_X(x) \ge 0\) 与归一性 \(\sum_{x} p_X(x) = 1\)。反过来，任何满足这两条的函数都可定义一个离散分布。注意 PMF 是逐点概率，而不是区间概率：对离散随机变量，单点可正，但长度为零的区间概率为零只在连续情形成立。</p>
+<p><strong>累积分布函数</strong>（CDF）定义为 \(F_X(x) = \mathbb{P}[X \le x]\)，对离散随机变量它是右连续阶梯函数，跳跃高度恰好等于该点的 PMF 值。CDF 在 \(x \to -\infty\) 时趋于 0，在 \(x \to +\infty\) 时趋于 1。用 CDF 计算区间概率是常见技巧：</p>
+<p>\[
+\mathbb{P}[a &lt; X \le b] = F_X(b) - F_X(a).
+\]</p>
+<p>离散随机变量之间可以谈<strong>联合分布</strong>与<strong>独立性</strong>：\(X, Y\) 独立当且仅当 \(p_{X,Y}(x,y) = p_X(x)p_Y(y)\) 对所有 \(x, y\) 成立。独立性是逐点乘积，而不是事件层面的独立，尽管两者在自然构造下等价。</p>
+<p>在 CS 70 的讨论与作业里，识别随机变量的<strong>定义域</strong>往往是第一步。例如投掷 \(n\) 次不均匀硬币，正面次数 \(X\) 的取值范围是 \(\{0, 1, \dots, n\}\)，而不是实数区间。把定义域写错会导致后续期望与方差计算全部错位。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>袋中有 3 个红球、2 个蓝球，随机无放回抽取 2 个。令 \(X\) 为抽到的红球数，求 \(p_X(k)\) 与 \(F_X(1)\)。</p>
+<p><strong>分布律</strong>：样本空间大小为 \(\binom{5}{2} = 10\)。当 \(k=0\) 时，两球皆蓝，有 \(\binom{2}{2}=1\) 种，故 \(p_X(0) = 1/10\)；当 \(k=1\) 时，一红一蓝，有 \(\binom{3}{1}\binom{2}{1}=6\) 种，故 \(p_X(1) = 6/10\)；当 \(k=2\) 时，两球皆红，有 \(\binom{3}{2}=3\) 种，故 \(p_X(2) = 3/10\)。</p>
+<p><strong>归一性验证</strong>：\(1/10 + 6/10 + 3/10 = 1\)。</p>
+<p><strong>CDF</strong>：\(F_X(1) = \mathbb{P}[X \le 1] = p_X(0) + p_X(1) = 7/10\)。</p>
+<p>这个例子同时展示了超几何分布的形状，下一节会把它抽象成一般公式。</p></div></div><h2 id="sec-expectation-variance">期望、方差与指标随机变量</h2><p>设离散随机变量 \(X\) 的取值集合为 \(\mathcal{X}\)。<strong>期望</strong>（期望值）定义为</p>
+<p>\[
+\mathbb{E}[X] = \sum_{x \in \mathcal{X}} x \cdot p_X(x),
+\]</p>
+<p>只要级数绝对收敛就存在。期望是线性算子：对任意常数 \(a, b\) 与同分布上的随机变量 \(X, Y\)，</p>
+<p>\[
+\mathbb{E}[aX + bY] = a\mathbb{E}[X] + b\mathbb{E}[Y],
+\]</p>
+<p><strong>不需要</strong> \(X, Y\) 独立。线性期望是 CS 70 计数与 Balls-and-Bins 问题的核心工具，因为它把复杂随机变量拆成简单随机变量之和。</p>
+<p><strong>方差</strong>定义为 \(\operatorname{Var}(X) = \mathbb{E}[(X - \mathbb{E}[X])^2]\)，等价于常用计算公式</p>
+<p>\[
+\operatorname{Var}(X) = \mathbb{E}[X^2] - (\mathbb{E}[X])^2.
+\]</p>
+<p>方差衡量随机变量偏离期望的平方期望，具有性质 \(\operatorname{Var}(aX + b) = a^2 \operatorname{Var}(X)\)。当 \(X, Y\) <strong>独立</strong>时，方差可加：</p>
+<p>\[
+\operatorname{Var}(X + Y) = \operatorname{Var}(X) + \operatorname{Var}(Y).
+\]</p>
+<p><strong>不独立时该公式一般不成立</strong>，必须考虑协方差项。</p>
+<p><strong>指标随机变量</strong>（indicator random variable）是取值为 0 或 1 的随机变量：对事件 \(A\)，定义 \(I_A(\omega) = 1\) 当 \(\omega \in A\)，否则为 0。它的期望就是事件概率：</p>
+<p>\[
+\mathbb{E}[I_A] = \mathbb{P}[A].
+\]</p>
+<p>把 \(X\) 写成指标之和，例如 \(X = \sum_{i=1}^n I_{A_i}\)，就能用线性期望直接算 \(\mathbb{E}[X] = \sum_i \mathbb{P}[A_i]\)，而无需先求出 \(X\) 的分布。这是 Monte Carlo 型计数问题（如 balls-into-bins 的空箱数、匹配问题成功数）的标准思路。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>投掷一枚不均匀硬币 \(n\) 次，正面概率为 \(p\)。令 \(X\) 为正面次数，\(I_i\) 为第 \(i\) 次出现正面的 indicator。</p>
+<p><strong>期望</strong>：\(X = \sum_{i=1}^n I_i\)，故</p>
+<p>\[
+\mathbb{E}[X] = \sum_{i=1}^n \mathbb{E}[I_i] = \sum_{i=1}^n p = np.
+\]</p>
+<p><strong>方差</strong>：各次独立，\(\operatorname{Var}(I_i) = p(1-p)\)，故</p>
+<p>\[
+\operatorname{Var}(X) = \sum_{i=1}^n \operatorname{Var}(I_i) = np(1-p).
+\]</p>
+<p><strong>对比无放回情形</strong>：从 \(N\) 球（其中 \(M\) 红）无放回抽 \(n\) 球，红球数 \(X\) 的期望同样是 \(n \cdot M/N\)（由对称性），但方差为 \(n \cdot \frac{M}{N}(1-\frac{M}{N}) \cdot \frac{N-n}{N-1}\)，多了一个<strong>有限总体修正因子</strong>。期望相同、方差不同，是辨析两类抽样的关键信号。</p></div></div><h2 id="sec-binomial-geometric">二项分布与几何分布</h2><p>在 \(n\) 次独立伯努利试验中，每次成功概率为 \(p\)，则成功次数 \(X\) 服从<strong>二项分布</strong>，记 \(X \sim \operatorname{Binomial}(n, p)\)，其 PMF 为</p>
+<p>\[
+\mathbb{P}[X = k] = \binom{n}{k} p^k (1-p)^{n-k}, \quad k = 0, 1, \dots, n.
+\]</p>
+<p>期望 \(\mathbb{E}[X] = np\)、方差 \(\operatorname{Var}(X) = np(1-p)\) 可由上节 indicator 方法直接得到。二项分布是 CS 70 讨论 9A「Head Count」的核心：投掷正面概率为 \(2/5\) 的硬币 20 次，正面数即 \(\operatorname{Binomial}(20, 2/5)\)。作业 09 第 6 题（航模测试）则展示了二项分布在多天独立筛选中的迭代：若每架飞机每天成功概率为 \(p\)，则 \(t\) 天后存活数为 \(\operatorname{Binomial}(n, p^t)\)。</p>
+<p><strong>几何分布</strong>描述的是「首次成功所需的试验次数」。设每次成功概率为 \(p\)，试验独立，则首次成功出现在第 \(k\) 次的概率为</p>
+<p>\[
+\mathbb{P}[X = k] = (1-p)^{k-1} p, \quad k = 1, 2, 3, \dots.
+\]</p>
+<p>这是以 \(\{1, 2, 3, \dots\}\) 为定义域的几何分布（注意也有以 \(\{0, 1, 2, \dots\}\) 定义的版本，差一次平移）。它的期望为 \(\mathbb{E}[X] = 1/p\)，方差为 \(\operatorname{Var}(X) = (1-p)/p^2\)，可通过等比数列求和或母函数推导。</p>
+<p>几何分布最重要的性质是<strong>无记忆性</strong>（memorylessness）：对任意正整数 \(k, m\),</p>
+<p>\[
+\mathbb{P}[X &gt; k+m \mid X &gt; m] = \mathbb{P}[X &gt; k].
+\]</p>
+<p>直觉上，已经失败了 \(m\) 次不会影响后续仍需等待的时间分布。这是几何分布独有的特征（在离散分布中，只有几何分布具有无记忆性），也是讨论 9B 第 1 题的核心考点。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>投掷一枚公平骰子，直到出现 6 点为止，记录投掷次数为 \(X\)。</p>
+<p><strong>分布识别</strong>：每次出现 6 的概率为 \(p = 1/6\)，独立重复，故 \(X \sim \operatorname{Geometric}(1/6)\)（以 \(\{1, 2, \dots\}\) 为定义域）。</p>
+<p><strong>期望与方差</strong>：\(\mathbb{E}[X] = 1/p = 6\)，\(\operatorname{Var}(X) = (1-p)/p^2 = (5/6)/(1/36) = 30\)。</p>
+<p><strong>无记忆性应用</strong>：已知前 3 次都没出现 6，还需投掷次数的条件分布仍是 \(\operatorname{Geometric}(1/6)\)，期望仍为 6。形式化地，对 \(Y = X - 3 \mid X &gt; 3\)，有</p>
+<p>\[
+\mathbb{P}[Y = k] = \mathbb{P}[X = k+3 \mid X &gt; 3] = \frac{(5/6)^{k+2}(1/6)}{(5/6)^3} = (1/6)(5/6)^{k-1},
+\]</p>
+<p>即 \(Y\) 与原分布相同。</p></div></div><h2 id="sec-hypergeometric-balls-and-bins">超几何分布与 Balls-and-Bins</h2><p><strong>超几何分布</strong>描述无放回抽样中的成功次数：总体含 \(N\) 个元素，其中 \(M\) 个为「成功」。从中无放回抽取 \(n\) 个，成功数 \(X\) 满足</p>
+<p>\[
+\mathbb{E}[X] = n \cdot \frac{M}{N}, \quad \operatorname{Var}(X) = n \cdot \frac{M}{N} \left(1 - \frac{M}{N}\right) \cdot \frac{N-n}{N-1}.
+\]</p>
+<p>期望与有放回（二项）情形相同，但方差多了一个<strong>有限总体修正因子</strong> \((N-n)/(N-1) &lt; 1\)，反映无放回抽样减少了波动。当 \(N\) 远大于 \(n\) 时，超几何近似于二项分布。讨论 8B「复活节彩蛋」与作业 09「对称弹珠」都是超几何背景的典型题。</p>
+<p><strong>Balls-and-Bins</strong> 把 \(m\) 个球独立、均匀地投入 \(n\) 个编号箱。基本问题包括：指定箱空着的概率、至少 \(k\) 个箱空着的概率、最大负载等。当 \(m = n\) 时，指定某箱为空的概率是</p>
+<p>\[
+\left(1 - \frac{1}{n}\right)^n \;\to\; \frac{1}{e} \quad (n \to \infty).
+\]</p>
+<p>前 \(k\) 个指定箱全空的概率为 \((1 - k/n)^n\)。讨论 9A 第 1 题进一步用 Union Bound 估计「至少 \(k\) 箱空」的概率上界：设 \(A_i\) 为第 \(i\) 组 \(k\) 箱全空的事件，共有 \(m = \binom{n}{k}\) 组，则</p>
+<p>\[
+\mathbb{P}[\text{至少 } k \text{ 箱空}] = \mathbb{P}\left[\bigcup_{i=1}^m A_i\right] \le m \cdot \left(1 - \frac{k}{n}\right)^n = \binom{n}{k}\left(1 - \frac{k}{n}\right)^n.
+\]</p>
+<p>Union Bound 的优势是避免复杂依赖，劣势是给的只是上界，不一定紧。</p>
+<p><strong>关键辨析</strong>：Balls-and-Bins 默认每次投球<strong>独立且均匀</strong>，对应「有放回、顺序重要」的样本空间，大小为 \(n^m\)。这与「stars and bars」的非均匀分布截然不同——后者每种组合（occupancy numbers）等可能，但每次投球不再独立。CS 70 明确要求区分这两种抽样机制。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>把 4 个球独立均匀投入 3 个箱，令 \(X\) 为空箱数，求 \(\mathbb{E}[X]\)。</p>
+<p><strong>指标分解</strong>：设 \(I_i\) 为第 \(i\) 箱为空的 indicator，则 \(X = I_1 + I_2 + I_3\)。由对称性，</p>
+<p>\[
+\mathbb{E}[I_i] = \mathbb{P}[\text{箱 } i \text{ 空}] = \left(1 - \frac{1}{3}\right)^4 = \left(\frac{2}{3}\right)^4 = \frac{16}{81}.
+\]</p>
+<p>故</p>
+<p>\[
+\mathbb{E}[X] = 3 \cdot \frac{16}{81} = \frac{16}{27}.
+\]</p>
+<p><strong>无需枚举</strong>：我们并未先求出 \(X\) 的分布（那需要容斥或斯特林数），直接由线性期望得到结果。这是 indicator 方法威力的典型体现。</p>
+<p><strong>对比</strong>：若问「某指定箱空」与「某指定两箱同时空」是否独立？前者概率 \((2/3)^4 = 16/81\)，后者 \((1/3)^4 = 1/81\),而乘积 \(16/81 \times 16/81 \neq 1/81\)，故不独立——这与讨论 9A 第 1(f) 题结论一致。</p></div></div><h2 id="sec-pairwise-mutual-independence">成对独立与相互独立</h2><p>事件族 \(\{A_1, \dots, A_n\}\) <strong>成对独立</strong>（pairwise independent）指对任意 \(i \neq j\)，\(\mathbb{P}[A_i \cap A_j] = \mathbb{P}[A_i]\mathbb{P}[A_j]\)。<strong>相互独立</strong>（mutual independence）则更强：要求对任意子集 \(S \subseteq \{1,\dots,n\}\),</p>
+<p>\[
+\mathbb{P}\left[\bigcap_{i \in S} A_i\right] = \prod_{i \in S} \mathbb{P}[A_i].
+\]</p>
+<p>成对独立不蕴含相互独立，这是 CS 70 独立性辨析的核心难点。讨论 9A 第 3 题给出了经典反例：掷两个公平骰子，设 \(A_1\) 为「第一骰为 1」、\(A_2\) 为「第二骰为 6」、\(A_3\) 为「两骰和为 7」。每个事件的概率都是 \(1/6\)，每对事件的交概率都是 \(1/36\)，故成对独立成立。但三者同时发生的概率为 \(1/36\)，而乘积为 \(1/216\)，故<strong>不相互独立</strong>。</p>
+<p>独立性辨析的常见手法：
+1. <strong>验证定义</strong>：直接计算 \(\mathbb{P}[A \cap B]\) 与 \(\mathbb{P}[A]\mathbb{P}[B]\) 是否相等。
+2. <strong>极端情形</strong>：若 \(A\) 发生必然导致 \(B\) 发生（如「前两箱空」蕴含「第一箱空」），则只要 \(0 &lt; \mathbb{P}[A] &lt; 1\) 且 \(\mathbb{P}[B] &lt; 1\)，两者必不独立。
+3. <strong>条件概率</strong>：检查 \(\mathbb{P}[A \mid B]\) 是否等于 \(\mathbb{P}[A]\)。若不相等，则不独立。</p>
+<p>作业 09 第 3 题（Mario 硬币）进一步说明：随机取一枚硬币掷两次，两次正面事件 \(Y_1, Y_2\) <strong>不独立</strong>，因为第一次正面提供了关于所选硬币偏倚的信息，从而影响第二次正面的概率。而随机取两枚不同硬币各掷一次，两次正面事件 \(X_1, X_2\) 同样不独立，因为第一次正面暗示第一枚硬币偏倚较高，从而影响第二枚硬币的分布（两枚不能相同）。两种情形都需用贝叶斯更新严格证明。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设事件 \(A, B\) 独立，\(\mathbb{P}[A] = 1/2\)，\(\mathbb{P}[B] = 1/2\)。令 \(C\) 为「\(A\) 与 \(B\) 恰有一个发生」，即 \(C = (A \cap B^c) \cup (A^c \cap B)\)。</p>
+<p><strong>求 \(C\) 的概率</strong>：\(\mathbb{P}[C] = \mathbb{P}[A]\mathbb{P}[B^c] + \mathbb{P}[A^c]\mathbb{P}[B] = \frac{1}{2}\cdot\frac{1}{2} + \frac{1}{2}\cdot\frac{1}{2} = \frac{1}{2}\)。</p>
+<p><strong>检查 \(A, C\) 独立性</strong>：\(\mathbb{P}[A \cap C] = \mathbb{P}[A \cap B^c] = \frac{1}{4}\)，而 \(\mathbb{P}[A]\mathbb{P}[C] = \frac{1}{2} \cdot \frac{1}{2} = \frac{1}{4}\)，故独立。同理 \(B, C\) 独立。</p>
+<p><strong>检查 \(A, B, C\) 相互独立性</strong>：\(\mathbb{P}[A \cap B \cap C] = 0\)（\(C\) 要求恰一个发生，与 \(A \cap B\) 矛盾），但 \(\mathbb{P}[A]\mathbb{P}[B]\mathbb{P}[C] = 1/8 \neq 0\)，故三者<strong>不成相互独立</strong>。</p>
+<p>这个例子说明：即使两两独立，三者的联合乘积条件仍可失败。构造此类反例的关键是让第三个事件成为前两个事件的「异或」类函数。</p></div></div><section aria-labelledby="interactive-lab" class="lesson-interactives"><h2 id="interactive-lab">交互推演</h2><article class="interactive-study"><h3>主持人知道奖品位置且必定打开空门时，换门继承了初选错误的全部概率。</h3><p>依据本地课程资料 <code>homework/hw09.pdf</code> 重绘；交互用于解释概念，不替代题面或证明。</p><figure aria-busy="true" class="course-interactive" data-interactive-src="../interactives/monty-hall-stepper.json"><img alt="Monty Hall 三种等概率奖品位置与两种策略胜负的静态图" class="course-interactive-fallback" src="../figures/monty-hall-stepper-fallback.svg"/></figure></article></section><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>无放回抽样的期望与有放回不同，因为每次抽取会改变组成。</h3><p>期望相同：无放回抽 \(n\) 次抽到红球的期望仍是 \(n \cdot M/N\)。由对称性，每次抽到红球的边际概率都是 \(M/N\)，线性期望不要求独立。不同的是方差：无放回方差多一个有限总体修正因子 \((N-n)/(N-1)\)。</p></article><article class="summary-card"><h3>几何分布与二项分布都是伯努利试验的产物，因此性质可以互推。</h3><p>二项分布计数固定 \(n\) 次试验中的成功次数，几何分布计数首次成功所需的试验次数。两者定义域、期望公式、方差公式都不同。几何分布独有的无记忆性在二项分布中没有对应。</p></article><article class="summary-card"><h3>成对独立就是相互独立，只是说法不同。</h3><p>成对独立只要求任意两个事件独立，相互独立要求任意子集的交概率等于概率乘积。讨论 9A 第 3 题（两骰子、第一骰为 1、第二骰为 6、和为 7）是成对独立但非相互独立的经典反例。</p></article><article class="summary-card"><h3>Balls-and-Bins 中每种 occupancy 组合（stars and bars）等可能。</h3><p>默认的 Balls-and-Bins 是球独立、均匀地投箱，对应「有放回、顺序重要」的样本空间（大小 \(n^m\)）。Stars and bars 给出的是组合数，但每种组合不等可能。混淆两者会导致概率计算错误。</p></article><article class="summary-card"><h3>方差总是可加的：\(\operatorname{Var}(X+Y) = \operatorname{Var}(X) + \operatorname{Var}(Y)\)。</h3><p>方差可加性只在 \(X, Y\) 独立（或不相关）时成立。一般情形需加上 \(2\operatorname{Cov}(X,Y)\)。对无放回抽样的超几何分布，协方差为负，导致方差比二项情形更小。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="由归一性 \(\sum_{k=1}^3 c \cdot k = c(1+2+3) = 6c = 1\)，得 \(c = 1/6\)。PMF 必须满足概率和为 1，这是求未知系数的标准入口。" data-incorrect="注意 PMF 的归一性要求所有取值概率之和为 1。列方程 \(c \cdot 1 + c \cdot 2 + c \cdot 3 = 1\) 求解。" data-quiz="m10-quiz-pmf-normalization"><p><strong>问题：</strong>设随机变量 \(X\) 取值 \(\{1, 2, 3\}\)，且 \(\mathbb{P}[X = k] = c \cdot k\)。求常数 \(c\)。</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(1/6\)</button><button aria-pressed="false" data-choice="b">\(1/3\)</button><button aria-pressed="false" data-choice="c">\(1/2\)</button><button aria-pressed="false" data-choice="d">\(1\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="几何分布的无记忆性：\(\mathbb{P}[X &gt; k+m \mid X &gt; m] = \mathbb{P}[X &gt; k]\)。取 \(k=3, m=2\) 即得 (a)。注意条件期望应为 \(\mathbb{E}[X \mid X &gt; 2] = 2 + \mathbb{E}[X]\)，而非不变。" data-incorrect="无记忆性针对的是尾概率 \(\mathbb{P}[X &gt; k]\)，不是期望或方差本身。条件期望应为 \(\mathbb{E}[X \mid X &gt; m] = m + \mathbb{E}[X]\)" data-quiz="m10-quiz-memoryless"><p><strong>问题：</strong>设 \(X \sim \operatorname{Geometric}(p)\)（以 \(\{1,2,\dots\}\) 为定义域）。以下哪项成立？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\mathbb{P}[X &gt; 5 \mid X &gt; 2] = \mathbb{P}[X &gt; 3]\)</button><button aria-pressed="false" data-choice="b">\(\mathbb{E}[X \mid X &gt; 2] = \mathbb{E}[X]\)</button><button aria-pressed="false" data-choice="c">\(\operatorname{Var}(X \mid X &gt; 2) = \operatorname{Var}(X) - 2\)</button><button aria-pressed="false" data-choice="d">以上皆非</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="c" data-correct="每对独立：\(\mathbb{P}[A \cap B] = 1/4 = \mathbb{P}[A]\mathbb{P}[B]\)，\(\mathbb{P}[A \cap C] = 1/4 = \mathbb{P}[A]\mathbb{P}[C]\)（第一枚奇且和奇 ↔ 第二枚偶，概率 \(1/4\)），同理 \(B, C\)。但 \(\mathbb{P}[A \cap B \cap C] = 0\)（两奇数和为偶），而乘积 \(1/8\)，故不相互独立。" data-incorrect="验证成对独立只需检查三个两两交；验证相互独立还需检查三者交。两奇数之和为偶数，故 \(A \cap B \cap C = \emptyset\)，联合概率为 0，与乘积 \(1/8\) 不等。" data-quiz="m10-quiz-pairwise-not-mutual"><p><strong>问题：</strong>掷两枚公平骰子。设 \(A\) 为「第一枚为奇数」，\(B\) 为「第二枚为奇数」，\(C\) 为「和为奇数」。以下正确的是：</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(A, B, C\) 相互独立</button><button aria-pressed="false" data-choice="b">\(A, B, C\) 成对独立且相互独立</button><button aria-pressed="false" data-choice="c">\(A, B, C\) 成对独立但不相互独立</button><button aria-pressed="false" data-choice="d">\(A, B, C\) 连成对独立都不成立</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="每球不落入指定两箱的概率为 \((n-2)/n = 1 - 2/n\)，\(n\) 球独立，故概率为 \((1 - 2/n)^n \to e^{-2} = 1/e^2\)。这是 Balls-and-Bins 的直接推广。" data-incorrect="每球需同时避开两个指定箱，概率为 \((n-2)/n\)。\(n\) 次独立，取极限得 \(\lim_{n\to\infty}(1-2/n)^n = e^{-2}\)。" data-quiz="m10-quiz-balls-empty"><p><strong>问题：</strong>将 \(n\) 个球独立均匀投入 \(n\) 个箱，指定某箱为空的概率趋近于 \(1/e\)。若改为「指定两箱同时为空」，概率趋近于：</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(1/e\)</button><button aria-pressed="false" data-choice="b">\(1/e^2\)</button><button aria-pressed="false" data-choice="c">\(2/e\)</button><button aria-pressed="false" data-choice="d">\(1/(2e)\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>离散随机变量的行为由分布律（PMF）完全刻画，CDF 提供另一种等价视角。</li><li>线性期望不依赖独立性，是处理计数与 Balls-and-Bins 问题的核心工具。</li><li>二项分布计数固定次数的成功，几何分布计数首次成功的试验次数，后者具有无记忆性。</li><li>超几何分布描述无放回抽样，期望与二项相同，但方差含有限总体修正因子。</li><li>成对独立不蕴含相互独立；判断独立性需逐层验证子集交的概率乘积。</li><li>Balls-and-Bins 默认独立均匀投球，与 stars and bars 的非均匀组合分布不同。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>discussion/dis08b.pdf</code> · 2–4 · confidence: high · Easter Eggs 用全概率规则求第 2 次抽到巧克力概率；Poisoned Smarties 用全概率与贝叶斯逆推工厂来源。</li><li><code>discussion/dis09a.pdf</code> · 1–3 · confidence: high · 第 1 题计算空箱概率并用 Union Bound 估计至少 k 箱空；第 2 题识别 Binomial(20, 2/5)。</li><li><code>discussion/dis09a.pdf</code> · 4 · confidence: high · 事件 {第一骰=1}、{第二骰=6}、{和=7} 两两独立但三者不独立。</li><li><code>homework/hw09.pdf</code> · 2–4 · confidence: high · Mario 硬币题比较「换币」与「同币两次」的独立性差异；航模测试展示 Xt ~ Binomial(n, p^t)。</li><li><code>cs70-cheatsheet.pdf</code> · R.V. 列 · confidence: low · Cheatsheet 列出 Geometric/Poisson 分布相关公式作为参考。</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

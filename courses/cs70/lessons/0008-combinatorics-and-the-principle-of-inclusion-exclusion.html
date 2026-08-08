@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>组合计数与容斥原理 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 8 讲</p><h1>组合计数与容斥原理</h1><p class="lede">本讲在基础计数之上，系统处理三类进阶主题：其一是带约束与对称性的计数——从 stars and bars 到容斥原理再到商计数；其二是网格路径的反射原理与 Catalan 型递推，并揭示其与有序树计数的同构；其三是 Fibonacci 计数模型及其组合证明。核心方法论是双射与两种计数法。</p><div class="meta"><span>预计用时：120 分钟</span><span>难度：中高</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>运用 stars and bars 模型计数不可区分对象到可区分容器的分配方式</li><li>运用容斥原理处理带禁止性质的受限计数问题</li><li>通过两种计数法或双射构造证明组合恒等式</li><li>使用反射原理建立跨越对角线路径与非法路径之间的双射，导出 Catalan 型递推</li><li>在对称群作用下计数等价类（面、珠、图、圈），识别自由作用与 Burnside 引理的应用条件</li><li>建立 Fibonacci 计数模型并证明无连续零二进制串数为 F_{t+2}</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>Module 7：基础计数（乘法原理、组合数、二项式定理）</li><li>集合运算与基数</li><li>基本递推关系与数学归纳法</li></ul><h2 id="stars-and-bars">球与棍：不可区分对象的分配</h2><p>计数问题中最基本的模型之一是：把 \(k\) 个不可区分的对象分配到 \(n\) 个可区分容器中，每个容器可以接收零个或多个对象。等价地，我们求非负整数解的个数：</p>
+<p>\[ x_1 + x_2 + \cdots + x_n = k, \quad x_i \in \mathbb{Z}_{\ge 0}. \]</p>
+<p><strong>Stars and Bars 方法。</strong> 将 \(k\) 个不可区分的小球排成一行（"星"），在它们之间插入 \(n-1\) 个隔板（"棍"）来划分出 \(n\) 个容器。整个序列由 \(k\) 个星和 \(n-1\) 个棍组成，共 \(k + n - 1\) 个位置。只需从中选出 \(n-1\) 个位置放棍（或等价地选 \(k\) 个位置放星），即得：</p>
+<p>\[ \#\{\text{分配方式}\} = \binom{k + n - 1}{n - 1} = \binom{k + n - 1}{k}. \]</p>
+<p>这个等式的组合本质是：在 \(k+n-1\) 个位置中选择哪些放棍，其余自动放星。</p>
+<p><strong>常见变体。</strong> 若要求每个容器至少一个对象，则先给每个容器一个，剩余 \(k-n\) 个自由分配（要求 \(k \ge n\)），答案为 \(\binom{k-1}{n-1}\)。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>一家甜品店提供 5 种口味的冰淇淋。一位顾客要买 8 个球装在同一只杯中，口味可以重复、顺序不计。问有多少种不同的选购方案？</p>
+<p>这里球不可区分（只关心每种口味各要几个），口味有 5 种（可区分容器）。设 \(x_i\) 为第 \(i\) 种口味要的球数，需计数：</p>
+<p>\[ x_1 + x_2 + x_3 + x_4 + x_5 = 8, \quad x_i \in \mathbb{Z}_{\ge 0}. \]</p>
+<p>由 stars and bars：</p>
+<p>\[ \# = \binom{8 + 5 - 1}{5 - 1} = \binom{12}{4} = 495. \]</p>
+<p>若顾客要求每种口味至少要一个球，则先给每种口味一个，剩余 3 个球自由分配：</p>
+<p>\[ \# = \binom{3 + 5 - 1}{5 - 1} = \binom{7}{4} = 35. \]</p></div></div><h2 id="inclusion-exclusion">容斥原理：处理受限计数</h2><p>当直接计数"至少满足某性质"或"不满足任何禁止性质"的对象时，容斥原理（Principle of Inclusion-Exclusion, PIE）是核心工具。</p>
+<p><strong>定理（PIE）。</strong> 设 \(A_1, A_2, \ldots, A_n\) 是有限全集 \(U\) 的子集，则</p>
+<p>\[ \left|\bigcup_{i=1}^n A_i\right| = \sum_{i} |A_i| - \sum_{i&lt;j} |A_i \cap A_j| + \sum_{i&lt;j&lt;k} |A_i \cap A_j \cap A_k| - \cdots + (-1)^{n+1} |A_1 \cap \cdots \cap A_n|. \]</p>
+<p><strong>补集形式。</strong> 更常用的是计数"避开所有性质"的对象：</p>
+<p>\[ \left|U \setminus \bigcup_{i=1}^n A_i\right| = |U| - \sum_i |A_i| + \sum_{i&lt;j} |A_i \cap A_j| - \cdots + (-1)^n |A_1 \cap \cdots \cap A_n|. \]</p>
+<p>每项交集的符号由 \((-1)^{|S|+1}\) 决定（并集情形）或 \((-1)^{|S|}\)（补集情形），其中 \(|S|\) 是涉及的集合数。关键是"逐层修正"：先加单集合，减两两交（因为被加了两次），加三三交（因为被减了过多），依此类推。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>计数 1 到 300 中能被 2、3 或 5 中至少一个整除的正整数个数。</p>
+<p>设 \(A_p = \{m \in \{1,\ldots,300\} : p \mid m\}\)。则：</p>
+<p>\[ |A_2| = \lfloor 300/2 \rfloor = 150, \quad |A_3| = 100, \quad |A_5| = 60. \]</p>
+<p>两两交（即被最小公倍数整除）：</p>
+<p>\[ |A_2 \cap A_3| = |A_6| = 50, \quad |A_2 \cap A_5| = |A_{10}| = 30, \quad |A_3 \cap A_5| = |A_{15}| = 20. \]</p>
+<p>三者交：</p>
+<p>\[ |A_2 \cap A_3 \cap A_5| = |A_{30}| = 10. \]</p>
+<p>由 PIE：</p>
+<p>\[ |A_2 \cup A_3 \cup A_5| = (150+100+60) - (50+30+20) + 10 = 310 - 100 + 10 = 220. \]</p></div></div><h2 id="combinatorial-proofs">组合恒等式与双射证明</h2><p><strong>组合证明（combinatorial proof）</strong> 的核心思想是：对一个有限集合用两种不同方式计数，得到两个表达式，它们必相等。它不依赖代数展开，而是给出组合直觉。</p>
+<p><strong>标准技术：</strong>
+1. <strong>两种计数法</strong>：为同一组合对象构造两种计数过程。
+2. <strong>双射法</strong>：在两个集合间建立双射，说明它们等势。</p>
+<p><strong>Pascal 恒等式。</strong> 对 \(1 \le k \le n\)：</p>
+<p>\[ \binom{n}{k} = \binom{n-1}{k-1} + \binom{n-1}{k}. \]</p>
+<p>组合解释：从 \(n\) 人中选 \(k\) 人组队。固定某人 Alice，分两类：含 Alice 的队（再从其余 \(n-1\) 人选 \(k-1\) 人）和不含 Alice 的队（从其余 \(n-1\) 人选 \(k\) 人）。</p>
+<p><strong>Hockey-stick 恒等式。</strong> 对 \(0 \le k \le n\)：</p>
+<p>\[ \sum_{i=k}^{n} \binom{i}{k} = \binom{n+1}{k+1}. \]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>用组合证明验证 hockey-stick 恒等式。</strong> 设 \(n=5, k=2\)：</p>
+<p>\[ \binom{2}{2} + \binom{3}{2} + \binom{4}{2} + \binom{5}{2} = 1 + 3 + 6 + 10 = 20 = \binom{6}{3}. \]</p>
+<p><strong>一般证明。</strong> 考虑集合 \(\{1, 2, \ldots, n+1\}\) 的所有 \(k+1\) 元子集。右边 \(\binom{n+1}{k+1}\) 直接计数。</p>
+<p>对左边，按子集的<strong>最大元</strong>分类。若最大元为 \(i+1\)（其中 \(i \ge k\)），则其余 \(k\) 个元素必须从 \(\{1, \ldots, i\}\) 中选取，有 \(\binom{i}{k}\) 种。\(i\) 的取值范围是 \(k\) 到 \(n\)，因此：</p>
+<p>\[ \sum_{i=k}^{n} \binom{i}{k} = \binom{n+1}{k+1}. \]</p>
+<p>两种计数法结果相同，恒等式得证。</p></div></div><h2 id="grid-paths">网格路径计数</h2><p>在整数格点 \(\mathbb{Z}^2\) 上，从 \((0,0)\) 移动到 \((m,n)\)，每步只能向右 \((x+1,y)\) 或向上 \((x,y+1)\)。最短路径恰好含 \(m\) 步右移和 \(n\) 步上移，共 \(m+n\) 步。</p>
+<p><strong>路径数公式。</strong> 在 \(m+n\) 步中选出哪 \(n\) 步为上移（或哪 \(m\) 步为右移）：</p>
+<p>\[ \#\{\text{最短路径 } (0,0) \to (m,n)\} = \binom{m+n}{n} = \binom{m+n}{m}. \]</p>
+<p><strong>跨越对角线的路径。</strong> 考虑从 \((0,0)\) 到 \((n,n)\) 且始终满足 \(y \le x\)（不跨越对角线 \(y=x\)）的路径。这类"合法路径"的计数需要反射原理。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>计算从 \((0,0)\) 到 \((4,4)\) 的最短路径总数，以及其中跨越对角线 \(y=x\) 的路径数。</p>
+<p>总路径数：\(\binom{8}{4} = 70\)。</p>
+<p><strong>反射原理</strong>指出：跨越对角线的路径与从 \((0,0)\) 到 \((3,5)\) 的路径之间存在双射。构造如下：对一条跨越 \(y=x\) 的路径，设首次跨越发生在从 \((i,i)\) 走到 \((i,i+1)\) 的那一步；将此后所有步做反射（右移↔上移），则终点变为 \((n-1,n+1) = (3,5)\)。反之，任给一条到 \((3,5)\) 的路径，它必跨越 \(y=x\)，做同样的反射即回到跨越路径。这是一个双射。</p>
+<p>因此跨越路径数 = 到 \((3,5)\) 的路径数 = \(\binom{8}{3} = 56\)。</p></div></div><h2 id="catalan-recurrence">反射原理与 Catalan 型递推</h2><p><strong>n-legal 路径。</strong> 在 \(n\times n\) 网格中从 \((0,0)\) 到 \((n,n)\)、始终满足 \(y \le x\) 的最短路径，称为 n-legal 路径。设其数目为 \(F_n\)。</p>
+<p>由反射原理，跨越对角线的路径数等于 \(\binom{2n}{n-1}\)，因此：</p>
+<p>\[ F_n = \binom{2n}{n} - \binom{2n}{n-1}. \]</p>
+<p>这正是第 \(n\) 个 Catalan 数 \(C_n = \frac{1}{n+1}\binom{2n}{n}\)。</p>
+<p><strong>递推关系。</strong> 设路径最后一次触及对角线 \(y=x\)（除终点外）的点是 \((i,i)\)，其中 \(0 \le i \le n-1\)。则：</p>
+<ul>
+<li>
+<p>从 \((0,0)\) 到 \((i,i)\) 的子路径是 i-legal 路径：\(F_i\) 种；</p>
+</li>
+<li>
+<p>从 \((i+1,i)\) 到 \((n,n-1)\) 的子路径（平移后）是 \((n-1-i)\)-legal 路径：\(F_{n-1-i}\) 种。</p>
+</li>
+</ul>
+<p>因此这类路径数为 \(F_i \cdot F_{n-1-i}\)。对所有可能的 \(i\) 求和：</p>
+<p>\[ F_n = \sum_{i=0}^{n-1} F_i \cdot F_{n-1-i}, \quad F_0 = 1. \]</p>
+<p><strong>与树的双射。</strong> 满足"非根节点度 ≤ 3、根节点度 ≤ 2"的 \(n\) 节点有序树，按左子树大小分类，恰好满足相同递推 \(T_n = \sum_{i=0}^{n-1} T_i T_{n-1-i}\)。这说明迷宫计数与树计数共享 Catalan 结构。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>计算 \(F_0, F_1, F_2, F_3\) 并验证递推。</p>
+<ul>
+<li>
+<p>\(F_0 = 1\)（空路径）；</p>
+</li>
+<li>
+<p>\(F_1 = 1\)：只有右→上；</p>
+</li>
+<li>
+<p>\(F_2 = F_0 F_1 + F_1 F_0 = 1\cdot 1 + 1\cdot 1 = 2\)；</p>
+</li>
+<li>
+<p>\(F_3 = F_0 F_2 + F_1 F_1 + F_2 F_0 = 1\cdot 2 + 1\cdot 1 + 2\cdot 1 = 5\)。</p>
+</li>
+</ul>
+<p>验证 \(F_3\)：总路径 \(\binom{6}{3}=20\)，跨越路径 \(\binom{6}{2}=15\)，合法路径 \(20-15=5\)。一致。</p></div></div><h2 id="symmetry-counting">对称作用下的计数</h2><p>当对象具有对称性时，"不同"的计数需在等价关系下进行——两个对象若可通过对称变换互相得到，则视为相同。</p>
+<p><strong>立方体面染色。</strong> 用 6 种不同颜色涂立方体的 6 个面。不考虑对称有 \(6!\) 种。立方体的旋转群有 24 个元素（选哪一面朝下：6 种；绕该轴旋转：4 种）。由于 6 色互异，非恒等旋转不能保持染色不变，作用是自由的（free action），故不同染色数为：</p>
+<p>\[ \frac{6!}{24} = 30. \]</p>
+<p><strong>手镯染色。</strong> \(n\) 颗珠子用 \(n\) 种不同颜色，旋转等价下：\(n!/n = (n-1)!\)。若同时允许翻转（反射等价），则除以 2：\((n-1)!/2\)。</p>
+<p><strong>标号图计数。</strong> \(n\) 个标号顶点的无向简单图：\(\binom{n}{2}\) 条可能的边，每条可选可不选：</p>
+<p>\[ 2^{\binom{n}{2}}. \]</p>
+<p><strong>完全图中的圈。</strong> \(K_n\) 中长度为 \(k\)（\(3 \le k \le n\)）的圈：先选有序 \(k\) 元顶点序列 \(\frac{n!}{(n-k)!}\)，再除以 \(k\)（旋转等价）和 2（翻转等价）：</p>
+<p>\[ \sum_{k=3}^{n} \frac{n!}{(n-k)! \cdot 2k}. \]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>将 4 颗颜色全不同的珠子串成手镯，旋转与翻转都视为相同。求不同手镯数。</p>
+<p>不考虑对称有 \(4! = 24\) 种排列。二面体群 \(D_4\) 有 \(2n = 8\) 个元素（\(n\) 旋转 + \(n\) 翻转）。由于颜色全异，只有恒等变换保持排列不变，作用自由，故：</p>
+<p>\[ \# = \frac{24}{8} = 3. \]</p>
+<p>可枚举验证：固定一颗珠子的颜色，其对面有 3 种选色，剩下两颗互换由翻转等价，故恰 3 种。</p></div></div><h2 id="fibonacci-counting">Fibonacci 计数模型</h2><p><strong>无连续零的二进制串。</strong> 设 \(a_t\) 为长度为 \(t\)、不含两个连续 0 的二进制串个数。考虑末位：</p>
+<ul>
+<li>
+<p>末位为 1：前 \(t-1\) 位任意合法串，\(a_{t-1}\) 种；</p>
+</li>
+<li>
+<p>末位为 0：倒数第二位必为 1，前 \(t-2\) 位任意合法串，\(a_{t-2}\) 种。</p>
+</li>
+</ul>
+<p>因此 \(a_t = a_{t-1} + a_{t-2}\)。初值 \(a_1 = 2\)（0, 1），\(a_2 = 3\)（01, 10, 11）。与 Fibonacci 数列 \(F_0=0, F_1=1\) 对比得：</p>
+<p>\[ a_t = F_{t+2}. \]</p>
+<p><strong>Fashion 模型。</strong> \(n\) 件配饰、\(t\) 天，要求同一配饰不能连续两天穿戴。对每件配饰 \(i\)，构造长度为 \(t\) 的二进制串：第 \(k\) 位为 0 表示第 \(k\) 天穿戴。"不连续穿戴" ⇔ "串中无连续 0"。各配饰独立，故总方案数：</p>
+<p>\[ (F_{t+2})^n. \]</p>
+<p>这与直接计数（逐步选子集）的结果一致，给出组合恒等式：</p>
+<p>\[ \sum_{x_1,\ldots,x_t \ge 0} \binom{n}{x_1}\binom{n-x_1}{x_2}\cdots\binom{n-x_{t-1}}{x_t} = (F_{t+2})^n. \]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>\(t=5\) 天、\(n=3\) 件配饰，求合法方案数。</p>
+<p>先算 \(F_{t+2} = F_7\)：\(F_0=0, F_1=1, F_2=1, F_3=2, F_4=3, F_5=5, F_6=8, F_7=13\)。</p>
+<p>每件配饰有 \(F_7 = 13\) 种合法穿戴模式（长度为 5 的无连续零二进制串），三件独立：</p>
+<p>\[ 13^3 = 2197. \]</p>
+<p>验证 \(t=5\) 时的串数：末位为 1 ⇒ \(a_4 = F_6 = 8\)；末位为 0 ⇒ \(a_3 = F_5 = 5\)；合计 \(8+5=13\)。正确。</p></div></div><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>把 k 个球放入 n 个盒子时，答案总是 n^k。</h3><p>这只在球可区分且盒子可区分时成立。若球不可区分，应用 stars and bars 得 \(\binom{k+n-1}{n-1}\)。模型前提决定公式。</p></article><article class="summary-card"><h3>容斥原理只需把满足单个性质的个数相加即可。</h3><p>仅加单集合会重复计数交集部分。PIE 要求交替加减各阶交集：加单集、减两两交、加三三交……直到 n 重交。</p></article><article class="summary-card"><h3>组合证明就是把恒等式两边做代数展开验证。</h3><p>组合证明要求对同一有限集合给出两种独立的计数过程（或构造双射），而非代数操作。它的价值在于提供组合直觉。</p></article><article class="summary-card"><h3>反射原理中，只要把整条路径关于 y=x 反射即可建立双射。</h3><p>反射只作用于首次跨越对角线之后的路径段，而非整条路径。整条反射会改变起点，无法保持 (0,0) 不动，也就不是 (0,0)→(n,n) 路径之间的映射。</p></article><article class="summary-card"><h3>对称计数时直接除以对称数总是对的。</h3><p>除以对称数的前提是群作用是自由的（无不动点）。若某些对象有非平凡对称性（如某些染色在旋转下不变），则需用 Burnside 引理 \(\frac{1}{|G|}\sum_{g}|X^g|\) 而非简单除法。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="b" data-correct="正确。由 stars and bars，\(\binom{k+n-1}{n-1} = \binom{12+4-1}{4-1} = \binom{15}{3}\)。" data-incorrect='注意这是"不可区分球、可区分盒子、允许空盒"的情形，应使用 stars and bars 公式 \(\binom{k+n-1}{n-1}\)。' data-quiz="m8-q1-stars-bars"><p><strong>问题：</strong>将 12 个完全相同的球放入 4 个不同的盒子，允许有空盒，共有多少种放法？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\binom{12}{4}\)</button><button aria-pressed="false" data-choice="b">\(\binom{15}{3}\)</button><button aria-pressed="false" data-choice="c">\(\binom{13}{3}\)</button><button aria-pressed="false" data-choice="d">\(4^{12}\)</button><button aria-pressed="false" data-choice="e">\(12^4\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。总数 100 减去被 3 或 7 整除的个数：\(|A_3 \cup A_7| = 33 + 14 - 4 = 43\)，补集为 \(100 - 43 = 57\)。" data-incorrect="用补集形式的 PIE：先计数被 3 或 7 整除的数 \(|A_3| + |A_7| - |A_{21}| = 33 + 14 - 4 = 43\)，再取补集 \(100 - 43 = 57\)。注意不要遗漏交集修正项。" data-quiz="m8-q2-pie"><p><strong>问题：</strong>1 到 100 中既不被 3 整除也不被 7 整除的正整数有多少个？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">57</button><button aria-pressed="false" data-choice="b">43</button><button aria-pressed="false" data-choice="c">56</button><button aria-pressed="false" data-choice="d">48</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="d" data-correct="正确。反射原理给出 \(F_n = \binom{2n}{n} - \binom{2n}{n-1}\)，而这等于 Catalan 数 \(\frac{1}{n+1}\binom{2n}{n}\)。两个表达式等价。" data-incorrect="合法路径数 \(F_n = \binom{2n}{n} - \binom{2n}{n-1}\)（总路径减跨越路径），该式可化简为 Catalan 数 \(\frac{1}{n+1}\binom{2n}{n}\)，两者等价。" data-quiz="m8-q3-catalan"><p><strong>问题：</strong>从 (0,0) 到 (5,5) 的最短路径中，始终不跨越对角线 y=x 的路径数目为：</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\binom{10}{5}\)</button><button aria-pressed="false" data-choice="b">\(\binom{10}{5} - \binom{10}{4}\)</button><button aria-pressed="false" data-choice="c">\(\frac{1}{6}\binom{10}{5}\)</button><button aria-pressed="false" data-choice="d">B 和 C 都对</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>Stars and bars：\(k\) 个不可区分对象分入 \(n\) 个可区分容器，允许空盒有 \(\binom{k+n-1}{n-1}\) 种；每盒至少一个有 \(\binom{k-1}{n-1}\) 种。</li><li>容斥原理：计数并集时交替加减各阶交集；补集形式用于"避开所有禁止性质"。</li><li>组合证明：对同一集合用两种方式计数得恒等式；常见技术包括分类计数与双射。</li><li>网格路径：\((0,0) \to (m,n)\) 最短路径数为 \(\binom{m+n}{m}\)。</li><li>反射原理：跨越 \(y=x\) 的路径与到 \((n-1,n+1)\) 的路径间存在双射；n-legal 路径数 \(F_n = \binom{2n}{n} - \binom{2n}{n-1}\)。</li><li>Catalan 递推与对称计数：\(F_n = \sum_{i=0}^{n-1} F_i F_{n-1-i}\)；作用自由时等价类数 = 总排列数 / |G|。</li><li>Fibonacci 计数：长度为 t 的无连续零二进制串数为 F_{t+2}；Fashion 模型总方案为 (F_{t+2})^n。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>discussion/dis06b.pdf</code> · 1 · confidence: high · This is a classic 'balls and bins' (also known as 'stars and bars') problem... k stars and n−1 bars, giving us C(k+1, 1)</li><li><code>discussion/dis06b.pdf</code> · 1 · confidence: high · If a number is not coprime to 100, this means that the number is either a multiple of 2 or a multiple of 5... By inclusion-exclusion, the total number... is 49 + 19 − 9 = 59</li><li><code>discussion/dis06b.pdf</code> · 2-3 · confidence: high · LHS: This is simply the number of ways to choose k crew members out of n candidates. RHS: ... First, Edward looks at the first candidate...</li><li><code>homework/hw07.pdf</code> · 2-3 · confidence: high · There are C(2n, n) paths, as there are total number of 2n moves, and n of them must be move 'right' command</li><li><code>homework/hw07.pdf</code> · 3 · confidence: high · Fn = ∑_{i=0}^{n-1} Fi · Fn−1−i ... Tn = ∑_{i=0}^{n-1} TiTn−i−1 ... a similar counting argument captures totally different objects (mazes and trees)!</li><li><code>homework/hw07.pdf</code> · 4 · confidence: high · Without considering symmetries there are 6! ways to color the faces of the cube... 24 = 6 × 4 ... 6!/24 = 30 distinct colorings</li><li><code>homework/hw07.pdf</code> · 6-7 · confidence: high · For t ≥ 1, prove that there are F_{t+2} binary strings of length t with no consecutive zeros</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

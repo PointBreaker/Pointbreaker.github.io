@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>期望、方差、协方差、几何与泊松分布 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 11 讲</p><h1>期望、方差、协方差、几何与泊松分布</h1><p class="lede">本讲系统介绍期望、方差、协方差的计算方法与核心性质，重点训练指示变量与线性期望技巧，并通过几何分布、随机置换、Balls-and-Bins 等模型展示这些工具在概率计算中的力量。</p><div class="meta"><span>预计用时：120 分钟</span><span>难度：中等</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>掌握期望的定义、计算法则与 LOTUS 公式，能计算离散随机变量的期望</li><li>熟练运用期望的线性性与指示变量技巧，无需独立性即可计算复杂随机变量的期望</li><li>理解几何分布的定义、期望与无记忆性，能识别并建模几何分布场景</li><li>掌握方差与协方差的定义、计算公式与基本性质，能计算随机变量线性组合的方差</li><li>能计算随机置换中 swap 与 k-cycle 的期望，体会指示变量在组合概率中的应用</li><li>理解泊松分布的定义、期望、方差与叠加原理，能识别泊松过程场景</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>离散概率基础：样本空间、事件、概率公理与条件概率</li><li>伯努利分布与二项分布的基本性质</li><li>随机变量的基本概念与分布律</li><li>组合计数基础：排列、组合与阶乘运算</li></ul><h2 id="section-1-expectation-basics">期望的定义与基本计算</h2><p>设 \(X\) 为离散随机变量，取值于可数集合 \(\mathcal{X}\)，其期望（expected value）定义为
+\[
+\mathbb{E}[X] = \sum_{x \in \mathcal{X}} x \cdot \mathbb{P}[X = x],\n\]
+要求该级数绝对收敛（对非负随机变量，发散时定义期望为 \(+\infty\)）。</p>
+<p>期望的一个直接推论是平移与缩放性质：对任意常数 \(a, b\)，
+\[
+\mathbb{E}[aX + b] = a\,\mathbb{E}[X] + b.
+\]</p>
+<p>当需要计算函数 \(g(X)\) 的期望时，有 Law of the Unconscious Statistician（LOTUS）：
+\[
+\mathbb{E}[g(X)] = \sum_{x \in \mathcal{X}} g(x) \cdot \mathbb{P}[X = x].
+\]
+该公式避免了先求 \(g(X)\) 的分布再求期望的繁琐过程。</p>
+<p>对于取非负整数值的随机变量 \(X\)，还有一个常用的尾和公式（tail-sum formula）：
+\[
+\mathbb{E}[X] = \sum_{i=1}^{\infty} \mathbb{P}[X \ge i].
+\]
+该公式在计算几何分布等随机变量的期望时尤为方便。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>考虑一个游戏：抛一枚均匀硬币。若出现正面，你获得 \$3；若出现反面，你掷一颗均匀骰子，获得骰子点数对应的美元数。设 \(X\) 为你获得的金额，求 \(\mathbb{E}[X]\)。</p>
+<p>设 \(H\) 为正面事件，\(\mathbb{P}[H] = 1/2\)。当出现反面时，骰子点数 \(D\) 的期望为 \(\mathbb{E}[D] = (1+2+3+4+5+6)/6 = 3.5\)。由全期望公式，
+\[
+\mathbb{E}[X] = \mathbb{E}[X \mid H]\mathbb{P}[H] + \mathbb{E}[X \mid \neg H]\mathbb{P}[\neg H] = 3 \cdot \frac{1}{2} + 3.5 \cdot \frac{1}{2} = 3.25.
+\]
+或者直接使用 LOTUS：\(\mathbb{E}[X] = 3 \cdot \frac{1}{2} + \sum_{d=1}^{6} d \cdot \frac{1}{12} = 1.5 + \frac{21}{12} = 3.25\)。</p></div></div><h2 id="section-2-linearity-indicators">期望的线性性与指示变量</h2><p>期望的最强大性质之一是线性性：对任意随机变量 \(X_1, \dots, X_n\)（不必独立），
+\[
+\mathbb{E}\left[\sum_{i=1}^{n} X_i\right] = \sum_{i=1}^{n} \mathbb{E}[X_i].
+\]
+这一性质使得我们即使不知道随机变量之间的依赖关系，也能计算它们和的期望。</p>
+<p>指示变量（indicator variable）是应用线性性的利器。对事件 \(A\)，定义
+\[
+\mathbb{I}_A = \begin{cases} 1 &amp; \text{if } A \text{ occurs}, \\ 0 &amp; \text{otherwise.} \end{cases}
+\]
+则 \(\mathbb{E}[\mathbb{I}_A] = \mathbb{P}[A]\)。许多计数随机变量可以分解为指示变量之和，从而将期望计算转化为概率计算。</p>
+<p>从组合角度看，线性性本质上是一种"双计数"（double counting）：对有限样本空间上的随机变量，\(\mathbb{E}[X] = \frac{1}{|\Omega|} \sum_{\omega \in \Omega} X(\omega)\)。若 \(X = \sum_i \mathbb{I}_{A_i}\)，则对所有样本点先按事件求和再按样本点求和，与先按样本点求和再对事件求和，结果相同。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>一条走廊上有 8 盏灯，每盏灯独立地以概率 \(0.4\) 亮起。设 \(Y\) 为亮灭状态发生变化的相邻灯对数（即从亮变灭或从灭变亮的次数），求 \(\mathbb{E}[Y]\)。</p>
+<p>对 \(i = 1, \dots, 7\)，令 \(\mathbb{I}_i\) 指示第 \(i\) 与第 \(i+1\) 盏灯状态不同。则 \(Y = \sum_{i=1}^{7} \mathbb{I}_i\)。第 \(i\) 与 \(i+1\) 盏灯状态不同的概率为 \(2 \cdot 0.4 \cdot 0.6 = 0.48\)。由线性性，
+\[
+\mathbb{E}[Y] = \sum_{i=1}^{7} \mathbb{E}[\mathbb{I}_i] = 7 \cdot 0.48 = 3.36.
+\]
+注意：这里不需要假设各对灯之间的独立性。</p></div></div><h2 id="section-3-geometric-distribution">几何分布与无记忆性</h2><p>几何分布描述的是独立伯努利试验中首次成功所需的试验次数。设每次试验成功的概率为 \(p \in (0, 1]\)，则随机变量 \(X\) 服从参数为 \(p\) 的几何分布，记作 \(X \sim \text{Geometric}(p)\)，其分布律为
+\[
+\mathbb{P}[X = k] = (1-p)^{k-1} p, \quad k = 1, 2, 3, \dots
+\]
+其期望为 \(\mathbb{E}[X] = 1/p\)，尾概率为 \(\mathbb{P}[X &gt; k] = (1-p)^k\)（前 \(k\) 次都失败）。</p>
+<p>几何分布的关键性质是无记忆性（memorylessness）：对任意整数 \(k \ge m \ge 0\)，
+\[
+\mathbb{P}[X &gt; k \mid X &gt; m] = \mathbb{P}[X &gt; k - m].
+\]
+直观含义是：已知前 \(m\) 次都失败，未来还需要等待的时间分布与从头开始相同。这一性质是几何分布独有的。</p>
+<p>几何分布的典型场景包括：反复尝试注册某门课程直到成功、持续抛硬币直到出现正面、飞盘游戏中直到传回起点等。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>某篮球运动员投篮命中率为 \(0.75\)，她持续投篮直到首次失手。设 \(X\) 为她总的投篮次数，求 \(\mathbb{E}[X]\) 以及 \(\mathbb{P}[X &gt; 4]\)。</p>
+<p>这里"成功"对应失手，概率 \(p = 0.25\)，故 \(X \sim \text{Geometric}(0.25)\)。期望为 \(\mathbb{E}[X] = 1/0.25 = 4\) 次。尾概率为 \(\mathbb{P}[X &gt; 4] = (0.75)^4 = 81/256 \approx 0.316\)。</p>
+<p>若已知她前 2 次都命中（即 \(X &gt; 2\)），则未来还需投篮次数的分布仍为 \(\text{Geometric}(0.25)\)，故 \(\mathbb{P}[X &gt; 5 \mid X &gt; 2] = \mathbb{P}[X &gt; 3] = (0.75)^3\)。</p></div></div><h2 id="section-4-variance-covariance">方差与协方差</h2><p>方差衡量随机变量偏离其期望的程度。随机变量 \(X\) 的方差定义为
+\[
+\operatorname{Var}(X) = \mathbb{E}\big[(X - \mathbb{E}[X])^2\big] = \mathbb{E}[X^2] - \mathbb{E}[X]^2,
+\]
+其中第二个等式是计算方差时常用的公式。方差具有性质：</p>
+<ul>
+<li>
+<p>\(\operatorname{Var}(aX + b) = a^2 \operatorname{Var}(X)\)；</p>
+</li>
+<li>
+<p>若 \(X\) 与 \(Y\) 独立，则 \(\operatorname{Var}(X + Y) = \operatorname{Var}(X) + \operatorname{Var}(Y)\)。</p>
+</li>
+</ul>
+<p>协方差刻画两个随机变量的线性相关程度：
+\[
+\operatorname{Cov}(X, Y) = \mathbb{E}[(X - \mathbb{E}[X])(Y - \mathbb{E}[Y])] = \mathbb{E}[XY] - \mathbb{E}[X]\mathbb{E}[Y].
+\]
+方差是协方差的特例：\(\operatorname{Var}(X) = \operatorname{Cov}(X, X)\)。对任意随机变量 \(X_1, \dots, X_n\)，
+\[
+\operatorname{Var}\left(\sum_{i=1}^{n} X_i\right) = \sum_{i=1}^{n} \operatorname{Var}(X_i) + 2 \sum_{1 \le i &lt; j \le n} \operatorname{Cov}(X_i, X_j).
+\]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(X\) 为均匀骰子的点数，计算 \(\operatorname{Var}(X)\)。</p>
+<p>\(\mathbb{E}[X] = (1+2+3+4+5+6)/6 = 7/2\)。
+\(\mathbb{E}[X^2] = (1^2 + 2^2 + \dots + 6^2)/6 = 91/6\)。
+因此 \(\operatorname{Var}(X) = 91/6 - (7/2)^2 = 91/6 - 49/4 = (182 - 147)/12 = 35/12 \approx 2.917\)。</p>
+<p>若掷 \(n\) 次取平均 \(\bar{X} = \frac{1}{n}\sum_{i=1}^n X_i\)，由各次独立同分布，\(\operatorname{Var}(\bar{X}) = \frac{1}{n^2} \cdot n \cdot \frac{35}{12} = \frac{35}{12n}\)。</p></div></div><h2 id="section-5-swaps-cycles">随机置换中的 swap 与 cycle</h2><p>考虑 \(\{1, \dots, n\}\) 上的均匀随机置换 \(\pi\)。我们关心两类结构的期望数量。</p>
+<p>一个 swap（对换）是指一对 \(\{i, j\}\)（\(i \neq j\)）满足 \(\pi(i) = j\) 且 \(\pi(j) = i\)。对每一对无序对 \(\{i, j\}\)，定义指示变量 \(\mathbb{I}_{\{i,j\}}\) 表示它们构成 swap。在 \(n!\) 个置换中，固定 \(\pi(i)=j, \pi(j)=i\) 后，其余 \(n-2\) 个元素可任意排列，故
+\[
+\mathbb{P}[\{i,j\} \text{ 是 swap}] = \frac{(n-2)!}{n!} = \frac{1}{n(n-1)}.
+\]
+共有 \(\binom{n}{2}\) 个无序对，由线性性，swap 的总数 \(S\) 的期望为
+\[
+\mathbb{E}[S] = \binom{n}{2} \cdot \frac{1}{n(n-1)} = \frac{1}{2}.
+\]
+有趣的是，该期望与 \(n\) 无关。</p>
+<p>类似地，一个 \(k\)-cycle（\(k \ge 2\)）是指 \(k\) 个不同元素 \(i_1, \dots, i_k\) 满足 \(\pi(i_1) = i_2, \dots, \pi(i_k) = i_1\)。对每一组循环序（cyclic ordering），其成为 \(k\)-cycle 的概率为 \((n-k)!/n!\)。长度为 \(k\) 的循环序共有 \(\frac{1}{k}\binom{n}{k} k! = \frac{n!}{k(n-k)!}\) 个，故 \(k\)-cycle 总数 \(C_k\) 的期望为
+\[
+\mathbb{E}[C_k] = \frac{n!}{k(n-k)!} \cdot \frac{(n-k)!}{n!} = \frac{1}{k}.
+\]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>在 \(\{1, 2, 3, 4\}\) 的均匀随机置换中，求 swap 的期望数量。</p>
+<p>共有 \(\binom{4}{2} = 6\) 个可能的 swap 对。对每一对，其为 swap 的概率为 \(1/(4 \cdot 3) = 1/12\)。故期望为 \(6 \cdot 1/12 = 1/2\)。这与 \(n=4\) 时的通用公式 \(\mathbb{E}[S] = 1/2\) 一致。</p></div></div><h2 id="section-6-balls-and-bins">Balls-and-Bins 与方差计算</h2><p>将 \(n\) 个球独立且均匀地投入 \(m\) 个箱子。设 \(X\) 为恰好有一个球的箱子数量。令 \(\mathbb{I}_i\) 指示第 \(i\) 个箱子恰好有一个球，则 \(X = \sum_{i=1}^m \mathbb{I}_i\)。</p>
+<p>每个箱子中的球数服从二项分布 \(\text{Binomial}(n, 1/m)\)，故
+\[
+\mathbb{E}[\mathbb{I}_i] = \mathbb{P}[\text{箱子 } i \text{ 恰有 1 个球}] = \binom{n}{1}\left(\frac{1}{m}\right)\left(1 - \frac{1}{m}\right)^{n-1} = \frac{n}{m}\left(1 - \frac{1}{m}\right)^{n-1}.
+\]</p>
+<p>对 \(i \neq j\)，\(\mathbb{E}[\mathbb{I}_i \mathbb{I}_j] = \mathbb{P}[\text{箱子 } i \text{ 与 } j \text{ 各恰有 1 个球}]\)。先从 \(n\) 个球中选 1 个放入箱子 \(i\)，再从剩下 \(n-1\) 个中选 1 个放入箱子 \(j\)，其余 \(n-2\) 个球不能放入这两个箱子：
+\[
+\mathbb{E}[\mathbb{I}_i \mathbb{I}_j] = \frac{n(n-1)}{m^2}\left(1 - \frac{2}{m}\right)^{n-2}.
+\]</p>
+<p>利用 \(\operatorname{Var}(X) = \mathbb{E}[X^2] - \mathbb{E}[X]^2\) 以及 \(X^2 = \sum_i \mathbb{I}_i + \sum_{i \neq j} \mathbb{I}_i \mathbb{I}_j\)，可得
+\[
+\operatorname{Var}(X) = m(m-1)\frac{n(n-1)}{m^2}\left(1 - \frac{2}{m}\right)^{n-2} + m \cdot \frac{n}{m}\left(1 - \frac{1}{m}\right)^{n-1} - \left[m \cdot \frac{n}{m}\left(1 - \frac{1}{m}\right)^{n-1}\right]^2.
+\]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>将 3 个球投入 2 个箱子，求恰好有一个球的箱子数的方差。</p>
+<p>直接计算：每个球独立等概率进入箱子 1 或 2。设 \(X\) 为恰有一个球的箱子数。</p>
+<ul>
+<li>
+<p>当两个箱子分别为 (3,0) 或 (0,3) 时，\(X = 0\)，概率为 \(2/8 = 1/4\)；</p>
+</li>
+<li>
+<p>当为 (2,1) 或 (1,2) 时，\(X = 1\)，概率为 \(6/8 = 3/4\)。
+故 \(\mathbb{E}[X] = 3/4\)，\(\mathbb{E}[X^2] = 3/4\)，\(\operatorname{Var}(X) = 3/4 - 9/16 = 3/16\)。</p>
+</li>
+</ul>
+<p>使用公式验证：\(m=2, n=3\)。
+\[
+\operatorname{Var}(X) = 2 \cdot 1 \cdot \frac{3 \cdot 2}{4} \cdot 0^{1} + 2 \cdot \frac{3}{2} \cdot \left(\frac{1}{2}\right)^2 - \left[2 \cdot \frac{3}{2} \cdot \left(\frac{1}{2}\right)^2\right]^2 = 0 + \frac{3}{4} - \frac{9}{16} = \frac{3}{16}.
+\]</p></div></div><h2 id="section-7-poisson-distribution">泊松分布</h2><p>泊松分布常用于描述在固定时间或空间区间内稀有事件发生的次数。参数 \(\lambda &gt; 0\) 的泊松分布记作 \(X \sim \text{Poisson}(\lambda)\)，其分布律为
+\[
+\mathbb{P}[X = k] = \frac{\lambda^k e^{-\lambda}}{k!}, \quad k = 0, 1, 2, \dots
+\]
+其期望与方差均等于参数：\(\mathbb{E}[X] = \operatorname{Var}(X) = \lambda\)。</p>
+<p>泊松分布具有叠加性：若 \(X \sim \text{Poisson}(\lambda_1)\) 与 \(Y \sim \text{Poisson}(\lambda_2)\) 独立，则 \(X + Y \sim \text{Poisson}(\lambda_1 + \lambda_2)\)。这一性质在分析多个独立源的合并流量时非常有用。</p>
+<p>泊松过程还具有独立增量性与无记忆性：在不相交区间内发生的事件数相互独立，且未来事件的分布只取决于区间长度，与过去无关。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>某机场有两个独立的接驳巴士线路，到达某站点的乘客数分别服从 \(\text{Poisson}(3)\) 与 \(\text{Poisson}(5)\)。设 \(Z\) 为两线路合计到达的乘客数，求 \(\mathbb{E}[Z]\) 与 \(\mathbb{P}[Z = 4]\)。</p>
+<p>由叠加性，\(Z \sim \text{Poisson}(8)\)，故 \(\mathbb{E}[Z] = 8\)。
+\[
+\mathbb{P}[Z = 4] = \frac{8^4 e^{-8}}{4!} = \frac{4096 e^{-8}}{24} = \frac{512 e^{-8}}{3}.
+\]</p></div></div><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>期望的线性性 \(\mathbb{E}[X+Y] = \mathbb{E}[X] + \mathbb{E}[Y]\) 仅在 \(X\) 与 \(Y\) 独立时成立。</h3><p>线性性对任意随机变量都成立，无需独立性假设。独立性仅在计算方差之和或 \(\mathbb{E}[XY]\) 时才需要。</p></article><article class="summary-card"><h3>\(\mathbb{E}[X^2] = (\mathbb{E}[X])^2\) 对任何随机变量都成立。</h3><p>一般 \(\mathbb{E}[X^2] \ge (\mathbb{E}[X])^2\)，等号成立当且仅当 \(X\) 几乎必然为常数（方差为零）。方差正是衡量两者差距的：\(\operatorname{Var}(X) = \mathbb{E}[X^2] - (\mathbb{E}[X])^2\)。</p></article><article class="summary-card"><h3>几何分布 \(\mathbb{P}[X=k] = (1-p)^{k-1}p\)（\(k \ge 1\)）与 \(\mathbb{P}[Y=k] = (1-p)^k p\)（\(k \ge 0\)）是同一个分布。</h3><p>这是几何分布的两种常见定义，前者计数首次成功所需的试验次数（取值 \(1,2,\dots\)），后者计数首次成功前的失败次数（取值 \(0,1,\dots\)）。两者的期望相差 1：\(\mathbb{E}[X] = 1/p\)，\(\mathbb{E}[Y] = (1-p)/p\)。使用时应明确采用哪种约定。</p></article><article class="summary-card"><h3>对任意两个随机变量，\(\operatorname{Var}(X+Y) = \operatorname{Var}(X) + \operatorname{Var}(Y)\)。</h3><p>该等式成立当且仅当 \(\operatorname{Cov}(X,Y) = 0\)。一般公式为 \(\operatorname{Var}(X+Y) = \operatorname{Var}(X) + \operatorname{Var}(Y) + 2\operatorname{Cov}(X,Y)\)。即使 \(X\) 与 \(Y\) 不独立，协方差也可能为零，但独立性是协方差的充分非必要条件。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="b" data-correct="期望的线性性对任意随机变量成立，无需独立性。选项 a 与 c 需要独立性（或协方差为零），选项 d 仅在方差为零时成立。" data-incorrect="期望的线性性不要求独立性，因此选项 b 恒成立。" data-quiz="m11-quiz-linearity"><p><strong>问题：</strong>设 \(X\) 与 \(Y\) 为任意随机变量（不必独立），以下哪个等式恒成立？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\mathbb{E}[XY] = \mathbb{E}[X]\mathbb{E}[Y]\)</button><button aria-pressed="false" data-choice="b">\(\mathbb{E}[X+Y] = \mathbb{E}[X] + \mathbb{E}[Y]\)</button><button aria-pressed="false" data-choice="c">\(\operatorname{Var}(X+Y) = \operatorname{Var}(X) + \operatorname{Var}(Y)\)</button><button aria-pressed="false" data-choice="d">\(\mathbb{E}[X^2] = (\mathbb{E}[X])^2\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="几何分布的无记忆性对所有满足 \(k \ge m \ge 0\) 的整数成立，这是几何分布的定义性质之一。" data-incorrect="无记忆性对所有 \(k \ge m \ge 0\) 成立，不要求特定 \(p\) 值或 \(k-m\) 的差值。" data-quiz="m11-quiz-memoryless"><p><strong>问题：</strong>设 \(X \sim \text{Geometric}(p)\)，则无记忆性 \(\mathbb{P}[X &gt; k \mid X &gt; m] = \mathbb{P}[X &gt; k-m]\) 对哪些 \(k, m\) 成立？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">对所有 \(k \ge m \ge 0\)</button><button aria-pressed="false" data-choice="b">仅当 \(k = m + 1\)</button><button aria-pressed="false" data-choice="c">仅当 \(X\) 与自身独立时</button><button aria-pressed="false" data-choice="d">仅当 \(p = 1/2\) 时</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="d" data-correct="由 \(\operatorname{Var}(aX+b) = a^2 \operatorname{Var}(X)\)，得 \(\operatorname{Var}(3X+5) = 9 \cdot 4 = 36\)。" data-incorrect="常数平移不影响方差，缩放因子需平方，故为 \(3^2 \cdot 4 = 36\)。" data-quiz="m11-quiz-variance-scaling"><p><strong>问题：</strong>若 \(\operatorname{Var}(X) = 4\)，则 \(\operatorname{Var}(3X + 5) = ?\)</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">4</button><button aria-pressed="false" data-choice="b">12</button><button aria-pressed="false" data-choice="c">16</button><button aria-pressed="false" data-choice="d">36</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>期望是概率加权平均，线性性 \(\mathbb{E}[\sum X_i] = \sum \mathbb{E}[X_i]\) 对任意随机变量成立，无需独立性</li><li>指示变量将计数问题转化为概率问题，是应用线性性的核心技巧</li><li>几何分布描述首次成功所需试验次数，具有无记忆性 \(\mathbb{P}[X&gt;k|X&gt;m]=\mathbb{P}[X&gt;k-m]\)</li><li>方差 \(\operatorname{Var}(X) = \mathbb{E}[X^2] - \mathbb{E}[X]^2\) 衡量随机变量的波动程度</li><li>协方差 \(\operatorname{Cov}(X,Y) = \mathbb{E}[XY] - \mathbb{E}[X]\mathbb{E}[Y]\) 刻画线性相关性，\(\operatorname{Var}(\sum X_i)\) 展开包含协方差项</li><li>随机置换中 swap 的期望为 \(1/2\)，\(k\)-cycle 的期望为 \(1/k\)，均通过指示变量与线性性求得</li><li>泊松分布 \(\text{Poisson}(\lambda)\) 的期望与方差均为 \(\lambda\)，独立泊松变量之和仍为泊松分布</li></ul><h2 id="sources">一手资料</h2><ul><li><code>discussion/dis09b.pdf</code> · CS 70, Spring 2023, DIS 9B 1 · confidence: high · P[X &gt; k | X &gt; m] = P[X &gt; k]/P[X &gt; m] = (1/4)^{k-m} = P[X &gt; k − m]</li><li><code>discussion/dis09b.pdf</code> · CS 70, Spring 2023, DIS 9B 3-5 · confidence: high · E[Ii] is exactly equal to the number of 1s in the ith column (divided by 6)</li><li><code>discussion/dis11a.pdf</code> · CS 70, Spring 2023, DIS 11A 1 · confidence: high · E[Y] = E[5X + 1000] = 5 E[X] + 1000 = 5 · 5000 + 1000 = 26000</li><li><code>discussion/dis11a.pdf</code> · CS 70, Spring 2023, DIS 11A 1-2 · confidence: high · Var(X) = E[X^2] − E[X]^2 = 91/6 − (7/2)^2 = 35/12</li><li><code>discussion/dis11a.pdf</code> · CS 70, Spring 2023, DIS 11A 2-3 · confidence: high · Var(X) = E[X^2] − E[X]^2 with E[XiXj] = 1 − P[Xi=0] − P[Xj=0] + P[Xi=0,Xj=0]</li><li><code>homework/hw11.pdf</code> · CS 70, Spring 2023, HW 11 4-5 · confidence: high · E[N] = 1/2 for swaps; E[N] = 1/k for k-cycles via cyclic orderings</li><li><code>homework/hw11.pdf</code> · CS 70, Spring 2023, HW 11 7-8 · confidence: high · Var(X) = E[X^2] − E[X]^2 with E[XiXj] = n(n−1)/m^2 (1−2/m)^{n−2}</li><li><code>cs70-cheatsheet.pdf</code> · Note 9 Geometric Poisson · confidence: medium · Geometric: P[X=k]=(1-p)^{k-1}p, E[X]=1/p; Poisson: P[X=k]=λ^k e^{-λ}/k!, E[X]=Var(X)=λ</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

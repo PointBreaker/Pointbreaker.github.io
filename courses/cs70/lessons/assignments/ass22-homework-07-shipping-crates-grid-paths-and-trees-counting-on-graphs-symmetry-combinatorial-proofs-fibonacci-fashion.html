@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shipping Crates, Grid Paths &amp; Trees, Counting on Graphs + Symmetry, Combinatorial Proofs, Fibonacci Fashion — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 作业 07</p>
+    <h1>货运箱、网格路径与树、图计数与对称、组合证明、斐波那契时尚</h1>
+    <p class="lede">覆盖计数技术（stars and bars、补集计数）、网格路径与卡塔兰递推、图与对称性计数、组合恒等式证明以及斐波那契计数。本次仅提取 Sundry 与第 1 题（Shipping Crates）。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Counting</li><li>Stars and Bars</li><li>Complement Counting</li><li>Shipping Crates</li><li>Indistinguishable Objects</li><li>Distinguishable Bins</li><li>组合数学</li><li>计数原理</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>homework/hw07.pdf</code>、<code>solutions/homework/hw07-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已收录 5/6 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>homework/hw07.pdf</code>、<code>solutions/homework/hw07-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">协作说明</span><strong>协作说明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在开始撰写最终作业提交之前，请简要说明你是如何完成本题的。你与谁一起完成了作业？请列出姓名与电子邮箱。（如果是 homework party，只需描述小组情况即可。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>本题旨在了解你的协作过程，无数学内容。如实说明合作对象或独立完成的情况即可。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>homework/hw07.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">1</span><strong>装运木箱</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>一个(suppose)工厂有(quad)四个装货码头（loading docks），用于存放已准备好发货的板条箱（crates）。假设工厂生产了 8 个无区别的板条箱，并将每个板条箱送往四个装货码头之一。</p>
+<p>(a) 将这些板条箱分配到装货码头共有多少种方式？</p>
+<p>(b) 现在假设：一旦某个装货码头包含至少 5 个板条箱，一辆卡车就会从该码头运走 5 个板条箱并发货。（例如，若有 6 个板条箱被送往同一码头，卡车会运走 5 个，码头内剩余 1 个板条箱。）我们规定：当且仅当在每一个装货码头上，两个配置在该码头内剩下的板条箱数量相同时，这两个配置被视为相同。问：与第 (a) 部分的答案相比，新设定下的结果（outcomes）数量会如何变化？本题不要求计算实际数值，我们将在 (c)–(e) 中再计算。只需给出定性答案（如“大于 (a)”“等于 (a)”“小于或等于 (a)”等），并说明理由。</p>
+<p>(c) 我们现在尝试计算板条箱的配置（configurations）数量。首先考虑从码头运走板条箱的情况。问：有多少种分配方式使得至少有一个板条箱从码头被运走？</p>
+<p>(d) 有多少种分配方式使得没有板条箱从码头被运走？即没有任何码头收到至少 5 个板条箱。</p>
+<p>(e) 综合前述结果，在修改后的情形下，板条箱的可能配置总数是多少？提示：注意，无论哪个码头收到那 5 个板条箱，最终都会得到相同的情形。在所有发货完成后，装货码头内剩余的板条箱可能有多少种配置？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 把 8 个无相同元素（indistinguishable）的球放入 4 个有标号（distinguishable）的盒子，考虑隔板法（stars and bars）。
+(b) 把“卡车运走 5 个”看作一个从旧配置到新剩余配置的映射。它是否把不同配置映到同一结果？是否会把同一配置映到两个不同结果？据此判断结果数量是上界还是下界。
+(c)–(e) 按“是否有码头收到 ≥5 个板条箱”把全体结果划分成两类，注意这两类互斥；选出一个“被拿走 5 个”的码头后，剩下的 3 个板条箱在 4 个码头之间的分配情形与具体是哪个码头无关。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 使用隔板法。把 8 个无区别的球放入 4 个有标号的盒子，共有</p>
+<p>\[
+\binom{11}{3}
+\]</p>
+<p>种方式。</p>
+<p>(b) 新设定下可能的结果更少。卡车的作用相当于一个函数，把第 (a) 部分所计数的那些配置映射到一个新的结果集合；虽然该函数可能把两个不同的配置映射到同一个结果，但它绝不会把同一个配置映射到两个不同的新结果。因此</p>
+<p>\[
+\binom{11}{3}
+\]</p>
+<p>是一个合法的上界，这也说明结果数量仍然是有限的（从而可以计数！）。</p>
+<p>(c) 你可能已经注意到，只可能有一个码头收到 5 个板条箱；我们将利用这一点来简化计数。我们先计数“有某个码头收到 5 个板条箱”的分配方式。注意，无论哪个码头收到那 5 个板条箱，情形都会归结为同一件事：我们只需把剩下的 3 个板条箱分配到 4 个码头。选择哪一个码头满足“≥5”有 4 种方式，而分配剩下的 3 个板条箱有</p>
+<p>\[
+\binom{6}{3}
+\]</p>
+<p>种方式。因此，使得某个码头收到 5 个板条箱的分配方式共有</p>
+<p>\[
+4\binom{6}{3}
+\]</p>
+<p>种。</p>
+<p>(d) 你可以把所有结果划分成两类：一类是某个码头收到超过 5 个板条箱的结果，另一类是没有任何码头收到超过 5 个板条箱的结果。注意这两类互斥。因此，可取第 (c) 部分的补集：没有任何板条箱从码头被运走的结果数量，等于结果总数减去“某个码头收到超过 5 个板条箱”的结果数量（即第 (c) 部分所得）。综合即得</p>
+<p>\[
+\binom{11}{3} - 4\binom{6}{3}
+\]</p>
+<p>种。</p>
+<p>(e) 无论哪个码头收到那 5 个板条箱，最终情形都等同于把 3 个无区别的板条箱分配到 4 个码头。由隔板法，结果总数为</p>
+<p>\[
+\binom{6}{3}
+\]</p>
+<p>种。因此，为得到配置总数，我们把“没有板条箱被运走”的结果数量，与“运走之后剩余”的结果数量相加。综合可得，结果总数为</p>
+<p>\[
+\binom{11}{3} - 4\binom{6}{3} + \binom{6}{3}
+= \binom{11}{3} - 3\binom{6}{3}
+= 105.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw07-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw07.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>网格与树！</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一个 \(n \times n\) 的网格（\(n \ge 1\)），从 \(0,0\) 出发，到达 \(n,n\)。在网格上，只允许以步长 1 向左、右、上或下移动。</p>
+<p>(a) 从 \(0,0\) 到 \(n,n\) 的最短路径有多少条？</p>
+<p>(b) 从 \(0,0\) 到 \(n-1,n+1\) 的最短路径有多少条？</p>
+<p>现在考虑满足如下条件的最短路径：只能访问满足 \(y \le x\) 的点 \(x,y\)。即路径不能越过直线 \(y = x\)。我们称这些路径为边长为 \(n\) 的迷宫的 \(n\)-合法路径（n-legal paths）。设 \(F_n\) 为 \(n\)-合法路径的数量。</p>
+<p>(c) 求从 \(0,0\) 到 \(n,n\) 且越过直线 \(y = x\) 的最短路径数。（提示：设 \(i,i\) 是某条最短路径首次越过直线 \(y = x\) 的位置，则剩余路径从 \(i,i+1\) 出发并继续前往 \(n,n\)。如果在剩余路径中将所有沿 \(y\) 方向的移动与沿 \(x\) 方向的移动互换，终点会变成哪里？）</p>
+<p>(d) 求从 \(0,0\) 到 \(n,n\) 且不越过直线 \(y = x\) 的最短路径数。（前面 (a) 和 (c) 的结论可能有用。）</p>
+<p>(e) 另一个思路是推导路径数的递推公式。固定某个满足 \(0 \le i \le n-1\) 的 \(i\)。我们想计数那些「最后一次触及直线 \(y = x\) 的点是 \(i,i\)」的 \(n\)-合法路径的数量。证明这样的路径数为 \(F_i \cdot F_{n-i-1}\)。（提示：当 \(i=0\) 时，第一步和最后一步分别是什么？路径的剩余部分被允许走到哪里？）</p>
+<p>(f) 解释为什么 \[F_n = \sum_{i=0}^{n-1} F_i \cdot F_{n-i-1}\]。</p>
+<p>(g) 对具有 \(n\) 个顶点（\(n \ge 1\)）的树，构造并解释其数量的递推公式，其中每个非根节点的度至多为 3，根节点的度至多为 2。两棵树不同当且仅当左子树不同或右子树不同。（留意一下你的公式与网格问题之间的关系。挺妙的！）</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · n×n 网格示意图，包含从 (0,0) 到 (n,n) 的一条越过直线 y=x 的最短路径，以及将该路径越过对角线后的部分做「右移/上移」互换（关于 y=x 反射）后得到的一条从 (0,0) 到 (n-1,n+1) 的路径</h4><p>网格范围：(0,0) 到 (n,n)（建议 n=4 示意）。画出直线 y=x。画一条从 (0,0) 到 (n,n) 的路径，使其在某点 (i,i) 首次越过 y=x 到达 (i,i+1)；将该路径从 (i,i+1) 到 (n,n) 的部分做「右移」与「上移」互换（即关于 y=x 反射），得到从 (i,i+1) 到 (n-1,n+1) 的路径，整体构成从 (0,0) 到 (n-1,n+1) 的路径。</p><p class="problem-source">来源：<code>homework/hw07.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于越过对角线的路径，尝试将其越过对角线之后的部分关于直线 \(y = x\) 做反射（将「右移」与「上移」互换），观察终点会映射到哪里——这通常会建立起一个双射。对于递推，关注路径「最后一次触及对角线的点」的不同情形，将路径拆成两段独立计数。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>将 \(x,y\) → (x+1,y) 的一次移动称为「右移」命令，\(x,y\) → (x,y+1) 的一次移动称为「上移」命令。</p>
+<p>(a) 共有 \(\binom{2n}{n}\) 条路径：总共需要走 \(2n\) 步，其中恰好有 \(n\) 步是「右移」，其余 \(n\) 步是「上移」。</p>
+<p>(b) 共有 \(\binom{2n}{n-1}\) 条路径，因为此时「右移」命令只有 \(n-1\) 步。</p>
+<p>(c) 我们来论证：所有越过直线 \(y=x\) 的路径构成的集合，与所有从 \(0,0\) 到 \(n-1,n+1\) 的路径构成的集合之间存在一个双射。</p>
+<p>假设有一条越过 \(y=x\) 的路径。一旦路径越过了 \(y=x\)，我们就可以将路径的后半部分翻转。设该非法路径首次越过 \(y=x\) 的位置是 \(i,i\) 并到达 \(i,i+1\)。那么，如果不翻转路径，它将通过 \(n-i\) 次「右移」和 \(n-1-i\) 次「上移」到达 \(n,n\)。如果将这些命令翻转（「右移」变「上移」、「上移」变「右移」），它将前往
+\[
+(i + (n-1-i), (i+1) + (n-i)) = (n-1, n+1).
+\]
+因此，所有非法路径都被映射为一条从 \(0,0\) 到 \(n-1,n+1\) 的路径。</p>
+<p>接下来论证反向：所有从 \(0,0\) 到 \(n-1,n+1\) 的路径都映射为一条非法路径。从 \(0,0\) 到 \(n-1,n+1\) 的路径必定会越过直线 \(y=x\)，设它首次越过该直线的位置是 \(i,i\) 并到达 \(i,i+1\)。那么它必须走 \((n-1)-i\) 次「右移」和 \((n+1)-(i+1)\) 次「上移」。我们将这些命令翻转，于是现在有 \(n-1-i\) 次「上移」和 \(n-i\) 次「右移」。此后路径将到达
+\[
+(i + (n-i), (i+1) + (n-1-i)) = (n, n),
+\]
+并且这条新路径被视为非法路径，因为它在点 \(i,i\) 处越过了 \(y=x\)。因此，所有从 \(0,0\) 到 \(n-1,n+1\) 的路径都能被映射为一条非法路径。</p>
+<p>于是，非法路径与从 \(0,0\) 到 \(n-1,n+1\) 的路径之间存在一个双射映射。因此，非法路径的数量为 \(\binom{2n}{n-1}\)。</p>
+<p>(d) 不越过 \(y=x\) 的路径数等于路径总数减去越过 \(y=x\) 的路径数，即
+\[
+\binom{2n}{n} - \binom{2n}{n-1}.
+\]</p>
+<p>(e) 设 \(F_n\) 为从 \(0,0\) 到 \(n,n\) 且满足上述条件的不同路径总数。已知 \(F_1 = 1\)。设 \(i,i\) 是某条路径除终点 \(n,n\) 外最后一次触及直线 \(y=x\) 的点。则此类路径的总数为 \(F_i \cdot F_{n-1-i}\)，其中 \(F_i\) 是从 \(0,0\) 到 \(i,i\) 的路径总数。由于 \(i,i\) 是该路径最后一个触及对角线的点，因此在此之后的所有步骤都不能越过直线 \(y = x - 1\)，这等价于说，从 \(i+1,i\) 到 \(n,n-1\) 的路径总数为 \(F_{n-1-i}\)。</p>
+<p>(f) 由 (e) 部分，最后一次在点 \(i,i\) 触及直线 \(y=x\) 的 \(n\)-合法路径的数量为 \(F_i \cdot F_{n-1-i}\)。为了得到 \(n\)-合法路径的总数，只需对路径可能经过的每一个可能的点 \(i,i\) 求和。因此，
+\[
+F_n = \sum_{i=0}^{n-1} F_i \cdot F_{n-1-i}.
+\]</p>
+<p>(g) 设 \(T_n\) 为具有 \(n\) 个节点的不同树的总数。当左子树大小为 \(i\)、右子树大小为 \(n-i-1\) 时，不同树的数量为 \(T_i \cdot T_{n-i-1}\)。对所有可能的左子树大小求和，即得不同树的总数：
+\[
+T_n = \sum_{i=0}^{n-1} T_i \cdot T_{n-i-1},
+\]
+其中初值条件为 \(T_0 = 1\)，\(T_1 = 1\)。注意，一个相似的计数论证居然刻画了完全不同的对象（迷宫与树）！</p>
+<p>如果你对这两个问题为何相关感兴趣，可以查阅卡塔兰数（Catalan numbers）。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw07-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw07.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>图上的计数 + 对称性</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>注意 10</p>
+<p>(a) 用恰好 6 种颜色对一个立方体的面进行着色，使得每个面具有不同的颜色，共有多少种方法？注意：如果其中一个着色可以通过以任意方式旋转立方体得到另一个，则认为这两个着色是相同的。</p>
+<p>(b) 用 \(n\) 种颜色对一条有 \(n\) 颗珠子的手链进行着色，使得每颗珠子具有不同的颜色，共有多少种方法？注意：如果其中一个着色可以通过旋转得到另一个，则认为这两个着色是相同的。</p>
+<p>(c) 具有 \(n\) 个标号顶点的不同无向图共有多少个？假设任意两个顶点之间至多有一条边，且不存在顶点到自身的边。图不一定是连通的。</p>
+<p>(d) 在具有 \(n\) 个顶点的完全图 \(K_n\) 中，不同的环（cycle）共有多少个？假设环中不能有重复的边。如果两个环互为旋转或翻转，则认为它们是相同的环（例如 \(v_1, v_2, v_3, v_1\)、\(v_2, v_3, v_1, v_2\) 和 \(v_1, v_3, v_2, v_1\) 都被视为同一个环）。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 一个立方体的示意图，六个面分别标有不同颜色，用于说明在旋转下着色的等价类</h4><p>立方体展开图或三维示意图，六个面分别标记为颜色 1 至 6（或 A 至 F）。可标注一个选定的「顶面」及其四个相邻侧面，以示意在确定一个面朝向后有 4 种绕轴旋转。</p><p class="problem-source">来源：<code>homework/hw07.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>当对称性（如旋转）使得若干方案等价时，先计数不考虑对称性的总数，再确定每个方案在对称变换下对应多少个等价方案。对于环的计数，先考虑有序的顶点序列，再模去由旋转和翻转生成的等价关系。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 在不考虑对称性的情况下，立方体面着色的方案数为 \(6!\)。对于任意给定的着色，其等价着色的数量为 \(24 = 6 \times 4\)：其中 6 是因为每个指定的面都可以旋转到六个方向中的任意一个；其 4 是因为在确定某个面的方向后，可以绕该轴以 4 种不同的方式旋转立方体（包括不再进一步旋转）。因此，不同的着色方案数为 \(6! / 24 = 30\)。</p>
+<p>(b) 在不考虑对称性的情况下，手链珠子的着色方案数为 \(n!\)。由于旋转的存在，对于任意给定的着色，都有 \(n\) 个等价的着色。因此，在考虑对称性后，不同的着色方案数为 \((n-1)!\)。注意：如果除了旋转之外还考虑翻转/镜像，则答案将是 \((n-1)!/2\)。</p>
+<p>(c) 共有 \(\binom{n}{2} = n(n-1)/2\) 条可能的边，每条边要么存在要么不存在。因此答案为 \(2^{n(n-1)/2}\)。（回顾一下 \(2^m = \sum_{k=0}^{m} \binom{m}{k}\)，此处 \(m = n(n-1)/2\)。）</p>
+<p>(d) 一个环中的顶点数 \(k\) 至少为 3，至多为 \(n\)。在不考虑重复的情况下，长度为 \(k\) 的环的数量可以通过从图中任选一个由 \(k\) 个顶点组成的有序序列来计数。因此，共有 \(n!/(n-k)!\) 个长度为 \(k\) 的环。我们将反转的环（\(abc = cba\)）和旋转的环（\(abc = bca = cab\)）视为不可区分的。由于每个长度为 \(k\) 的环可以以 1 种方式反转、以 \(k\) 种方式旋转，我们将 \(n!/(n-k)!\) 除以 2 以考虑反转，再除以 \(k\) 以考虑旋转。因此，不同环的总数为
+\[
+\sum_{k=3}^{n} \frac{n!}{(n-k)! \cdot 2k}.
+\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw07-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw07.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>各式各样的组合证明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 10 用组合证明（combinatorial proof）证明下列各个恒等式。</p>
+<p>(a) 对每个大于 1 的正整数 \(n\)，
+\[
+\sum_{k=0}^{n} k \cdot \binom{n}{k} = n \cdot \sum_{k=0}^{n-1} \binom{n-1}{k}.
+\]</p>
+<p>(b) 对每个正整数 \(m\) 以及每个满足 \(n &gt; m\) 的正整数 \(n\)，
+\[
+\sum_{a+b+c=m} \binom{n}{a} \cdot \binom{n}{b} \cdot \binom{n}{c} = \binom{3n}{m}.
+\]
+（记号说明：左边的和取遍所有满足 \(a + b + c = m\) 的非负整数三元组 \((a, b, c)\)。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 考虑从 \(n\) 个人中选出一个委员会，再从委员会中选出一名主席。分别按「先选委员会再选主席」与「先选主席再选其余委员」两种方式计数，比较得到的表达式。</p>
+<p>(b) 考虑从 \(3n\) 支不同颜色的铅笔（红、蓝、绿各 \(n\) 支）中选出 \(m\) 支。分别按「直接选」与「按颜色分批选」两种方式计数。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 设有 \(n\) 个人，我们希望从中选出若干人组成一个特别委员会，再从委员会中选出一名主席。问有多少种不同的做法？</p>
+<p>我们可以先选出委员会成员，再从已选出的成员中选出主席。选出大小为 \(k\) 的委员会有 \(\binom{n}{k}\) 种方式；委员会一旦选定，又有 \(k\) 种方式选出主席。为了覆盖所有可能的委员会大小，我们需要对 \(k\) 的所有合法取值求和，于是得到表达式
+\[
+\sum_{k=0}^{n} k \cdot \binom{n}{k},
+\]
+这恰好是我们想证明的恒等式左边。</p>
+<p>换一种方式，我们也可以先选出委员会的主席，再选出其余委员。主席有 \(n\) 种选法；在剩下的 \(n-1\) 人中，可以任选一个子集作为其余委员。选出大小为 \(k\) 的子集有 \(\binom{n-1}{k}\) 种方式，对 \(k\) 求和得到
+\[
+n \cdot \sum_{k=0}^{n-1} \binom{n-1}{k},
+\]
+这恰好是恒等式的右边。</p>
+<p>由于两边计数的是同一个对象，恒等式成立。</p>
+<p>(b) 设有 \(n\) 支可区分的红铅笔、\(n\) 支可区分的蓝铅笔和 \(n\) 支可区分的绿铅笔（共 \(3n\) 支铅笔），我们希望从中选出 \(m\) 支带去上课。问有多少种选法？</p>
+<p>一种方法是直接选出 \(m\) 支铅笔，不考虑颜色。由于所有铅笔都是可区分的，共有 \(\binom{3n}{m}\) 种选法，这恰好是恒等式的右边。</p>
+<p>另一种方法是按颜色分批选取：先选 \(a\) 支红铅笔，再选 \(b\) 支蓝铅笔，最后选 \(c\) 支绿铅笔（其中 \(a + b + c = m\)）。选法数为 \(\binom{n}{a} \cdot \binom{n}{b} \cdot \binom{n}{c}\)。为了覆盖所有可能的分布情况，我们需要对所有合法的三元组 \((a, b, c)\) 求和，得到
+\[
+\sum_{a+b+c=m} \binom{n}{a} \cdot \binom{n}{b} \cdot \binom{n}{c},
+\]
+这恰好是恒等式的左边。</p>
+<p>由于两边计数的是同一个对象，恒等式成立。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw07-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw07.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>斐波那契风尚</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Note 10 你的衣柜里有 \(n\) 件配饰（accessories），你想规划接下来 \(t\) 天每天佩戴哪些配饰。作为优雅礼仪魅力学校（Elegant Etiquette Charm School）的学生，你知道连续多天佩戴同一件配饰是不时尚的。（注意，这一原则对一般衣物同样适用）。因此，你想用子集 \(S_1, S_2, \ldots, S_t\) 来表示每天佩戴的配饰，其中 \(S_1 \subseteq \{1, 2, \ldots, n\}\)，且对 \(2 \leq i \leq t\)，有 \(S_i \subseteq \{1, 2, \ldots, n\}\) 且 \(S_i\) 与 \(S_{i-1}\) 不相交（disjoint）。</p>
+<p>(a) 对 \(t \geq 1\)，证明：长度为 \(t\) 且不含连续两个 0 的二进制字符串共有 \(F_{t+2}\) 个（假设斐波那契数列（Fibonacci sequence）以 \(F_0 = 0\)、\(F_1 = 1\) 开始）。</p>
+<p>(b) 用组合证明证明下列恒等式，该恒等式对 \(t \geq 1\) 和 \(n \geq 0\) 给出了如下计数：为你的 \(n\) 件配饰创建接下来 \(t\) 天的子集，使得同一件配饰不会连续两天都被佩戴：
+\[
+\sum_{x_1 \geq 0} \sum_{x_2 \geq 0} \cdots \sum_{x_t \geq 0} \binom{n}{x_1}\binom{n-x_1}{x_2}\binom{n-x_2}{x_3} \cdots \binom{n-x_{t-1}}{x_t} = (F_{t+2})^n.
+\]
+（你可以假设：当 \(a &lt; b\) 时，\(\binom{a}{b} = 0\)。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 考虑长度为 \(k+1\) 且不含连续 0 的二进制字符串，按末位是 0 还是 1 分为两类，建立递推关系，并用强归纳法证明。</p>
+<p>(b) 对左边：按天依次选取配饰，注意每天选取的子集必须与前一天不相交，依次相乘后求和。对右边：对每件配饰独立考虑，构造长度为 \(t\) 的二进制字符串表示该配饰在哪些天被佩戴，利用 (a) 的结论，再将 \(n\) 件配饰的方案数相乘。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 用强归纳法证明。</p>
+<p>基础情况：当 \(k = 1\) 时，可能的二进制字符串只有 0 和 1，共 2 个，而 \(F_{k+2} = F_3 = 2\)。当 \(k = 2\) 时，可能的二进制字符串为 11、01 和 10，共 3 个，而 \(F_{k+2} = F_4 = 3\)。恒等式成立。</p>
+<p>归纳假设：对 \(k \geq 2\)，假设对所有满足 \(1 \leq x \leq k\) 的 \(x\)，长度为 \(x\) 且不含连续 0 的二进制字符串有 \(F_{x+2}\) 个。</p>
+<p>归纳步骤：考虑长度为 \(k+1\) 且不含连续 0 的二进制字符串。将它们分为两类：末位为 0 的和末位为 1 的。</p>
+<p>末位为 0 的字符串：可以由长度为 \(k-1\) 且不含连续 0 的二进制字符串末尾添加 10 构成。由归纳假设，这类字符串有 \(F_{k+1}\) 个。</p>
+<p>末位为 1 的字符串：可以由长度为 \(k\) 且不含连续 0 的二进制字符串末尾添加 1 构成。由归纳假设，这类字符串有 \(F_{k+2}\) 个。</p>
+<p>由于这两类（末位为 0 的和末位为 1 的）合起来覆盖了所有长度为 \(k+1\) 且不含连续 0 的二进制字符串，因此这类字符串的总数为 \(F_{k+1} + F_{k+2} = F_{k+3}\)。这完成了归纳证明。</p>
+<p>(b) 先看恒等式的左边。要创建大小分别为 \(x_i = |S_i|\)（\(1 \leq i \leq t\)）且逐天不相交的配饰子集，创建 \(S_1\)（第一天佩戴的配饰子集）有 \(\binom{n}{x_1}\) 种方式。由于 \(S_2\) 必须与 \(S_1\) 不相交，创建 \(S_2\) 有 \(\binom{n-x_1}{x_2}\) 种方式。由于 \(S_3\) 必须与 \(S_2\) 不相交，创建 \(S_3\) 有 \(\binom{n-x_2}{x_3}\) 种方式，依此类推。因此，创建大小分别为 \(x_1, \ldots, x_t\) 的子集 \(S_1, \ldots, S_t\) 有
+\[
+\binom{n}{x_1}\binom{n-x_1}{x_2} \cdots \binom{n-x_{t-1}}{x_t}
+\]
+种方式。于是，\(S_1, \ldots, S_t\) 总共可以在
+\[
+\sum_{x_1 \geq 0} \sum_{x_2 \geq 0} \cdots \sum_{x_t \geq 0} \binom{n}{x_1}\binom{n-x_1}{x_2}\binom{n-x_2}{x_3} \cdots \binom{n-x_{t-1}}{x_t}
+\]
+种方式下被创建。</p>
+<p>再看恒等式的右边。对每件配饰 \(i \in \{1, \ldots, n\}\)，我们先决定哪些子集 \(S_1, \ldots, S_t\) 包含配饰 \(i\)，其中不能将配饰 \(i\) 分配到连续两天的子集中。对每件配饰，创建一个长度为 \(t\) 的二进制字符串，其中第一位代表 \(S_1\)，第二位代表 \(S_2\)，依此类推。我们规定，第 \(k\) 位上的 0 表示在第 \(k\) 天佩戴该配饰。因此，将配饰 \(i\) 分配到子集 \(S_1, \ldots, S_t\) 且没有两个连续子集都包含配饰 \(i\) 的方式数，等于长度为 \(t\) 且不含连续 0 的二进制字符串的个数。利用 (a) 的结论，选择包含配饰 \(i\) 的非连续子集有 \(F_{t+2}\) 种方式。</p>
+<p>由于共有 \(n\) 件配饰，配饰 \(1, \ldots, n\) 可以被分配到子集 \(S_1, \ldots, S_t\) 中的方式数为 \((F_{t+2})^n\)。</p>
+<p>这就证明了该恒等式。</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw07-sol.pdf</code> · 7-8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw07.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>homework/hw07.pdf</code></li>
+      <li><code>solutions/homework/hw07-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

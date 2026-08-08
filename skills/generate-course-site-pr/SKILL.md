@@ -11,7 +11,7 @@ Build an evidence-backed Chinese course guide from local materials, use the shar
 
 - Treat the current directory as the source folder unless the user names another folder.
 - Default to `PointBreaker/Pointbreaker.github.io`, base branch `main`, and branch `course/<slug>`.
-- Never access `drive.google.com` or `docs.google.com`. Use downloaded local copies and report skipped links.
+- Respect source and network constraints stated by the user for the current course build.
 - Never push to `main`, merge a PR, overwrite an existing course, discard unrelated changes, or publish source files without authorization.
 - Never invent schedule facts, requirements, formulas, results, or citations. Record unresolved gaps and omit unsupported claims.
 - Keep source materials and `.course-build/` outside the website commit.
@@ -26,7 +26,7 @@ Before inspecting course materials, run:
 python <skill-root>/scripts/sync_skill.py --skill-root <skill-root> --json
 ```
 
-Only use the canonical `PointBreaker/Pointbreaker.github.io` source. If the sandbox blocks network access, retry once with the required network approval. Never use Google Drive or Docs for synchronization.
+Only use the canonical `PointBreaker/Pointbreaker.github.io` source. If the sandbox blocks network access, retry once with the required network approval.
 
 - On `updated`, immediately re-read `<skill-root>/SKILL.md` from the beginning and follow the updated workflow. Re-run the command once; the second result should be `up-to-date`.
 - On `up-to-date` or `disabled`, continue normally.
@@ -47,11 +47,11 @@ Read the generated inventory and extracted text. Inspect PDF pages visually when
 
 ### 2. Establish canonical course facts
 
-Use the official homepage for the schedule, course identity, public links, and mapping only. Follow first-party links except Google Drive/Docs. Prefer local official handouts and slides over summaries.
+Use the official homepage for the schedule, course identity, public links, and mapping only. Follow first-party links when the current user authorizes and can access them; apply network restrictions per course build rather than hard-coding a provider ban. Prefer local official handouts and slides over summaries.
 
 Read [references/content-quality.md](references/content-quality.md) before writing content.
 Read [references/interactive-content.md](references/interactive-content.md) when the course contains mathematical relationships, diagrams, matrices, parameter-sensitive behavior, algorithms, or multi-stage processes that may benefit from a visual explanation.
-Read [references/claude-code-extraction.md](references/claude-code-extraction.md) before delegating high-volume local text extraction to Claude Code. Keep source interpretation, dependency modeling, content decisions, frontend architecture, and final QA in the primary agent.
+Read [references/claude-code-extraction.md](references/claude-code-extraction.md) before optionally delegating high-volume local text extraction to Claude Code. Select a model that the current user can access, verify the actual model metadata, and keep source interpretation, dependency modeling, content decisions, frontend architecture, and final QA in the primary agent. If Claude Code is unavailable, continue with the primary agent rather than blocking the course build.
 Read [references/solution-bearing-coursework.md](references/solution-bearing-coursework.md) when local discussion solutions, homework solutions, answer keys, or worked solutions are present and the user authorizes publishing them.
 
 ### 3. Create the course plan
@@ -86,7 +86,7 @@ Replace every `COURSE_CONTENT_TODO` with source-grounded content.
 - Preserve the existing guide when refreshing extracted problem lists. Treat the guide and the complete problem outline as separate regions; automated reruns may replace only the generated outline markers.
 - When the user explicitly authorizes solutions, publish the complete official solution under a collapsed disclosure after the self-contained question and a non-answer hint. Never mix solution text into the visible statement or hint.
 - Use `\(...\)` and `\[...\]` for math. Never split identifiers with math delimiters or put LaTeX inside code.
-- Add 2–5 meaningful quizzes with a valid container `data-answer`.
+- Add 2–5 meaningful quizzes to each lecture page, with a valid container `data-answer`; complete homework, discussion, lab, and exam pages may use their source-backed problems instead of synthetic quizzes.
 - Create static SVG diagrams, function plots, matrix heatmaps, or steppers only when they materially improve understanding. Follow [references/interactive-content.md](references/interactive-content.md), store course-owned files under `figures/` and `interactives/`, and require a static fallback for every interactive.
 - Use the shared declarative interactive runtime. Never add inline JavaScript, arbitrary executable expressions, external chart libraries, CDN scripts, or remote interactive data.
 - Do not publish graded solutions unless explicitly authorized.

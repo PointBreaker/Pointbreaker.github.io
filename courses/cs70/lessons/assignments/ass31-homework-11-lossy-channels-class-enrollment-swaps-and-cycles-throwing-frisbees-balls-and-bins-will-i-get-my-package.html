@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lossy Channels, Class Enrollment, Swaps &amp; Cycles, Throwing Frisbees, Balls and Bins, Will I Get My Package — CS70</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS70 · 作业 11</p>
+    <h1>有损信道、选课、swap 与 cycle、掷飞盘、Balls-and-Bins、我能收到包裹吗</h1>
+    <p class="lede">本次作业涵盖多项式插值与 Berlekamp-Welch 纠错编码、几何分布与无记忆性、随机排列中的对换与 k-循环期望、飞盘游戏的几何分布与尾概率、球与箱子模型的方差计算，以及随机配送问题的期望与方差。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>polynomial interpolation</li><li>Berlekamp-Welch</li><li>geometric distribution</li><li>memoryless property</li><li>permutations</li><li>indicator random variables</li><li>variance</li><li>balls and bins</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>homework/hw11.pdf</code>、<code>solutions/homework/hw11-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 7 道大题。本地官方解答已收录 6/7 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>homework/hw11.pdf</code>、<code>solutions/homework/hw11-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">协作说明</span><strong>协作说明</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在开始撰写最终作业提交之前，请简要说明你是如何完成这份作业的。你还与谁一起完成？请列出姓名和电子邮件地址。（如果是在作业讨论会中协作，只需描述该小组即可。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>如实记录协作对象与协作方式；每位同学仍应独立组织并撰写自己的最终答案。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>homework/hw11.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">01</span><strong>可能有损可能没有</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>假设 Alice 希望通过某个信道向 Bob 发送一条消息。Alice 有一条长度为 6 的消息。</p>
+<p>(a) 每个数据包以概率 \(p\) 被丢弃。如果 Alice 发送 7 个数据包，Bob 能够使用多项式插值成功重构 Alice 的消息的概率是多少？</p>
+<p>(b) 同样，每个数据包以概率 \(p\) 被丢弃。此外，信道在删除数据包之后还可能损坏 1 个数据包。Alice 意识到了这一点，于是为一条长度为 6 的消息发送了 10 个数据包。Bob 接收到足够多的数据包以使用 Berlekamp-Welch 算法成功重构 Alice 的消息的概率是多少？</p>
+<p>(c) 同样，每个数据包以概率 \(p\) 被丢弃。这一次，每个数据包还可能以概率 \(q\) 被损坏。一个数据包被丢弃与其是否被损坏相互独立（即一个数据包可能既被损坏又被丢弃）。考虑 Alice 为一条长度为 6 的消息发送 7 个数据包的原始场景。Bob 能够对他接收到的所有点使用多项式插值正确重构 Alice 的消息的概率是多少？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：
+对于 (a)，要使用多项式插值重构一个 5 次多项式，Bob 至少需要接收到 6 个未被损坏的数据包。对于 (b)，Berlekamp-Welch 算法可以容忍最多 \(k\) 个错误，此时需要 \(n + 2k\) 个数据包才能保证重构。注意这里的 \(n\) 和 \(k\) 分别是什么。</p>
+<p>对于 (c)，需要同时考虑数据包被损坏和被丢弃的情况。注意一个数据包既被损坏又被丢弃时，Bob 实际上没有接收到这个损坏的数据包。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) Alice 的消息需要一个 5 次多项式，该多项式可由 6 个点唯一确定。因此，至少需要 6 个点才能通过信道。Bob 能够恢复消息的概率就是最多丢失一个数据包的概率。由于数据包以概率 \(p\) 丢失，丢失 1 个数据包的概率为 \(\binom{7}{1} p(1-p)^6\)。丢失 0 个数据包的概率为 \((1-p)^7\)。因此，丢失 0 个或 1 个数据包的概率为
+\[\binom{7}{1} p(1-p)^6 + (1-p)^7.\]
+这就是 Bob 接收到 6 个数据包的概率，意味着他能够成功重构该 5 次多项式。</p>
+<p>(b) Bob 需要 \(n + 2k = 8\) 个数据包才能保证成功重构 Alice 的消息。总共发送了 10 个数据包，因此只有当丢失 0 个、1 个或 2 个数据包时，才能保证重构。丢失 0 个数据包的概率为
+\[(1-p)^{10}.\]
+丢失 1 个数据包的概率为
+\[\binom{10}{1} p(1-p)^9.\]
+丢失 2 个数据包的概率为
+\[\binom{10}{2} p^2(1-p)^8.\]
+因此，成功的概率为
+\[(1-p)^{10} + \binom{10}{1} p(1-p)^9 + \binom{10}{2} p^2(1-p)^8.\]</p>
+<p>(c) 同样，如果没有任何数据包被损坏，Bob 就能重构消息。我们使用与 (a) 部分相同的思路。没有任何数据包被损坏的概率为 \((1-q)^7\)。我们知道，在未被损坏的基础上，最多只能丢失 1 个数据包。因此，我们可以丢失 1 个数据包，其概率为
+\[\binom{7}{1} p(1-p)^6.\]
+或者，我们可以不丢失任何数据包，其概率为 \((1-p)^7\)。还有一种可能的情况是，恰好有一个数据包被损坏，但该数据包也被丢弃；在这种情况下，只要没有其他数据包被损坏或丢失，我们就能恢复消息。这种情况发生的概率为
+\[\binom{7}{1} pq(1-p)^6(1-q)^6.\]
+因此，我们得到
+\[(1-q)^7 \left[ \binom{7}{1} p(1-p)^6 + (1-p)^7 \right] + \binom{7}{1} pq(1-p)^6(1-q)^6.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw11-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw11.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">02</span><strong>选课注册</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Lydia 刚刚开始她的 CalCentral 选课预约。她需要注册一门地理课和一门历史课。没有候补名单，她每天可以尝试注册一门或两门课。CalCentral 选课系统很奇怪且挑剔，因此每次尝试成功注册地理课的概率为 \(p_g\)，每次尝试成功注册历史课的概率为 \(p_h\)。此外，这些事件相互独立。</p>
+<p>(a) 假设 Lydia 开始每天尝试注册地理课，并在第 \(G\) 天成功注册。\(G\) 的分布是什么？</p>
+<p>(b) 假设她在前 7 天每天尝试后仍未注册地理课。\(P[G = i \mid G &gt; 7]\)，即在 \(G &gt; 7\) 的条件下 \(G\) 的条件分布是什么？</p>
+<p>(c) 一旦她注册了地理课，她将从第 \(G + 1\) 天开始尝试注册历史课，并在第 \(H\) 天成功注册。求 Lydia 注册这两门课所需的期望天数，即 \(\mathbb{E}[H]\)。</p>
+<p>假设 Lydia 改为从第 1 天开始就同时尝试注册这两门课，而不是逐一尝试。设 \(G\) 为注册地理课所需的天数，\(H\) 为注册历史课所需的天数。</p>
+<p>(d) 现在 \(G\) 和 \(H\) 的分布是什么？它们是否独立？</p>
+<p>(e) 设 \(A\) 表示她注册第一门课的那一天，\(B\) 表示她注册两门课的那一天。\(A\) 的分布是什么？</p>
+<p>(f) 现在 Lydia 注册两门课所需的期望天数是多少，即 \(\mathbb{E}[B]\)？</p>
+<p>(g) 到第 30 天结束时，她预计将注册多少门课？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：
+对于 (a) 和 (b)，考虑几何分布的定义及其无记忆性。对于 (c)，利用期望的线性性质。</p>
+<p>对于 (d)-(g)，注意 \(G\) 和 \(H\) 现在是独立的几何随机变量。对于 (e)，考虑 \(\min\{G, H\}\) 的尾概率。对于 (f)，利用 \(\min\{g, h\} + \max\{g, h\} = g + h\) 的关系。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) \(G \sim \text{Geometric}(p_g)\)。</p>
+<p>(b) 在 \(G &gt; 7\) 的条件下，随机变量 \(G\) 取值为 \(\{8, 9, \ldots\}\)。对于 \(i = 8, 9, \ldots\)，
+\[P[G = i \mid G &gt; 7] = \frac{P[G = i \wedge G &gt; 7]}{P[G &gt; 7]} = \frac{P[G = i]}{P[G &gt; 7]} = \frac{p_g(1-p_g)^{i-1}}{(1-p_g)^7} = p_g(1-p_g)^{i-8}.\]
+如果令 \(K\) 表示在第 7 天之后注册地理课所需的额外天数，即 \(K = G - 7\)，则在 \(G &gt; 7\) 的条件下，随机变量 \(K\) 服从参数为 \(p_g\) 的几何分布。注意，这与 \(G\) 的分布相同。这被称为几何分布的无记忆性。</p>
+<p>(c) 我们有 \(H - G \sim \text{Geometric}(p_h)\)。因此 \(\mathbb{E}[G] = 1/p_g\) 且 \(\mathbb{E}[H - G] = 1/p_h\)。因此
+\[\mathbb{E}[H] = \mathbb{E}[G] + \mathbb{E}[H - G] = \frac{1}{p_g} + \frac{1}{p_h}.\]</p>
+<p>(d) \(G \sim \text{Geometric}(p_g)\)，\(H \sim \text{Geometric}(p_h)\)。是的，它们相互独立。</p>
+<p>(e) 我们有 \(A = \min\{G, H\}\) 且 \(B = \max\{G, H\}\)。我们还使用以下最小值的定义：
+\[\min(g, h) = \begin{cases} g &amp; \text{if } g \leq h; \\ h &amp; \text{if } g &gt; h. \end{cases}\]
+现在，对于所有 \(k \in \{1, 2, \ldots\}\)，\(\min(G, H) = k\) 等价于 \((G = k) \cap (H \geq k)\) 或 \((H = k) \cap (G &gt; k)\)。因此，
+\[P[A = k] = P[\min(G, H) = k] = P[(G = k) \cap (H \geq k)] + P[(H = k) \cap (G &gt; k)] = P[G = k] \cdot P[H \geq k] + P[H = k] \cdot P[G &gt; k]\]
+（因为 \(G\) 和 \(H\) 独立）
+\[= [(1-p_g)^{k-1} p_g](1-p_h)^{k-1} + [(1-p_h)^{k-1} p_h](1-p_g)^k\]
+（因为 \(G\) 和 \(H\) 服从几何分布）
+\[= ((1-p_g)(1-p_h))^{k-1} (p_g + p_h(1-p_g)) = (1 - p_g - p_h + p_h p_g)^{k-1} (p_g + p_h - p_g p_h).\]
+但这个最终表达式恰好是参数为 \(p_g + p_h - p_g p_h\) 的几何随机变量取值 \(k\) 的概率。因此 \(A \sim \text{Geom}(p_g + p_h - p_g p_h)\)。</p>
+<p>一种替代的、稍微更简洁的方法是使用几何分布的尾概率，而不是通常的点概率。换句话说，我们可以处理 \(P[A \geq k]\) 而不是 \(P[A = k]\)；显然，值 \(P[A \geq k]\) 确定了值 \(P[A = k]\)，因为 \(P[A = k] = P[A \geq k] - P[A \geq (k + 1)]\)，所以计算它们就足够了。
+\[P[A \geq k] = P[\min(G, H) \geq k] = P[(G \geq k) \cap (H \geq k)] = P[G \geq k] \cdot P[H \geq k] \quad \text{（因为 } G, H \text{ 独立）}\]
+\[= (1-p_g)^{k-1}(1-p_h)^{k-1} \quad \text{（因为 } G, H \text{ 服从几何分布）}\]
+\[= ((1-p_g)(1-p_h))^{k-1} = (1 - p_g - p_h + p_g p_h)^{k-1}.\]
+这是参数为 \(p_g + p_h - p_g p_h\) 的几何分布的尾概率，所以我们完成了。</p>
+<p>(f) 由 (e) 部分得 \(\mathbb{E}[A] = 1/(p_g + p_h - p_g p_h)\)。由 (d) 部分得 \(\mathbb{E}[G] = 1/p_g\) 且 \(\mathbb{E}[H] = 1/p_h\)。现在我们观察到 \(\min\{g, h\} + \max\{g, h\} = g + h\)。利用期望的线性性质，我们得到 \(\mathbb{E}[A] + \mathbb{E}[B] = \mathbb{E}[G] + \mathbb{E}[H]\)。因此
+\[\mathbb{E}[B] = \frac{1}{p_g} + \frac{1}{p_h} - \frac{1}{p_g + p_h - p_g p_h}.\]</p>
+<p>(g) 设 \(I_G\) 和 \(I_H\) 分别为事件 \(G \leq 30\) 和 \(H \leq 30\) 的示性随机变量。则 \(I_G + I_H\) 是她在 30 天内注册的课程数量。因此答案为
+\[\mathbb{E}[I_G] + \mathbb{E}[I_H] = P[G \leq 30] + P[H \leq 30] = 1 - (1-p_g)^{30} + 1 - (1-p_h)^{30}.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw11-sol.pdf</code> · 2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw11.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">03</span><strong>对换与循环</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>我们说一个排列 \(\pi = (\pi(1), \ldots, \pi(n))\) 包含一个对换（swap），如果存在 \(i, j \in \{1, \ldots, n\}\) 使得 \(\pi(i) = j\) 且 \(\pi(j) = i\)，其中 \(i \neq j\)。</p>
+<p>(a) 随机排列中对换的期望数量是多少？</p>
+<p>(b) 方差是多少？</p>
+<p>(c) 与上述精神相同，我们说 \(\pi\) 包含一个 \(k\)-循环（k-cycle），如果存在 \(i_1, \ldots, i_k \in \{1, \ldots, n\}\) 使得 \(\pi(i_1) = i_2\)，\(\pi(i_2) = i_3\)，...，\(\pi(i_k) = i_1\)。计算 \(k\)-循环数量的期望。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：
+对于 (a) 和 (b)，使用示性随机变量。对于每一对 \(\{i, j\}\)，定义一个示性变量表示该对是否构成对换。利用期望的线性性质计算期望，并在计算方差时考虑不同对之间的协方差。</p>
+<p>对于 (c)，类似地使用示性随机变量，但这次是对每个 \(k\) 元循环序定义示性变量。注意计算 \(k\) 元循环序的数量时要避免重复计数。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 作为热身，我们先计算 1 和 2 被对换的概率。共有 \(n!\) 种可能的排列，其中 \((n-2)!\) 种满足 \(\pi(1) = 2\) 且 \(\pi(2) = 1\)。这意味着
+\[P[\text{(1,2) 是对换}] = \frac{(n-2)!}{n!} = \frac{1}{n(n-1)}.\]
+在这个计算中，1 和 2 并没有什么特殊之处，因此对于任意 \(\{i, j\} \subset \{1, \ldots, n\}\)，\(i\) 和 \(j\) 被对换的概率都与上述相同。我们记 \(I_{i,j}\) 为 \(i\) 和 \(j\) 被对换的示性变量，\(N\) 为对换的总数，因此
+\[\mathbb{E}[N] = \mathbb{E}\left[ \sum_{\{i, j\} \subset \{1, \ldots, n\}} I_{i,j} \right] = \sum_{\{i, j\} \subset \{1, \ldots, n\}} P[\text{(i,j) 是对换}] = \frac{1}{n(n-1)} \binom{n}{2} = \frac{1}{2}.\]</p>
+<p>(b) 对于方差，当我们将 \(N^2\) 展开为对 \(\{i, j\}, \{k, l\}\) 的求和时，我们需要知道 \(\mathbb{E}[I_{i,j} I_{k,l}]\)，即 \(i\) 和 \(j\) 被对换且 \(k\) 和 \(l\) 也被对换的概率。需要考虑三种情况。如果 \(\{i, j\} = \{k, l\}\)，则概率正好是我们上面计算的值。如果这两个对共享一个元素，则它们不可能同时都是对换。如果这两个对不相交，则在 \(n!\) 种可能的排列中，有 \((n-4)!\) 种包含我们关心的两个对换。因此
+\[\mathbb{E}[N^2] = \sum_{\{i, j\} \subset \{1, \ldots, n\}} \mathbb{E}[I_{i,j}^2] + \sum_{\{i, j\} \cap \{k, l\} = \emptyset} \mathbb{E}[I_{i,j} I_{k,l}] = \binom{n}{2} \frac{1}{n(n-1)} + \binom{n}{2} \binom{n-2}{2} \frac{1}{n(n-1)(n-2)(n-3)} = \frac{1}{2} + \frac{1}{4},\]
+且 \(\text{Var}(N) = \mathbb{E}[N^2] - \mathbb{E}[N]^2 = \frac{1}{2} + \frac{1}{4} - \frac{1}{4} = \frac{1}{2}\)。</p>
+<p>(c) 这里的思路与上述非常相似，因此我们在阐述上会稍微简洁一些。然而，作为一个初步的旁白，我们需要一个从集合 \(\{1, \ldots, n\}\) 中取 \(k\) 个元素的循环序（cyclic ordering）的概念。我们指的是用集合中的元素标记项链的 \(k\) 个珠子，其中如果我们可以通过沿绳子移动标记来将一个变成另一个，我们就说这些标记是相同的。例如，\((1,2,3,4)\) 和 \((1,2,4,3)\) 是不同的循环序，但 \((1,2,3,4)\) 和 \((2,3,4,1)\) 是相同的。从具有 \(n\) 个元素的集合中取长度为 \(k\) 的循环序的数量为
+\[\binom{n}{k} \frac{k!}{k} = \frac{n!}{(n-k)!} \cdot \frac{1}{k},\]
+因为如果我们先计算所有大小为 \(k\) 的子集，然后计算每个子集的所有排列，我们会重复计数一个因子 \(k\)。</p>
+<p>现在，设 \(N\) 为计算 \(k\)-循环数量的随机变量，对于 \(\{1, \ldots, n\}\) 中 \(k\) 个元素的每个循环序 \((i_1, \ldots, i_k)\)，设 \(I_{(i_1, \ldots, i_k)}\) 为 \(\pi(i_1) = i_2\)，\(\pi(i_2) = i_3\)，...，\(\pi(i_k) = i_1\) 的示性变量。在 \((n-k)!\) 种排列中，\((i_1, \ldots, i_k)\) 构成一个 \(k\)-循环（因为我们对 \(\{1, \ldots, n\}\) 中剩余的 \((n-k)\) 个元素可以自由地进行任何操作），因此 \((i_1, \ldots, i_k)\) 构成这样一个循环的概率为 \(\frac{(n-k)!}{n!}\)，且
+\[\mathbb{E}[N] = \mathbb{E}\left[ \sum_{(i_1, \ldots, i_k) \text{ cyclic ordering}} I_{(i_1, \ldots, i_k)} \right] = \frac{n!}{(n-k)!} \cdot \frac{1}{k} \cdot \frac{(n-k)!}{n!} = \frac{1}{k}.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw11-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw11.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">04</span><strong>扔飞盘</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Shahzar 和他的 \(n-1\) 个朋友站成一个圈，玩以下游戏：Shahzar 随机将飞盘扔给圈中的其他人，每个人被扔到的概率相等，此后，持有飞盘的人再次随机将飞盘扔给圈中的其他人，每个人被扔到的概率也相等。当有人将飞盘扔回给 Shahzar 时，游戏结束。</p>
+<p>(a) 在游戏过程中，飞盘被扔出的期望次数是多少？</p>
+<p>(b) 在游戏过程中，从未接到飞盘的人的期望数量是多少？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：
+对于 (a)，注意在第一次扔出之后，游戏在每次扔出时结束的概率是常数。考虑使用尾概率公式 \(\mathbb{E}[X] = \sum_{i=1}^\infty P[X \geq i]\)。</p>
+<p>对于 (b)，对每个人定义一个示性变量表示该人从未接到飞盘。利用全概率公式计算该示性变量为 1 的概率，然后利用期望的线性性质。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 设 \(X\) 为对应于飞盘被扔出次数的随机变量。我们可以认识到 \(X\) 是一个平移几何随机变量，因为在第一次扔出之后，游戏结束的概率始终是 \(\frac{1}{n-1}\)。因此，扔出次数的期望值比参数为 \(p = \frac{1}{n-1}\) 的几何随机变量的期望值多 1，因此期望值为 \(1 + (n-1) = n\)。</p>
+<p>替代解法：注意 \(X\) 是非负且取整数值的，因此我们可以使用尾概率公式。回顾尾概率公式表明
+\[\mathbb{E}[X] = \sum_{i=1}^\infty P[X \geq i],\]
+因此只需计算每个 \(i \geq 1\) 的 \(P[X \geq i]\) 即可。游戏显然总是至少包含一次扔出，因此 \(P[X \geq 1] = 1\)。对于每个后续的 \(i\)，游戏持续 \(i\) 次或更多次扔出的概率是前 \(i-1\) 次扔出中 Shahzar 没有接到飞盘的概率。由于 Shahzar 先扔飞盘，第一次扔出必须给别人。从那时起，下一次扔出给 Shahzar 以外的人的概率为 \(\frac{n-2}{n-1}\)，因为有 \(n-1\) 个可能的人和 \(n-2\) 个不是 Shahzar 的人。因此，Shahzar 在前 \(i-1\) 次扔出中没有接到飞盘的概率为
+\[P[X \geq i] = \left( \frac{n-2}{n-1} \right)^{i-2}.\]
+最后，我们将这个表达式代入尾概率公式并计算得到的几何级数：
+\[\mathbb{E}[X] = \sum_{i=1}^\infty P[X \geq i] = 1 + \sum_{i=2}^\infty \left( \frac{n-2}{n-1} \right)^{i-2} = n.\]</p>
+<p>(b) 与 (a) 部分类似，设 \(X\) 为对应于飞盘被扔出次数的随机变量。此外，将人编号为 \(1, 2, \ldots, n-1\)，并设 \(Y_i\) 为人 \(i\) 从未接到飞盘的示性变量。如果我们令 \(Y = Y_1 + \cdots + Y_{n-1}\)，则 \(Y\) 恰好是从未接到飞盘的人数。</p>
+<p>由于 \(X\) 只能取集合 \(\{2, 3, \ldots\}\) 中的值，我们可以使用全概率公式得到
+\[P[Y_i = 1] = \sum_{j=2}^\infty P[Y_i = 1 \cap X = j].\]
+我们可以计算游戏包含 \(j\) 次扔出且人 \(i\) 在该游戏中没有接到飞盘的概率如下。为了使这种情况发生，对于第一次扔出，我们只需要保证人 \(i\) 没有接到飞盘。对于接下来的 \(j-2\) 次扔出，我们必须保证人 \(i\) 和 Shahzar 都没有接到飞盘（否则游戏会提前结束）。最后，我们必须保证最后一次扔出给 Shahzar，以便游戏包含正确数量的扔出次数。人 \(i\) 在第一次扔出中没有接到飞盘的概率为 \(\frac{n-2}{n-1}\)。在给定人 \(i\) 没有飞盘的情况下，下一个接到飞盘的人既不是人 \(i\) 也不是 Shahzar 的概率为 \(\frac{n-3}{n-1}\)。最后，Shahzar 在任何一次扔出中接到飞盘的概率为 \(\frac{1}{n-1}\)。因此，我们的概率为
+\[P[Y_i = 1 \cap X = j] = \left( \frac{n-2}{n-1} \right) \left( \frac{n-3}{n-1} \right)^{j-2} \left( \frac{1}{n-1} \right).\]
+将其代入求和并使用几何级数公式，我们得到
+\[P[Y_i = 1] = \sum_{j=2}^\infty \left( \frac{n-2}{n-1} \right) \left( \frac{n-3}{n-1} \right)^{j-2} \left( \frac{1}{n-1} \right) = \frac{n-2}{2n-2}.\]
+最后，我们可以利用期望的线性性质得到最终答案：
+\[\mathbb{E}[Y] = \sum_{i=1}^{n-1} \mathbb{E}[Y_i] = \sum_{i=1}^{n-1} \frac{n-2}{2n-2} = \frac{n-2}{2}.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw11-sol.pdf</code> · 6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw11.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">05</span><strong>球与箱子</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>将 \(n\) 个球扔进 \(m\) 个箱子中，其中 \(m\) 和 \(n\) 为正整数。设 \(X\) 为恰好有一个球的箱子数量。计算 \(\text{Var}(X)\)。最终答案不应包含任何求和符号。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：
+对每个箱子定义一个示性变量表示该箱子恰好有一个球。利用方差的计算公式 \(\text{Var}(X) = \mathbb{E}[X^2] - \mathbb{E}[X]^2\)。</p>
+<p>计算 \(\mathbb{E}[X_i]\) 和 \(\mathbb{E}[X_i X_j]\)（其中 \(i \neq j\)）。注意落入箱子的球数服从二项分布，并利用二项分布的概率质量函数。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>设 \(X_i\) 为第 \(i\) 个箱子恰好有一个球的示性变量，对于每个 \(i = 1, \ldots, m\)。由于 \(X = \sum_i X_i\)，我们可以使用方差的计算公式：
+\[\text{Var}(X) = \mathbb{E}[X^2] - \mathbb{E}[X]^2 = \mathbb{E}\left[ \left( \sum_{i=1}^m X_i \right)^2 \right] - \left( \mathbb{E}\left[ \sum_{i=1}^m X_i \right] \right)^2 = \mathbb{E}\left[ \sum_{i \neq j} X_i X_j + \sum_{i=1}^m X_i^2 \right] - \left( \sum_{i=1}^m \mathbb{E}[X_i] \right)^2 = \sum_{i \neq j} \mathbb{E}[X_i X_j] + \sum_{i=1}^m \mathbb{E}[X_i] - \left( \sum_{i=1}^m \mathbb{E}[X_i] \right)^2,\]
+其中最后一行利用了期望的线性性质，并认识到 \(X_i^2 = X_i\)，因为它只能取值 0 或 1。</p>
+<p>由于落入第 \(i\) 个箱子的球数服从 \(\text{Binomial}(n, \frac{1}{m})\) 分布，我们有
+\[\mathbb{E}[X_i] = P[\text{1 ball in bin } i] = \binom{n}{1} \cdot \left( \frac{1}{m} \right)^1 \left( 1 - \frac{1}{m} \right)^{n-1} = \frac{n}{m} \left( 1 - \frac{1}{m} \right)^{n-1}.\]
+对于 \(j \in \{1, \ldots, n\}\) 且不等于 \(i\)，我们可以注意到 \(X_i X_j\) 只能取值 0 或 1。这意味着 \(\mathbb{E}[X_i X_j] = P[X_i X_j = 1] = P[X_i = 1, X_j = 1]\)，即恰好有一个球落入第 \(i\) 个箱子且恰好有一个球落入第 \(j\) 个箱子的概率。这结果是
+\[\mathbb{E}[X_i X_j] = P[X_i X_j = 1] = \binom{n}{1} \binom{n-1}{1} \left( \frac{1}{m} \right)^1 \left( \frac{1}{m} \right)^1 \left( 1 - \frac{2}{m} \right)^{n-2} = \frac{n(n-1)}{m^2} \left( 1 - \frac{2}{m} \right)^{n-2}.\]
+注意到 \(\sum_{i \neq j}\) 有 \(m(m-1)\) 项，其余求和有 \(m\) 项，我们发现
+\[\text{Var}(X) = m(m-1) \cdot \frac{n(n-1)}{m^2} \left( 1 - \frac{2}{m} \right)^{n-2} + m \cdot \frac{n}{m} \left( 1 - \frac{1}{m} \right)^{n-1} - m^2 \left[ \frac{n}{m} \left( 1 - \frac{1}{m} \right)^{n-1} \right]^2.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw11-sol.pdf</code> · 7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw11.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">06</span><strong>我能收到包裹吗？</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>某公司的外卖员正在向 \(n\) 个客户配送 \(n\) 个包裹，其中 \(n\) 是大于 1 的自然数。他不仅从剩余的包裹中均匀随机地给每个客户一个包裹，还以 \(\frac{1}{2}\) 的概率在配送前打开包裹。设 \(X\) 为收到自己包裹且未打开的客户数量。</p>
+<p>(a) 计算期望 \(\mathbb{E}[X]\)。</p>
+<p>(b) 计算方差 \(\text{Var}(X)\)。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：
+对每个客户定义一个示性变量表示该客户收到自己的包裹且未打开。利用期望的线性性质计算 \(\mathbb{E}[X]\)。</p>
+<p>对于方差，利用 \(\text{Var}(X) = \mathbb{E}[X^2] - \mathbb{E}[X]^2\)。计算 \(\mathbb{E}[X_i X_j]\) 时，注意在给定客户 \(i\) 收到自己包裹的条件下，客户 \(j\) 收到自己包裹的条件概率。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 定义
+\[X_i = \begin{cases} 1, &amp; \text{if the } i\text{-th customer gets his/her package unopened}, \\ 0, &amp; \text{otherwise}. \end{cases}\]
+由期望的线性性质，\(\mathbb{E}[X] = \mathbb{E}\left[ \sum_{i=1}^n X_i \right] = \sum_{i=1}^n \mathbb{E}[X_i]\)。我们有
+\[\mathbb{E}[X_i] = P[X_i = 1] = \frac{1}{2n},\]
+因为第 \(i\) 个客户收到自己包裹的概率为 \(\frac{1}{n}\)，且包裹未打开的概率为 \(\frac{1}{2}\)，且外卖员独立地打开包裹。</p>
+<p>因此，
+\[\mathbb{E}[X] = n \cdot \frac{1}{2n} = \frac{1}{2}.\]</p>
+<p>(b) 为了计算 \(\text{Var}(X)\)，我们需要知道 \(\mathbb{E}[X^2]\)。</p>
+<p>由期望的线性性质，
+\[\mathbb{E}[X^2] = \mathbb{E}\left[ (X_1 + X_2 + \cdots + X_n)^2 \right] = \mathbb{E}\left[ \sum_{i, j} X_i X_j \right] = \sum_{i, j} \mathbb{E}[X_i X_j].\]
+然后我们考虑两种情况，要么 \(i = j\)，要么 \(i \neq j\)。</p>
+<p>因此 \(\sum_{i, j} \mathbb{E}[X_i X_j] = \sum_i \mathbb{E}[X_i^2] + \sum_{i \neq j} \mathbb{E}[X_i X_j]\)。</p>
+<p>\(\mathbb{E}[X_i^2] = \mathbb{E}[X_i] = \frac{1}{2n}\) 对于所有 \(i\)。为了找到 \(\mathbb{E}[X_i X_j]\)，我们需要计算 \(P[X_i X_j = 1]\)：
+\[P[X_i X_j = 1] = P[X_i = 1] P[X_j = 1 \mid X_i = 1] = \frac{1}{2n} \cdot \frac{1}{2(n-1)},\]
+因为如果客户 \(i\) 收到了自己的包裹，客户 \(j\) 还有 \(n-1\) 个选择。</p>
+<p>因此，
+\[\mathbb{E}[X^2] = n \cdot \frac{1}{2n} + n \cdot (n-1) \cdot \frac{1}{2n} \cdot \frac{1}{2(n-1)} = \frac{3}{4},\]
+\[\text{Var}(X) = \mathbb{E}[X^2] - \mathbb{E}[X]^2 = \frac{3}{4} - \frac{1}{4} = \frac{1}{2}.\]</p></div><p class="problem-source">解答来源：<code>solutions/homework/hw11-sol.pdf</code> · 9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>homework/hw11.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>homework/hw11.pdf</code></li>
+      <li><code>solutions/homework/hw11-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

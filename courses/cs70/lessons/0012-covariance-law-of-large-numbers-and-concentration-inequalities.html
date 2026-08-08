@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>协方差、大数定律与集中不等式 — CS70</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS70 · 第 12 讲</p><h1>协方差、大数定律与集中不等式</h1><p class="lede">本讲深化协方差与相关系数的反直觉案例，训练条件期望与全期望公式的应用，并通过 Poisson 建模、Chebyshev/Cantelli 不等式建立尾部概率估计的基本工具，最后用大数定律统一对样本路径收敛的直觉。</p><div class="meta"><span>预计用时：120 分钟</span><span>难度：中高级</span><span>Proofs · Graph Theory · RSA · Combinatorics</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>掌握协方差的定义、双线性性质及其与方差的关系</li><li>识别协方差与相关系数中的常见反例，理解 Corr=0 与独立的区别</li><li>运用全期望公式计算条件期望，解决骰子游戏与计数问题</li><li>理解 Poisson 分布的可加性及其在服务器宕机建模中的应用</li><li>应用 Chebyshev 与 Cantelli 不等式估计尾部概率</li><li>理解大数定律的直观含义与不同赌局结构下的样本路径行为</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>模块 10：离散随机变量的期望、方差与条件期望基础</li><li>模块 11：几何分布、Poisson 分布及其无记忆性</li></ul><h2 id="covariance-definition">协方差的定义与双线性</h2><p>协方差度量两个随机变量的联合线性偏离程度。对任意随机变量 \(X\) 与 \(Y\)，定义
+\[
+\operatorname{Cov}(X,Y) = \mathbb{E}[XY] - \mathbb{E}[X]\mathbb{E}[Y].
+\]
+当 \(\operatorname{Cov}(X,Y) &gt; 0\) 时，\(X\) 与 \(Y\) 倾向于同向偏离均值；当 \(\operatorname{Cov}(X,Y) &lt; 0\) 时，二者倾向于反向偏离。特别地，\(\operatorname{Var}(X) = \operatorname{Cov}(X,X)\)，因此协方差是方差的推广。</p>
+<p>协方差具有双线性性：对任意常数 \(a,b\) 与随机变量 \(X,Y,Z\)，
+\[
+\operatorname{Cov}(aX+bY, Z) = a\operatorname{Cov}(X,Z) + b\operatorname{Cov}(Y,Z).
+\]
+利用双线性性可以展开
+\[
+\operatorname{Var}(X+Y) = \operatorname{Var}(X) + \operatorname{Var}(Y) + 2\operatorname{Cov}(X,Y).
+\]
+当 \(X\) 与 \(Y\) 独立时，\(\operatorname{Cov}(X,Y) = 0\)，此时方差具有可加性；但反之不成立——协方差为零不能推出独立性。</p>
+<p>相关系数将协方差归一化到 \([-1,1]\) 区间：
+\[
+\operatorname{Corr}(X,Y) = \frac{\operatorname{Cov}(X,Y)}{\sqrt{\operatorname{Var}(X)\operatorname{Var}(Y)}},
+\]
+要求 \(\operatorname{Var}(X) &gt; 0\) 且 \(\operatorname{Var}(Y) &gt; 0\)。相关系数为 \(\pm 1\) 当且仅当 \(X\) 与 \(Y\) 之间存在线性关系 \(Y = aX + b\)（\(a \neq 0\)）。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(X\) 为掷一枚公平骰子的结果，\(Y = 2X + 1\)。计算 \(\operatorname{Cov}(X,Y)\) 与 \(\operatorname{Corr}(X,Y)\)。</p>
+<p>首先，\(\mathbb{E}[X] = \frac{7}{2}\)，\(\mathbb{E}[X^2] = \frac{91}{6}\)，因此
+\[
+\operatorname{Var}(X) = \frac{91}{6} - \frac{49}{4} = \frac{35}{12}.
+\]
+由于 \(Y = 2X+1\)，有 \(\mathbb{E}[Y] = 2 \cdot \frac{7}{2} + 1 = 8\)，且
+\[
+\mathbb{E}[XY] = \mathbb{E}[X(2X+1)] = 2\mathbb{E}[X^2] + \mathbb{E}[X] = 2 \cdot \frac{91}{6} + \frac{7}{2} = \frac{203}{6}.
+\]
+于是
+\[
+\operatorname{Cov}(X,Y) = \frac{203}{6} - \frac{7}{2} \cdot 8 = \frac{35}{6}.
+\]
+而 \(\operatorname{Var}(Y) = 4\operatorname{Var}(X) = \frac{35}{3}\)，所以
+\[
+\operatorname{Corr}(X,Y) = \frac{35/6}{\sqrt{\frac{35}{12} \cdot \frac{35}{3}}} = 1,
+\]
+符合 \(Y\) 是 \(X\) 的严格递增线性函数时相关系数为 \(1\) 的结论。</p></div></div><h2 id="covariance-counterexamples">协方差的反直觉案例</h2><p>本节通过三个反例说明协方差直觉的陷阱。首先，\(\operatorname{Var}(X) = 0\) 确实意味着 \(X\) 几乎必然为常数：设 \(\mu = \mathbb{E}[X]\)，则
+\[
+0 = \operatorname{Var}(X) = \mathbb{E}[(X-\mu)^2],
+\]
+由于被积函数非负，必有 \((X-\mu)^2 = 0\) 几乎必然成立，即 \(X = \mu\) 几乎必然。</p>
+<p>其次，\(\operatorname{Corr}(X,Y) = 0\) 不能推出 \(X\) 与 \(Y\) 独立。经典反例：设 \(X,Y\) 为独立掷骰结果，考虑 \(A = X+Y\) 与 \(B = X-Y\)。利用双线性性，
+\[
+\operatorname{Cov}(A,B) = \operatorname{Cov}(X+Y, X-Y) = \operatorname{Var}(X) - \operatorname{Var}(Y) = 0,
+\]
+因此 \(\operatorname{Corr}(A,B) = 0\)。但 \(A\) 与 \(B\) 不独立：若 \(B = 0\)，则 \(A = 2X\) 必为偶数，故 \(\mathbb{P}[A=7, B=0] = 0\)，而 \(\mathbb{P}[A=7]\) 与 \(\mathbb{P}[B=0]\) 均非零。</p>
+<p>第三，\(\operatorname{Var}(cX) = c^2\operatorname{Var}(X)\)，而非 \(c\operatorname{Var}(X)\)。这是因为
+\[
+\operatorname{Var}(cX) = \mathbb{E}[(cX - c\mathbb{E}[X])^2] = c^2\mathbb{E}[(X-\mathbb{E}[X])^2] = c^2\operatorname{Var}(X).
+\]
+标准差则满足 \(\sigma(cX) = |c|\sigma(X)\)，这是线性性质。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(X\) 与 \(Y\) 独立同分布，\(\operatorname{Var}(X) = \sigma^2 &gt; 0\)。令 \(U = X+Y\)，\(V = X-Y\)。</p>
+<p>计算协方差：
+\[
+\operatorname{Cov}(U,V) = \operatorname{Cov}(X+Y, X-Y) = \operatorname{Var}(X) - \operatorname{Var}(Y) + \operatorname{Cov}(X,Y) - \operatorname{Cov}(Y,X).
+\]
+由于 \(X,Y\) 独立，\(\operatorname{Cov}(X,Y) = 0\)，且 \(\operatorname{Var}(X) = \operatorname{Var}(Y)\)，故 \(\operatorname{Cov}(U,V) = 0\)。</p>
+<p>但 \(U\) 与 \(V\) 不独立：条件 \(V = 0\) 意味着 \(X = Y\)，从而 \(U = 2X\)。若 \(X\) 为整数，则 \(U\) 必为偶数。因此联合分布不能分解为边缘分布的乘积。</p></div></div><h2 id="conditional-expectation">条件期望与全期望公式</h2><p>全期望公式（Law of Total Expectation）是计算复杂随机变量期望的核心工具：
+\[
+\mathbb{E}[Y] = \mathbb{E}[\mathbb{E}[Y \mid X]] = \sum_{x} \mathbb{E}[Y \mid X=x] \cdot \mathbb{P}[X=x].
+\]
+其直觉是：先对 \(X\) 的每个取值求条件期望，再按 \(X\) 的分布加权平均。</p>
+<p>条件期望 \(\mathbb{E}[Y \mid X=x]\) 本身是一个关于 \(x\) 的函数，记 \(g(x) = \mathbb{E}[Y \mid X=x]\)，则 \(\mathbb{E}[Y \mid X] = g(X)\) 是一个随机变量。迭代期望公式 \(\mathbb{E}[Y] = \mathbb{E}[\mathbb{E}[Y \mid X]]\) 是上述公式的简洁写法。</p>
+<p>全期望公式常与无记忆性结合使用。例如，掷骰子直到出现 6，设 \(X\) 为总掷数，\(Y\) 为出现 1 的次数。在 \(X=k\) 条件下，前 \(k-1\) 次只能取 \(\{1,2,3,4,5\}\)，每次出现 1 的概率为 \(\frac{1}{5}\)，故
+\[
+\mathbb{E}[Y \mid X=k] = \frac{1}{5}(k-1).
+\]
+由全期望公式，
+\[
+\mathbb{E}[Y] = \mathbb{E}\left[\frac{1}{5}(X-1)\right] = \frac{1}{5}(\mathbb{E}[X]-1).
+\]
+由于 \(X \sim \text{Geometric}(\frac{1}{6})\)，\(\mathbb{E}[X] = 6\)，得 \(\mathbb{E}[Y] = 1\)。</p>
+<p>Coupon Collector 问题中，收集全部 \(n\) 张卡片所需次数 \(X = \sum_{i=1}^{n} X_i\)，其中 \(X_i \sim \operatorname{Geometric}(\frac{n-i+1}{n})\) 独立。方差为
+\[
+\operatorname{Var}(X) = n^2 \sum_{i=1}^{n} i^{-2} - \mathbb{E}[X].
+\]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>Alice 从 \(\{0,1,\dots,100\}\) 均匀随机选整数 \(X\)，Bob 再从 \(\{0,1,\dots,X\}\) 均匀随机选 \(Y\)。求 \(\mathbb{E}[Y]\)。</p>
+<p>条件期望为 \(\mathbb{E}[Y \mid X=x] = \frac{x}{2}\)。由全期望公式，
+\[
+\mathbb{E}[Y] = \sum_{x=0}^{100} \mathbb{E}[Y \mid X=x] \cdot \mathbb{P}[X=x] = \sum_{x=0}^{100} \frac{x}{2} \cdot \frac{1}{101} = \frac{1}{2}\mathbb{E}[X] = \frac{1}{2} \cdot 50 = 25.
+\]</p></div></div><h2 id="poisson-additivity">Poisson 分布的可加性与应用</h2><p>Poisson 分布具有可加性：若 \(X_1 \sim \operatorname{Poisson}(\lambda_1)\) 与 \(X_2 \sim \operatorname{Poisson}(\lambda_2)\) 独立，则
+\[
+X_1 + X_2 \sim \operatorname{Poisson}(\lambda_1 + \lambda_2).
+\]
+证明利用全概率公式与二项式定理：
+\[
+\mathbb{P}[X_1+X_2 = n] = \sum_{k=0}^{n} \frac{\lambda_1^k}{k!}e^{-\lambda_1} \cdot \frac{\lambda_2^{n-k}}{(n-k)!}e^{-\lambda_2} = \frac{e^{-(\lambda_1+\lambda_2)}}{n!} \sum_{k=0}^{n} \binom{n}{k}\lambda_1^k \lambda_2^{n-k} = \frac{(\lambda_1+\lambda_2)^n}{n!}e^{-(\lambda_1+\lambda_2)}.
+\]</p>
+<p>Poisson 分布常用于建模稀有事件计数。设服务器集群中每台服务器每天独立宕机概率为 \(p\)，共有 \(n\) 台，则日宕机数服从 \(\operatorname{Binomial}(n,p)\)。当 \(n\) 很大而 \(np = \lambda\) 适中时，可用 \(\operatorname{Poisson}(\lambda)\) 近似，且 \(\mathbb{E}[X] = \operatorname{Var}(X) = \lambda\)。</p>
+<p>对于独立的几何变量 \(X \sim \operatorname{Geometric}(p)\) 与 Poisson 变量 \(Y \sim \operatorname{Poisson}(\lambda)\)，利用全概率公式与几何分布的无记忆性 \(\mathbb{P}[X &gt; k] = (1-p)^k\)：
+\[
+\mathbb{P}[X &gt; Y] = \sum_{y=0}^{\infty} (1-p)^y \cdot \frac{\lambda^y}{y!}e^{-\lambda} = e^{-\lambda} \sum_{y=0}^{\infty} \frac{(\lambda(1-p))^y}{y!} = e^{-\lambda} e^{\lambda(1-p)} = e^{-\lambda p}.
+\]</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>某数据中心每天平均 4 台服务器宕机，宕机数服从 \(\operatorname{Poisson}(4)\)。求某天至多 2 台宕机的概率。</p>
+<p>\[
+\mathbb{P}[X \leq 2] = \sum_{i=0}^{2} \frac{4^i}{i!}e^{-4} = e^{-4} + 4e^{-4} + 8e^{-4} = 13e^{-4}.
+\]</p></div></div><h2 id="concentration-inequalities">Chebyshev 与 Cantelli 集中不等式</h2><p>Chebyshev 不等式给出尾部概率的通用上界：对任意随机变量 \(X\) 与 \(k &gt; 0\)，
+\[
+\mathbb{P}[|X - \mathbb{E}[X]| \geq k\sigma] \leq \frac{1}{k^2},
+\]
+其中 \(\sigma = \sqrt{\operatorname{Var}(X)}\)。证明利用 Markov 不等式：
+\[
+\mathbb{P}[|X-\mu| \geq k\sigma] = \mathbb{P}[(X-\mu)^2 \geq k^2\sigma^2] \leq \frac{\mathbb{E}[(X-\mu)^2]}{k^2\sigma^2} = \frac{\sigma^2}{k^2\sigma^2} = \frac{1}{k^2}.
+\]</p>
+<p>Cantelli 不等式（单边 Chebyshev）给出更精确的单侧界：对 \(k &gt; 0\)，
+\[
+\mathbb{P}[X - \mu \geq k\sigma] \leq \frac{1}{1+k^2}.
+\]
+Chebyshev 对双侧对称，Cantelli 对单侧更紧。</p>
+<p>这些不等式在分布未知时特别有用：只要知道期望和方差，就能给出尾部概率的保守估计。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设 \(X\) 的 \(\mathbb{E}[X] = 10\)，\(\operatorname{Var}(X) = 4\)。用 Chebyshev 估计 \(\mathbb{P}[|X-10| \geq 4]\)。</p>
+<p>这里 \(k\sigma = 4\)，\(\sigma = 2\)，故 \(k = 2\)。Chebyshev 给出
+\[
+\mathbb{P}[|X-10| \geq 4] \leq \frac{1}{2^2} = \frac{1}{4}.
+\]</p></div></div><h2 id="law-of-large-numbers">大数定律与样本路径</h2><p>大数定律（LLN）描述样本均值的收敛性：设 \(X_1, X_2, \dots\) 为 i.i.d. 随机变量，\(\mathbb{E}[X_i] = \mu\)，\(\operatorname{Var}(X_i) = \sigma^2 &lt; \infty\)，则样本均值 \(\bar{X}_n = \frac{1}{n}\sum_{i=1}^n X_i\) 依概率收敛到 \(\mu\)：对任意 \(\epsilon &gt; 0\)，
+\[
+\lim_{n \to \infty} \mathbb{P}[|\bar{X}_n - \mu| &gt; \epsilon] = 0.
+\]
+由 Chebyshev 不等式可证：
+\[
+\mathbb{P}[|\bar{X}_n - \mu| \geq \epsilon] \leq \frac{\sigma^2}{n\epsilon^2} \to 0.
+\]</p>
+<p>LLN 的含义需结合具体赌局理解。对掷币试验，设正面概率为 \(\frac{1}{2}\)：</p>
+<ul>
+<li>
+<p>赌局 A：正面比例 \(&gt; 60\%\)。小样本下概率不小，大样本下趋于 0。</p>
+</li>
+<li>
+<p>赌局 B：正面比例在 \(40\%\)–\(60\%\) 之间。大样本下概率趋于 1。</p>
+</li>
+<li>
+<p>赌局 C：正面比例恰为 \(50\%\)。无论样本多大，概率趋于 0（连续化后单点测度为 0）。</p>
+</li>
+</ul><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>掷公平硬币 \(n\) 次，正面数 \(S_n \sim \operatorname{Binomial}(n, \frac{1}{2})\)。用 Chebyshev 估计 \(\mathbb{P}\left[\left|\frac{S_n}{n} - \frac{1}{2}\right| \geq 0.1\right]\)。</p>
+<p>\(\mathbb{E}\left[\frac{S_n}{n}\right] = \frac{1}{2}\)，\(\operatorname{Var}\left(\frac{S_n}{n}\right) = \frac{1}{4n}\)。取 \(\epsilon = 0.1\)：
+\[
+\mathbb{P}\left[\left|\frac{S_n}{n} - \frac{1}{2}\right| \geq 0.1\right] \leq \frac{1}{4n(0.1)^2} = \frac{25}{n}.
+\]
+当 \(n = 100\) 时上界为 \(0.25\)；当 \(n = 1000\) 时上界为 \(0.025\)，体现收敛速度。</p></div></div><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>若 \(\operatorname{Corr}(X,Y) = 0\)，则 \(X\) 与 \(Y\) 独立。</h3><p>协方差为零（或相关系数为零）仅表明没有线性关系，但变量间可能存在非线性依赖。反例：独立骰子结果构成的 \(X+Y\) 与 \(X-Y\) 协方差为零但不独立。</p></article><article class="summary-card"><h3>\(\operatorname{Var}(cX) = c\operatorname{Var}(X)\)。</h3><p>正确公式是 \(\operatorname{Var}(cX) = c^2\operatorname{Var}(X)\)。常数平方后提出，因为方差是二阶量。</p></article><article class="summary-card"><h3>若 \(\operatorname{Cov}(X,Y) = 0\)，则 \(\operatorname{Var}(X+Y) = \operatorname{Var}(X) + \operatorname{Var}(Y)\) 仅在独立时成立。</h3><p>实际上只要协方差为零，方差可加性就成立：\(\operatorname{Var}(X+Y) = \operatorname{Var}(X) + \operatorname{Var}(Y) + 2\operatorname{Cov}(X,Y)\)。独立性是充分非必要条件。</p></article><article class="summary-card"><h3>大数定律意味着样本比例会恰好等于期望值。</h3><p>LLN 描述的是依概率收敛，不是逐点相等。对连续分布，样本均值恰好等于期望值的概率为 0。</p></article><article class="summary-card"><h3>Chebyshev 不等式给出的界总是紧的。</h3><p>Chebyshev 是通用界，对许多具体分布（如正态分布）远不如精确尾部概率紧。它只在分布信息极少时有用。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="b" data-correct="协方差为 0 因为 \(\operatorname{Cov}(X+Y,X-Y) = \operatorname{Var}(X) - \operatorname{Var}(Y) = 0\)，但 \(U,V\) 不独立（条件 \(V=0\) 限制 \(U\) 的取值）。" data-incorrect="协方差为 0 不意味着独立，这是本讲核心反例。注意 \(\operatorname{Cov}(X+Y,X-Y) = \operatorname{Var}(X) - \operatorname{Var}(Y)\)。" data-quiz="m12-quiz-cov-indep"><p><strong>问题：</strong>设 \(X,Y\) 为独立同分布随机变量，\(\operatorname{Var}(X) = 1\)。令 \(U = X+Y\)，\(V = X-Y\)。以下哪项正确？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\operatorname{Cov}(U,V) = 0\) 且 \(U,V\) 独立</button><button aria-pressed="false" data-choice="b">\(\operatorname{Cov}(U,V) = 0\) 但 \(U,V\) 不独立</button><button aria-pressed="false" data-choice="c">\(\operatorname{Cov}(U,V) = 2\)</button><button aria-pressed="false" data-choice="d">\(\operatorname{Cov}(U,V) = -1\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="利用全期望公式，\(\mathbb{E}[Y] = \frac{1}{5}(\mathbb{E}[X]-1) = \frac{1}{5}(6-1) = 1\)。" data-incorrect="注意条件期望 \(\mathbb{E}[Y|X=k] = \frac{1}{5}(k-1)\)，再对几何分布 \(X\) 取期望。" data-quiz="m12-quiz-total-expectation"><p><strong>问题：</strong>掷骰子直到出现 6，设 \(Y\) 为出现 1 的次数。求 \(\mathbb{E}[Y]\)。</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\frac{1}{5}\)</button><button aria-pressed="false" data-choice="b">1</button><button aria-pressed="false" data-choice="c">5</button><button aria-pressed="false" data-choice="d">6</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="Chebyshev 给出 \(\mathbb{P}[|X| \geq 3] \leq 1/9\)，因此 \(\mathbb{P}[X \geq 3] \leq \mathbb{P}[|X| \geq 3] \leq 1/9\)。" data-incorrect="注意 Chebyshev 是双侧界，单侧概率不超过双侧概率。取 \(k=3\) 得 \(1/k^2 = 1/9\)。" data-quiz="m12-quiz-chebyshev"><p><strong>问题：</strong>随机变量 \(X\) 满足 \(\mathbb{E}[X] = 0\)，\(\operatorname{Var}(X) = 1\)。用 Chebyshev 不等式估计 \(\mathbb{P}[X \geq 3]\) 的上界。</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\frac{1}{9}\)</button><button aria-pressed="false" data-choice="b">\(\frac{1}{3}\)</button><button aria-pressed="false" data-choice="c">1</button><button aria-pressed="false" data-choice="d">\(\frac{1}{4}\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="独立 Poisson 变量之和仍为 Poisson，参数相加：\(\operatorname{Poisson}(2+3) = \operatorname{Poisson}(5)\)。" data-incorrect="Poisson 分布具有可加性，参数相加而非相乘。注意与二项分布的区别。" data-quiz="m12-quiz-poisson-sum"><p><strong>问题：</strong>\(X \sim \operatorname{Poisson}(2)\)，\(Y \sim \operatorname{Poisson}(3)\)，独立。\(X+Y\) 的分布是？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">\(\operatorname{Poisson}(5)\)</button><button aria-pressed="false" data-choice="b">\(\operatorname{Poisson}(6)\)</button><button aria-pressed="false" data-choice="c">\(\operatorname{Normal}(5,5)\)</button><button aria-pressed="false" data-choice="d">\(\operatorname{Binomial}(5, 1/2)\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>协方差 \(\operatorname{Cov}(X,Y) = \mathbb{E}[XY] - \mathbb{E}[X]\mathbb{E}[Y]\) 度量线性关联，双线性性是其核心代数性质。</li><li>\(\operatorname{Var}(X) = 0 \implies X\) 几乎必然为常数；但 \(\operatorname{Corr}(X,Y) = 0\) 不能推出独立。</li><li>全期望公式 \(\mathbb{E}[Y] = \mathbb{E}[\mathbb{E}[Y \mid X]]\) 是处理条件结构的基本工具。</li><li>Poisson 分布具有可加性，常用于稀有事件建模，且 \(\mathbb{E}[X] = \operatorname{Var}(X) = \lambda\)。</li><li>Chebyshev 不等式 \(\mathbb{P}[|X-\mu| \geq k\sigma] \leq 1/k^2\) 提供通用尾部界。</li><li>大数定律描述样本均值的依概率收敛，收敛速度为 \(O(1/n)\)。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>discussion/dis11b.pdf</code> · 1 · confidence: high · cov(X,Y) = E[XY] - E[X]E[Y]</li><li><code>homework/hw12.pdf</code> · 1 · confidence: high · cov(X+Y, X-Y) = cov(X,X) - cov(Y,Y) = 0</li><li><code>discussion/dis12a.pdf</code> · 1-2 · confidence: high · E[V] = Σ E[V|S=s]·P[S=s]</li><li><code>discussion/dis11b.pdf</code> · 3 · confidence: high · X1 + X2 is a Poisson random variable with mean λ1 + λ2</li><li><code>cs70-cheatsheet.pdf</code> · Note 7 · confidence: medium · Inequalities LLN</li><li><code>discussion/dis12b.pdf</code> · 3 · confidence: high · LLN coin flips sample paths</li><li><code>homework/hw12.pdf</code> · 4 · confidence: high · Var(X) = n² Σ i⁻² - E[X]</li></ul><footer id="pb-page-end"><p>CS70: Discrete Mathematics and Probability Theory · Spring 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>
