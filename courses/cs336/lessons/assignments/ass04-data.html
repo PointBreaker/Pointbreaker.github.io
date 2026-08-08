@@ -10,15 +10,15 @@
   <script defer src="../../assets/katex.min.js"></script>
   <script defer src="../../assets/katex-auto-render.min.js"></script>
   <script defer src="../../assets/math-render.js"></script>
-  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260806e">
-  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260806e">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
 </head>
 <body>
   <div class="page">
     <!-- Banner -->
     <div class="guide-banner">
       <p class="guide-eyebrow">CS336 · Assignment 4 导读</p>
-      <h1>Data：从原始网页到训练语料</h1>
+      <h1>CS336 作业 4：数据</h1>
       <p class="guide-lede">这份导读帮你理解 Assignment 4 要做什么、需要哪些知识、如何开始。它<strong>不包含任何实现答案</strong>——pipeline 是你自己搭出来的。</p>
       <div class="guide-meta">
         <span><span class="meta-icon">📅</span> 发布：2026-05-06</span>
@@ -29,7 +29,7 @@
 
     <div class="source-note" data-official-source="spring-2026">
       <p><strong>Spring 2026 官方资料（v26.0.1）：</strong><a href="https://github.com/stanford-cs336/assignment4-data">代码仓库</a> · <a href="https://github.com/stanford-cs336/assignment4-data/blob/main/cs336_assignment4_data.pdf">作业说明</a> · <a href="https://cs336.stanford.edu/#schedule">课程日程</a></p>
-      <p>本页只提供学习路径与调试方法，不包含实现答案。官方 handout 规定：AI 可用于概念解释和 API 文档查询，不可用于实现作业代码。</p>
+      <p><strong>版本说明：</strong>上方导读沿用 Spring 2026 课程结构；下方“完整 Handout”严格依据本地 Spring 2025 PDF 与 README 本土化，适配本地 2025 作业仓库。页面已收录任务、接口、约束、交付物与验收要求，但不提供参考实现。</p>
     </div>
 
     <!-- ============================================================ -->
@@ -216,9 +216,637 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 编程作业</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 14 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>cs336_spring2025_assignment4_data.pdf</code>、<code>assignment4-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>作业总览与环境准备</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>作业目标
+<p>本作业要求你亲手处理 Common Crawl 网页抓取数据，构建用于语言模型训练的数据集。你将实现：</p>
+<ol>
+<li>将 Common Crawl HTML 转换为纯文本。</li>
+<li>用多种方法过滤抽取后的文本（如有害内容、个人可识别信息等）。</li>
+<li>对训练数据进行去重。</li>
+<li>在过滤后的数据上训练语言模型，以理解数据处理决策对性能的影响。</li>
+</ol>
+仓库结构
+<p>仓库地址：<code>github.com/stanford-cs336/assignment4-data</code>，请执行 <code>git clone</code> 克隆仓库；如有更新可通过 <code>git pull</code> 获取。</p>
+<ul>
+<li>
+<p><code>cs336-basics/*</code>：包含 assignment 1 所构建模型的训练代码，已替换部分手写组件为 PyTorch 原生实现（如使用 PyTorch 内置 cross-entropy kernel），并提供支持多 GPU 分布式数据并行（DDP）的训练脚本。你将用此脚本在过滤后的数据上训练模型并向排行榜提交。</p>
+</li>
+<li>
+<p><code>cs336_data/*</code>：你将在此编写 assignment 4 的代码。这是一个空模块，可自由实现。</p>
+</li>
+<li>
+<p><code>tests/*.py</code>：包含所有必须通过的测试。这些测试调用 <code>tests/adapters.py</code> 中定义的钩子（hooks），你需要实现这些适配器（adapters）以将你的代码接入测试。编写额外测试或修改测试代码有助于调试，但你的实现必须能通过原始提供的测试套件。</p>
+</li>
+<li>
+<p><code>README.md</code>：包含目录结构详情及环境准备的基本说明。</p>
+</li>
+</ul>
+环境与依赖
+<p>与之前的作业一致，使用 <code>uv</code> 管理依赖。</p>
+数据与资源路径（Together 集群）
+<ul>
+<li>
+<p>示例 WARC 文件：<code>/data/CC/example.warc.gz</code></p>
+</li>
+<li>
+<p>对应 WET 文件：<code>/data/CC/example.warc.wet.gz</code></p>
+</li>
+<li>
+<p>fastText 语言识别模型：<code>/data/classifiers/lid.176.bin</code></p>
+</li>
+<li>
+<p>Dolma 仇恨/有毒言论分类器：<code>/data/classifiers/dolma_fasttext_hatespeech_jigsaw_model.bin</code></p>
+</li>
+<li>
+<p>Dolma NSFW 分类器：<code>/data/classifiers/dolma_fasttext_nsfw_jigsaw_model.bin</code></p>
+</li>
+<li>
+<p>Wikipedia 参考 URL 列表（4350 万条外部链接）：<code>/data/wiki/enwiki-20240420-extracted_urls.txt.gz</code></p>
+</li>
+<li>
+<p>待过滤的 5000 个 WET 文件：<code>/data/CC/CC*.warc.wet.gz</code>（压缩文本约 375 GB）</p>
+</li>
+<li>
+<p>Paloma 验证集（C4 100 domains 子集，已用 GPT-2 tokenizer 切分）：<code>/data/paloma/tokenized_paloma_c4_100_domains_validation.bin</code></p>
+</li>
+</ul>
+<blockquote>
+<p><strong>警告</strong>：这些文件包含完全未经筛选的网页，可能含有大量潜在有害内容。如看到不愿阅读的文档，可跳过继续浏览。</p>
+</blockquote>
+运行与测试
+<p>每个实现类问题均配有适配器与测试命令，例如：</p>
+<ul>
+<li>
+<p><code>uv run pytest -k test_extract_text_from_html_bytes</code></p>
+</li>
+<li>
+<p><code>uv run pytest -k test_identify_language</code></p>
+</li>
+<li>
+<p><code>uv run pytest -k test_mask_emails</code></p>
+</li>
+<li>
+<p><code>uv run pytest -k test_mask_phones</code></p>
+</li>
+<li>
+<p><code>uv run pytest -k test_mask_ips</code></p>
+</li>
+<li>
+<p><code>uv run pytest -k test_classify_nsfw</code></p>
+</li>
+<li>
+<p><code>uv run pytest -k test_classify_toxic_speech</code></p>
+</li>
+<li>
+<p><code>uv run pytest -k test_gopher</code></p>
+</li>
+</ul>
+提交方式
+<ul>
+<li>
+<p><strong>Gradescope</strong> 提交以下文件：</p>
+</li>
+<li>
+<p><code>writeup.pdf</code>：回答所有书面问题，请排版你的回答。</p>
+</li>
+<li>
+<p><code>code.zip</code>：包含你编写的所有代码。</p>
+</li>
+<li>
+<p><strong>排行榜</strong>：向 <code>github.com/stanford-cs336/assignment4-data-leaderboard</code> 提交 PR。详见该仓库的 <code>README.md</code>。</p>
+</li>
+<li>
+<p><strong>打包提交</strong>：运行 <code>./test_and_make_submission.sh</code>，该脚本会安装依赖、运行测试并生成 gzip 压缩包。</p>
+</li>
+</ul>
+评分与排行榜政策
+<ul>
+<li>
+<p>本作业的目标是<strong>优化数据</strong>，使训练后的 Transformer 语言模型在 Paloma benchmark 的 C4 100 domains 子集上<strong>最小化验证 perplexity</strong>。</p>
+</li>
+<li>
+<p><strong>不得修改模型架构或训练流程</strong>，排行榜提交必须使用提供的训练代码。</p>
+</li>
+<li>
+<p>可使用 Paloma 验证数据来构建过滤器或分类器以处理 CC WET 文件，但<strong>不得将验证数据原样复制进训练数据</strong>，语言模型绝不能看到验证集中的任何数据。</p>
+</li>
+</ul>
+全局约束与调试入口
+<ul>
+<li>
+<p>不得修改训练配置（除路径和 wandb 属性外）或训练脚本。</p>
+</li>
+<li>
+<p>调试入口为 <code>tests/adapters.py</code> 中定义的各适配器钩子，以及各问题对应的 <code>pytest</code> 命令。</p>
+</li>
+<li>
+<p>数据处理建议尽可能使用多进程并行（如 <code>concurrent.futures</code> 或 <code>multiprocessing</code>），Slurm 集群上可使用 <code>submitit</code> 包。</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先仔细阅读作业的 Overview 和仓库 README，明确哪些模块由你实现（<code>cs336_data</code>）、哪些由你使用（<code>cs336-basics</code>、<code>tests</code>）。</p>
+</li>
+<li>
+<p>在动手写代码前，先浏览示例 WARC/WET 文件，建立对原始数据的直觉。</p>
+</li>
+<li>
+<p>使用 <code>uv</code> 创建和管理虚拟环境，安装所需依赖（resiliparse、fastwarc、fastText、NLTK、transformers 等）。</p>
+</li>
+<li>
+<p>每实现一个函数，立即运行对应的 <code>pytest</code> 测试，确保适配器正确接入。</p>
+</li>
+<li>
+<p>自检方法：对每个适配器函数，构造简单的手写输入/输出样例，验证其行为与文档描述一致后再运行官方测试。</p>
+</li>
+<li>
+<p>调试时优先查看 <code>tests/adapters.py</code> 中的钩子签名与测试期望的返回类型。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">look_at_cc</span><strong>查看 Common Crawl 数据</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>在实现任何处理流程之前，先浏览原始数据、建立直觉总是有益的。Common Crawl 数据以三种格式发布：</p>
+<ul>
+<li>
+<p><strong>WARC</strong>（"Web ARChive format"）文件：包含原始 CC 数据，包括页面 ID 和 URL、元数据与 HTTP 请求详情（如请求日期时间、服务器 IP 地址），以及页面的原始内容（如 HTML）。</p>
+</li>
+<li>
+<p><strong>WAT</strong>（"Web Archive Transformation"）文件：包含从 WARC 文件提取并以 JSON 对象形式导出的高层元数据。例如，对于 HTML 页面，包含该页面的链接列表和页面标题。</p>
+</li>
+<li>
+<p><strong>WET</strong>（"Web Extracted Text"）文件：包含从原始 HTML 页面抽取的纯文本。</p>
+</li>
+</ul>
+<p>以下问题将查看一个 WARC 文件及其对应的 WET 文件。这些文件来自 2018 年 4 月的抓取（crawl），下载命令如下：</p>
+<pre><code class="language-bash"># 下载示例 WARC 文件
+$ wget https://data.commoncrawl.org/crawl-data/CC-MAIN-2025-18/segments/1744889135610.12/warc/CC-MAIN-20250417135010-20250417165010-00065.warc.gz
+# 下载对应的 WET 文件
+$ wget https://data.commoncrawl.org/crawl-data/CC-MAIN-2025-18/segments/1744889135610.12/wet/CC-MAIN-20250417135010-20250417165010-00065.warc.wet.gz
+</code></pre>
+<p>在 Together 集群上，这些文件位于：</p>
+<ul>
+<li>
+<p><code>/data/CC/example.warc.gz</code></p>
+</li>
+<li>
+<p><code>/data/CC/example.warc.wet.gz</code></p>
+</li>
+</ul>
+<blockquote>
+<p><strong>警告</strong>：这些文件包含完全未经筛选的网页，可能含有大量潜在有害内容。如看到不愿阅读的文档，可跳过继续浏览。</p>
+</blockquote>
+问题 (4 分)
+<p><strong>(a)</strong> 下载上述 WARC 或在集群上找到我们提供的副本。浏览该文件中的<strong>第一个页面</strong>。该文件为 gzip 压缩，可用以下命令浏览：</p>
+<pre><code class="language-bash">$ zcat /data/CC/example.warc.gz | less
+</code></pre>
+<p><code>less</code> 允许你用键盘方向键、Page Up、Page Down 浏览文件，按 <code>q</code> 退出。查看第一个网页：它的 URL 是什么？是否仍可访问？仅从原始 HTML 能看出这个页面大致是关于什么的？</p>
+<p>交付物：2–3 句话的回答。</p>
+<p><strong>(b)</strong> 现在查看对应的 WET 文件：</p>
+<pre><code class="language-bash">$ zcat /data/CC/example.warc.wet.gz | less
+</code></pre>
+<p>注意 WET 文件包含不属于抽取文本内容的 HTTP 头（如 <code>Content-Length</code>）。查看第一个例子，你会看到从刚才所见原始 HTML 中抽取的文本。</p>
+<p>注意，抽取的文本中有许多仍保留着 HTML 结构，并非页面的实际主体内容。你认为所见文本中是否有本应被抽取器过滤掉的部分？从训练数据质量的角度思考：用这样的文本训练模型可能会出现什么问题？反过来，模型又可能从该页面中提取出哪些有用的信息？</p>
+<p>交付物：3–4 句话的回答。</p>
+<p><strong>(c)</strong> 什么算是一个好的训练样本高度依赖于场景。请描述一个该样本<strong>可能适合</strong>出现在训练数据中的应用领域，以及一个它<strong>可能不适合</strong>的领域。</p>
+<p>交付物：1–2 句话的回答。</p>
+<p><strong>(d)</strong> 再看更多例子以更好地了解 Common Crawl 的内容。浏览<strong>另外 25 条 WET 记录</strong>。对每条记录，简要评论文档的语言（如果你能识别）、域名、页面类型等。到第几个例子时，你才会看到一个你认为"高质量"的网页？</p>
+<p>交付物：对 25 篇文档的简要标注，包括文档的语言、域名、页面类型及其他杂项说明；以及到第几个例子时出现高质量示例。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>用 <code>zcat ... | less</code> 浏览大文件时，可用 <code>/</code> 搜索关键词、<code>n</code>/<code>N</code> 跳转匹配项。</p>
+</li>
+<li>
+<p>观察 WARC 记录时，重点关注 HTTP 头中的 <code>WARC-Target-URI</code> 获取 URL，以及 HTML 的 <code>&lt;title&gt;</code> 与 <code>&lt;body&gt;</code> 片段判断主题。</p>
+</li>
+<li>
+<p>对比 WET 抽取结果时，注意哪些内容来自导航栏、页脚、侧边栏等非主体区域。</p>
+</li>
+<li>
+<p>标注 25 篇文档时，建议记录：URL/域名、语言、页面类型（文章/论坛/电商/登录页等）、是否高质量及理由，便于后续回答。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">extract_text</span><strong>HTML 文本抽取</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>从 HTML 抽取文本具有挑战性。通常，任何抽取流程都会寻找 HTML 中的可见内容（如 <code>&lt;p&gt;</code> 标签，这些标签本应包含文本块），但这仍可能抽取远超我们在浏览器中打开页面时感知到的"主体内容"的部分。例如，打开 StackOverflow 时，主体内容在问题和回答中，但菜单选项、指向 StackExchange 其他无关页面的链接、页脚、登录/注册链接——这些全是可见文本，却很难可靠地与主体内容区分开。</p>
+<p>许多工具实现了文本抽取流程。本作业使用 <strong>Resiliparse</strong> 库执行文本抽取。Resiliparse 还能帮助解决一个更基础的问题：检测包含原始内容的字节串的文本编码。尽管网上大多数页面使用 UTF-8 编码（据 Wikipedia 称占 98.2%），你的文本抽取流程仍应能稳健处理其他编码。</p>
+<blockquote>
+<p><strong>提示</strong>：建议使用 <strong>FastWARC</strong> 库遍历 WARC 文件中的记录。以下类可能有用：
+<code>python
+from fastwarc.warc import ArchiveIterator, WarcRecordType</code></p>
+</blockquote>
+问题 (3 分)
+<p><strong>(a)</strong> 编写一个函数，从包含原始 HTML 的字节串中抽取文本。使用 <code>resiliparse.extract.html2text.extract_plain_text</code> 执行抽取。该函数需要字符串作为输入，因此你需要先将字节串解码为 Unicode 串。注意输入的字节串可能<strong>不是</strong> UTF-8 编码，因此你的函数应能在 UTF-8 解码失败时检测编码。Resiliparse 提供了 <code>resiliparse.parse.encoding.detect_encoding()</code>，可能会有所帮助。</p>
+<p>交付物：一个接受 HTML 字节串并返回抽取文本字符串的函数。实现适配器 <code>run_extract_text_from_html_bytes</code>，并确保通过 <code>uv run pytest -k test_extract_text_from_html_bytes</code>。</p>
+<p><strong>(b)</strong> 在单个 WARC 文件上运行你的文本抽取函数，将其输出与对应 WET 文件中的抽取文本对比。你注意到哪些差异和/或相似之处？哪种抽取看起来更好？</p>
+<p>交付物：2–3 句话的回答，对比你自己函数抽取的文本与 WET 文件中的抽取文本。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先用 <code>resiliparse.parse.encoding.detect_encoding()</code> 检测字节串编码，再用对应编码解码为字符串；若检测失败可回退到 UTF-8 并设置错误处理策略（如 <code>errors='replace'</code>）。</p>
+</li>
+<li>
+<p>使用 <code>resiliparse.extract.html2text.extract_plain_text</code> 时，可查阅其文档了解可选参数（如是否保留链接、图片说明等）。</p>
+</li>
+<li>
+<p>用 FastWARC 遍历 WARC 记录时，筛选 <code>WarcRecordType.RESPONSE</code> 类型的记录以获取页面内容。</p>
+</li>
+<li>
+<p>自检方法：选取几条记录，分别打印你的抽取结果与 WET 中对应文本，逐段对比差异。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 3-4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">language_identification</span><strong>语言识别</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>网络包含数千种语言的页面。但在大多数计算预算下，训练能有效利用如此多样化数据的多语言模型颇具挑战。因此，许多源自 Common Crawl 的语言建模训练集只包含有限语言集合的数据。</p>
+<p><strong>fastText</strong>（https://fasttext.cc）是一个有用的库，提供高效的文本分类器。它既提供在你自己数据上训练分类器的基础设施，也提供一系列预训练模型，包括语言识别模型。可从 https://fasttext.cc/docs/en/language-identification.html 下载 fastText 语言识别模型 <code>lid.176.bin</code>，该模型在 Together 集群上也可于 <code>/data/classifiers/lid.176.bin</code> 获取。</p>
+<p>通常，语言过滤器使用分类器给出的分数来决定是否保留给定页面。使用 fastText 语言识别分类器实现一个语言识别过滤器，它应对其预测给出一个非负分数以表示置信度。</p>
+问题 (6 分)
+<p><strong>(a)</strong> 编写一个函数，接受一个 Unicode 串并识别其中存在的主要语言。函数应返回一个二元组，包含语言标识符和一个 0 到 1 之间的分数，表示对该预测的置信度。</p>
+<p>交付物：一个执行语言识别、给出顶级语言预测和分数的函数。实现适配器 <code>run_identify_language</code>，并确保通过 <code>uv run pytest -k test_identify_language</code> 中的所有测试。注意，这些测试假设英语（<code>"en"</code>）和中文（<code>"zh"</code>）有特定的字符串标识符，因此你的测试适配器应在必要时执行相应的重映射。</p>
+<p><strong>(b)</strong> 语言模型在推理时的行为很大程度上取决于其训练数据。因此，数据过滤流程中的问题可能导致下游问题。你认为语言识别流程中的问题可能引发什么问题？在更高风险场景中（如部署面向用户的产品），你会如何缓解这些问题？</p>
+<p>交付物：2–5 句话的回答。</p>
+<p><strong>(c)</strong> 在你从 WARC 文件抽取的文本上运行语言识别系统（通过你先前实现的文本抽取函数）。手动识别 20 个随机例子的语言，并将你的标签与分类器预测对比。报告分类器错误。文档中有多少比例是英语？基于你的观察，过滤时应使用怎样的分类器置信度阈值？</p>
+<p>交付物：2–5 句话的回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>使用 fastText 的 <code>lid.176.bin</code> 模型预测时，返回的标签形如 <code>__label__en</code>，需重映射为 <code>"en"</code> 等形式；分数可通过概率值或模型输出的置信度获取。</p>
+</li>
+<li>
+<p>fastText 返回的标签可能包含多个候选，取第一个作为顶级预测。</p>
+</li>
+<li>
+<p>处理 Unicode 字符串时，注意去除可能干扰分类的噪声（如过长的空白、HTML 残留标签）。</p>
+</li>
+<li>
+<p>自检方法：用已知语言的短文本（如英语、中文段落）验证标识符映射和分数范围是否正确。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 4-5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">mask_pii</span><strong>个人可识别信息（PII）掩码</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>网络包含大量可用于联系或识别个人的信息，如电子邮件地址、电话号码或 IP 地址。我们可能不希望面向用户的语言模型输出关于真实人物的此类信息，常见做法是在训练数据集中掩码掉这些信息片段。</p>
+<p>你将实现三个掩码过程：(a) 电子邮件地址，(b) 电话号码，(c) IP 地址。</p>
+问题 (3 分)
+<p><strong>1.</strong> 编写一个函数掩码电子邮件。函数接受一个字符串作为输入，将所有电子邮件地址实例替换为字符串 <code>"|||EMAIL_ADDRESS|||"</code>。要检测电子邮件地址，你可以查找能可靠完成此任务的正则表达式。</p>
+<p>交付物：一个将给定字符串中所有电子邮件地址替换为 <code>"|||EMAIL_ADDRESS|||"</code> 的函数，返回一个二元组，包含新字符串和被掩码的实例数量。实现适配器 <code>run_mask_emails</code>，并确保通过 <code>uv run pytest -k test_mask_emails</code> 中的所有测试。</p>
+<p><strong>2.</strong> 编写一个函数掩码电话号码。函数接受一个字符串作为输入，将所有电话号码实例替换为字符串 <code>"|||PHONE_NUMBER|||"</code>。可靠地完成此任务可能极具挑战性，因为电话号码可能以极其多样的格式书写，但你应该至少捕获美国最常用的电话号码格式，并对轻微句法偏差具有鲁棒性。</p>
+<p>交付物：一个将给定字符串中电话号码替换为 <code>"|||PHONE_NUMBER|||"</code> 的函数，返回一个二元组，包含新字符串和被掩码的实例数量。实现适配器 <code>run_mask_phone_numbers</code>，并确保通过 <code>uv run pytest -k test_mask_phones</code>。</p>
+<p><strong>3.</strong> 编写一个函数掩码 IP 地址。对于本问题，聚焦 IPv4 地址（4 个以点分隔、最大 255 的数字）即可。函数接受一个字符串作为输入，将所有 IP 地址实例替换为字符串 <code>"|||IP_ADDRESS|||"</code>。</p>
+<p>交付物：一个将给定字符串中 IPv4 地址替换为 <code>"|||IP_ADDRESS|||"</code> 的函数，返回一个二元组，包含新字符串和被掩码的实例数量。实现适配器 <code>run_mask_ips</code>，并确保通过 <code>uv run pytest -k test_mask_ips</code>。</p>
+<p><strong>4.</strong> 当这些过滤器被天真（naïvely）应用于训练集时，你认为语言模型下游可能会出现什么问题？你会如何缓解这些问题？</p>
+<p>交付物：2–5 句话的回答。</p>
+<p><strong>5.</strong> 在你从 WARC 文件抽取的文本上运行 PII 掩码函数（通过你先前实现的文本抽取函数）。浏览 20 个发生替换的随机例子；给出一些假阳性（false positives）和假阴性（false negatives）的例子。</p>
+<p>交付物：2–5 句话的回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>电子邮件正则表达式可参考 RFC 5322 的常见简化实现，注意处理 <code>+</code>、<code>.</code>、<code>-</code>、<code>_</code> 等字符。</p>
+</li>
+<li>
+<p>美国电话号码常见格式包括 <code>(xxx) xxx-xxxx</code>、<code>xxx-xxx-xxxx</code>、<code>xxx.xxx.xxxx</code>、<code>+1 xxx xxx xxxx</code> 等，建议构建一个覆盖多种分隔符和可选国家码的正则。</p>
+</li>
+<li>
+<p>IPv4 地址正则需限制每段为 0–255，可用 <code>(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)</code> 匹配每段。</p>
+</li>
+<li>
+<p>每次替换时计数，确保返回的掩码数量准确。</p>
+</li>
+<li>
+<p>自检方法：构造包含已知数量电子邮件/电话号码/IP 地址的测试字符串，验证替换结果与计数。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 5-6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">harmful_content</span><strong>有害内容检测</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>来自网络的未筛选转储包含大量我们不希望在推理时让语言模型重复的文本。一些训练样本甚至可能出人意料地来自通常无害的网站（如 Wikipedia）——例如，某些页面上用户留下的评论可能相当恶毒。</p>
+<p>尽管基本不可能在有害与否之间划定清晰界线，许多数据过滤流程仍会对主要包含有害内容的页面进行过滤。识别此类内容的方法有很多，包括统计禁用词表中的词，或在人工标注标签上构建简单分类器。本作业聚焦于识别两大类有害内容：</p>
+<ul>
+<li>
+<p><strong>NSFW</strong>（"Not safe for work"，含色情、脏乱或其他潜在令人不适的内容）</p>
+</li>
+<li>
+<p><strong>有毒言论（toxic speech）</strong>（"粗鲁、无礼或不合理的语言，可能让人离开讨论"）</p>
+</li>
+</ul>
+<p>我们将使用 Dolma 项目提供的 fastText 预训练模型来判断输入文本是否属于上述任一类别。这些分类器在 Jigsaw Toxic Comments 数据集上训练。</p>
+<p>NSFW 分类器下载地址：
+<code>dolma-artifacts.org/fasttext_models/jigsaw_fasttext_bigrams_20230515/jigsaw_fasttext_bigrams_nsfw_final.bin</code></p>
+<p>仇恨言论分类器下载地址：
+<code>dolma-artifacts.org/fasttext_models/jigsaw_fasttext_bigrams_20230515/jigsaw_fasttext_bigrams_hatespeech_final.bin</code></p>
+<p>这两个分类器也已放置在 Together 集群上：</p>
+<ul>
+<li>
+<p><code>/data/classifiers/dolma_fasttext_hatespeech_jigsaw_model.bin</code>：仇恨与有毒言论的预训练分类器</p>
+</li>
+<li>
+<p><code>/data/classifiers/dolma_fasttext_nsfw_jigsaw_model.bin</code>：NSFW 内容的预训练分类器</p>
+</li>
+</ul>
+<p>使用这些模型实现一个函数，接受包含页面内容的 Unicode 串，返回一个标签（如 <code>"toxic"</code>、<code>"non-toxic"</code>）及置信度分数。</p>
+问题 (6 分)
+<p><strong>1.</strong> 编写一个函数检测 NSFW 内容。</p>
+<p>交付物：一个将给定字符串标记为包含或不包含 NSFW 内容的函数，返回一个二元组，包含标签和置信度分数。实现适配器 <code>run_classify_nsfw</code>，并确保通过 <code>uv run pytest -k test_classify_nsfw</code>。注意，该测试只是取自 Jigsaw 数据集的健全性检查（sanity check），绝不意味着你的分类器是准确的，你需要自行验证。</p>
+<p><strong>2.</strong> 编写一个函数检测有毒言论。</p>
+<p>交付物：一个将给定字符串标记为是否由有毒言论构成的函数，返回一个二元组，包含标签和置信度分数。实现适配器 <code>run_classify_toxic_speech</code>，并确保通过 <code>uv run pytest -k test_classify_toxic_speech</code>。同样，该测试只是取自 Jigsaw 的健全性检查。</p>
+<p><strong>3.</strong> 当这些过滤器被应用于创建训练集时，你认为语言模型下游可能会出现什么问题？你会如何缓解这些问题？</p>
+<p>交付物：2–5 句话的回答。</p>
+<p><strong>4.</strong> 在你从 WARC 文件抽取的文本上运行有害内容过滤器（通过你先前实现的文本抽取函数）。浏览 20 个随机例子，将分类器预测与你自己的判断对比。报告分类器错误。文档中有多少比例是有害的？基于你的观察，过滤时应使用怎样的分类器置信度阈值？</p>
+<p>交付物：2–5 句话的回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>加载 fastText 分类器后，预测时注意其返回的标签形式（如 <code>__label__toxic</code>），需重映射为 <code>"toxic"</code> / <code>"non-toxic"</code> 等。</p>
+</li>
+<li>
+<p>fastText 返回的概率可直接用作置信度分数；若返回多类，取对应标签的概率。</p>
+</li>
+<li>
+<p>测试仅作健全性检查，建议用自己的样本（如明显有毒/无毒文本）验证分类器行为。</p>
+</li>
+<li>
+<p>自检方法：用 Jigsaw 风格样本验证标签映射与分数合理性，再在真实 CC 文本上抽样评估。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 6-7 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">gopher_quality_filters</span><strong>Gopher 质量过滤器</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>即使按语言过滤页面并移除有害内容，剩余页面中仍有相当一部分对语言模型训练是低质量的。"质量"虽不易定义，但浏览 Common Crawl 例子有助于识别低质量内容，例如：</p>
+<ul>
+<li>
+<p>付费墙内容页面</p>
+</li>
+<li>
+<p>断链占位页面</p>
+</li>
+<li>
+<p>登录、注册或联系表单</p>
+</li>
+<li>
+<p>主要含非文本内容的页面（如照片、视频，在文本抽取过程中丢失）</p>
+</li>
+</ul>
+<p>Gopher 论文 [Rae et al., 2021] 描述了一组简单的质量过滤器，用于从网页抓取数据中移除类似的简单低质文本案例。这些过滤器由易于理解的简单启发式规则组成，常能覆盖许多明显不合适的例子。Gopher 质量过滤器包括若干基于文档长度、词长、符号词比以及特定英语停用词是否存在的标准。</p>
+<p>本作业要求你实现 Gopher 论文中描述的过滤器<strong>子集</strong>。具体而言，应移除满足以下任一条件的文档：</p>
+<ul>
+<li>
+<p>包含<strong>少于 50 或多于 100,000</strong> 个词。</p>
+</li>
+<li>
+<p>平均词长<strong>不在 3 到 10 个字符</strong>范围内。</p>
+</li>
+<li>
+<p><strong>超过 30%</strong> 的行以省略号（<code>" ..."</code>）结尾。</p>
+</li>
+<li>
+<p><strong>少于 80%</strong> 的词包含至少一个字母字符。</p>
+</li>
+</ul>
+<p>Gopher 论文使用的所有质量过滤器的完整描述见其 Appendix A。</p>
+问题 (3 分)
+<p><strong>(a)</strong> 实现上述 Gopher 质量过滤器的子集。对于将文本切分为词，你可能会发现 NLTK 包（特别是 <code>nltk.word_tokenize</code>）很有用，但并非必须使用。</p>
+<p>交付物：一个接受字符串作为唯一参数并返回布尔值的函数，表示文本是否通过 Gopher 质量过滤器。实现适配器 <code>run_gopher_quality_filter</code>，并确保通过 <code>uv run pytest -k test_gopher</code> 中的测试。</p>
+<p><strong>(b)</strong> 在你从 WARC 文件抽取的文本上运行基于规则的质量过滤器（通过你先前实现的文本抽取函数）。浏览 20 个随机例子，将过滤器预测与你自己的判断对比。评论质量过滤器与你判断不一致的案例。</p>
+<p>交付物：2–5 句话的回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>使用 <code>nltk.word_tokenize</code> 将文本切分为词列表，便于统计词数、词长和含字母词比例。</p>
+</li>
+<li>
+<p>逐行检查是否以 <code>" ..."</code> 结尾，计算占比。</p>
+</li>
+<li>
+<p>平均词长 = 所有词字符总数 / 词数，注意空文本的边界情况。</p>
+</li>
+<li>
+<p>含字母字符的词比例 = 至少包含一个 <code>str.isalpha()</code> 为真的字符的词数 / 总词数。</p>
+</li>
+<li>
+<p>自检方法：构造满足/不满足各条规则的边界案例（如恰好 50 个词、平均词长恰为 3 或 10 等），验证过滤器返回值。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 7 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">quality_classifier</span><strong>质量分类器</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>现在让我们超越 Gopher 规则所捕获的简单句法质量准则。语言建模训练并非首次出现需要对内容进行质量排序的需求。特别是在信息检索领域，文本质量同样是一个根本性挑战。搜索引擎利用的一个经典信号是网页链接结构：高质量页面倾向于链接到其他高质量页面 [Page et al., 1998]。OpenAI 在构建 WebText（GPT-2 [Radford et al., 2019] 的训练数据集）时使用了类似的洞察：他们收集被 Reddit 评论链接且超过最低"karma"阈值的页面。Reddit 的替代方案是使用 Wikipedia 作为高质量链接的来源，因为从 Wikipedia 页面链接的外部来源往往是可信页面 [Touvron et al., 2023]。</p>
+<p>虽然使用受控来源通常能产生高质量内容，但所得数据集对于当今标准来说规模较小（OpenWebText 有 40GB 文本，而 The Pile 大 20 倍以上）。一种方法是将这些参考页面作为正例，（随机）Common Crawl 页面作为负例，训练一个 fastText 分类器。该分类器给出一个质量分数，可用于过滤整个 Common Crawl 的页面。设置质量阈值需要在精确率和召回率之间权衡。</p>
+<p>在本部分中，你将构建一个质量分类器。为方便起见，我们已从最近的 Wikipedia 转储中提取了参考页面的 URL，并放置在 Together 集群的 <code>/data/wiki/enwiki-20240420-extracted_urls.txt.gz</code>。该文件包含截至 2024 年 4 月英语 Wikipedia 页面上发现的 4350 万条外部链接列表，但我们期望你对这些 URL 进行子采样，以获得"高质量"文本的正例用于训练你的分类器。注意，这些正例可能仍包含不良内容，因此可能有用的是应用你已构建的其他原语（例如语言识别、过滤规则等）来进一步提高其质量。给定一个 URL 文件，你可以使用 <code>wget</code> 以 WARC 格式抓取其内容：</p>
+<pre><code class="language-shell">wget --timeout=5 \
+  -i subsampled_positive_urls.txt \
+  --warc-file=subsampled_positive_urls.warc \
+  -O /dev/null
+</code></pre>
+问题
+<p><strong>Problem ( quality_classifier): 15 points</strong></p>
+<p><strong>(a)</strong> 训练一个质量分类器，给定文本，返回一个数值质量分数。</p>
+<p><strong>交付物：</strong> 供下一子问题使用的质量分类器。</p>
+<p><strong>(b)</strong> 编写一个函数，将页面标记为高质量或低质量，并提供标签的置信度分数。</p>
+<p><strong>交付物：</strong> 一个函数，以字符串为唯一参数，返回一个包含标签（是否高质量）和置信度分数的对。实现适配器 <code>[run_classify_quality]</code>。作为健全性检查，确保它通过运行 <code>uv run pytest -k test_classify_quality</code> 正确分类我们提供的两个示例。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：fastText 文本分类、Wikipedia 作为高质量数据源、精确率-召回率权衡、正负例采样策略。实施顺序：(1) 从 <code>enwiki-20240420-extracted_urls.txt.gz</code> 子采样正例 URL；(2) 使用 <code>wget</code> 抓取正例页面；(3) 从 Common Crawl 随机采样负例；(4) 可选地应用语言识别、Gopher 规则等原语清洗正负例；(5) 训练 fastText 质量分类器；(6) 实现 <code>run_classify_quality</code> 适配器，封装分类与置信度返回。调试策略：检查训练数据中正负例比例是否均衡；观察分类器在已知高质量/低质量样本上的分数分布；确认子采样规模与内存/训练时间的平衡。自检方法：运行 <code>uv run pytest -k test_classify_quality</code> 验证两个示例是否正确分类；在 WARC 数据上抽样检查分数分布是否合理。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 8-9 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">exact_deduplication</span><strong>精确行去重</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>网页包含大量重复内容。一些页面是彼此的精确副本——想想存档，或标准工具生成的默认页面，比如流行 Web 服务器的 404 页面。但大多数重复发生在更细粒度的层面。例如，考虑 Stack Overflow 上的所有问题页面。虽然每个页面都有独特内容（例如问题、评论、答案本身），但所有页面也有大量冗余，比如页眉、菜单选项和页脚，在渲染所有这些页面时都会以精确形式重复。在本节的第一部分，我们将处理这种精确重复，之后再看如何处理近似重复。</p>
+<p>一种简单的精确重复去重方法是只保留文档中在语料库内唯一的行。这足以消除大部分冗余，比如我们上面提到的页眉和菜单选项。在更简单的情况下，当移除在其他地方精确重复的行时，我们通常会留下每个页面的唯一主要内容（比如 StackOverflow 上的问题和答案）。</p>
+<p>为此，我们可以对语料库进行一次遍历，统计观察到的每行出现次数。然后，在第二次遍历中，通过仅保留其唯一行来重写每个文档。</p>
+<p>天真地，用于保存计数器的数据结构可能占用与存储语料库中所有唯一行一样多的空间。一个简单的内存效率技巧是改用行的哈希作为键，使键具有固定大小（而不是依赖于行的长度）。你现在将实现这种简单的去重方法。</p>
+问题
+<p><strong>Problem ( exact_deduplication): 3 points</strong></p>
+<p>编写一个函数，接受输入文件路径列表并对它们执行精确行去重。它应首先统计语料库中每行的频率，使用哈希减少内存，然后仅保留每个文件的唯一行来重写。</p>
+<p><strong>交付物：</strong> 一个执行精确行去重的函数。你的函数应接受两个参数：(a) 输入文件路径列表，和 (b) 输出目录。它应将每个输入文件以相同名称重写到输出目录，但通过移除在输入文件集中出现超过一次的行来去重内容。例如，如果输入路径是 <code>a/1.txt</code> 和 <code>a/2.txt</code>，输出目录是 <code>b/</code>，你的函数应写入文件 <code>b/1.txt</code> 和 <code>b/2.txt</code>。实现适配器 <code>[run_exact_line_deduplication]</code> 并确保它通过 <code>uv run pytest -k test_exact_line_deduplication</code>。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：精确去重、哈希计数、文件 I/O、内存效率。实施顺序：(1) 遍历所有输入文件，对每行计算哈希并统计全局频率；(2) 再次遍历文件，仅保留频率为 1 的行写入输出目录。调试策略：在小规模测试文件上验证行计数是否正确；检查输出目录中的文件是否保留原始文件名；确认跨文件的重复行被正确移除而文件内唯一行被保留。自检方法：运行 <code>uv run pytest -k test_exact_line_deduplication</code>；手动构造包含跨文件重复行的测试用例验证行为。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 9-10 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">minhash_deduplication</span><strong>MinHash + LSH 文档去重</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>精确去重对于移除在多个网页间逐字重复的内容很有用，但不能处理文档内容略有不同的情况。例如，考虑软件许可证文档——许可证文档通常从模板生成，需要年份和软件作者姓名。因此，一个 MIT 许可项目的许可证文件包含的内容与另一个 MIT 许可项目大体相同，但它们不是精确副本。为了移除这种重复的、大部分模板化的内容，我们需要模糊去重。为了高效执行模糊文档级去重，我们将使用 minhash 与局部敏感哈希（LSH）。</p>
+<p>为了执行模糊去重，我们将使用文档间的一种特定相似度概念：每个文档 n-gram 之间的 Jaccard 相似度。集合 \(S\) 和 \(T\) 之间的 Jaccard 相似度定义为：</p>
+<p>\[
+J(S, T) = \frac{|S \cap T|}{|S \cup T|}
+\]</p>
+<p>要天真地执行模糊去重，我们可以将每个文档表示为一组 n-gram，计算所有文档对之间的 Jaccard 相似度，将超过特定 Jaccard 相似度阈值的对标记为重复。然而，这种方法对于大型文档集合（例如 Common Crawl）不切实际。此外，天真地存储一组 n-gram 会比文档占用更多内存。</p>
+<h3>MinHashing</h3>
+<p>为了解决内存问题，我们将 n-gram 文档表示替换为签名。特别是，我们希望构造签名，使得当我们比较两个文档的签名时，得到文档各自 n-gram 集合之间 Jaccard 相似度的近似值。Minhash 签名满足这些性质。要计算文档 n-gram 集合 \(S = \{s_1, \ldots, s_n\}\) 的 minhash 签名，我们需要 \(k\) 个不同的哈希函数 \(h_1, \ldots, h_k\)。每个哈希函数将一个 n-gram 映射到一个整数。给定哈希函数 \(h_i\)，文档 n-gram 集合 \(S\) 的 minhash 为：</p>
+<p>\[
+\text{minhash}(h_i, S) = \min(h_i(s_1), h_i(s_2), \ldots, h_i(s_n))
+\]</p>
+<p>文档 n-gram \(S\) 的签名是 \(\mathbb{R}^k\) 中的一个向量，其中每个元素 \(i\) 包含在随机哈希函数 \(h_i\) 下 \(S\) 的 minhash，即：</p>
+<p>\[
+[\text{minhash}(h_1, S), \text{minhash}(h_2, S), \ldots, \text{minhash}(h_k, S)]
+\]</p>
+<p>事实证明，对于两个文档 n-gram 集合 \(S_1\) 和 \(S_2\)，集合之间的 Jaccard 相似度近似于具有相同 minhash 值的列的比例（证明见 Leskovec et al., 2014 的第 3.3.3 节）。例如，给定文档签名 <code>[1, 2, 3, 2]</code> 和 <code>[5, 2, 3, 4]</code>，n-gram 集合之间的 Jaccard 相似度近似为 \(2/4\)，因为这些签名的第二和第三列具有相同的 minhash 值。</p>
+<h3>局部敏感哈希（LSH）</h3>
+<p>尽管 minhashing 为我们提供了一种内存高效的文档表示，保留了任意文档对之间的预期相似度，我们仍然需要比较所有文档对以找到相似度最高的。LSH 提供了一种高效分桶可能具有高相似度的文档的方法。要将 LSH 应用于我们的文档签名（现在是 \(\mathbb{R}^k\) 中的向量），我们将签名分成 \(b\) 个带（band），每个带包含 \(r\) 个 minhash，其中 \(k = br\)。例如，如果我们有 100 元素的文档签名（由 100 个随机哈希函数生成），我们可以将其分成 2 个带各 50 个 minhash，或 4 个带各 25 个 minhash，或 50 个带各 2 个 minhash，等等。如果两个文档在某个带具有相同的哈希值，它们将被聚到同一桶中，并被视为候选重复。因此，对于固定数量的签名，增加带的数量会增加召回率并降低精确率。</p>
+<p>对于上述的具体例子，假设文档 D1 的 minhash 签名为 <code>[1, 2, 3, 4, 5, 6]</code>，文档 D2 的签名为 <code>[1, 2, 3, 5, 1, 2]</code>。如果我们使用 3 个带各 2 个 minhash，则 D1 的第一带是 <code>[1, 2]</code>，D1 的第二带是 <code>[3, 4]</code>，D1 的第三带是 <code>[5, 6]</code>。类似地，D2 的第一带是 <code>[1, 2]</code>，D2 的第二带是 <code>[3, 5]</code>，D2 的第三带是 <code>[1, 2]</code>。由于第一带的哈希值匹配（两个文档都是 <code>[1, 2]</code>），D1 和 D2 将在第一带下被聚到一起。它们不会在任何其他带下被聚到一起，因为哈希值不匹配。然而，注意由于文档在至少一个带下被聚到一起，它们将被视为候选重复，无论其他带是否匹配。</p>
+<p>一旦我们识别出候选重复，可以以多种方式处理它们。例如，我们可以计算所有候选重复之间的 Jaccard 相似度，将超过设定阈值的对标记为重复。</p>
+<p>最后，我们在桶之间聚类重复文档。例如，假设文档 A 和 B 在一个桶中匹配且真实 Jaccard 相似度高于我们的阈值，文档 B 和 C 在另一个桶中匹配且真实 Jaccard 相似度也高于我们的阈值。那么，我们将文档 A、B 和 C 视为单个聚类。我们随机移除每个聚类中除一个以外的所有文档。</p>
+问题
+<p><strong>Problem ( minhash_deduplication): 8 points</strong></p>
+<p>编写一个函数，接受输入文件路径列表并使用 minhash 和 LSH 执行模糊文档去重。特别是，你的函数应为提供的列表中的每个文档计算 minhash 签名，使用具有提供数量的带的 LSH 识别候选重复，然后计算候选重复之间的真实 n-gram Jaccard 相似度并移除超过给定阈值的。为了提高召回率（遵循 Penedo et al., 2023），在计算 minhash 签名和/或比较 Jaccard 相似度之前，通过小写化、移除标点、规范化空白、移除重音符号并应用 NFD unicode 规范化来规范化文本。</p>
+<p><strong>交付物：</strong> 一个执行模糊文档去重的函数。你的函数应至少接受以下参数：(a) 输入文件路径列表，(b) 用于计算 minhash 签名的哈希数量，(c) 用于 LSH 的带数量，(d) 用于计算 minhash 签名的 n-gram 长度（以词计），和 (e) 输出目录。你可以假设用于计算 minhash 签名的哈希数量可被用于 LSH 的带数量整除。</p>
+<p>你的函数应将每个输入文件以相同名称重写到输出目录，但仅写入以下文档：(a) 非候选重复和/或 (b) 从聚类桶中随机选择保留的。例如，如果输入路径是 <code>a/1.txt</code> 和 <code>a/2.txt</code>，输出目录是 <code>b/</code>，你的函数应写入文件 <code>b/1.txt</code> 和 <code>b/2.txt</code>。实现适配器 <code>[run_minhash_deduplication]</code> 并确保它通过 <code>uv run pytest -k test_minhash_deduplication</code>。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：Jaccard 相似度、MinHash 签名、局部敏感哈希（LSH）、n-gram、NFD unicode 规范化。实施顺序：(1) 对每篇文档进行文本规范化（小写、去标点、规范化空白、去重音、NFD）；(2) 生成词级 n-gram 集合；(3) 使用 k 个哈希函数计算 minhash 签名；(4) 将签名分成 b 个带，每个带 r 个哈希（k=br），通过 LSH 将至少一个带匹配的文档对作为候选重复；(5) 计算候选对的真实 n-gram Jaccard 相似度；(6) 将超过阈值的对视为重复，构建聚类并随机保留每聚类一篇文档。调试策略：在少量文档上验证 minhash 签名维度是否正确；检查带划分是否满足整除关系；验证 Jaccard 计算在已知相似/不相似文档对上的表现。自检方法：运行 <code>uv run pytest -k test_minhash_deduplication</code>；构造包含近似重复模板文档的测试用例验证召回。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 10-11 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">filter_data</span><strong>过滤语言建模数据（filter_data）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>你已经在本作业前半部分实现了多种用于过滤网页爬取数据的基本模块（HTML 抽取、语言识别、PII 脱敏、有害内容检测、Gopher 质量规则、质量分类器、精确/近似去重）。现在要把它们投入实际使用，生成可用于语言建模的训练数据。</p>
+<p>Together 集群上为你准备了 5000 个 CC WET 文件作为起点，路径为：</p>
+<pre><code>/data/CC/CC*.warc.wet.gz
+</code></pre>
+<p>你的目标是对这些 CC dump 进行过滤，使得训练出的 Transformer 语言模型在 <strong>Paloma benchmark 的 C4 100 domains 子集</strong> 上<strong>最小化验证 perplexity</strong>。注意：你<strong>不得修改模型架构或训练过程</strong>，目标只是构造最优数据。该数据集包含 C4 语言建模数据集中最常见的 100 个 domain 的样本。验证数据已放置在 Together 集群：</p>
+<pre><code>/data/paloma/tokenized_paloma_c4_100_domains_validation.bin
+</code></pre>
+<p>（使用 GPT-2 tokenizer 已 tokenize）。你可以用以下方式加载并查看：</p>
+<pre><code class="language-python">import numpy as np
+data = np.fromfile(
+    "/data/paloma/tokenized_paloma_c4_100_domains_validation.bin",
+    dtype=np.uint16
+)
+from transformers import AutoTokenizer
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+print(tokenizer.decode(data[0:2000]))
+</code></pre>
+<p>基于你过滤后的数据集，将训练一个 <strong>GPT-2 small 形状的模型</strong>，迭代 <strong>200K 步</strong>，并在 C4 100 上评估 perplexity。</p>
+<p>5000 个 WET 文件本身就是相当大的数据量（压缩文本约 375GB）。为高效处理，建议尽可能使用多进程并行。可参考 <code>concurrent.futures</code> 或 Python <code>multiprocessing</code> API；也可使用 <code>submitit</code> 包将任务并行提交到 Slurm 集群（作业中给出了 <code>concurrent.futures.ProcessPoolExecutor</code> 与 <code>submitit.AutoExecutor</code> 的完整示例）。建议用 <strong>FastWARC</strong> 库遍历 WET 文件中的记录，用 <strong>tldextract</strong> 库从 URL 中提取 domain 用于过滤：</p>
+<pre><code class="language-python">from fastwarc.warc import ArchiveIterator, WarcRecordType
+from tldextract import TLDExtract
+</code></pre>
+问题 (filter_data)（6 分）
+<h3>(a)</h3>
+<p>编写一个（或一系列）脚本，从 <code>/data/CC/CC*.warc.wet.gz</code> 过滤出语言建模数据。你可以自由应用本作业前面实现的任何基本模块，也可以自由探索其他过滤/生成数据的方法（例如，基于 n-gram 语言模型的 perplexity 进行过滤）。目标是：产出的数据训练后在 Paloma C4 100 domains 子集上 perplexity 最小。</p>
+<p><strong>重要约束</strong>：你<strong>被允许</strong>利用 Paloma 验证数据来<strong>构造</strong>用于处理 CC WET 文件的过滤器或分类器，但<strong>不得</strong>将任何验证数据<strong>原样复制</strong>到训练数据中。语言模型<strong>绝不能</strong>看到验证集中的任何数据。</p>
+<p>你的脚本应报告<strong>每个过滤器各自保留了多少示例</strong>，以便你了解各过滤器对最终输出数据的贡献。</p>
+<p><strong>交付物</strong>：一个（或一系列）脚本，并行过滤所提供的 CC WET 文件并产出语言建模数据；一份书面说明，列出每个过滤步骤分别删除了被丢弃样本中的多大比例。</p>
+<h3>(b)</h3>
+<p>过滤这 5000 个 WET 文件需要多长时间？过滤整个 Common Crawl dump（100,000 个 WET）又需要多长时间？</p>
+<p><strong>交付物</strong>：数据过滤流水线的运行时间。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：WET 文件格式与 FastWARC 的记录遍历、Paloma/C4 验证数据的分布特性、多进程与 Slurm 并行（<code>concurrent.futures</code> / <code>submitit</code>）、perplexity 作为过滤信号。</p>
+<p>实施顺序：先用少量 WET 文件跑通端到端流水线（读取 → 抽取 → 各过滤器 → 写出），确认计数输出正确后再扩展到全量；并行化时先本地 <code>ProcessPoolExecutor</code> 验证，再切换到 <code>submitit</code> 上 Slurm。</p>
+<p>调试策略：对每个过滤器分别统计保留/丢弃数量与比例，定位丢弃最多的环节；在小样本上人工抽查被保留与被丢弃的文档，判断是否符合预期。</p>
+<p>自检方法：确认脚本输出的“各过滤器保留数”之和与最终保留数一致；确认没有把验证集原文混入训练数据；确认在 5000 文件上的运行时间可线性外推到 100,000 文件。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 11-14 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">inspect_filtered_data</span><strong>检查过滤后的数据（inspect_filtered_data）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>你已经产出了一批语言建模数据。在训练之前，需要检查这批数据的内容与质量，判断过滤流水线是否按预期工作，并据此决定是否需要进一步调整流水线。</p>
+问题 (inspect_filtered_data)（4 分）
+<h3>(a)</h3>
+<p>从你的过滤后数据集中随机抽取 <strong>5 个</strong>示例。对它们的质量进行评论，并判断它们是否适合用于语言建模——尤其要考虑我们的目标是在 C4 100 domains benchmark 上<strong>最小化 perplexity</strong>。</p>
+<p><strong>交付物</strong>：最终过滤数据中的 5 个随机示例（若文档较长，可仅展示相关片段即可）。对每个示例，用 1-2 句话描述该示例以及它是否值得用于语言建模。</p>
+<h3>(b)</h3>
+<p>取出 <strong>5 个</strong>被你的过滤脚本删除或修改的 CC WET。指出是过滤流程的哪个部分删除或修改了这些文档，并说明你认为这种删除或修改是否合理。</p>
+<p><strong>交付物</strong>：原始 WET 中的 5 个随机被丢弃示例（若文档较长，可仅展示相关片段即可）。对每个示例，用 1-2 句话描述该示例以及它的删除是否合理。</p>
+<h3>(c)</h3>
+<p>如果上述分析促使你对数据流水线做出进一步更改，可以在训练模型之前进行这些更改。报告你尝试过的任何数据更改与/或迭代。</p>
+<p><strong>交付物</strong>：描述你尝试过的数据更改与/或迭代。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：Paloma C4 100 domains 验证集的领域分布、perplexity 与训练数据质量/匹配度的关系、各过滤模块的判定逻辑。</p>
+<p>实施顺序：先做 (a) 看保留样本是否符合“高质量、与 C4 100 领域匹配”的直觉；再做 (b) 看被丢弃样本是否存在误伤；最后基于 (a)(b) 的发现决定是否回到过滤脚本调整阈值或规则，并记录迭代。</p>
+<p>调试策略：对保留样本重点检查是否仍然含有模板化/重复/低信息量的内容；对被丢弃样本检查是否误丢了与 C4 100 高度相关的页面。</p>
+<p>自检方法：保留样本应“看起来像”高质量网页正文；被丢弃样本应能明确归因到某个过滤器；若 (c) 做了调整，比较调整前后保留/丢弃样本的变化是否符合预期。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 14-15 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">tokenize_data</span><strong>对过滤后的数据进行 tokenize（tokenize_data）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>在语言模型训练你产出的数据之前，需要先对它进行 tokenize。通过 <code>transformers</code> 使用 <strong>GPT-2 tokenizer</strong> 将过滤后的数据编码为整数 ID 序列。不要忘记在每个文档之后加上 GPT-2 的序列结束 token <code>\</code>``|||endoftext|||```。</p>
+<p>作业给出了起步代码，读取输入文件的每一行，调用 <code>tokenizer.encode(line) + [tokenizer.eos_token_id]</code>，展平后写入 <code>np.uint16</code> numpy 数组并 <code>tofile</code> 到输出路径：</p>
+<pre><code class="language-python">import multiprocessing
+import numpy as np
+from tqdm import tqdm
+from transformers import AutoTokenizer
+
+input_path = "path/to/your/filtered/data"
+output_path = "path/to/your/tokenized/data"
+
+tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+def tokenize_line_and_add_eos(line):
+    return tokenizer.encode(line) + [tokenizer.eos_token_id]
+
+with open(input_path) as f:
+    lines = f.readlines()
+
+pool = multiprocessing.Pool(multiprocessing.cpu_count())
+chunksize = 100
+results = []
+for result in tqdm(
+    pool.imap(tokenize_line_and_add_eos, lines, chunksize=chunksize),
+    total=len(lines),
+    desc="Tokenizing lines"
+):
+    results.append(result)
+
+pool.close()
+pool.join()
+
+# Flatten the list of ids and convert to numpy array
+all_ids = [token_id for sublist in results for token_id in sublist]
+print(f"Tokenized and encoded {input_path} into {len(all_ids)} tokens")
+ids_array = np.array(all_ids, dtype=np.uint16)
+ids_array.tofile(output_path)
+</code></pre>
+问题 (tokenize_data)（2 分）
+<p>编写一个脚本，对你过滤后的数据进行 <strong>tokenize 并序列化</strong>。必须按示例代码的方式序列化，即 <code>ids_array.tofile(output_path)</code>，其中 <code>ids_array</code> 是 <code>np.uint16</code> numpy 整数 ID 数组，以确保与所提供的训练脚本兼容。</p>
+<p>你的过滤后数据集里有多少个 token？</p>
+<p><strong>交付物</strong>：用于 tokenize 并序列化过滤后数据的脚本，以及你产出的数据集的 token 数量。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：GPT-2 tokenizer 与 <code>eos_token_id</code>、numpy <code>tofile</code>/<code>fromfile</code> 二进制序列化、<code>np.uint16</code>  dtype 与训练脚本的读取约定。</p>
+<p>实施顺序：先用少量过滤数据跑通 tokenize 脚本，确认 <code>ids_array</code> 可被 <code>np.fromfile(..., dtype=np.uint16)</code> 正确加载并 <code>tokenizer.decode</code> 回原文；再在全量数据上运行并记录总 token 数。</p>
+<p>调试策略：检查每个文档末尾是否真的追加了 <code>eos_token_id</code>；确认展平后的 ID 数量与 <code>np.fromfile</code> 读回的数量一致；确认没有因编码/换行处理导致的文档粘连。</p>
+<p>自检方法：用 <code>np.fromfile(output_path, dtype=np.uint16)</code> 读回并 <code>decode</code>，验证前若干文档可还原；报告的总 token 数应与 <code>len(all_ids)</code> 一致。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 15-16 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">train_model</span><strong>训练语言模型并提交验证损失</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>问题描述
+<p>在你完成数据过滤与 tokenize 之后，现在要在处理好的数据集上训练一个语言模型，并以验证损失作为最终提交指标。</p>
+<h3>训练目标</h3>
+<ul>
+<li>
+<p>训练一个 <strong>GPT-2 small</strong> 形状的模型，在生成的数据上跑 <strong>200K iterations</strong>，并周期性地在 C4 100 domains 验证集上评估性能。</p>
+</li>
+<li>
+<p>作业的目标是<strong>通过构造最优数据</strong>来最小化验证损失，而不是通过修改模型或优化过程来降低损失。</p>
+</li>
+<li>
+<p><strong>不要修改训练配置</strong>（除数据路径与 wandb 属性外），也不要修改训练脚本。</p>
+</li>
+</ul>
+<h3>配置与启动</h3>
+<ol>
+<li>打开配置文件 <code>cs336-basics/configs/experiment/your_data.yaml</code>：</li>
+</ol>
+<ul>
+<li>
+<p>将 <code>paths.train_bin</code> 指向你的 tokenized 训练数据文件。</p>
+</li>
+<li>
+<p>设置合适的 <code>training.wandb_entity</code> 与 <code>training.wandb_project</code> 用于日志记录。
+2. 超参数位于 <code>cs336-basics/cs336_basics/train_config.py</code>，训练使用 <strong>2 块 GPU、data parallel、每设备 batch size 128</strong>。一次训练大约需要 <strong>7 小时</strong>，请预留足够时间。
+3. 使用 <code>cs336-basics/scripts/train.py</code> 启动训练，命令如下：</p>
+</li>
+</ul>
+<pre><code class="language-bash">uv run torchrun --standalone --nproc_per_node=2 scripts/train.py --config-name=experiment/your_data
+</code></pre>
+<h3>调试与采样（可选）</h3>
+<ul>
+<li>在测试数据时，可以将 <code>training.save_checkpoints</code> 设为 <code>True</code>，这样每次评估验证损失时都会保存一个 checkpoint：</li>
+</ul>
+<pre><code class="language-bash">uv run torchrun --standalone --nproc_per_node=2 \
+  scripts/train.py --config-name=experiment/your_data \
+  +training.save_checkpoints=True
+</code></pre>
+<ul>
+<li>checkpoint 会保存到 <code>cs336-basics/output/your_data/step_N</code>，之后可以用以下命令从模型中采样：</li>
+</ul>
+<pre><code class="language-bash">uv run python scripts/generate_with_gpt2_tok.py \
+  --model_path cs336-basics/output/your_data/step_N
+</code></pre>
+<h3>排行榜提交</h3>
+<ul>
+<li>
+<p>将你在验证集上取得的<strong>最佳验证损失</strong>提交到排行榜。</p>
+</li>
+<li>
+<p>排行榜通过向 <code>github.com/stanford-cs336/assignment4-data-leaderboard</code> 提交 PR 进行，详见该仓库的 README.md。</p>
+</li>
+</ul>
+<h3>交付物</h3>
+<ul>
+<li>
+<p>记录到的<strong>最佳验证损失</strong>；</p>
+</li>
+<li>
+<p>对应的<strong>学习曲线</strong>；</p>
+</li>
+<li>
+<p>对你所做工作的<strong>描述</strong>（数据构造思路、过滤策略、迭代过程等）。</p>
+</li>
+</ul>
+<h3>分值</h3>
+<p>本题共 <strong>2 分</strong>。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念与准备：</p>
+<ul>
+<li>
+<p>确认已完成 <code>tokenize_data</code>，tokenized 数据是以 <code>np.uint16</code> 序列化保存的整数 ID 数组，且每条文档后都附加了 <code>&lt;|endoftext|&gt;</code> 结束符。</p>
+</li>
+<li>
+<p>确认 <code>cs336-basics/configs/experiment/your_data.yaml</code> 中的 <code>paths.train_bin</code>、<code>training.wandb_entity</code>、<code>training.wandb_project</code> 均已正确设置。</p>
+</li>
+</ul>
+<p>实施顺序：
+1. 先用小批量数据或较短训练验证流程是否能正常启动，排除路径与配置错误。
+2. 正式启动 200K iterations 训练，利用 wandb 监控验证损失曲线。
+3. 若需调试数据质量，开启 <code>+training.save_checkpoints=True</code>，在关键 step 保存 checkpoint 并用 <code>generate_with_gpt2_tok.py</code> 采样检查生成质量。</p>
+<p>调试策略：</p>
+<ul>
+<li>
+<p>若训练无法启动，优先检查 <code>train_bin</code> 路径是否指向实际存在的 tokenized 文件，以及 wandb 凭证是否配置正确。</p>
+</li>
+<li>
+<p>若验证损失异常高，回头审视过滤与质量分类器阈值是否过严/过松，或检查是否误引入了与验证集分布差异过大的数据。</p>
+</li>
+<li>
+<p>若训练时间紧张，可先用子集快速迭代过滤策略，再在最终数据上跑完整训练。</p>
+</li>
+</ul>
+<p>自检方法：</p>
+<ul>
+<li>
+<p>对照作业目标确认没有改动模型架构、优化器超参数或训练脚本逻辑。</p>
+</li>
+<li>
+<p>确认最佳验证损失来自 C4 100 domains 验证集，并在学习曲线上标注对应 step。</p>
+</li>
+<li>
+<p>确保排行榜提交值与本地记录的验证损失一致。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 16 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
     <h2 id="quiz">自测：你准备好了吗？</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！WARC 是 Common Crawl 的标准存储格式，包含 HTTP 响应和元数据。" data-incorrect="Common Crawl 使用 WARC (Web ARChive) 格式存储抓取的网页数据。">
+    <div class="quiz" data-answer="b" data-quiz="1" data-correct="正确！WARC 是 Common Crawl 的标准存储格式，包含 HTTP 响应和元数据。" data-incorrect="Common Crawl 使用 WARC (Web ARChive) 格式存储抓取的网页数据。">
       <p><strong>问题 1：</strong>Common Crawl 数据通常以什么格式存储？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">CSV</button>
@@ -229,7 +857,7 @@
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！MinHash 通过多个 hash 函数的最小值签名来估计 Jaccard 相似度。" data-incorrect="MinHash 的核心思想是用 hash 签名估计集合的 Jaccard 相似度，避免两两比较。">
+    <div class="quiz" data-answer="b" data-quiz="2" data-correct="正确！MinHash 通过多个 hash 函数的最小值签名来估计 Jaccard 相似度。" data-incorrect="MinHash 的核心思想是用 hash 签名估计集合的 Jaccard 相似度，避免两两比较。">
       <p><strong>问题 2：</strong>MinHash 算法的核心思想是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">用 hash 加密数据</button>
@@ -240,7 +868,7 @@
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！LSH 通过 banding 技术，只比较 hash 签名相同的候选对，大幅减少比较次数。" data-incorrect="LSH 通过 banding 技术减少候选对数量，只比较可能相似的文档对。">
+    <div class="quiz" data-answer="b" data-quiz="3" data-correct="正确！LSH 通过 banding 技术，只比较 hash 签名相同的候选对，大幅减少比较次数。" data-incorrect="LSH 通过 banding 技术减少候选对数量，只比较可能相似的文档对。">
       <p><strong>问题 3：</strong>为什么 LSH（局部敏感哈希）能加速去重？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它跳过了所有比较</button>
@@ -251,7 +879,7 @@
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！过度过滤会降低数据多样性，可能导致模型在长尾任务上表现变差。" data-incorrect="过度过滤的风险是损失数据多样性，使模型在某些领域或文体上表现变差。">
+    <div class="quiz" data-answer="b" data-quiz="4" data-correct="正确！过度过滤会降低数据多样性，可能导致模型在长尾任务上表现变差。" data-incorrect="过度过滤的风险是损失数据多样性，使模型在某些领域或文体上表现变差。">
       <p><strong>问题 4：</strong>数据过滤的"过度过滤"风险是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">训练太慢</button>
@@ -296,7 +924,7 @@
     </footer>
   </div>
   <script src="../../assets/quiz.js"></script>
-  <script defer src="../../../../assets/course/lesson-ui.js?v=20260806e"></script>
-  <script defer src="../../../../assets/course/interactive.js?v=20260806e"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
 </body>
 </html>

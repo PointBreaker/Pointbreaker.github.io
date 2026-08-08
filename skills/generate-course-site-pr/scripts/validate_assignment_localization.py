@@ -20,6 +20,7 @@ VALID_PRESENTATION_TYPES = (
     "官方题面翻译",
     "依据本地资料重建",
     "站内等价练习",
+    "Handout 完整本土化",
 )
 
 BARE_REFERENCE_PATTERNS = (
@@ -60,7 +61,11 @@ def validate_page(path: Path) -> list[str]:
         errors.append("guide content is missing before the generated outline")
     if re.search(r'<a\s+[^>]*href=["\']https?://', outline, re.I):
         errors.append("problem outline contains an external link")
-    if re.search(r"\\[\(\[]", outline) and "assets/course/math-render.js" not in html:
+    if (
+        re.search(r"\\[\(\[]", outline)
+        and "assets/course/math-render.js" not in html
+        and "assets/math-render.js" not in html
+    ):
         errors.append("page contains KaTeX delimiters but does not load math-render.js")
 
     lowered = text_content(outline).lower()
@@ -88,6 +93,12 @@ def validate_page(path: Path) -> list[str]:
         )
         student_text = text_content(student_body)
         raw_math_candidate = re.sub(r"\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]", " ", student_body)
+        raw_math_candidate = re.sub(
+            r"<(?:pre|code)\b[^>]*>[\s\S]*?</(?:pre|code)>",
+            " ",
+            raw_math_candidate,
+            flags=re.I,
+        )
         for pattern in BARE_REFERENCE_PATTERNS:
             if pattern.search(student_text):
                 errors.append(f"problem {index} still contains a bare exercise reference")
