@@ -22,16 +22,21 @@
       <p class="guide-lede">这份导读帮你理解 Assignment 2 要做什么、需要哪些知识、如何开始。它<strong>不包含任何实现答案</strong>——kernel 是你自己写出来的。</p>
       <div class="guide-meta">
         <span><span class="meta-icon">📅</span> 发布：2026-04-15</span>
-        <span><span class="meta-icon">⏰</span> 截止：2026-04-30</span>
+        <span><span class="meta-icon">⏰</span> 截止：2026-04-29</span>
         <span><span class="meta-icon">📖</span> 前置：第 5-9 课</span>
       </div>
+    </div>
+
+    <div class="source-note" data-official-source="spring-2026">
+      <p><strong>Spring 2026 官方资料（v26.1.3）：</strong><a href="https://github.com/stanford-cs336/assignment2-systems">代码仓库</a> · <a href="https://github.com/stanford-cs336/assignment2-systems/blob/main/cs336_assignment2_systems.pdf">作业说明</a> · <a href="https://cs336.stanford.edu/#schedule">课程日程</a></p>
+      <p>本页只提供学习路径与调试方法，不包含实现答案。官方 handout 规定：AI 可用于概念解释和 API 文档查询，不可用于实现作业代码。</p>
     </div>
 
     <!-- ============================================================ -->
     <h2 id="what">这个 Assignment 要你做什么？</h2>
 
     <div class="card idea">
-      <p><strong>一句话总结：</strong>先 profile 找到瓶颈，然后用 Triton 实现 fused kernel 和 FlashAttention，最后用 DDP 和 ZeRO 实现分布式训练，把模型的训练速度推向硬件极限。</p>
+      <p><strong>一句话总结：</strong>建立可靠的 benchmark/profile 基线，加入 activation checkpointing，用 Triton 实现 FlashAttention 2，再完成 DDP、优化器状态分片与 FSDP，把正确性、显存和吞吐量放在同一套实验框架中比较。</p>
     </div>
 
     <p>Assignment 2 是一个<strong>自底向上的性能工程</strong>：从理解 GPU 架构开始，到编写自定义 kernel，再到多 GPU 并行。每个部分都建立在前一部分的基础上。</p>
@@ -42,11 +47,12 @@
         <tr><th>组件</th><th>对应课程</th><th>核心概念</th></tr>
       </thead>
       <tbody>
-        <tr><td class="comp-name">Profiling</td><td class="comp-lec">第 5 课</td><td>nsys/ncu, roofline model</td></tr>
-        <tr><td class="comp-name">Fused RMSNorm</td><td class="comp-lec">第 6 课</td><td>kernel fusion, Triton</td></tr>
-        <tr><td class="comp-name">FlashAttention-2</td><td class="comp-lec">第 7 课</td><td>tiling, online softmax</td></tr>
-        <tr><td class="comp-name">DDP</td><td class="comp-lec">第 8 课</td><td>数据并行, AllReduce</td></tr>
-        <tr><td class="comp-name">ZeRO</td><td class="comp-lec">第 9 课</td><td>内存分区, 通信-计算重叠</td></tr>
+        <tr><td class="comp-name">Benchmarking & Profiling</td><td class="comp-lec">第 5 课</td><td>可靠计时、nsys、瓶颈归因</td></tr>
+        <tr><td class="comp-name">Activation Checkpointing</td><td class="comp-lec">第 7-8 课</td><td>以重计算换 activation 显存</td></tr>
+        <tr><td class="comp-name">FlashAttention 2</td><td class="comp-lec">第 6 课</td><td>Triton、tiling、online softmax</td></tr>
+        <tr><td class="comp-name">DDP</td><td class="comp-lec">第 7 课</td><td>数据并行与 AllReduce</td></tr>
+        <tr><td class="comp-name">Optimizer State Sharding</td><td class="comp-lec">第 8 课</td><td>优化器状态分片</td></tr>
+        <tr><td class="comp-name">FSDP</td><td class="comp-lec">第 8 课</td><td>参数、梯度与状态的全分片训练</td></tr>
       </tbody>
     </table>
 
@@ -92,13 +98,13 @@
 
     <div class="step-card">
       <div class="step-number">2</div>
-      <h3>Fused RMSNorm → FlashAttention</h3>
+      <h3>Activation Checkpointing → FlashAttention 2 → 分片训练</h3>
       <p>建议的实现顺序：</p>
       <ol>
-        <li><strong>Fused RMSNorm</strong> — 第一个 Triton kernel，理解元素级操作如何合并</li>
+        <li><strong>Activation checkpointing</strong> — 先量化用重计算换显存的收益与代价</li>
         <li><strong>FlashAttention-2</strong> — 核心难点，理解 tiling 和 online softmax 如何避免 materialize 完整的 attention matrix</li>
         <li><strong>DDP</strong> — 理解 AllReduce 如何同步梯度</li>
-        <li><strong>ZeRO Stage 1/2/3</strong> — 逐步增加内存优化</li>
+        <li><strong>Optimizer state sharding 与 FSDP</strong> — 分别验证状态分片与全分片训练的内存/通信权衡</li>
       </ol>
     </div>
 
@@ -172,7 +178,7 @@ print(prof.key_averages().table())</code></pre>
       <div class="connection-item">
         <div class="conn-lec">第 6 课</div>
         <div class="conn-arrow">↓</div>
-        <div class="conn-apply">Triton → Fused RMSNorm kernel</div>
+        <div class="conn-apply">Triton → FlashAttention 2 kernel</div>
       </div>
       <div class="connection-item">
         <div class="conn-lec">第 7 课</div>
@@ -187,7 +193,7 @@ print(prof.key_averages().table())</code></pre>
       <div class="connection-item">
         <div class="conn-lec">第 9 课</div>
         <div class="conn-arrow">↓</div>
-        <div class="conn-apply">ZeRO → 内存优化训练</div>
+        <div class="conn-apply">分片策略 → optimizer state sharding / FSDP</div>
       </div>
     </div>
 
