@@ -78,6 +78,8 @@ Rules:
 - Keep every `sourceFiles` path relative to the source-resource folder.
 - Use unique numbers and valid `dependsOn` targets.
 - Use `kind` such as `Assignment`, `Homework`, `Lab`, `Project`, `Exam`, or `Module`.
+- Use `kind: "Discussion"` for discussion worksheets. Store the source-facing identifier in `displayNumber` or `resourceNumber` when it is not a simple global integer, for example `00a`; keep the internal `number` unique.
+- For extracted work-item pages, record `problemCount` and `solutionAvailable` so the Dashboard can communicate coverage without exposing answers.
 - Set `kind` explicitly to `Exam`, `Quiz`, `Midterm`, or `Final Exam` for assessments that terminate a learning stage. Do not disguise exams as generic assignments.
 - Make each `dependsOn` entry a lecture number. Sparse dependencies are allowed, but their maximum number must place the item in the correct chronological stage.
 - When exams exist, the Dashboard derives stage boundaries from exams ordered by `max(dependsOn)`. It assigns the continuous, previously unshown lecture interval to that stage, assigns each HW to the first exam boundary covering `max(dependsOn)`, and extends a final exam through the last lecture. Cumulative final-exam dependencies must not cause previous lectures to render again.

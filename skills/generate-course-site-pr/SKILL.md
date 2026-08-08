@@ -1,6 +1,6 @@
 ---
 name: generate-course-site-pr
-description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, homework, labs, notes, code, figures, and an official course homepage into a complete CourseStack v3 GitHub Pages course under the shared courses directory, including source-backed math visualizations and interactive learning components when useful, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, polished lecture and assignment pages, visual or interactive explanations, resource-to-frontend generation, or an automated course PR.
+description: Turn a local folder of course PDFs, PPT/PPTX slides, syllabi, discussion worksheets, homework, official solutions, labs, notes, code, figures, and an official course homepage into a complete CourseStack v3 GitHub Pages course under the shared courses directory, including source-backed math visualizations and interactive learning components when useful, then validate it and open a pull request against PointBreaker/Pointbreaker.github.io. Use when Codex is launched inside a course-resource folder and the user wants a new course site, a data-driven course Dashboard, complete question/hint/solution pages, polished lecture and assignment pages, visual or interactive explanations, resource-to-frontend generation, or an automated course PR.
 ---
 
 # Generate Course Site PR
@@ -52,6 +52,7 @@ Use the official homepage for the schedule, course identity, public links, and m
 Read [references/content-quality.md](references/content-quality.md) before writing content.
 Read [references/interactive-content.md](references/interactive-content.md) when the course contains mathematical relationships, diagrams, matrices, parameter-sensitive behavior, algorithms, or multi-stage processes that may benefit from a visual explanation.
 Read [references/claude-code-extraction.md](references/claude-code-extraction.md) before delegating high-volume local text extraction to Claude Code. Keep source interpretation, dependency modeling, content decisions, frontend architecture, and final QA in the primary agent.
+Read [references/solution-bearing-coursework.md](references/solution-bearing-coursework.md) when local discussion solutions, homework solutions, answer keys, or worked solutions are present and the user authorizes publishing them.
 
 ### 3. Create the course plan
 
@@ -79,9 +80,11 @@ Replace every `COURSE_CONTENT_TODO` with source-grounded content.
 
 - Organize each lecture around conceptual dependencies, derivations, worked examples, implementation notes, misconceptions, recap, quizzes, and primary references.
 - Organize each homework/lab/project guide around objectives, prerequisites, task structure, setup, deliverables, validation, and common failure modes.
+- Treat discussion sheets, homework, and their solutions as paired resources. Preserve the original identifier with `displayNumber`, even when it contains suffixes such as `00a`.
 - Localize every student-facing work item into natural Simplified Chinese. Preserve the original identifier for traceability, but never leave the learner dependent on an English-only statement.
 - Make every homework and exam self-contained: include all functions, matrices, intervals, units, constraints, subparts, and figure data needed to answer it without opening a textbook, PDF, or external link. When the local source only gives a textbook reference, either reconstruct the statement from local evidence or add a clearly labeled source-aligned onsite equivalent exercise; never present an adaptation as the official original.
 - Preserve the existing guide when refreshing extracted problem lists. Treat the guide and the complete problem outline as separate regions; automated reruns may replace only the generated outline markers.
+- When the user explicitly authorizes solutions, publish the complete official solution under a collapsed disclosure after the self-contained question and a non-answer hint. Never mix solution text into the visible statement or hint.
 - Use `\(...\)` and `\[...\]` for math. Never split identifiers with math delimiters or put LaTeX inside code.
 - Add 2–5 meaningful quizzes with a valid container `data-answer`.
 - Create static SVG diagrams, function plots, matrix heatmaps, or steppers only when they materially improve understanding. Follow [references/interactive-content.md](references/interactive-content.md), store course-owned files under `figures/` and `interactives/`, and require a static fallback for every interactive.

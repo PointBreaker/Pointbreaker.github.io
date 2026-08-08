@@ -76,6 +76,7 @@
   let stages = [];
   let activeView = 'all';
   let hasExams = false;
+  let hasMultipleWorkKinds = false;
 
   const EXAM_PATTERN = /\b(exam|quiz|midterm|final)\b|考试|测验|期中|期末/i;
   const FINAL_PATTERN = /\bfinal\b|期末/i;
@@ -239,17 +240,44 @@
     const tag = href ? 'a' : 'article';
     const linkAttribute = href ? ` href="${escapeHtml(href)}"` : '';
     const due = item.due ? `截止 ${item.due}` : '';
-    const searchText = [kind, item.number, item.title, item.titleZh, item.description].join(' ').toLowerCase();
-    const sequenceLabel = hasExams
-      ? `${type === 'exams' ? 'Exam' : 'HW'} ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
-      : `${kind} ${item.number}`;
+    const visibleNumber = item.displayNumber ?? item.resourceNumber ?? item.number;
+    const searchText = [kind, item.number, visibleNumber, item.title, item.titleZh, item.description].join(' ').toLowerCase();
+    const usesSourceFacingNumber = item.displayNumber != null || item.resourceNumber != null || hasMultipleWorkKinds;
+    const sequenceLabel = type === 'exams'
+      ? `Exam ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
+      : hasExams && !usesSourceFacingNumber
+        ? `HW ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
+        : `${kind} ${visibleNumber}`;
     return `<${tag} class="flow-card ${type === 'exams' ? 'exam-card' : 'homework-card'}" data-card data-type="${type}" data-search="${escapeHtml(searchText)}"${linkAttribute}>
       <p class="card-kicker">${escapeHtml(sequenceLabel)}</p>
       <h4>${escapeHtml(item.titleZh || item.title)}</h4>
       ${item.description ? `<p class="card-description">${escapeHtml(item.description)}</p>` : ''}
-      <div class="card-meta">${item.released ? `<span>发布 ${escapeHtml(item.released)}</span>` : ''}${due ? `<span>${escapeHtml(due)}</span>` : ''}</div>
-      <span class="card-action">${href ? '打开导读' : '导读制作中'}</span>
+      <div class="card-meta">${item.problemCount ? `<span>${escapeHtml(item.problemCount)} 题</span>` : ''}${item.solutionAvailable ? '<span>含答案</span>' : ''}${item.released ? `<span>发布 ${escapeHtml(item.released)}</span>` : ''}${due ? `<span>${escapeHtml(due)}</span>` : ''}</div>
+      <span class="card-action">${href ? (item.solutionAvailable ? '打开题目与答案' : '打开练习') : '内容制作中'}</span>
     </${tag}>`;
+  }
+
+  function workGroupMarkup(items, type) {
+    if (!hasMultipleWorkKinds) return items.map((item) => workMarkup(item, type));
+    const kindOrder = { discussion: 0, homework: 1, assignment: 1, lab: 2, project: 3, module: 4 };
+    const groups = new Map();
+    [...items].sort((a, b) => {
+      const aKind = String(a.kind || a.type || 'Assignment');
+      const bKind = String(b.kind || b.type || 'Assignment');
+      const order = (kindOrder[aKind.toLowerCase()] ?? 9) - (kindOrder[bKind.toLowerCase()] ?? 9);
+      if (order) return order;
+      return String(a.displayNumber ?? a.resourceNumber ?? a.number).localeCompare(
+        String(b.displayNumber ?? b.resourceNumber ?? b.number), undefined, { numeric: true }
+      );
+    }).forEach((item) => {
+      const kind = item.kind || item.type || 'Assignment';
+      if (!groups.has(kind)) groups.set(kind, []);
+      groups.get(kind).push(item);
+    });
+    return [...groups.entries()].map(([kind, groupItems]) => `<section class="work-group" data-work-group>
+      <header class="work-group-heading"><span>${escapeHtml(kind)}</span><strong>${groupItems.length}</strong></header>
+      <div class="work-group-items">${groupItems.map((item) => workMarkup(item, type)).join('')}</div>
+    </section>`);
   }
 
   function rangeLabel(stage) {
@@ -259,9 +287,9 @@
     return String(first) === String(last) ? `L${first}` : `L${first}–L${last}`;
   }
 
-  function laneMarkup(type, title, items, emptyText) {
+  function laneMarkup(type, title, items, emptyText, count = items.length) {
     return `<div class="flow-lane ${type}-lane" data-lane="${type}">
-      <div class="lane-heading"><span>${escapeHtml(title)}</span><strong>${items.length}</strong></div>
+      <div class="lane-heading"><span>${escapeHtml(title)}</span><strong>${count}</strong></div>
       <div class="lane-content">${items.join('') || `<div class="lane-empty">${escapeHtml(emptyText)}</div>`}</div>
     </div>`;
   }
@@ -276,7 +304,7 @@
     const homeworkTitle = hasExams ? 'HW' : (info.workItemLabel || status.workItemLabel || '实践');
     pathList.innerHTML = stages.map((stage, index) => {
       const lectureCards = stage.lectures.map(lessonMarkup);
-      const homeworkCards = stage.homework.map((item) => workMarkup(item, 'homework'));
+      const homeworkCards = workGroupMarkup(stage.homework, 'homework');
       const examCards = stage.exams.map((item) => workMarkup(item, 'exams'));
       return `<section class="flow-stage${hasExams ? '' : ' two-lane'}" data-stage>
         <header class="stage-heading">
@@ -287,7 +315,7 @@
         <div class="flow-grid">
           ${laneMarkup('lectures', '讲义', lectureCards, '本阶段暂无讲义')}
           <div class="flow-arrow" data-arrow data-from="lectures" data-to="homework" aria-hidden="true"><span>→</span></div>
-          ${laneMarkup('homework', homeworkTitle, homeworkCards, `本阶段暂无 ${homeworkTitle}`)}
+          ${laneMarkup('homework', homeworkTitle, homeworkCards, `本阶段暂无 ${homeworkTitle}`, stage.homework.length)}
           ${hasExams ? `<div class="flow-arrow" data-arrow data-from="homework" data-to="exams" aria-hidden="true"><span>→</span></div>${laneMarkup('exams', 'Exam', examCards, '本阶段暂无 Exam')}` : ''}
         </div>
       </section>`;
@@ -306,6 +334,10 @@
         const visible = matchesType && matchesSearch;
         card.classList.toggle('is-hidden', !visible);
         if (visible) visibleCounts[card.dataset.type] += 1;
+      });
+
+      stage.querySelectorAll('[data-work-group]').forEach((group) => {
+        group.hidden = !group.querySelector('[data-card]:not(.is-hidden)');
       });
 
       stage.querySelectorAll('[data-lane]').forEach((lane) => {
@@ -347,6 +379,9 @@
     info = courseInfo;
     status = courseStatus;
     hasExams = getAssignments().some(isExam);
+    hasMultipleWorkKinds = new Set(
+      getAssignments().filter((item) => !isExam(item)).map((item) => item.kind || item.type || 'Assignment')
+    ).size > 1;
     hydrateHeader();
     hydrateStats();
     renderPaths();

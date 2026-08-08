@@ -37,6 +37,33 @@ Do not delegate:
 
 Use a fresh non-persistent print session with explicit model selection, a narrow tool allowlist, and a JSON schema. Do not resume an earlier conversation. Give Claude Code read access only to the named local source folder and write no repository files directly.
 
+Prefer the bundled verified capture runner so large structured results go directly to runtime artifacts without entering the primary agent's context:
+
+```bash
+python <skill-root>/scripts/run_longcat_extraction.py \
+  --prompt-file <build-dir>/claude-extraction/prompt.md \
+  --schema-file <build-dir>/claude-extraction/schema.json \
+  --output <build-dir>/claude-extraction/result.json \
+  --run-json <build-dir>/claude-extraction/run.json \
+  --workdir <source-folder> \
+  --add-dir <source-folder> \
+  --add-dir <inventory-output> \
+  --model 'LongCat-2.0[1M]'
+```
+
+The runner performs a fresh machine-verified preflight for every extraction, exposes only the `Read` tool to the extraction worker, rejects provider/model/context substitution, records usage, and writes only under `.course-build/`.
+
+For solution-bearing discussion or homework batches, normalize the worker output to the evidence-backed work-item schema used by the build, review low-confidence records and visual requirements, then render it with:
+
+```bash
+python <skill-root>/scripts/render_extracted_work_items.py \
+  --repo <course-site-repo> \
+  --slug <course-slug> \
+  --data <build-dir>/claude-extraction/result.json
+```
+
+The renderer preserves an existing guide, inserts or replaces only the complete source-outline region, keeps official solutions collapsed, creates discussion pages when needed, and updates `course-info.json` with source, problem-count, and solution-availability metadata. Do not render until the primary agent has reviewed source mappings, conflicts, and figure reconstruction requirements.
+
 Require each extracted fact to include:
 
 - `value`;
@@ -53,5 +80,6 @@ Store captured output under `.course-build/claude-extraction/`. Validate the JSO
 - Never pass secrets, browser sessions, repository credentials, or unrelated user files.
 - Never grant Bash, Edit, Write, network, or git tools for extraction.
 - Batch related files, request concise structured output, and set an explicit budget when supported.
+- Keep PDF-visual batches small: normally one long homework plus its solution, or at most four short discussion sheets. Start from extracted text and open only pages whose tables, diagrams, or OCR are incomplete. Use the verified runner's timeout rather than allowing an unproductive whole-course vision pass to run indefinitely.
 - Stop after one corrective retry if the output violates the schema or lacks evidence; perform the remaining work locally.
 - Record the verified model, invocation time, input file list, and output path in `.course-build/claude-extraction/run.json` for reproducibility. Do not commit runtime extraction artifacts.
