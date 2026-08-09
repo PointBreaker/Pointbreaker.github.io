@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 10: Zero-Sum Games and Reductions — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 10</p>
+    <h1>讨论 10：零和博弈与归约</h1>
+    <p class="lede">复习零和博弈的线性规划建模、对偶性、置换博弈的均衡策略；通过错例辨析加深对归约方向与规模膨胀的理解；讨论 2-染色与 3-染色、TSP 搜索版与优化版之间的归约。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Zero-Sum Games</li><li>Linear Programming</li><li>Duality</li><li>Permutation Game</li><li>Reduction</li><li>Graph Coloring</li><li>TSP</li><li>NP-completeness</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis10.pdf</code>、<code>dis10-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis10.pdf</code>、<code>dis10-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>零和博弈简答</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>零和博弈（Zero Sum Game）：对局双方分别为最大化者（maximizer）与最小化者（minimizer）。收益矩阵 \(M\) 从最大化者视角写出：每一行对应最大化者的一个动作，每一列对应最小化者的一个动作，正元表示最大化者获胜。\(M\) 是 \(n \times m\) 矩阵，\(n\) 为最大化者的选择数，\(m\) 为最小化者的选择数。</p>
+<p>固定最大化者选择为概率分布、记选择第 \(i\) 行的概率为 \(p_i\) 的线性规划如下：</p>
+<p>\[
+\begin{aligned}
+\max\ &amp; z \\
+\text{s.t.}\ &amp; M_{1,1} p_1 + \cdots + M_{n,1} p_n \ge z \\
+&amp; M_{1,2} p_1 + \cdots + M_{n,2} p_n \ge z \\
+&amp;\ \vdots \\
+&amp; M_{1,m} p_1 + \cdots + M_{n,m} p_n \ge z \\
+&amp; p_1 + p_2 + \cdots + p_n = 1 \\
+&amp; p_1, p_2, \ldots, p_n \ge 0
+\end{aligned}
+\]</p>
+<p>其对偶（dual）固定最小化者为概率分布，记选择第 \(j\) 列的概率为 \(q_j\)：</p>
+<p>\[
+\begin{aligned}
+\min\ &amp; w \\
+\text{s.t.}\ &amp; M_{1,1} q_1 + \cdots + M_{1,m} q_m \le w \\
+&amp; M_{2,1} q_1 + \cdots + M_{2,m} q_m \le w \\
+&amp;\ \vdots \\
+&amp; M_{n,1} q_1 + \cdots + M_{n,m} q_m \le w \\
+&amp; q_1 + q_2 + \cdots + q_m = 1 \\
+&amp; q_1, q_2, \ldots, q_m \ge 0
+\end{aligned}
+\]</p>
+<p>由强对偶性（strong duality），无论先固定最小化者的分布还是最大化者的分布，博弈的最优值相同。</p>
+<p><strong>(a)</strong> 设某零和博弈的收益矩阵 \(M\) 满足 \(M = -M^{\top}\)。行玩家的期望收益是多少？</p>
+<p><strong>(b)</strong> 判断真假并证明：若收益矩阵的每个元素均为 \(1\) 或 \(-1\)，且任意一行中 \(1\) 的最大个数为 \(k\)，则对于任意含 \(1\) 的个数少于 \(k\) 的行，行玩家的最优策略以概率 \(0\) 选择该行。</p>
+<p><strong>(c)</strong> 判断真假并证明：记 \(M_i\) 为收益矩阵的第 \(i\) 行。若 \(M_1 = \frac{M_2 + M_3}{2}\)，则存在行玩家的一个最优策略以概率 \(0\) 选择第 \(1\) 行。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 解答中给出的 2×3 与 2×2 反例矩阵</h4><p>Counterexample matrix: [[1,-1,1],[-1,1,-1]]; Equivalent 2x2: [[1,-1],[-1,1]]</p><p class="problem-source">来源：<code>dis10-sol.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 把列玩家的收益矩阵用 \(M\) 表达出来；在零和博弈中双方期望收益之和为 \(0\)。
+(b)(c) 构造反例或给出变换：对 (b) 尝试一个 \(2 \times 3\) 的矩阵，让含较少 \(1\) 的行仍被以正概率使用；对 (c) 把概率 \(p_1\) 拆分给第 \(2\)、\(3\) 行并保持期望收益不变。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 列玩家的收益矩阵为 \(-M^{\top}\)。由 \(M = -M^{\top}\) 可知，行、列双方的收益矩阵是同一个矩阵，因此双方的期望收益相等；又因为零和博弈双方期望收益之和为 \(0\)，故每位玩家的期望收益都是 \(0\)。</p>
+<p><strong>(b)</strong> 假。考虑如下 \(2 \times 3\) 收益矩阵：</p>
+<p>\[
+\begin{bmatrix}
+1 &amp; -1 &amp; 1 \\
+-1 &amp; 1 &amp; -1
+\end{bmatrix}
+\]</p>
+<p>行玩家的最优策略是以相等概率 \(\frac{1}{2},\frac{1}{2}\) 选择两行 —— 注意列玩家对选择第 \(1\) 列或第 \(3\) 列无差异，因此该博弈等价于如下 \(2 \times 2\) 零和博弈：</p>
+<p>\[
+\begin{bmatrix}
+1 &amp; -1 \\
+-1 &amp; 1
+\end{bmatrix}
+\]</p>
+<p>此时两行含 \(1\) 的个数分别是 \(2\) 和 \(1\)，但最优策略仍以正概率选择含 \(1\) 较少的第 \(2\) 行。</p>
+<p><strong>(c)</strong> 真。设行玩家的最优策略以概率 \(p_1, p_2, p_3\) 选择第 \(1,2,3\) 行。由于 \(M_1 = \frac{M_2 + M_3}{2}\)，该策略可替换为：以概率 \(0\) 选第 \(1\) 行，以概率 \(p_2 + p_1/2\) 选第 \(2\) 行，以概率 \(p_3 + p_1/2\) 选第 \(3\) 行。新策略的期望收益与原策略相同，故也是最优策略。</p></div><p class="problem-source">解答来源：<code>dis10-sol.pdf</code> · 2–3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis10.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>置换博弈</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>置换博弈（Permutation Game）是零和博弈的一种特殊形式。其收益矩阵为 \(n \times n\)，且满足：每一行与每一列都恰好以某种顺序包含元素 \(m_1, m_2, \ldots, m_n\)。例如：</p>
+<p>\[
+M = \begin{bmatrix}
+m_1 &amp; m_2 &amp; m_3 \\
+m_2 &amp; m_3 &amp; m_1 \\
+m_3 &amp; m_1 &amp; m_2
+\end{bmatrix}
+\]</p>
+<p>给定任意一个置换博弈，描述行玩家与列玩家的最优策略，论证它们为何是最优的，并给出行玩家的期望收益（即行、列玩家所选元素的期望值）。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 置换博弈的 3×3 示例矩阵</h4><p>M = [[m1,m2,m3],[m2,m3,m1],[m3,m1,m2]]</p><p class="problem-source">来源：<code>dis10.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>利用对称性：若列玩家均匀随机选择列，则无论行玩家选哪一行，其期望收益都相同（每列被选中的概率都是 \(1/n\)，而每行恰好遍历所有 \(m_k\)）。再由对偶性论证这已达到均衡。
+自检：行玩家的均匀策略是否同样让列玩家无论选哪一列都得到相同的期望收益？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>双方的最优策略均为均匀随机选择行（或列），即每行（每列）以概率 \(1/n\) 被选中。该策略的期望收益为 \(\frac{1}{n}\sum_k m_k\)。</p>
+<p>最优性论证：若列玩家采用该均匀策略，则行玩家无论选择哪一列，每列被选中的概率都是 \(1/n\)，而每一行恰好以某种顺序包含所有 \(m_k\)，因此行玩家任意策略的期望收益都是 \(\frac{1}{n}\sum_k m_k\)。由对称性，若行玩家采用该均匀策略，列玩家任意策略的期望收益也相同。由线性规划对偶性，这对混合策略构成最优均衡。</p></div><p class="problem-source">解答来源：<code>dis10-sol.pdf</code> · 3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis10.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>零和博弈</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Alice 与 Bob 对局一个零和博弈，收益矩阵如下。第 \((i,j)\) 个元素表示 Alice 选策略 \(i\)、Bob 选策略 \(j\) 时 Alice 获得的收益。Alice 是行玩家，试图最大化收益；Bob 是列玩家，试图最小化 Alice 的收益。</p>
+<p>\[
+\begin{array}{c|cc}
+\text{Alice \setminus Bob} &amp; 1 &amp; 2 \\
+\hline
+1 &amp; 4 &amp; 1 \\
+2 &amp; 2 &amp; 5
+\end{array}
+\]</p>
+<p>现构造线性规划求最大化 Alice 收益的策略。设变量为 \(x_1, x_2\) 与 \(p\)，其中 \(x_i\) 为 Alice 选第 \(i\) 行的概率，\(p\) 为 Alice 的收益。</p>
+<p><strong>(a)</strong> 写出为 Alice 选择策略以最大化其收益的线性规划。</p>
+<p><strong>(b)</strong> 从 Bob 的视角写出一个最小化 Alice 收益的线性规划。设变量为 \(y_1, y_2\) 与 \(p\)，其中 \(y_i\) 为 Bob 选第 \(i\) 列的概率，\(p\) 为 Alice 的收益。</p>
+<p><strong>(c)</strong> 课上讲过 Bob 的线性规划是 Alice 的对偶。你写的这一对线性规划如何体现这一点？请机械地取对偶，或给出简要论证。（提示：可先把线性规划化成便于取对偶的形式。）</p>
+<p><strong>(d)</strong> 最优解与博弈的值（value of the game）各是多少？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · Alice 与 Bob 的 2×2 收益矩阵</h4><p>Alice\Bob 1 2; row1: 4 1; row2: 2 5</p><p class="problem-source">来源：<code>dis10.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a)(b) 注意 Alice 的两个约束来自 Bob 可能选的每一列，Bob 的两个约束来自 Alice 可能选的每一行。
+(c) 把 \(x_1 + x_2 = 1\) 改写成 \(x_1 + x_2 \le 1\) 并在最优点验证仍取等号，然后把所有变量都移到约束左侧、右端为常数，再机械取对偶。
+(d) 对 \(2 \times 2\) 博弈可直接求解，或利用互补松弛。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong></p>
+<p>\[
+\begin{aligned}
+\max\ &amp; p \\
+\text{s.t.}\ &amp; p \le 4x_1 + 2x_2 \\
+&amp; p \le x_1 + 5x_2 \\
+&amp; x_i \ge 0 \\
+&amp; x_1 + x_2 = 1
+\end{aligned}
+\]</p>
+<p><strong>(b)</strong></p>
+<p>\[
+\begin{aligned}
+\min\ &amp; p \\
+\text{s.t.}\ &amp; p \ge 4y_1 + y_2 \\
+&amp; p \ge 2y_1 + 5y_2 \\
+&amp; y_i \ge 0 \\
+&amp; y_1 + y_2 = 1
+\end{aligned}
+\]</p>
+<p><strong>(c)</strong> 先把 Alice 的线性规划略作调整：将 \(x_1 + x_2 = 1\) 改为 \(x_1 + x_2 \le 1\)。这是因为减小 \(x_1, x_2\) 只会使 \(p\) 减小，故新约束在最优解处仍然取等号。再把所有变量（可能系数为 \(0\)）都显式写在目标函数与每个约束里，且每个约束右端为常数：</p>
+<p>\[
+\begin{aligned}
+\max\ &amp; 0x_1 + 0x_2 + 1p \\
+\text{s.t.}\ &amp; -4x_1 - 2x_2 + 1p \le 0 \\
+&amp; -1x_1 - 5x_2 + 1p \le 0 \\
+&amp; 1x_1 + 1x_2 + 0p \le 1 \\
+&amp; x_i \ge 0
+\end{aligned}
+\]</p>
+<p>在此熟悉形式下机械取对偶，设对偶变量为 \(y_1, y_2, r\)：</p>
+<p>\[
+\begin{aligned}
+\min\ &amp; 0y_1 + 0y_2 + 1r \\
+\text{s.t.}\ &amp; -4y_1 - 1y_2 + 1r \ge 0 \\
+&amp; -2y_1 - 5y_2 + 1r \ge 0 \\
+&amp; 1y_1 + 1y_2 + 0r \ge 1 \\
+&amp; y_i \ge 0
+\end{aligned}
+\]</p>
+<p>对 Bob 的线性规划做同样的变形，即可看到它与上述对偶完全相同。因此 Alice 与 Bob 的线性规划互为对偶。这也符合直觉：一旦双方都公布概率分布，博弈的期望收益即被固定；先手玩家实际上是在为对方可达的收益设定界限（Alice 给出最大下界，Bob 给出最小上界）。</p>
+<p><strong>(d)</strong></p>
+<p>\[
+x_1 = \frac{1}{2},\quad x_2 = \frac{1}{2},\quad p = 3
+\]</p>
+<p>博弈的值为 \(3\)。</p></div><p class="problem-source">解答来源：<code>dis10-sol.pdf</code> · 3–5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis10.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>错误的归约</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>归约（Reduction）：若我们已有求解问题 A 的算法，如何用它求解问题 B？</p>
+<p>本课程反复出现的若干例子包括：</p>
+<ul>
+<li>
+<p>用线性规划（LP）解最大流（max flow）；</p>
+</li>
+<li>
+<p>用最大流解 \(s\)-\(t\) 最小割（min s-t cut）；</p>
+</li>
+<li>
+<p>用最小生成树（MST）解最大生成树；</p>
+</li>
+<li>
+<p>用 Huffman 树解二十个问题（twenty questions）。</p>
+</li>
+</ul>
+<p>在每种情况下，我们都把要求解的问题 B 的实例 \(I\) 变换成问题 A 的实例 \(I'\)，再把 \(I'\) 的解变换回 \(I\) 的解。重要的是该变换必须是高效的（多项式时间）。若能做到，则称将问题 B <strong>归约</strong>（reduce）到问题 A。</p>
+<p>直观上，高效归约意味着：若能高效求解 A，则也能高效求解 B；反过来，若我们认为 B 不能高效求解，则 A 也不能。简言之，我们认为 A "至少一样难" 于 B。</p>
+<p>为证明归约成立，需同时证明两点：(1) 若问题 A 的实例 \(I'\) 有解，则问题 B 的实例 \(I\) 必有解；(2) 若问题 B 的实例 \(I\) 有解，则问题 A 的实例 \(I'\) 必有解。</p>
+<p>以下每一部分都给出一个关于归约的错误论断，请分别解释为何该论断是错误的。</p>
+<p><strong>(a)</strong> 非负边权的最短简单路径问题可通过把所有边权取负归约到最长简单路径问题。由于非负边权最短简单路径有多项式时间算法，因此最长简单路径也存在多项式时间算法。</p>
+<p><strong>(b)</strong> 我们有一个从问题 B 到问题 A 的归约：将大小为 \(n\) 的 B 实例变换为大小为 \(n^2\) 的 A 实例。存在一个算法在二次时间内求解 A。因此该归约也给出了在二次时间内求解 B 的算法。</p>
+<p><strong>(c)</strong> 我们有一个从问题 B 到问题 A 的归约：在 \(O(n^2)\) 时间内将大小为 \(n\) 的 B 实例变换为大小为 \(n\) 的 A 实例。存在一个算法在线性时间内求解 A。因此该归约也给出了在线性时间内求解 B 的算法。</p>
+<p><strong>(d)</strong> 最小点覆盖（minimum vertex cover）可如下归约到最短路径：给定图 \(G\)，若其最小点覆盖大小为 \(k\)，则构造新图 \(G'\)，使得 \(G'\) 中从 \(s\) 到 \(t\) 的最短路径长度为 \(k\)。\(G'\) 的最短路径长度等于 \(G\) 的最小点覆盖大小，因此若最短路径存在高效算法，则点覆盖也存在高效算法。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 归约方向示意：B → A 表示 B 不比 A 难；以及规模膨胀 n → n² 的示意</h4><p>归约方向：B → A（B 不比 A 难）；问题 (b) 的实例规模从 n 膨胀到 n²。</p><p class="problem-source">来源：<code>dis10.pdf</code> · 4,6</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>归约关注两点：方向（谁归约到谁，"至少一样难" 指向哪边）和代价（实例规模膨胀 + 归约本身的运行时间）。
+自检：每一个 "高效算法" 结论，总运行时间是否真的与原结论一致？归约是否需要用到待求的答案本身？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 归约方向错误。把最短简单路径归约到最长简单路径，只能说明最长简单路径<strong>至少一样难</strong>于最短简单路径，而不能反过来说前者容易（事实上目前尚无已知算法能在优于指数时间内求解最长简单路径）。</p>
+<p><strong>(b)</strong> 归约会膨胀实例规模：在大小为 \(n^2\) 的 A 实例上运行二次时间算法，实际耗时 \(O((n^2)^2) = O(n^4)\)（四次时间），而非二次。此外，归约步骤本身在 \(n\) 上是多项式的，甚至可能花费 \(O(n^d)\)（\(d &gt; 2\))，使得整体算法在尚未求解 A 之前就已慢于二次时间。</p>
+<p><strong>(c)</strong> 这次归约不再膨胀规模，但归约本身耗时 \(O(n^2)\)，因此将归约与 A 的线性时间算法合并，只能得到 \(O(n^2)\) 的整体算法，而非线性。</p>
+<p><strong>(d)</strong> 该归约需要先借助一个最小点覆盖算法算出 \(k\) 才能构造 \(G'\)，这就失去了归约的意义。本质上它只说明了最小点覆盖至少一样难于其自身。</p></div><p class="problem-source">解答来源：<code>dis10-sol.pdf</code> · 6–7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis10.pdf</code> · 4,6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>图染色问题</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>无向图 \(G = (V, E)\) 称为 \(k\)-可染（k-colorable）的，若能为每个顶点分配来自集合 \(\{1, 2, \ldots, k\}\) 的一种颜色，使得任意两个相邻顶点颜色不同。在 \(k\)-染色问题（k-coloring problem）中，给定图 \(G\)，若它是 \(k\)-可染的则输出 "Yes"，否则输出 "No"。</p>
+<p><strong>(a)</strong> 说明如何把 2-染色问题归约到 3-染色问题。即描述一个算法，输入图 \(G\) 输出图 \(G'\)，使得 \(G'\) 是 3-可染的当且仅当 \(G\) 是 2-可染的。为证明算法的正确性，请描述如何从 \(G\) 的 2-染色构造 \(G'\) 的 3-染色，以及如何反过来。（无需运行时间分析。）</p>
+<p><strong>(b)</strong> 2-染色问题存在 \((|V| + |E|)\) 时间算法。上述归约是否意味着 3-染色问题也存在高效算法？若是，求出所得算法的运行时间；若否，请论证你的回答。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 由 G 构造 G&#x27;：加入全连接顶点 v* 的示意</h4><p>Construction: G' = G + v<em> with edges from v</em> to every vertex in G.</p><p class="problem-source">来源：<code>dis10-sol.pdf</code> · 7</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 为了让 \(G'\) 的染色强制 "多用一种颜色"，考虑加入一个与所有其他顶点相邻的新顶点 \(v^*\)。
+(b) 回到归约方向的定义：本题的归约把 2-染色归约到 3-染色，这说明了哪一个问题至少一样难？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 由 \(G\) 构造 \(G'\)：加入一个新顶点 \(v^*\)，并将 \(v^*\) 与 \(G\) 中所有其他顶点相连。</p>
+<ul>
+<li>
+<p>若 \(G\) 是 2-可染的，取其 2-染色并令 \(v^*\) 染颜色 3，即得到 \(G'\) 的一个合法 3-染色。故 \(G'\) 是 3-可染的。</p>
+</li>
+<li>
+<p>若 \(G'\) 是 3-可染的，由于 \(v^*\) 与图中所有其他顶点相邻，任意合法 3-染色中 \(v^*\) 必须是唯一具有其颜色的顶点，因此其余顶点总共只使用 2 种颜色，即 \(G\) 是 2-可染的。从 \(G'\) 的 3-染色恢复 \(G\) 的 2-染色时，只需保留该染色并忽略 \(v^*\)（并把除 \(v^*\) 颜色外的两种颜色重新映射为颜色 1 和 2）。</p>
+</li>
+</ul>
+<p><strong>(b)</strong> 否，归约方向错误。该归约表明 3-染色<strong>至少一样难</strong>于 2-染色，但 3-染色可能比 2-染色难得多。</p>
+<p>（注：事实上，人们怀疑不存在时间 \(O(2^{|V|^{0.99}})\) 的 3-染色算法。这是课程很快就会反复见到的一种常见而略带神秘感的趋势：把问题描述中的 2 改成 3，问题就会从容易变得困难。）</p></div><p class="problem-source">解答来源：<code>dis10-sol.pdf</code> · 7–8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis10.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>优化与搜索</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>回顾旅行商问题（Traveling Salesman Problem, TSP）的下列定义，我们称之为 Search-tsp：给定一个边带权的完全图 \(G\) 和一个预算 \(b\)，我们希望找到一条经过 \(G\) 所有节点的回路（tour），使其长度 \(\le b\)（若存在）。</p>
+<p>该问题的优化版本（我们称之为 Min-tsp）直接要求最短的回路。</p>
+<p><strong>(a)</strong> 证明：若 Search-tsp 可在多项式时间内求解，则 Min-tsp 也可在多项式时间内求解。</p>
+<p><strong>(b)</strong> 反之，证明：若 Min-tsp 可在多项式时间内求解，则 Search-tsp 也可在多项式时间内求解。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 二分搜索区间 [0, 所有边权之和] 的示意</h4><p>Binary search over [0, sum of all edge weights] for optimal tour length.</p><p class="problem-source">来源：<code>dis10-sol.pdf</code> · 8</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 最优回路长度落在 \(0\) 到所有边权之和之间；该范围在输入规模上是指数级的，因此不能逐次递增 \(b\)，而应使用二分搜索。
+(b) 利用最优性的定义：比较 Min-tsp 的返回值与预算 \(b\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 在所有可能的最优回路长度范围 \([0, \sum_e w(e)]\) 内进行二分搜索（binary search）。注意这里必须使用二分搜索，而不能每次把 \(b\) 加 1，因为所有边权之和在输入规模上是指数级的。</p>
+<p><strong>(b)</strong> 运行 Min-tsp 并返回其最优值。若该值大于 \(b\)，则由最优性定义可知不存在长度 \(\le b\) 的回路。</p></div><p class="problem-source">解答来源：<code>dis10-sol.pdf</code> · 8–9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis10.pdf</code> · 6 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis10.pdf</code></li>
+      <li><code>dis10-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

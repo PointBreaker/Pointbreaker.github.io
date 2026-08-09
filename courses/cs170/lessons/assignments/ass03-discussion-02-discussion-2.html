@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 2 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 2</p>
+    <h1>讨论 2</h1>
+    <p class="lede">分治（divide and conquer）专题练习：逆序对计数（基于归并排序）、最大子数组和（分治变体）、帕累托最优点（Pareto-optimal points）筛选、复数与单位根（n-th roots of unity）复习，以及单调矩阵（monotone matrix）每行最小值的高效查找（选做）。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>divide and conquer</li><li>merge sort</li><li>counting inversions</li><li>maximum subarray sum</li><li>Pareto optimality</li><li>complex numbers</li><li>roots of unity</li><li>monotone matrix</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis02.pdf</code>、<code>dis02-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis02.pdf</code>、<code>dis02-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">discussion02-counting-inversions</span><strong>1 逆序对计数（Counting inversions）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>该问题源自排名（rankings）分析。考虑比较两种排名方式：一种方法是按照其中一种排名给元素（书籍、电影等）打上 \(1\) 到 \(k\) 的标签，再按照另一种排名排列这些标签，观察有多少对元素是“顺序错乱”的。</p>
+<p>给定一个由 \(k\) 个<strong>不同</strong>数组成的序列 \(n_1, \cdots, n_k\)。我们称两个下标 \(i &lt; j\) 构成一个<strong>逆序对</strong>（inversion），当且仅当 \(n_i &gt; n_j\)，即这两个元素是“顺序错乱”的。请给出一个分治（divide and conquer）算法，在 \(O(k \log k)\) 时间内确定序列 \(n_1, \cdots, n_k\) 中逆序对的总数。</p>
+<p>只需给出算法描述与运行时间分析。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>尝试修改归并排序（merge sort），在合并（merge）的过程中同步计数：当从右半部分取出元素时，左半部分剩余的所有元素都与它构成逆序对。</p>
+<p>自检：若直接逐对检查，时间复杂度会退化为 \(O(k^2)\)。思考如何在不逐一查看每对逆序的情况下，利用“已排序”的性质批量统计跨左右两半的逆序对数量。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(i) 主思路</p>
+<p>逆序对的数量可能达到二次级别，因此算法必须在不逐对检查的情况下确定总数。</p>
+<p>思路是修改归并排序。将序列分成两半 \(n_1, \cdots, n_l\) 与 \(n_{l+1}, \cdots, n_k\)，在分别排序两半的同时统计每半内部的逆序对数；然后在合并两半时，统计两个数分别位于不同半区的逆序对 \((a_i, a_j)\) 的数量。总数等于这三部分之和。</p>
+<p>(ii) 伪代码</p>
+<pre><code>procedure count(A)
+    if length[A] = 1 then
+        return A, 0
+    B, x &lt;- count(A 的前半部分)
+    C, y &lt;- count(A 的剩余部分)
+    D &lt;- 空列表
+    z &lt;- 0
+    while B 非空或 C 非空 do
+        if B 为空 then
+            将 C 追加到 D 并移除 C 的元素
+        else if C 为空 then
+            将 B 追加到 D 并移除 B 的元素
+        else if B[1] &lt; C[1] then
+            将 B[1] 追加到 D 并从 B 中移除 B[1]
+        else
+            将 C[1] 追加到 D 并从 C 中移除 C[1]
+            z &lt;- z + length[B]
+    return D, x + y + z
+</code></pre>
+<p>(iii) 正确性证明</p>
+<p>考虑合并过程中的某一步，假设指针分别指向 \(b_i\) 与 \(c_j\)。由于 \(B\) 和 \(C\) 已经有序，若将 \(b_i\) 追加到 \(D\)，不会产生新的逆序对，因为 \(b_i\) 小于 \(C\) 中剩余的所有元素，并且排在所有这些元素之前。</p>
+<p>反之，若将 \(c_j\) 追加到 \(D\)，则 \(c_j\) 小于 \(B\) 中所有剩余元素，并且排在所有这些元素之后，因此逆序对的计数应增加 \(B\) 中剩余元素的个数。</p>
+<p>(iv) 运行时间分析</p>
+<p>在每次递归调用中，合并两个有序列表并计数耗时 \(O(n)\)。运行时间为 \(T(n) = 2T(n/2) + O(n)\)，由主定理（Master theorem）得 \(O(n \log n)\)。</p></div><p class="problem-source">解答来源：<code>dis02-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis02.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion02-maximum-subarray-sum</span><strong>2 最大子数组和（Maximum Subarray Sum）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一个包含 \(n\) 个整数的数组 \(A\)，<strong>最大子数组和</strong>（maximum subarray sum）是 \(A\) 的任意连续子数组（包括空子数组）的最大和。换言之，最大子数组和为：</p>
+<p>\[
+\max_{i \le j} \sum_{k=i}^{j} A[k]
+\]</p>
+<p>例如，数组 \([-2, 1, -3, 4, -1, 2, 1, -5, 4]\) 的最大子数组和为 \(6\)，即连续子数组 \([4, -1, 2, 1]\) 的和。</p>
+<p>设计一个 \(O(n \log n)\) 时间的算法，求出最大子数组和。请给出三部分（3-part）解答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>把数组切成等大的两半 \(L\) 和 \(R\)。最大子数组要么完全落在 \(L\) 或 \(R\) 中（递归求解），要么<strong>跨越中点</strong>，即从 \(L\) 内开始、到 \(R\) 内结束。对于跨越的情况，整个子数组必然由“以中点结尾的最大后缀”和“以中点下一个位置开始的最大前缀”拼接而成——这两部分能否各自在线性时间内求出？</p>
+<p>自检：若只用“左 / 右”递归而忽略跨越中点的情况，能否处理最大子数组恰好横跨两半的输入？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(i) 主思路：</p>
+<p>直觉上我们似乎要找出两个下标 \(i\) 和 \(j\)，使得子数组 \(A[i{:}j]\) 的和尽可能大，共有 \(O(n^2)\) 种可能。但存在分治解法：把 \(A\) 分成相等的两半 \(L\) 和 \(R\)，即 \(A[1{:}n/2]\) 与 \(A[n/2+1{:}n]\)。最大子数组有两种可能：</p>
+<p>(a) 完全包含在 \(L\) 或 \(R\) 中：通过递归求解。令 \(s_1\) 为递归调用 \(L\) 的结果，\(s_2\) 为递归调用 \(R\) 的结果。</p>
+<p>(b) <strong>跨越边界</strong>（crosses the boundary），即起始于 \(L\)、终止于 \(R\)：若最大子数组为 \(A[i{:}j]\)，则 \(A[i, n/2]\) 必须是以 \(A[n/2]\) 结尾的最大子数组，且 \(A[n/2+1, j]\) 必须是以 \(A[n/2+1]\) 开始的最大子数组。看起来我们似乎需要求解两个最大子数组问题：找出使 \(A[i, n/2]\) 和最大的 \(i\)，以及使 \(A[n/2+1, j]\) 和最大的 \(j\)。注意每个问题都只需确定一个下标，各自只有 \(n/2\) 种可能，因此每个都可在 \(O(n)\) 步内完成。例如，为求 \(i\)，依次计算 \(A[k, n/2]\)（\(k = 1\) 到 \(n/2\)）并取最大值。最终令 \(s_3\) 为 \(A[i, n/2]\) 的元素和加上 \(A[n/2+1, j]\) 的元素和。</p>
+<p>若 \(n = 1\)，返回 \(\max\{A[1], 0\}\)；否则返回 \(\max\{s_1, s_2, s_3\}\)。</p>
+<p>(ii) 正确性证明：对 \(n\) 进行归纳。当数组长度为 \(1\) 时，算法显然正确。</p>
+<p>当数组长度至少为 \(2\) 时，最大子数组有两种可能：</p>
+<p>(a) 完全包含在 \(L\) 或 \(R\) 中。</p>
+<p>(b) 跨越边界，即在第 \(n/2\) 个元素之前开始、在第 \(n/2\) 个元素之后结束。</p>
+<p>第一种情况下，算法会输出 \(s_1\) 或 \(s_2\)，由归纳假设它们正确。</p>
+<p>第二种情况下，跨越边界的最大子数组必须由“以第 \(n/2\) 个元素结尾的和最大的子数组”与“以第 \(n/2+1\) 个元素开始的的和最大的子数组”组成。因此该情况下算法输出 \(s_3\)，是正确的。</p>
+<p>(iii) 运行时间分析：计算 \(s_3\) 的方法耗时 \(O(n)\)，因为每个 \(A[i{:}n/2]\) 与 \(A[n/2+1{:}i]\) 的和都可以在给定前一个和的情况下以 \(O(1)\) 时间算出。于是得到递推式：</p>
+<p>\[
+T(n) = 2T(n/2) + O(n)
+\]</p>
+<p>由主定理可得运行时间为 \(O(n \log n)\)。</p></div><p class="problem-source">解答来源：<code>dis02-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis02.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion02-pareto-optimality</span><strong>3 帕累托最优性（Pareto Optimality）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定点集 \(P = \{(x_1, y_1), (x_2, y_2), \ldots, (x_n, y_n)\}\)，称点 \((x_i, y_i) \in P\) 是<strong>帕累托最优的</strong>（Pareto-optimal），当且仅当不存在 \(j \ne i\) 使得 \(x_j &gt; x_i\) 且 \(y_j &gt; y_i\)。换言之，\(P\) 中没有任何点严格地位于 \((x_i, y_i)\) 的上方且右侧。请设计一个 \(O(n \log n)\) 时间的分治算法，给定 \(P\)，输出 \(P\) 中所有帕累托最优点。</p>
+<p>只需给出算法描述与运行时间分析。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>按 \(x\) 坐标对数组进行分割。思考：在递归返回的两部分结果中，有一部分的所有返回点在合并后是否天然保持帕累托最优？另一部分中，哪些点会被“支配”掉，能否在<strong>线性时间</strong>内剔除？</p>
+<p>反例方向：若只按 \(x\) 切分而忽略左右之间的 \(y\) 坐标关系，左侧哪些点会被右侧新出现的点淘汰？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>算法：将点按 \(x\) 坐标排序，令 \(L\) 为左半部分、\(R\) 为右半部分。对 \(L\) 和 \(R\) 分别递归，记返回的帕累托最优点集合分别为 \(L'\) 与 \(R'\)。通过一次线性扫描计算 \(R\) 中最大的 \(y\) 坐标 \(y_{\max}\)，然后移除 \(L'\) 中所有 \(y\) 坐标小于 \(y_{\max}\) 的点。返回 \(L'\) 与 \(R'\) 的并集。</p>
+<p>证明：现在证明该算法在已按 \(x\) 坐标排序的点集上的正确性。最简单情况下只有一个点，它默认是帕累托最优的。设有多个点，则可假设 \(L'\) 包含 \(L\) 中的帕累托最优点，\(R'\) 包含 \(R\) 中的帕累托最优点。</p>
+<p>\(R'\) 中的每个点在 \(L \cup R\) 中都是帕累托最优的，因为 \(L\) 中所有点的 \(x\) 坐标都更小，无法破坏 \(R'\) 中点的帕累托最优性。</p>
+<p>对于 \(L'\) 中的每个点，当且仅当其 \(y\) 坐标大于 \(y_{\max}\)（\(R\) 中最大的 \(y\) 坐标）时，它在 \(L \cup R\) 中才是帕累托最优的。因此，算法返回的集合在 \(L \cup R\) 中是帕累托最优的。</p>
+<p>运行时间：由主定理，该算法运行时间为 \(T(n) = 2T(n/2) + O(n) = O(n \log n)\)。</p></div><p class="problem-source">解答来源：<code>dis02-sol.pdf</code> · 5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis02.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion02-complex-numbers-review</span><strong>4 复数复习（Complex numbers review）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>复数是能够写成矩形形式 \(a + bi\) 的数（\(i\) 为虚数单位，满足 \(i^2 = -1\)）。以下著名公式（欧拉公式，Euler's formula）将复数的极坐标形式与矩形形式联系起来：</p>
+<p>\[
+r e^{i\theta} = r(\cos \theta + i \sin \theta)
+\]</p>
+<p>在极坐标形式中，\(r \ge 0\) 表示复数到 \(0\) 的距离，\(\theta\) 表示其角度。注意：由于 \(\sin(\theta) = \sin(\theta + 2\pi)\)，\(\cos(\theta) = \cos(\theta + 2\pi)\)，因此对任意 \(r, \theta\) 都有 \(r e^{i\theta} = r e^{i(\theta + 2\pi)}\)。</p>
+<p><strong>\(n\) 次单位根</strong>（\(n\)-th roots of unity）是满足 \(\omega^n = 1\) 的 \(n\) 个复数，由下式给出：</p>
+<p>\[
+\omega_k = e^{2\pi i k / n}, \quad k = 0, 1, 2, \ldots, n-1
+\]</p>
+<p>(a) 设 \(x = e^{2\pi i \cdot 3/10}\)，\(y = e^{2\pi i \cdot 5/10}\)，它们都是 \(10\) 次单位根。计算乘积 \(x \cdot y\)。它是否是某个 \(n\) 的 \(n\) 次单位根？它是否是 \(10\) 次单位根？</p>
+<p>若改为 \(x = e^{2\pi i \cdot 6/10}\)，\(y = e^{2\pi i \cdot 7/10}\)，会发生什么？请尽可能化简所有答案。</p>
+<p>(b) 证明：对任意 \(n\) 次单位根 \(\omega \ne 1\)，当 \(n &gt; 1\) 时，\(\sum_{k=0}^{n-1} \omega^k = 0\)。</p>
+<p>提示：使用等比数列求和公式 \(\sum_{k=0}^{n} \alpha^k = \frac{\alpha^{n+1} - 1}{\alpha - 1}\)，该公式对复数同样适用。</p>
+<p>(c) (i) 求所有满足 \(\omega^2 = -1\) 的 \(\omega\)。</p>
+<p>(ii) 求所有满足 \(\omega^4 = -1\) 的 \(\omega\)。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(b) 利用 \(\omega^n = 1\) 把等比数列求和公式的分子化简为 \(0\)。注意前提 \(\omega \ne 1\) 保证分母非零。</p>
+<p>(c) 对等式两边平方，可把 \(\omega^2 = -1\) 与 \(\omega^4 = -1\) 分别转化为求 \(4\) 次与 \(8\) 次单位根的问题；再剔除会使等式左端变成 \(+1\) 的那些根。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) \(x \cdot y = e^{2\pi i \cdot 8/10}\)。它总是一个 \(10\) 次单位根（这是一般性质）。但因为 \(8/10 = 4/5\)，它也是 \(5\) 次单位根。</p>
+<p>若 \(x = e^{2\pi i \cdot 6/10}\)，\(y = e^{2\pi i \cdot 7/10}\)，则乘积会“绕圈”（wind around），变为 \(e^{2\pi i \cdot 13/10} = e^{2\pi i \cdot 3/10}\)。</p>
+<p>(b) 由 \(\omega^n = 1\)，代入等比数列求和公式：</p>
+<p>\[
+\sum_{k=0}^{n-1} \omega^k = \frac{\omega^n - 1}{\omega - 1} = \frac{1 - 1}{\omega - 1} = 0
+\]</p>
+<p>(c) (i) \(\omega = i,\, -i\)。</p>
+<p>证法之一：两边平方得 \(\omega^4 = 1\)，故只需考虑 \(4\) 次单位根：\(e^{2\pi i \cdot 0/4},\, e^{2\pi i \cdot 1/4},\, e^{2\pi i \cdot 2/4},\, e^{2\pi i \cdot 3/4}\)，即 \(1,\, i,\, -1,\, -i\)。几何上，它们对应沿复平面单位圆走 \(0\)、\(1\)、\(2\)、\(3\) 个四分之一圈。其中平方为 \(-1\) 的是 \(i\) 与 \(-i\)。</p>
+<p>(ii) \(\omega = e^{2\pi i \cdot 1/8},\, e^{2\pi i \cdot 3/8},\, e^{2\pi i \cdot 5/8},\, e^{2\pi i \cdot 7/8}\)。</p>
+<p>类似地，两边平方得 \(\omega^8 = 1\)，故只需考虑 \(8\) 次单位根。但 \(\omega^4 \ne 1\)，因此 \(\omega\) 不能是 \(4\) 次单位根。那些不是 \(4\) 次单位根的 \(8\) 次单位根恰好是 \(e^{2\pi i \cdot 1/8},\, e^{2\pi i \cdot 3/8},\, e^{2\pi i \cdot 5/8},\, e^{2\pi i \cdot 7/8}\)，经验证它们均满足 \(\omega^4 = -1\)。</p></div><p class="problem-source">解答来源：<code>dis02-sol.pdf</code> · 6-7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis02.pdf</code> · 4-6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion02-monotone-matrices</span><strong>5 （选做）单调矩阵（Monotone matrices）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>一个 \(m \times n\) 矩阵 \(A\) 是<strong>单调的</strong>（monotone），当且仅当 \(n \ge m\)、\(A\) 的每一行都没有重复元素，并且满足如下性质：若第 \(i\) 行的最小值位于列 \(j_i\)，则 \(j_1 &lt; j_2 &lt; j_3 &lt; \cdots &lt; j_m\)。例如，下面的矩阵就是单调的（每行的最小值以粗体标出）：</p>
+<p>\[
+\begin{bmatrix}
+\mathbf{1} &amp; 3 &amp; 4 &amp; 6 &amp; 5 &amp; 2 \\
+7 &amp; 3 &amp; \mathbf{2} &amp; 5 &amp; 6 &amp; 4 \\
+7 &amp; 9 &amp; 6 &amp; 3 &amp; 10 &amp; \mathbf{0}
+\end{bmatrix}
+\]</p>
+<p>给出一个高效（即优于 \(O(mn)\) 时间）的算法，找出单调矩阵 \(A\) 每一行的最小值。请给出三部分（3-part）解答。运行时间分析中不必写出形式化的递推关系，使用非正式的总结（如图示法“proof by picture”）即可。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 重画题目给出的 3×6 单调矩阵示例，并标出每行最小值。</h4><p>\[
+\begin{bmatrix}
+\mathbf{1} &amp; 3 &amp; 4 &amp; 6 &amp; 5 &amp; 2 \\
+7 &amp; 3 &amp; \mathbf{2} &amp; 5 &amp; 6 &amp; 4 \\
+7 &amp; 9 &amp; 6 &amp; 3 &amp; 10 &amp; \mathbf{0}
+\end{bmatrix}
+\]</p><p class="problem-source">来源：<code>dis02.pdf</code> · 5</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑取第 \(m/2\) 行并直接扫描这一行找到其最小值所在列 \(j\)。利用单调性：所有上方行的最小值必然位于第 \(j\) 列左侧，所有下方行的最小值必然位于第 \(j\) 列右侧。能否把问题归约到两个更小的子矩阵上？</p>
+<p>自检：每层递归对若干子问题的扫描总长度是否被 \(n\) 控制？为什么同层的子矩阵列互不重叠？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(i) 主思路：</p>
+<p>若 \(A\) 只有一行，则直接扫描该行并输出其最小值。</p>
+<p>否则，仅通过扫描第 \(m/2\) 行找到 \(A\) 的最小元素。设该元素位于第 \(j\) 列，则由于 \(A\) 是单调矩阵，第 \(m/2\) 行以上所有行的最小值必定位于第 \(j\) 列左侧，即位于子矩阵 \(A[1{:}m/2-1,\; 1{:}j-1]\) 中；第 \(m/2\) 行以下所有行的最小值必定位于第 \(j\) 列右侧。因此我们递归调用算法处理子矩阵 \(A[1{:}m/2-1,\; 1{:}j-1]\) 和 \(A[m/2+1{:}m,\; j+1{:}n]\)，分别找出第 \(1\) 到 \(m/2-1\) 行与第 \(m/2+1\) 到 \(m\) 行的最小值并输出。</p>
+<p>(ii) 正确性证明：对 \(m\) 进行完全归纳（total induction）。</p>
+<p>基础情况 \(m = 1\)：算法显式地找出并输出该单一行的最小值。</p>
+<p>若 \(A\) 有多行，算法当然会找出并输出第 \(m/2\) 行的正确最小值。如前所论证，\(A\) 的第 \(1\) 到 \(m/2-1\) 行的最小值与子矩阵 \(A[1{:}m/2-1,\; 1{:}j-1]\) 的最小值相同，而第 \(m/2+1\) 到 \(m\) 行的最小值与子矩阵 \(A[m/2+1{:}m,\; j+1{:}n]\) 的最小值相同。由归纳假设，算法正确输出这些矩阵的最小值，连同上面的第 \(m/2\) 行一起，便找出并输出了 \(A\) 所有行的最小值。</p>
+<p>(iii) 运行时间分析：</p>
+<p>有两种分析方法。其一是显式统计每层递归的总步数。由于 \(m\) 在每一步递归中减半，共有 \(\log m\) 层递归。在每一层递归中，矩阵的列被分成两部分——分别属于左子矩阵与右子矩阵。而且，执行分割只需扫描单行全部元素，耗时 \(n\)。这意味着在任意递归层，所有子矩阵的列互不相交：若各子矩阵分别有 \(n_k\) 列，则 \(\sum_k n_k \le n\)。将这些矩阵再分割到下一层所需的总步数为 \(\sum_k n_k \le n\)。因此共有 \(\log m\) 层递归，每层总耗时 \(n\)，总计 \(n \log m\)。</p>
+<p>更精确地，当 \(m = 1\) 时 \(\log m = 0\)，因此表达式应为 \(n(\log m + 1)\) 以正确处理基础情况。</p>
+<p>对于“图示法”（proof by picture），考虑下图示意：灰色框代表每层递归中要求解的子矩阵，蓝线代表每层递归中扫描的行。可以看到每层递归中蓝线的总长度为 \(O(n)\)。</p>
+<p>另一种分析方法是通过写出并求解递推关系（尽管这不是得分必需）。设 \(T(m, n)\) 为求解 \(m \times n\) 数组所需的步数。找到第 \(m/2\) 行的最小值耗时 \(n\)；若该行最小值位于第 \(j\) 列，则递归规模至多为 \(m/2 \times j\) 与 \(m/2 \times (n - j)\)。于是可写出递推式：</p>
+<p>\[
+T(m, n) \le T(m/2, j) + T(m/2, n - j) + n
+\]</p>
+<p>它不像主定理中的标准形式，是“二维”的。猜测 \(T(m, n) \le n(\log m + 1)\)，并用对 \(m\) 的强归纳法证明。</p>
+<p>基础情况：\(T(1, n) = n = n(\log 1 + 1)\)。</p>
+<p>归纳步骤：</p>
+<p>\[
+\begin{aligned}
+T(m, n) &amp;\le T(m/2, j) + T(m/2, n - j) + n \\
+&amp;\le j(\log(m/2) + 1) + (n - j)(\log(m/2) + 1) + n \\
+&amp;= n(\log(m/2) + 1) + n = n(\log m + 1)
+\end{aligned}
+\]</p></div><p class="problem-source">解答来源：<code>dis02-sol.pdf</code> · 7-8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis02.pdf</code> · 5 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis02.pdf</code></li>
+      <li><code>dis02-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

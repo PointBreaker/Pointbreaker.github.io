@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CS 170 Fall 2023 Homework 13 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 作业 13</p>
+    <h1>UC Berkeley CS 170 Fall 2023 作业 13</h1>
+    <p class="lede">CS 170 Fall 2023 作业 13，截止时间为 12 月 1 日周五晚 10:00（宽限至晚 11:59）。本次作业聚焦近似算法与流算法：局部搜索求解 Max-Cut 的迭代上界与 1/2 近似保证；随机化算法与去随机化求解 Max 3-SAT 的 7/8 近似比及 OPT 下界；蓄水池抽样（Reservoir Sampling）变体在单遍流中输出均匀随机元素与以高概率检测重复元素；整数流中利用有限内存判断和的奇偶性、整除性以及乘积的整除性。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>local search</li><li>Max-Cut</li><li>approximation algorithm</li><li>randomized algorithm</li><li>Max 3-SAT</li><li>derandomization</li><li>reservoir sampling</li><li>streaming algorithm</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>hw13.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 道大题。本地资料未包含官方解答；提示只用于指出切入点。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>hw13.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>学习小组（Study Group）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>列出你的学习小组中所有成员的姓名和 SID。如果你没有合作者，必须明确写出 "none"。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>请如实填写你的学习小组成员的姓名和 SID；若没有合作者，请填写 "none"。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>hw13.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>最大割问题的局部搜索（Local Search for Max Cut）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>有时，局部搜索（local search）算法可以为 NP 困难问题给出不错的近似解。</p>
+<p>回顾 Max-Cut（最大割）问题：给定一个无权重图 \(G = (V, E)\)，我们要找到一个割 \((S, T)\)，使得「跨越」割的边数（即一个端点在 \(S\) 中、另一个端点在 \(T\) 中的边）最大化。考虑以下局部搜索算法：</p>
+<ol>
+<li>从任意一个割开始（例如 \((S, T) = (V, \emptyset)\)）。</li>
+<li>当存在某个顶点 \(v \in S\)，使得将 \(v\) 移到另一边后跨越的边数多于当前割 \((S, T)\)（即 \((S \setminus \{v\}, T \cup \{v\})\) 跨越的边更多），或存在某个 \(v \in T\) 使得 \((S \cup \{v\}, T \setminus \{v\})\) 跨越的边更多时，将 \(v\) 移动到割的另一侧。</li>
+</ol>
+<p>现在我们来证明该算法具有的几个保证。</p>
+<p>（a）给出该算法迭代次数的上界（即移动顶点的总次数）。</p>
+<p>（b）证明当该算法终止时，所得到的割中至少有一半的边跨越该割。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：当我们把 \(v\) 从 \(S\) 移动到 \(T\) 时，\(v\) 在 \(S\) 中的邻居必须多于在 \(T\) 中的邻居。这一观察对算法终止后每个顶点的邻居分布意味着什么？接下来，关于跨越割的边数与每一侧内部的边数，我们能得出什么结论？</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>hw13.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>随机化近似算法（Randomization for Approximation）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>有时，极其简单的随机化算法也可以达到相当不错的近似比。</p>
+<p>（a）考虑 Max 3-SAT 问题：给定一个实例，包含 \(m\) 个子句，每个子句恰好包含 3 个不同的文字（literal），找出能满足尽可能多子句的赋值。给出一个简单的随机化算法，使其在期望下达到 \(\frac{7}{8}\) 的近似比。也就是说，若最优解满足 \(c\) 个子句，你的算法应能在期望下产生一个满足至少 \(\frac{7c}{8}\) 个子句的赋值。</p>
+<p>（b）给定一个 Max 3-SAT 实例 \(I\)，令 \(\mathrm{OPT}_I\) 表示在 \(I\) 中能被任意变量赋值满足的子句的最大比例。在所有实例 \(I\) 上，\(\mathrm{OPT}_I\) 的最小值是多少？换言之，\(\min_I \mathrm{OPT}_I\) 等于多少？</p>
+<p>（c）（额外学分）将你在（a）中的算法去随机化（derandomize），即给出一个能达到相同近似比的确定性算法。证明你算法的正确性。</p>
+<p>注意：这一小问特别难，请仅在完成作业其余部分且希望额外练习时再尝试。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>（a）提示：利用期望的线性性（linearity of expectation）！</p>
+<p>（b）提示：利用（a）的结论，并注意随机变量必须有时至少取其均值。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>hw13.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>蓄水池抽样的变体（Reservoir Variations）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>（a）设计一个算法，接收一个由 \([n] := \{1, \ldots, n\}\) 中 \(M\) 个整数组成的流 \(x_1, \ldots, x_M\)，并在任意时刻 \(t\) 能够输出 \(x_1, \ldots, x_t\) 中的一个均匀随机元素。你的算法至多使用关于 \(\log n\) 和 \(\log M\) 的多项式级别的空间。证明算法的正确性并分析空间复杂度。你的算法只能对数据流进行单遍扫描。</p>
+<p>（b）对于由 \([n]\) 中 \(2n\) 个整数组成的流 \(S = x_1, \ldots, x_{2n}\)，若 \(j \in [n]\) 出现超过一次，则称 \(j\) 为重复元素。</p>
+<p>证明 \(S\) 必须包含一个重复元素，并设计一个算法，以 \(S\) 为输入，以至少 \(1 - \frac{1}{n}\) 的概率输出一个重复元素。你的算法至多使用关于 \(\log n\) 的多项式级别的空间。证明算法的正确性并分析空间复杂度。你的算法只能对数据流进行单遍扫描。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>（a）提示：对于正确性证明，注意 \(\frac{1}{t} = 1 \cdot \frac{1}{2} \cdot \frac{2}{3} \cdot \frac{3}{4} \cdots \frac{t-1}{t}\)。</p>
+<p>（b）提示：使用 \(\log n\) 份（a）中算法的副本来跟踪目前所见元素的一个随机子集。对于正确性证明，尝试上界化算法未能输出重复元素的概率；同时注意，至多有 \(n\) 个下标 \(t\) 使得元素 \(x_t\) 在 \(t\) 之后不再出现。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>hw13.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>整数流（Streaming Integers）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在本问题中，假设我们接收一个无限的整数流 \(x_1, x_2, \ldots\)，且每收到一个新整数后必须执行某些计算。由于我们可能会看到大量整数，因此希望限制总共使用的内存。以下所有部分，请给出算法的简要描述及其正确性的简要证明。</p>
+<p>（a）证明：仅使用一个比特的内存，我们就能计算目前所见的所有整数之和是偶数还是奇数。</p>
+<p>（b）证明：我们可以使用 \(O(\log N)\) 个比特的内存，计算目前所见的所有整数之和是否能被某个固定的整数 \(N\) 整除。</p>
+<p>（c）假设 \(N\) 为质数。给出一个算法，检查 \(N\) 是否能整除目前所见的所有整数的乘积，并使用尽可能少的内存比特。</p>
+<p>（d）现在，设 \(N\) 为任意整数，并假设已知其质因数分解：\(N = p_1^{k_1} p_2^{k_2} \cdots p_r^{k_r}\)。给出一个算法，检查 \(N\) 是否能整除目前所见的所有整数的乘积，并使用尽可能少的内存比特。用 \(k_1, \ldots, k_r\) 写出你的算法所使用的比特数。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>（c）提示：假设流的前 3 个整数是 7, 10, 6。你如何检查 \(N = 3\) 是否整除它们的乘积？为什么没有必要计算出整个乘积 \(7 \times 10 \times 6 = 420\) 来判断整除性？</p>
+<p>（d）提示：在你的算法过程中跟踪 \(r\) 个值（即对 \(N\) 的每个质因数各跟踪一个）。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>hw13.pdf</code> · 4 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>hw13.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

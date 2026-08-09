@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CS 170 Fall 2023 Discussion 4: Graph Short Answer and Biconnected Components — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 4</p>
+    <h1>CS 170 2023 年秋季学期 Discussion 4：图简答与双连通分量</h1>
+    <p class="lede">图算法练习：DFS 先序/后序编号性质、强连通分量(SCC)算法变体正确性、双连通分量与关键边/顶点的线性时间算法。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>DFS</li><li>pre-order</li><li>post-order</li><li>ancestor</li><li>SCC</li><li>强连通分量</li><li>双连通分量</li><li>关键边</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis04.pdf</code>、<code>dis04-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 7 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis04.pdf</code>、<code>dis04-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>图简答 (Graph Short Answer)</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4>图算法速览 (Graphs Cheatsheet)
+<p>深度优先搜索 (DFS) 伪代码：</p>
+<pre><code>def dfs(G, s):
+def explore_recursive(G, v):
+    visited(v) = true
+    previsit(v) # 设置 v 的先序编号
+    for each edge (v, u) in E:
+</code></pre>
+1. 图简答 (Graph Short Answer)
+<p>对于下列每个命题，证明其为真，或给出反例说明其为假。注意 \(\text{pre}(v)\) 与 \(\text{post}(v)\) 分别表示顶点 \(v\) 的先序与后序编号。</p>
+<p>(a) 若 \((u, v)\) 是无向图中的一条边，且在 DFS 过程中 \(\text{post}(v) &lt; \text{post}(u)\)，则 \(u\) 是 DFS 树中 \(v\) 的祖先。</p>
+<p>(b) 在有向图中，若存在一条从 \(u\) 到 \(v\) 的路径，且 \(\text{pre}(u) &lt; \text{pre}(v)\)，则 \(u\) 是 DFS 树中 \(v\) 的祖先。</p>
+<p>(c) 我们可以修改课堂上的 SCC 算法，使得在 \(G\) 上按 \(G\) 的递减先序运行 DFS，而非按 \(G^R\) 的递减后序运行。该修改后的算法仍然正确。</p>
+<p>(d) 我们可以修改课堂上的 SCC 算法，使得第一次 DFS 在 \(G\) 上运行，第二次 DFS 在 \(G^R\) 上运行。该修改后的算法仍然正确。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 有向图反例：从 w 开始的 DFS，展示 pre/post 编号与树边/回边</h4><ul>
+<li>
+<p>顶点：w, u, v</p>
+</li>
+<li>
+<p>DFS 先序/后序编号：\(w(\text{pre}=1,\text{post}=6)\)、\(u(\text{pre}=2,\text{post}=3)\)、\(v(\text{pre}=4,\text{post}=5)\)</p>
+</li>
+<li>
+<p>有向边：w→u（树边，标记 T），w→v（树边，标记 T），u→w（回边，标记 B）</p>
+</li>
+<li>
+<p>说明：存在路径 \(u\to w\to v\)，且 \(\text{pre}(u)=2 &lt; \text{pre}(v)=4\)，但 \(u\) 不是 \(v\) 的祖先（\(u,v\) 是 \(w\) 的兄弟子节点）</p>
+</li>
+</ul><p class="problem-source">来源：<code>dis04-sol.pdf</code> · 4</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑 DFS 先序/后序编号的区间包含关系；对于假命题，尝试构造极小反例（2–3 个顶点）。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) <strong>真</strong>。只有两种可能的情况：\(\text{pre}(u) &lt; \text{pre}(v) &lt; \text{post}(v) &lt; \text{post}(u)\)，或 \(\text{pre}(v) &lt; \text{post}(v) &lt; \text{pre}(u) &lt; \text{post}(u)\)。在第一种情况下，\(u\) 是 \(v\) 的祖先。在第二种情况下，\(v\) 在未访问 \(u\) 时就已出栈。然而，由于 \(u\) 与 \(v\) 之间有边，且 DFS 会访问 \(v\) 的所有邻居，因此这种情况不可能发生。</p>
+<p>(b) <strong>假</strong>。考虑从 \(w\) 开始 DFS 的如下情形（见图示反例）：存在路径 \(u \to w \to v\)，且 \(\text{pre}(u) = 2 &lt; \text{pre}(v) = 4\)，但 \(u\) 不是 \(v\) 的祖先（\(u\) 与 \(v\) 是兄弟节点）。</p>
+<p>(c) <strong>假</strong>。考虑一个只有单条有向边的 2 顶点图，即 \(G = (V = \{v_1, v_2\}, E = \{(v_1, v_2)\})\)。若从 \(v_2\) 开始 DFS，则 \(G\) 中先序编号最大的顶点是 \(v_1\)。然而 \(v_1\) 并非汇点 SCC，因此该修改后的算法会返回错误答案。</p>
+<p>(d) <strong>真</strong>。\(G\) 的强连通分量与 \(G^R\) 的强连通分量相同。</p></div><p class="problem-source">解答来源：<code>dis04-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis04.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>双连通分量 (Biconnected Components)</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4>2. 双连通分量 (Biconnected Components)
+<p>考虑任意一个无向连通图 \(G = (V, E)\)。若删除边 \((u, v) \in E\) 会使图不再连通，则称该边为<strong>关键边</strong>（critical edge）。换句话说，图 \((V, E \setminus \{(u, v)\})\) 不再连通。类似地，若删除顶点 \(v \in V\) 及其所有关联边后图不再连通，则称 \(v\) 为<strong>关键顶点</strong>（critical vertex）。</p>
+<p>(a) 是否总能找到一个非关键顶点 \(v \in V\)？非关键边呢？</p>
+<p>(b) 给出一个线性时间算法，找出 \(G\) 的所有关键边。</p>
+<p>(c) 修改上述算法，找出 \(G\) 的所有关键顶点。</p>
+<p>(d) \(G\) 的一个双连通分量是指不包含关键顶点的连通子图；换句话说，从该分量中删除任意一个顶点后，它仍保持连通。若将 \(G\) 的所有双连通分量收缩为超节点（meta-node）（类似于对 SCC 的操作），所得结果图具有什么性质？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 用于演示 low-link 算法的示例无向图及其 DFS 树，标注 pre/low 值与关键边/顶点</h4><ul>
+<li>
+<p>示例图：无向连通图 G = (V, E)，例如 V = {a, b, c, d, e}，E = {(a,b), (a,c), (b,c), (c,d), (d,e)}</p>
+</li>
+<li>
+<p>DFS 树边（实线）与回边（虚线）</p>
+</li>
+<li>
+<p>每个顶点标注 pre[v]/low[v] 值</p>
+</li>
+<li>
+<p>关键边标记（满足 low[child] &gt; pre[parent] 的树边）</p>
+</li>
+<li>
+<p>关键顶点标记（根节点有多个子节点，或某子节点 low &gt; pre）</p>
+</li>
+</ul><p class="problem-source">来源：<code>dis04-sol.pdf</code> · 4</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>从 DFS 树的叶子入手思考非关键顶点；利用 low-link 值判断关键边/顶点；收缩后的结构可通过反证法证明。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 在图上从任意顶点运行 DFS，取所得 DFS 树中的任意一个叶子。删除该叶子不会使图不连通，因为剩余顶点仍通过 DFS 树边相连。但我们不一定能找到非关键边。例如，树中的每条边都是关键边。</p>
+<p>(b) 在 \(G\) 上运行 DFS，记录每个顶点的 \(\text{pre}[v]\)。同时维护每个顶点的 \(\text{low}\) 值，其中 \(\text{low}[v]\) 表示 \(v\) 的子树中通过一条回边可达的顶点 \(u\) 的最小 \(\text{pre}[u]\)。唯一可能的关键边是 DFS 中的树边。\(v\) 与其父节点 \(p\) 之间的边是关键边，当且仅当 \(\text{low}[v] &gt; \text{pre}[p]\)（即不存在从 \(v\) 到 \(p\) 或其任意祖先的回边）。</p>
+<p><strong>复杂度</strong>：\(O(|V| + |E|)\)，与标准 DFS 相同。</p>
+<p>(c) DFS 树的根节点是关键顶点，当且仅当它有多于一个子节点。非根顶点 \(v\) 是关键顶点，当且仅当存在 \(v\) 的某个子节点 \(c\) 满足 \(\text{low}[c] &gt; \text{pre}[v]\)。</p>
+<p><strong>复杂度</strong>：\(O(|V| + |E|)\)，与 (b) 相同。</p>
+<p>(d) 所得结果图是<strong>一棵树</strong>。为证明这一点，可证：若结果图中存在环，则该环上所有超节点都属于同一个双连通分量，导致矛盾。</p></div><p class="problem-source">解答来源：<code>dis04-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis04.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>途经点 (Waypoint)</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一个<strong>强连通</strong>的有向图 \(G = (V, E)\)，边权为正，以及一个特殊节点 \(v_0 \in V\)。请设计一个高效算法，对<strong>所有</strong>节点对 \(s, t\)，计算从 \(s\) 到 \(t\) 且<strong>必须经过</strong> \(v_0\) 的最短路径长度。</p>
+<p>你的算法时间复杂度应为 \(O(|V|^2 + |E| \log |V|)\)。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：考虑将必须经过 \(v_0\) 的路径拆分为两段。如何高效地同时得到所有节点到 \(v_0\) 的距离，以及 \(v_0\) 到所有节点的距离？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body">算法思路
+<p>从 \(s\) 到 \(t\) 且经过 \(v_0\) 的最短路径长度，等于从 \(s\) 到 \(v_0\) 的最短路径长度加上从 \(v_0\) 到 \(t\) 的最短路径长度：</p>
+<p>\[\text{dist}_{v_0}(s, t) = \text{dist}(s, v_0) + \text{dist}(v_0, t)\]</p>
+算法步骤
+<ol>
+<li><strong>正向 Dijkstra</strong>：在原图 \(G\) 上从 \(v_0\) 运行 Dijkstra，得到 \(v_0\) 到所有顶点 \(t\) 的最短距离 \(d_G(v_0, t)\)。</li>
+<li><strong>反向 Dijkstra</strong>：将 \(G\) 的所有边反向得到 \(G^R\)，在 \(G^R\) 上从 \(v_0\) 运行 Dijkstra。\(v_0\) 在 \(G^R\) 中到 \(s\) 的距离等于 \(s\) 在 \(G\) 中到 \(v_0\) 的最短距离，记为 \(d_G(s, v_0)\)。</li>
+<li><strong>合并结果</strong>：枚举所有点对 \((s, t)\)，输出 \(d_G(s, v_0) + d_G(v_0, t)\)。</li>
+</ol>
+正确性证明
+<p>设 \(P\) 是一条从 \(s\) 到 \(t\) 且经过 \(v_0\) 的最短路径。由于路径必须经过 \(v_0\)，\(P\) 可分解为子路径 \(P_1\)（从 \(s\) 到 \(v_0\)）和子路径 \(P_2\)（从 \(v_0\) 到 \(t\)）。</p>
+<ul>
+<li>
+<p>\(P_1\) 的长度 \(\geq\) 从 \(s\) 到 \(v_0\) 的最短距离 \(d_G(s, v_0)\)。</p>
+</li>
+<li>
+<p>\(P_2\) 的长度 \(\geq\) 从 \(v_0\) 到 \(t\) 的最短距离 \(d_G(v_0, t)\)。</p>
+</li>
+</ul>
+<p>因此 \(|P| \geq d_G(s, v_0) + d_G(v_0, t)\)。</p>
+<p>反之，取一条从 \(s\) 到 \(v_0\) 的最短路径和一条从 \(v_0\) 到 \(t\) 的最短路径拼接起来，就得到一条从 \(s\) 到 \(t\) 且经过 \(v_0\) 的路径，其长度恰好为 \(d_G(s, v_0) + d_G(v_0, t)\)。</p>
+<p>故 \(\text{dist}_{v_0}(s, t) = d_G(s, v_0) + d_G(v_0, t)\)。</p>
+复杂度分析
+<ul>
+<li>
+<p>两次 Dijkstra 调用：\(O((|V| + |E|) \log |V|)\)。</p>
+</li>
+<li>
+<p>枚举所有点对：\(O(|V|^2)\)。</p>
+</li>
+<li>
+<p>总时间复杂度：\(O(|V|^2 + |E| \log |V|)\)，满足要求。</p>
+</li>
+</ul></div><p class="problem-source">解答来源：<code>dis04-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis04.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>按序跑腿 (Running Errands)</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你需要在伯克利完成 \(k\) 件差事。伯克利被表示为一个有向加权图 \(G\)，其中每个顶点 \(v\) 是一个地点，边 \((u, v)\) 的权重 \(w_{uv}\) 表示从 \(u\) 到 \(v\) 需要 \(w_{uv}\) 分钟。</p>
+<p>差事必须<strong>按顺序</strong>完成：第 \(i\) 件差事在访问集合 \(S_i\) 中的任意一个顶点时即可立即完成（例如，若需购买零食，可在任意超市完成）。你的家位于顶点 \(h\)。</p>
+<p>给定 \(G, h\) 以及所有的 \((S_i)_{i=1}^k\)，设计一个高效算法，计算从家 \(h\) 出发完成所有差事所需的最少时间（分钟）。即，在 \(G\) 中找到一条从 \(h\) 出发的最短路径，使其依次经过 \(S_1\) 中的一个顶点、然后 \(S_2\) 中的一个顶点、然后 \(S_3\) 中的一个顶点，依此类推。</p>
+<p>例如在下图中，最短路径为 \(h \to C \to B \to C \to E\)，所需时间为 \(5 + 3 + 4 + 10 = 22\)。</p>
+<p>（图：包含节点 \(h, A, B, C, D, E, F\) 的有向加权图，集合 \(S_1, S_2, S_3\) 标注在部分节点上。）</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · Running Errands 示例图：包含节点 h, A, B, C, D, E, F 的有向加权图，标注集合 S1, S2, S3 及各边权重，示例路径 h → C → B → C → E。</h4>节点
+<ul>
+<li>
+<p>\(h\)（家）</p>
+</li>
+<li>
+<p>\(A, B, C, D, E, F\)</p>
+</li>
+</ul>
+集合标注
+<ul>
+<li>\(S_1, S_2, S_3\) 分别标注在部分节点上</li>
+</ul>
+边与权重（已知）
+<ul>
+<li>
+<p>\(h \to C\)：5</p>
+</li>
+<li>
+<p>\(C \to B\)：3</p>
+</li>
+<li>
+<p>\(B \to C\)：4</p>
+</li>
+<li>
+<p>\(C \to E\)：10</p>
+</li>
+<li>
+<p>其他边权重包括 2, 4, 9, 10 等（具体拓扑参考原图）</p>
+</li>
+</ul>
+示例路径
+<ul>
+<li>
+<p>最短路径：\(h \to C \to B \to C \to E\)</p>
+</li>
+<li>
+<p>总时间：\(5 + 3 + 4 + 10 = 22\)</p>
+</li>
+</ul><p class="problem-source">来源：<code>dis04.pdf</code> · 5</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>提示：如果每个顶点不仅有位置信息，还带有"已完成前若干件差事"的状态，图的结构会如何变化？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body">核心思想
+<p>构建一个<strong>分层图</strong> \(G'\)，共 \(k+1\) 层，分别记为 \(G_0, G_1, \ldots, G_k\)。每层是原图 \(G\) 的一个拷贝，\(G_i\) 中顶点 \(v\) 的拷贝记为 \(v_i\)。</p>
+<p>对于每个 \(v \in S_i\)，添加一条从 \(v_{i-1}\) 到 \(v_i\) 的<strong>权值为 0</strong> 的边。</p>
+算法步骤
+<ol>
+<li>构建分层图 \(G'\)：创建 \(k+1\) 层，每层拷贝 \(G\) 的所有顶点和边。</li>
+<li>对每个 \(i = 1, \ldots, k\) 以及每个 \(v \in S_i\)，添加零权边 \((v_{i-1}, v_i)\)。</li>
+<li>在 \(G'\) 上从 \(h_0\) 运行 Dijkstra 算法。</li>
+<li>输出 \(G_k\) 中任意顶点的最短距离。</li>
+</ol>
+正确性证明
+<p><strong>引理</strong>：\(G'\) 中从 \(h_0\) 到 \(G_k\) 中任意顶点的路径，与 \(G\) 中从 \(h\) 出发按顺序经过 \(S_1, S_2, \ldots, S_k\) 的路径一一对应，且长度相同。</p>
+<p><em>证明</em>：将 \(G'\) 中的路径映射回 \(G\)：对每条边 \((u_i, v_i)\)，替换为 \(G\) 中的边 \((u, v)\)；忽略形如 \((v_{i-1}, v_i)\) 的零权边。所得路径长度不变。由于路径必须依次包含形如 \((v_0, v_1), (v_1, v_2), \ldots\) 的边，因此对应的路径按顺序经过了 \(S_1, S_2, \ldots, S_k\)。</p>
+<p>反之，\(G\) 中任何按顺序完成差事的路径，都可以在 \(G'\) 中找到对应的、长度相同的路径。</p>
+<p>因此，\(G'\) 中从 \(h_0\) 到 \(G_k\) 的最短路径长度等于原问题的最优解。</p>
+复杂度分析
+<p>分层图 \(G'\) 的规模为原图的 \(k+1\) 倍：</p>
+<ul>
+<li>
+<p>顶点数：\((k+1)|V|\)</p>
+</li>
+<li>
+<p>边数：\((k+1)|E| + k|V|\)</p>
+</li>
+</ul>
+<p>在 \(G'\) 上运行 Dijkstra 的时间为 \(O(k(|V| + |E|) \log k|V|)\)。</p></div><p class="problem-source">解答来源：<code>dis04-sol.pdf</code> · 7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis04.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>图的遍历（选做）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><blockquote>
+<p><strong>提示：</strong>助教可能不会在课堂上覆盖全部题目，这很正常。讨论讲义并非设计为一小时内做完，而是有意保留较长篇幅，供你在课后练习、巩固并拓展讲课、阅读与作业中的概念。</p>
+</blockquote>
+<p><strong>5 图的遍历（选做）</strong></p>
+<p>下图是一个包含顶点 \(A, B, C, D, E, F, G, H, I, J\) 的有向图（详见 dis04.pdf 第 5 页图）。</p>
+<p>(a) 回顾 DFS 树中的边可以分为四种类型：</p>
+<ul>
+<li>
+<p><strong>树边（Tree edges）</strong>：DFS 树中的边；</p>
+</li>
+<li>
+<p><strong>后向边（Back edges）</strong>：不在 DFS 树中的边 \((u, v)\)，其中 \(v\) 是 \(u\) 在 DFS 树中的祖先；</p>
+</li>
+<li>
+<p><strong>前向边（Forward edges）</strong>：不在 DFS 树中的边 \((u, v)\)，其中 \(u\) 是 \(v\) 在 DFS 树中的祖先；</p>
+</li>
+<li>
+<p><strong>横叉边（Cross edges）</strong>：不在 DFS 树中的边 \((u, v)\)，其中 \(u\) 不是 \(v\) 的祖先，\(v\) 也不是 \(u\) 的祖先。</p>
+</li>
+</ul>
+<p>对上面的有向图从顶点 A 开始执行 DFS，按字母顺序打破平局。在遍历过程中，为每个节点标注 pre-number 和 post-number，并将每条边标记为 Tree、Back、Forward 或 Cross。</p>
+<p>(b) 强连通分量（SCC）定义为顶点的一个子集，其中从每个顶点到其他任意顶点都存在路径。求上图的所有 SCC。</p>
+<p>(c) 将 (b) 中找到的每个 SCC 收缩为一个 meta-node，得到由 SCC meta-node 构成的图。在下方画出这个图，并描述其结构。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 原始有向图，包含顶点 A-J 和所有有向边</h4><p>顶点：A, B, C, D, E, F, G, H, I, J
+边：A→B, A→E, C→J, J→F, F→D, F→H, H→I, I→G, G→H, D→C, D→A, H→A, E→B</p><p class="problem-source">来源：<code>dis04.pdf</code> · 5</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · DFS 树及边分类标注图</h4><p>DFS 树边（实线）：A→B, A→E, C→J, J→F, F→D, F→H, H→I, I→G
+后向边（虚线，Back）：G→H, D→C
+横叉边（虚线，Cross）：D→A, H→A, E→B
+pre/post 号码：A(1,6), B(2,3), C(7,20), D(10,11), E(4,5), F(9,18), G(14,15), H(12,17), I(13,16), J(8,19)</p><p class="problem-source">来源：<code>dis04-sol.pdf</code> · 8</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · SCC 收缩后的 meta-graph（DAG）</h4><p>Meta-nodes：{A}, {B}, {E}, {G,H,I}, {C,J,F,D}
+边：{C,J,F,D}→{G,H,I}, {C,J,F,D}→{A}, {G,H,I}→{A}, {A}→{E}, {A}→{B}, {E}→{B}</p><p class="problem-source">来源：<code>dis04-sol.pdf</code> · 9</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p><strong>提示：</strong></p>
+<ul>
+<li>
+<p>DFS 从 A 开始，按字母顺序访问邻居。注意 pre-number 在首次访问节点时分配，post-number 在节点的所有邻居处理完毕后分配。</p>
+</li>
+<li>
+<p>判断边类型时，关键是看目标节点与源节点在 DFS 树中的祖先-后代关系。</p>
+</li>
+<li>
+<p>对于 SCC，考虑每个节点能到达哪些节点，以及哪些节点能到达它。互相可达的节点属于同一个 SCC。</p>
+</li>
+<li>
+<p>收缩 SCC 后得到的 meta-graph 一定是有向无环图（DAG）。</p>
+</li>
+</ul></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a) DFS 遍历结果</strong></p>
+<p>从顶点 A 开始，按字母顺序打破平局，DFS 的 pre-number 和 post-number 如下：</p>
+<table>
+<thead>
+<tr>
+<th>顶点</th>
+<th>pre-number</th>
+<th>post-number</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A</td>
+<td>1</td>
+<td>6</td>
+</tr>
+<tr>
+<td>B</td>
+<td>2</td>
+<td>3</td>
+</tr>
+<tr>
+<td>C</td>
+<td>7</td>
+<td>20</td>
+</tr>
+<tr>
+<td>D</td>
+<td>10</td>
+<td>11</td>
+</tr>
+<tr>
+<td>E</td>
+<td>4</td>
+<td>5</td>
+</tr>
+<tr>
+<td>F</td>
+<td>9</td>
+<td>18</td>
+</tr>
+<tr>
+<td>G</td>
+<td>14</td>
+<td>15</td>
+</tr>
+<tr>
+<td>H</td>
+<td>12</td>
+<td>17</td>
+</tr>
+<tr>
+<td>I</td>
+<td>13</td>
+<td>16</td>
+</tr>
+<tr>
+<td>J</td>
+<td>8</td>
+<td>19</td>
+</tr>
+</tbody>
+</table>
+<p><strong>边分类：</strong></p>
+<ul>
+<li>
+<p><strong>树边（Tree）</strong>：A→B, A→E, C→J, J→F, F→D, F→H, H→I, I→G</p>
+</li>
+<li>
+<p><strong>后向边（Back）</strong>：G→H（H 是 G 的祖先）, D→C（C 是 D 的祖先）</p>
+</li>
+<li>
+<p><strong>横叉边（Cross）</strong>：D→A, H→A, E→B</p>
+</li>
+<li>
+<p><strong>前向边（Forward）</strong>：无</p>
+</li>
+</ul>
+<p><strong>证明：</strong> DFS 从 A(1) 开始，先访问 B(2)，B 无未访问邻居，B 结束于 3。回到 A，访问 E(4)，E 的邻居 B 已访问，E 结束于 5。A 的邻居处理完毕，A 结束于 6。下一个未访问节点 C(7)，C→J(8)，J→F(9)，F→D(10)，D 的邻居 C 和 A 均已访问，D 结束于 11。回到 F，F→H(12)，H→I(13)，I→G(14)，G 的邻居 H 已访问，G 结束于 15。依次回溯，I 结束于 16，H 结束于 17，F 结束于 18，J 结束于 19，C 结束于 20。</p>
+<p>边类型判断依据：</p>
+<ul>
+<li>
+<p>G→H：H(12,17) 是 G(14,15) 的祖先（DFS 树路径 H→I→G），故为后向边。</p>
+</li>
+<li>
+<p>D→C：C(7,20) 是 D(10,11) 的祖先（DFS 树路径 C→J→F→D），故为后向边。</p>
+</li>
+<li>
+<p>D→A：A(1,6) 与 D(10,11) 的区间不重叠，互不为祖先，故为横叉边。</p>
+</li>
+<li>
+<p>H→A：A(1,6) 与 H(12,17) 的区间不重叠，互不为祖先，故为横叉边。</p>
+</li>
+<li>
+<p>E→B：B(2,3) 与 E(4,5) 的区间不重叠，互不为祖先，故为横叉边。</p>
+</li>
+</ul>
+<p><strong>(b) 强连通分量</strong></p>
+<p>SCCs 为：\(\{A\}\), \(\{B\}\), \(\{E\}\), \(\{G, H, I\}\), \(\{C, J, F, D\}\)</p>
+<p><strong>证明：</strong></p>
+<ul>
+<li>
+<p>\(\{G, H, I\}\)：H→I, I→G, G→H 形成环，三者互相可达。</p>
+</li>
+<li>
+<p>\(\{C, J, F, D\}\)：C→J→F→D→C 形成环，四者互相可达。</p>
+</li>
+<li>
+<p>\(\{A\}\)：A 可到达 B 和 E，但 B 和 E 无法到达 A（B 无出边，E 只指向 B），故 A 独立。</p>
+</li>
+<li>
+<p>\(\{B\}\)：B 无出边，无法到达任何其他节点，故独立。</p>
+</li>
+<li>
+<p>\(\{E\}\)：E→B，但 B 无法到达 E，故 E 独立。</p>
+</li>
+</ul>
+<p><strong>(c) Meta-graph</strong></p>
+<p>将每个 SCC 收缩为 meta-node，meta-graph 的边为：</p>
+<ul>
+<li>
+<p>\(\{C,J,F,D\} \to \{G,H,I\}\)（来自 F→H）</p>
+</li>
+<li>
+<p>\(\{C,J,F,D\} \to \{A\}\)（来自 D→A）</p>
+</li>
+<li>
+<p>\(\{G,H,I\} \to \{A\}\)（来自 H→A）</p>
+</li>
+<li>
+<p>\(\{A\} \to \{E\}\)（来自 A→E）</p>
+</li>
+<li>
+<p>\(\{A\} \to \{B\}\)（来自 A→B）</p>
+</li>
+<li>
+<p>\(\{E\} \to \{B\}\)（来自 E→B）</p>
+</li>
+</ul>
+<p><strong>结构描述：</strong> Meta-graph 是一个有向无环图（DAG）。拓扑序为 \(\{C,J,F,D\}\), \(\{G,H,I\}\), \(\{A\}\), \(\{E\}\), \(\{B\}\)。\(\{C,J,F,D\}\) 和 \(\{G,H,I\}\) 均有边指向 \(\{A\}\)，\(\{A\}\) 有边指向 \(\{E\}\) 和 \(\{B\}\)，\(\{E\}\) 有边指向 \(\{B\}\)。</p>
+<p><strong>复杂度分析：</strong> DFS 遍历的时间复杂度为 \(O(V + E)\)，其中 \(V = 10\) 为顶点数，\(E = 13\) 为边数。识别 SCC 的算法（如 Kosaraju 或 Tarjan）同样为 \(O(V + E)\)。收缩 SCC 并构建 meta-graph 的过程也是 \(O(V + E)\)。</p></div><p class="problem-source">解答来源：<code>dis04-sol.pdf</code> · 8-9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis04.pdf</code> · 5-6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>Dijkstra算法在负权边上的失效（选做）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>6. Dijkstra 算法在负权边上的失效（选做）</p>
+<p>请画出一张至多含五个顶点的图，并标明运行 Dijkstra 算法时采用的源点。</p>
+<p>(a) 画一张不含负权环、但 Dijkstra 算法会给出错误答案的图。</p>
+<p>(b) 画一张至少含两条负权边、但 Dijkstra 算法仍会给出正确答案的图。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · Dijkstra算法在负权边上失效的反例图，包含4个顶点A、B、C、D及带权有向边</h4><pre><code>Vertices: A, B, C, D
+Edges:
+
+- A → B (weight 2)
+
+- B → C (weight -2)
+
+- A → C (weight 1)
+
+- C → D (weight 1)
+Source: A
+</code></pre><p class="problem-source">来源：<code>dis04-sol.pdf</code> · 1</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · Dijkstra算法在具有两条负权边的有向路径上仍然正确的示例图</h4><pre><code>Vertices: A, B, C
+Edges:
+
+- A → B (weight -1)
+
+- B → C (weight -2)
+Source: A
+</code></pre><p class="problem-source">来源：<code>dis04-sol.pdf</code> · 1</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p><strong>Hint for (a):</strong> 考虑Dijkstra算法贪心选择最小距离节点且不再重新访问的特性。一条负权边可能产生一条通往已访问节点的更短路径，但Dijkstra算法不会重新检查该节点。</p>
+<p><strong>Hint for (b):</strong> 考虑一条简单的有向路径，其中每个节点按顺序被访问，不存在需要重新访问已确定节点的替代路径。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><h3>Solution</h3>
+<p><strong>(a)</strong> Here's one example:</p>
+<pre><code>A
+B
+C D
+2 -2
+1 1
+</code></pre>
+<p>More precisely, the graph has vertices \(A\), \(B\), \(C\), \(D\) and directed edges:</p>
+<ul>
+<li>
+<p>\(A \to B\) with weight \(2\)</p>
+</li>
+<li>
+<p>\(B \to C\) with weight \(-2\)</p>
+</li>
+<li>
+<p>\(A \to C\) with weight \(1\)</p>
+</li>
+<li>
+<p>\(C \to D\) with weight \(1\)</p>
+</li>
+</ul>
+<p>从源点 \(A\) 运行 Dijkstra 算法时，由于先访问 \(C\) 后访问 \(B\)，算法会把到 \(D\) 的距离误算为 \(2\)，而真实最短距离是 \(1\)。</p>
+<p><strong>(b)</strong> 在有向路径图上，Dijkstra 算法始终能正确工作。例如：</p>
+<pre><code>A → B → C
+  -1   -2
+</code></pre>
+<p>More precisely, the graph has vertices \(A\), \(B\), \(C\) and directed edges:</p>
+<ul>
+<li>
+<p>\(A \to B\) with weight \(-1\)</p>
+</li>
+<li>
+<p>\(B \to C\) with weight \(-2\)</p>
+</li>
+</ul>
+<p>Dijkstra's algorithm from source \(A\) correctly computes: \(d(B) = -1\), \(d(C) = -3\).</p></div><p class="problem-source">解答来源：<code>dis04-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis04.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">7</span><strong>BFS 简介（选做）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><blockquote>
+<p><strong>提示：</strong> 你的助教可能不会覆盖所有问题。这完全没问题，讨论课讲义并非设计在一小时内完成。它们故意出得很长，以便作为资源供你练习、巩固和拓展课堂、阅读和作业中讨论的概念。</p>
+</blockquote>
+<p>在本问题中，我们将考虑最短路径问题：给定图 \(G(V, E)\)，找出从 \(s\) 到每个顶点 \(v \in V\) 的最短路径长度。对于无权图，路径长度是路径中边的数量。我们可以使用广度优先搜索（BFS）算法来解决这个问题，本周课上还会再次讲到。</p>
+<p>BFS 可以像深度优先搜索（DFS）一样实现，但使用队列而非栈。下面是 BFS 的另一种实现的伪代码，它对每个 \(i \in \{0, 1, \ldots, |V| - 1\}\) 计算距离 \(s\) 为 \(i\) 的顶点集合，记为 \(L_i\)。</p>
+<p><strong>Algorithm 1 Vertex Distances via BFS</strong></p>
+<ol>
+<li>Input: A graph \(G(V, E)\), starting vertex \(s\)</li>
+<li>for all \(v \in V\) do</li>
+<li><code>visited(v) = False</code></li>
+<li><code>visited(s) = True</code></li>
+<li>\(L_0 \to \{s\}\)</li>
+<li>for \(i\) from \(0\) to \(n - 1\) do</li>
+<li>\(L_{i+1} = \{\}\)</li>
+<li>for \(u \in L_i\) do</li>
+<li>for \((u, v) \in E\) do</li>
+<li>if <code>visited(v) = False</code> then</li>
+<li>\(L_{i+1}\).add(\(v\))</li>
+<li><code>visited(v) = True</code></li>
+</ol>
+<p>换句话说，我们从 \(L_0 = \{s\}\) 开始，然后对每个 \(i\)，将 \(L_{i+1}\) 设为 \(L_i\) 中顶点的所有尚未加入之前任何 \(L_j\)（\(j \le i\)）的邻居。</p>
+<p><strong>(a)</strong> 证明 BFS 对所有 \(i\) 都计算出正确的 \(L_i\) 值。</p>
+<p><strong>(b)</strong> 证明该算法与 DFS 一样，运行时间为 \(O(m + n)\)，其中 \(n\) 是节点数，\(m\) 是边数。</p>
+<p><strong>(c)</strong> 我们可能想找出从 \(s\) 到每个顶点的最短加权路径。即每条边有权重 \(w_e\)，路径长度是路径中边的权重之和。上述算法在所有 \(w_e = 1\) 时有效，但如果某些 \(w_e \neq 1\) 则容易出错。</p>
+<p>填空以得到一个在 \(w_e\) 为正整数时计算最短路径的算法：</p>
+<blockquote>
+<p>我们将 \(G\) 中的每条边 \(e\) 替换为 <strong><em>_</em></strong>_ 得到新图 \(G'\)，然后在 \(G'\) 上从 \(s\) 开始运行 BFS。证明你的答案。</p>
+</blockquote>
+<p><strong>(d)</strong> 该算法作为权重 \(w_e\) 的函数，运行时间是多少？写出所有 \(w_e\) 需要多少位？该算法的运行时间是否是输入规模的多项式？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 有向图，说明将每条权重为 we 的边替换为 we 条无权边组成的路径</h4><p>有向图示例：原边 e 被替换为 we 条连续无权边构成的路径</p><p class="problem-source">来源：<code>dis04-sol.pdf</code> · 11</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 提示：使用归纳法证明，对所有 \(i\)，\(L_i\) 包含所有距离 \(s\) 为 \(i\) 的顶点，且仅包含这些顶点。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a) 解：</strong> 我们声称在 for 循环的第 \(i\) 次迭代开始前：(1) 所有距离 \(s\) 恰好为 \(i\) 的顶点都在 \(L_i\) 中，(2) 所有距离 \(s\) 大于 \(i\) 的顶点尚未被加入任何 \(L_j\)（\(j \le i\)）。我们将归纳证明这对所有 \(i\) 成立，从而说明算法是正确的。</p>
+<p>这对 \(i = 0\) 成立。假设对 \(i = k\) 成立。我们证明对 \(i = k + 1\) 成立。(1) 对 \(i = k + 1\) 成立是因为每个距离为 \(k + 1\) 的顶点都与某个距离为 \(k\) 的顶点相邻，因此由归纳假设 (1)，它会在第 \(k\) 次迭代中被加入 \(L_{k+1}\)。(2) 成立是因为没有距离为 \(k + 2\) 或更远的顶点能与距离为 \(k\) 或更小的顶点相邻，因此在第 \(k\) 次迭代中加入任何 \(L_{k+1}\) 的顶点只能是那些距离恰好为 \(k + 1\) 的顶点。</p>
+<p><strong>(b) 解：</strong> 初始化 visited 花费 \(O(n)\) 时间。for 循环的第 \(i\) 次迭代花费 \(O\!\left(\sum_{v \in L_i} \delta(v)\right)\) 时间，其中 \(\delta(v)\) 是 \(v\) 的度。由于没有 \(v\) 出现在多个 \(L_i\) 中，总时间为 \(O\!\left(n + \sum_{v \in V} \delta(v)\right) = O(n + m)\)。</p>
+<p><strong>(c) 解：</strong> 一条由 \(w_e\) 条无权边组成的路径。见下图示例（有向图）：</p>
+<blockquote>
+<p>图示：有向图中，原权重为 \(w_e\) 的边 \(e\) 被替换为 \(w_e\) 条连续无权边构成的路径。</p>
+</blockquote>
+<p><strong>(d) 解：</strong> 运行时间为 \(O\!\left(\sum_{e \in E} w_e\right)\)，因为 \(G'\) 有 \(\sum_{e \in E} w_e\) 条边。所需位数为 \(\Theta\!\left(\sum_{e \in E} \log w_e\right)\)。因此，尽管该算法的运行时间看起来像多项式，但当某些 \(w_e\) 很大时，它花费的时间是指数级于输入规模的。</p></div><p class="problem-source">解答来源：<code>dis04-sol.pdf</code> · 10-12 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis04.pdf</code> · 7-8 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis04.pdf</code></li>
+      <li><code>dis04-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

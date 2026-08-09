@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Homework 9 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 作业 9</p>
+    <h1>作业 9</h1>
+    <p class="lede">UC Berkeley CS 170 Fall 2023 第九次作业，涵盖线性规划标准型、对偶、网络流残差图、最大流修复、流分解、霍夫曼编码与线性规划，以及 Edmonds-Karp 与最小割编程题。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>linear programming</li><li>canonical form</li><li>dual LP</li><li>network flow</li><li>residual graph</li><li>Edmonds-Karp</li><li>min cut</li><li>flow decomposition</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>hw09.pdf</code>、<code>hw09-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 8 道大题。本地官方解答已收录 7/8 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>hw09.pdf</code>、<code>hw09-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>学习小组</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>列出你的学习小组中所有成员的姓名和 SID（学生编号）。如果你没有合作者，必须明确写出 "none"。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>这是签到题，照实填写即可；没有合作者就写 none。</p>
+<p>记得也把后续每道题的推理写清楚，方便助教追溯思路。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>标准型线性规划</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>回顾：任意线性规划都可以化为更受约束的<strong>标准型（canonical form）</strong>：所有变量非负，约束均为 \(\le\) 不等式，目标为最大化代价函数。</p>
+<p>更正式地，变量为 \(x_i\)。目标是 \(\max c^\top x = \max \sum_i c_i x_i\)，其中 \(c_i\) 为常数。第 \(j\) 个约束为 \(\sum_i a_{ij} x_i \le b_j\)，其中 \(a_{ij}, b_j\) 为常数。此外还有 \(x_i \ge 0\)。</p>
+<p>一个标准型 LP 示例：</p>
+<p>\[
+\begin{aligned}
+\text{maximize}\quad &amp; 5x_1 + 3x_2 \\
+\text{subject to}\quad &amp;
+\begin{cases}
+x_1 + x_2 - x_3 \le 1 \\
+-(x_1 + x_2 - x_3) \le -1 \\
+-x_1 + 2x_2 + x_4 \le 0 \\
+-(-x_1 + 2x_2 + x_4) \le 5 \\
+x_1, x_2, x_3, x_4 \ge 0
+\end{cases}
+\end{aligned}
+\]</p>
+<p>对于下面的各个子问题，描述应如何修改才能使之满足标准型。若不可能做到，请给出理由。各子问题相互独立。</p>
+<p>(a) 最小化目标：\(\min \sum_i c_i x_i\)</p>
+<p>(b) 变量下界：\(x_1 \ge b_1\)</p>
+<p>(c) 有界变量：\(b_1 \le x_1 \le b_2\)</p>
+<p>(d) 等式约束：\(x_2 = b_2\)</p>
+<p>(e) 更多等式约束：\(x_1 + x_2 + x_3 = b_3\)</p>
+<p>(f) 绝对值约束：\(|x_1 + x_2| \le b_2\)，其中 \(x_1, x_2 \in \mathbb{R}\)</p>
+<p>(g) 另一绝对值约束：\(|x_1 + x_2| \ge b_2\)，其中 \(x_1, x_2 \in \mathbb{R}\)</p>
+<p>(h) 最小化最大值目标：\(\min \max(x_1, x_2)\)</p>
+<p>提示：使用一个哑变量（dummy variable）！</p>
+<p>(i) 无界变量：\(x_4 \in \mathbb{R}\)</p>
+<p>提示：如何用两个正数的运算来表示任意实数？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>标准型要求：目标为最大化、约束为 \(\le\)、变量 \(\ge 0\)。逐一检查当前形式违反了哪条规则，再作对应变换。</p>
+<p>对于目标方向，取负即可反转；对于下界，不等式两端乘 \(-1\) 要翻转方向；对于同时有上下界的变量或等式，可拆成两个不等式。绝对值要分情况讨论，并记得把自由变量拆成两个非负变量之差。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 目标取负：\(\max \left(-\sum_i c_i x_i\right)\)。</p>
+<p>(b) 不等式两端乘 \(-1)\) 并翻转方向：\(-x_1 \le -b_1\)。</p>
+<p>(c) 拆成两个不等式：\(-x_1 \le -b_1\) 且 \(x_1 \le b_2\)。</p>
+<p>(d) 拆成两个不等式：\(x_2 \le b_2\) 且 \(-x_2 \le -b_2\)。</p>
+<p>(e) 拆成两个不等式：\(x_1 + x_2 + x_3 \le b_3\) 且 \(-x_1 - x_2 - x_3 \le -b_3\)。</p>
+<p>(f) 先把绝对值拆成线性约束：\(x_1 + x_2 \le b_2\) 且 \(-x_1 - x_2 \le b_2\)；再令 \(x_1 = x_1^+ - x_1^-\)，\(x_2 = x_2^+ - x_2^-\)，其中 \(x_1^+, x_1^-, x_2^+, x_2^- \ge 0\)，代入得到：
+\[
+\begin{cases}
+(x_1^+ - x_1^-) + (x_2^+ - x_2^-) \le b_2 \\
+-(x_1^+ - x_1^-) - (x_2^+ - x_2^-) \le b_2
+\end{cases}
+\]</p>
+<p>(g) 不可能。因为 \(|x_1 + x_2| \ge b_2\) 等价于 \((x_1 + x_2 \ge b_2) \cup (x_1 + x_2 \le -b_2)\)，即两个半空间的<strong>并集</strong>；但线性规划只能表达约束的<strong>交集</strong>（除非 \(b_2 = 0\)，否则二者不能同时成立），所以无法写成标准型。</p>
+<p>(h) 引入哑变量 \(t\)，改写为：
+\[
+\begin{aligned}
+\text{minimize}\quad &amp; t \\
+\text{subject to}\quad &amp; x_1 \le t,\; x_2 \le t
+\end{aligned}
+\]
+再对目标取负转为最大化：\(\max (-t)\)，约束为 \(x_1 \le t,\; x_2 \le t\)。</p>
+<p>(i) 用两个非负变量之差表示：令 \(x_4 = x_4^+ - x_4^-\)，其中 \(x_4^+ \ge 0,\; x_4^- \ge 0\)，代入原规划即可。</p></div><p class="problem-source">解答来源：<code>hw09-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>烘焙师</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你是一名烘焙师，出售布朗尼（brownies）和饼干（cookies）的批次（目前还没有 brookies……）。每批布朗尼需要 4 千克巧克力（chocolate）和 2 个鸡蛋（eggs）；每批饼干需要 1 千克巧克力和 3 个鸡蛋。你共有 80 千克巧克力和 90 个鸡蛋。每售出一批布朗尼可获利 60 美元，每售出一批饼干可获利 30 美元。目标是决定生产多少批布朗尼和饼干以使利润最大。</p>
+<p>(a) 将该问题表述为一个线性规划问题，即写出一个（标准型）线性规划，使其解给出本题答案。画出可行域（feasible region），并用单纯形法（Simplex）求解。</p>
+<p>(b) 设每批布朗尼的利润变为 \(C\) 美元，每批饼干的利润仍为 30 美元。对上一问中列出的每个顶点，给出使得该顶点为最优解的 \(C\) 的取值范围。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 二维可行域，含坐标轴 x（布朗尼批数）与 y（饼干批数），约束线 4x+y=80 与 2x+3y=90，以及顶点 (20,0)、(15,20)、(0,30)。</h4><p>约束：4x+y=80, 2x+3y=90, x=0, y=0；顶点：(20,0), (15,20), (0,30)；目标函数在 (15,20) 取最大值 1500。</p><p class="problem-source">来源：<code>hw09.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先定义变量（布朗尼批数 \(x\)、饼干批数 \(y\)），列出约束：巧克力和鸡蛋的消耗不超过库存，且变量非负。</p>
+<p>(b) 问可比较相邻顶点处的目标函数值，列不等式组求解；也可从几何角度理解：目标向量 \((C, 30)\) 随 \(C\) 旋转，最优解沿可行域边界滑动。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 设 \(x\) 为布朗尼批数，\(y\) 为饼干批数。</p>
+<p>\[
+\begin{aligned}
+\text{maximize}\quad &amp; 60x + 30y \\
+\text{subject to}\quad &amp;
+\begin{cases}
+4x + y \le 80 \\
+2x + 3y \le 90 \\
+x \ge 0 \\
+y \ge 0
+\end{cases}
+\end{aligned}
+\]</p>
+<p>可行域的顶点为 \((x=20, y=0)\)、\((x=15, y=20)\)、\((x=0, y=30)\)。目标函数在 \((x=15, y=20)\) 处取得最大值：</p>
+<p>\[60 \cdot 15 + 30 \cdot 20 = 1500\]</p>
+<p>即生产 15 批布朗尼和 20 批饼干，可获最大利润 1500 美元。</p>
+<p>(b) 对每个顶点，写出其目标值不小于相邻顶点目标值的不等式：</p>
+<ul>
+<li>
+<p>\((x=0, y=30)\)：当 \(C \le 20\) 时最优。</p>
+</li>
+<li>
+<p>\((x=15, y=20)\)：当 \(20 \le C \le 120\) 时最优。</p>
+</li>
+<li>
+<p>\((x=20, y=0)\)：当 \(120 \le C\) 时最优。</p>
+</li>
+</ul>
+<p>几何解释：当 \(C\) 增大时，向量 \((C, 30)\) 更指向 \(x\) 轴方向，最优解随之向 \(x\) 轴方向移动。当 \(C = 20\) 或 \(C = 120\) 时，向量 \((C, 30)\) 与某条约束垂直，该约束上存在多个最优解。</p></div><p class="problem-source">解答来源：<code>hw09-sol.pdf</code> · 4-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>代餐</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Jonny 正在为南极企鹅筹备一个"计算机科学理论导论"通宵夏令营。企鹅饥饿时解题能力下降，因此 Jonny 希望确保紧急食物来源，以防北极熊溜进冰屋把食物吃光。可惜预算紧张，为了容纳尽可能多的企鹅，他需要在满足企鹅最低营养需求的前提下使食物花费最少。</p>
+<p>每只企鹅每天需要至少 600 卡路里的蛋白质（protein）、800 卡路里的碳水化合物（carbs）和 500 卡路里的脂肪（fat）。Jonny 考虑购买三种食物：三文鱼（salmon）、面包（bread）和鱿鱼（squid）。其成分如下表：</p>
+<table>
+<thead>
+<tr>
+<th>食物</th>
+<th>每磅价格（美元）</th>
+<th>蛋白质卡路里/磅</th>
+<th>碳水卡路里/磅</th>
+<th>脂肪卡路里/磅</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>三文鱼</td>
+<td>6</td>
+<td>400</td>
+<td>0</td>
+<td>150</td>
+</tr>
+<tr>
+<td>面包</td>
+<td>1</td>
+<td>50</td>
+<td>300</td>
+<td>25</td>
+</tr>
+<tr>
+<td>鱿鱼</td>
+<td>8</td>
+<td>300</td>
+<td>100</td>
+<td>200</td>
+</tr>
+</tbody>
+</table>
+<p>目标是找到满足每日营养需求的最便宜组合。</p>
+<p>(a) 将该问题表述为一个线性规划。</p>
+<p>(b) 写出 (a) 中线性规划的对偶（dual）。</p>
+<p>(c) 假设现在有一位药剂师想为三种药丸定价，企图让我们买药丸替代食物。每种药丸恰好提供蛋白质、碳水化合物、脂肪中的一种。从药剂师的角度，把对偶变量、目标和约束解释为一个优化问题。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 食物成分表：三文鱼、面包、鱿鱼每磅价格、蛋白质/碳水/脂肪卡路里。</h4><p>三文鱼：价格 6、蛋白质 400、碳水化合物 0、脂肪 150；面包：价格 1、蛋白质 50、碳水化合物 300、脂肪 25；鱿鱼：价格 8、蛋白质 300、碳水化合物 100、脂肪 200。</p><p class="problem-source">来源：<code>hw09.pdf</code> · 4</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 设三种食物的磅数为目标变量，营养需求为下界约束，总价格为目标函数。</p>
+<p>(b) 每个营养约束对应一个对偶变量；原问题最小化、约束为 \(\ge\)，对偶即为最大化、约束为 \(\le\)。</p>
+<p>(c) 把对偶变量解释为每卡路里营养的"价格"，约束保证药丸组合不比对应食物更贵。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 设 \(a, b, c\) 分别为三文鱼、面包、鱿鱼（squid）的磅数。</p>
+<p>\[
+\begin{aligned}
+\text{minimize}\quad &amp; 6a + b + 8c \\
+\text{subject to}\quad &amp;
+\begin{cases}
+400a + 50b + 300c \ge 600 \\
+300b + 100c \ge 800 \\
+150a + 25b + 200c \ge 500 \\
+a, b, c \ge 0
+\end{cases}
+\end{aligned}
+\]</p>
+<p>(b) 设 \(p, c, f\) 分别为对应蛋白质、碳水、脂肪约束的对偶变量。对偶为：</p>
+<p>\[
+\begin{aligned}
+\text{maximize}\quad &amp; 600p + 800c + 500f \\
+\text{subject to}\quad &amp;
+\begin{cases}
+400p + 150f \le 6 \\
+50p + 300c + 25f \le 1 \\
+300p + 100c + 200f \le 8 \\
+p, c, f \ge 0
+\end{cases}
+\end{aligned}
+\]</p>
+<p>(c) 对偶变量可解释为蛋白质、碳水、脂肪药丸每卡路里的价格。</p>
+<ul>
+<li>
+<p>目标：药剂师希望通过卖出满足我们营养需求的药丸来最大化总收入。</p>
+</li>
+<li>
+<p>约束：任何药丸组合的价格不得超过提供同等营养的食物每磅的价格（否则我们就会直接买那种食物而不是药丸）。</p>
+</li>
+</ul></div><p class="problem-source">解答来源：<code>hw09-sol.pdf</code> · 7-8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>残差图练习</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>(a) 考虑如下网络及其上的流。每条边标注了流量值（蓝色）和容量（黑色）。例如，边 \((s, a)\) 上当前推送 2 单位流量，容量为 7。</p>
+<p>请画出该流对应的残差图（residual graph）。</p>
+<p>(b) 给定网络 \(G = (V, E)\)，其边具有整数容量 \(c_e\)，以及从结点 \(s\) 到结点 \(t\) 的一个最大流 \(f\)。具体地，\(f\) 以每条边 \(e\) 上的整数流 \(\{f_e\}_{e \in E}\) 的形式给出。</p>
+<p>然而我们发现 \(G\) 中某条容量值标错了：对边 \((u, v)\)，我们使用了 \(c_{uv}\)，但实际应为 \(c_{uv} - 1\)。不幸的是，流 \(f\) 恰好将该边用满：\(f_{uv} = c_{uv}\)。若要修复，可以从头重跑 Ford-Fulkerson，但存在更快的方法。</p>
+<p>描述一个在 \(O(|V| + |E|)\) 时间内修复该网络最大流的算法。给出三部分解答（Main Idea / Proof of Correctness / Runtime）。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 原网络流图：结点 s, a, b, c, d, t，边标注流量（蓝）与容量（黑），例如 (s, a) 流量 2 容量 7。</h4><p>原题网络流图缺失，需从 hw09.pdf 第 5 页提取各边 (u,v)、流量 f_uv 与容量 c_uv，以及对应残差边。</p><p class="problem-source">来源：<code>hw09.pdf</code> · 5</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 对每条边，前向残差容量 = 容量 − 流量，反向残差容量 = 流量；只保留残差容量为正的边。</p>
+<p>(b) 错误仅让一条边多承载了 1 单位流。考虑由正流边构成的子图：若存在经过 \((u, v)\) 的简单环，可沿环反向推送 1 单位流来"抵消"；否则需要找从 \(s \to u\) 和从 \(v \to t\) 的两条不相交路径，再沿整条路径反向调整，最后检查是否还能从 \(s\) 增广到 \(t\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 残差图（重绘原图，对每条原边 \((x, y)\) 画出残差容量为正的边，前向为 \(c_{xy} - f_{xy}\)，反向为 \(f_{xy}\)）。由于原题网络流图缺失，需从原 PDF 第 5 页重绘原网络及其残差图；具体残差边依赖于原图各边的流量与容量。</p>
+<p>(b)</p>
+<p><strong>Main Idea</strong>：先构造残差图（此时 \((u, v)\) 仍用原容量 \(c_{uv}\)）。考虑所有正流边构成的子图 \(G' = (V', E')\)。尝试在 \(G'\) 中找一条从 \(v\) 到 \(u\) 的简单路径：</p>
+<ul>
+<li>
+<p>若存在，则得到一条经过 \((u, v)\) 的简单环，沿该环反向推送 1 单位流即可修复，且不破坏流守恒。</p>
+</li>
+<li>
+<p>若不存在，则必存在从 \(s\) 到 \(u\) 的路径 \(p_u\) 和从 \(v\) 到 \(t\) 的路径 \(p_v\)（用 DFS 找到）。将它们与 \((u, v)\) 拼接得到路径 \(p = p_u + (u, v) + p_v\)，沿 \(p\) 从 \(t\) 向 \(s\) 推送 1 单位流（即对 \(p\) 上每条正向边流量减 1，反向边流量加 1，\((v, u)\) 除外）。最后在新残差图上 DFS 判断是否存在 \(s\)-\(t\) 路径，若有则再推送 1 单位流。</p>
+</li>
+</ul>
+<p><strong>Proof of Correctness</strong>：</p>
+<ul>
+<li>
+<p>若 \(G'\) 中存在经过 \((u, v)\) 的简单环，由流守恒（\(\sum_v f_{uv} = \sum_w f_{vw}\)）可知沿该环推送流不破坏任何流性质。</p>
+</li>
+<li>
+<p>若不存在这样的环，因 \((u, v)\) 满载且流量为整数，存在从 \(v\) 到 \(t\) 的含至少 1 单位流的路径，从而残差图中有 \(t\) 到 \(v\) 的路径；同理有 \(u\) 到 \(s\) 的路径，且二者不相交，故算法能正确找到 \(p\)。</p>
+</li>
+<li>
+<p>新网络的最大流至多比原最大流少 1（因为只改变了 min-cut 上一条边的容量）。若存在简单环或反向推送后仍能增广，则 Ford-Fulkerson 一次迭代即可恢复 1 单位流（容量与流量均为整数）；否则最大流恰好减少 1，算法亦正确。</p>
+</li>
+</ul>
+<p><strong>Runtime</strong>：总时间为 \(O(|V| + |E|)\)，因为算法仅为常数次 DFS 或遍历边/结点：</p>
+<ol>
+<li>构造残差图：\(O(|V| + |E|)\)。</li>
+<li>构造 \(G'\)：\(O(|V| + |E|)\)。</li>
+<li>判断 \(G'\) 中是否存在含 \((u, v)\) 的简单环：\(O(|V| + |E|)\)。</li>
+<li>若存在，沿环反向推送 1 单位流：\(O(|E|)\)。</li>
+<li>若不存在，从 \(s\) 和 \(v\) 各运行一次 DFS 找 \(p_u = s \to u\) 和 \(p_v = v \to t\)：共 \(O(|V| + |E|)\)。</li>
+<li>沿 \(p\) 反向推送 1 单位流：\(O(|E|)\)。</li>
+<li>可能再增广一条路径：\(O(|V| + |E|)\)。</li>
+</ol></div><p class="problem-source">解答来源：<code>hw09-sol.pdf</code> · 9-11 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>（附加题）霍夫曼编码与线性规划</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>考虑如下针对字符 a, b, c, d 的霍夫曼编码（Huffman code）：a = 0, b = 10, c = 110, d = 111。</p>
+<p>设 \(f_a, f_b, f_c, f_d\) 分别表示某文件（仅含这些字符）中各字符所占的比例。写出一个以 \(f_a, f_b, f_c, f_d\) 为变量的线性规划，求解如下问题：能够生成该霍夫曼编码的 \(f_a, f_b, f_c, f_d\) 取何值时，会使该霍夫曼编码使用的每字符比特数（bits per character）最多？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>每字符比特数 = 平均码长 \(= f_a \cdot 1 + f_b \cdot 2 + f_c \cdot 3 + f_d \cdot 3\)。要使该编码成为对应频率下的霍夫曼编码，需对频率施加排序与合并约束，例如 \(f_a \ge f_b \ge f_c, f_d\) 且 \(f_c + f_d \le f_a\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>目标为最大化每字符比特数：</p>
+<p>\[\max\quad f_a + 2f_b + 3f_c + 3f_d\]</p>
+<p>约束：</p>
+<p>\[
+\begin{cases}
+f_a + f_b + f_c + f_d = 1 \\
+f_a, f_b, f_c, f_d \ge 0 \\
+f_a \ge f_b \ge f_c, f_d \\
+f_c + f_d \le f_a
+\end{cases}
+\]</p>
+<p>即 \(f_c \le f_b\)，\(f_d \le f_b\)，\(f_b \le f_a\)，\(f_c + f_d \le f_a\)（因算法选择先把 c, d 合并，再与 b 合并，而不是先把 a 合并）。</p>
+<p>标准型形式：</p>
+<p>\[
+\begin{aligned}
+\text{maximize}\quad &amp; f_a + 2f_b + 3f_c + 3f_d \\
+\text{subject to}\quad &amp;
+\begin{cases}
+f_a + f_b + f_c + f_d \le 1 \\
+-f_a - f_b - f_c - f_d \le -1 \\
+f_c - f_b \le 0 \\
+f_d - f_b \le 0 \\
+f_b - f_a \le 0 \\
+f_c + f_d - f_a \le 0 \\
+f_a, f_b, f_c, f_d \ge 0
+\end{cases}
+\end{aligned}
+\]</p>
+<p>注意倒数第二条约束写作 \(f_c + f_d - f_a \le 0\) 而非 \(f_c + f_d \le f_a\)，因为标准型要求变量全部在左侧、常数在右侧。</p></div><p class="problem-source">解答来源：<code>hw09-sol.pdf</code> · 12 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">7</span><strong>（附加题）流分解</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>设 \(G = (V, E)\) 为有向图，\(f\) 为图上任意一个 \(s\)-\(t\) 流。假设图中不存在所有边都满足 \(f_e &gt; 0\) 的有向环。设计一个算法，将 \(f\) 分解为至多 \(|E|\) 个路径流之和：即找出 \(s\)-\(t\) 路径 \(p_1, \dots, p_k\) 及对应流量值 \(F_1, \dots, F_k\)，使得：</p>
+<ul>
+<li>
+<p>路径数 \(k \le |E|\)；</p>
+</li>
+<li>
+<p>\(f\) 为这 \(k\) 个路径流之和：对每条边 \(e\)，若 \(P_e\) 为包含 \(e\) 的路径集合，则 \(\sum_{p_i \in P_e} F_i = f_e\)。</p>
+</li>
+</ul>
+<p>例如在下图（每条边标注 \(f_e\)）中，可分解为 \(p_1 = ((A,B),(B,C),(C,D))\)，\(p_2 = ((A,B),(B,D))\)，其中 \(F_1 = 1\)，\(F_2 = 2\)。</p>
+<p>给出算法描述，并简要说明为何至多产生 \(|E|\) 条路径。</p>
+<p>提示：Ford-Fulkerson 是怎样工作的？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 示例流图：结点 A, B, C, D，边 (A,B) 流量 3，(B,C) 流量 1，(B,D) 流量 2，(C,D) 流量 1。</h4><p>A-&gt;B (3), B-&gt;C (1), B-&gt;D (2), C-&gt;D (1)。分解：p1 = A-B-C-D (F1=1), p2 = A-B-D (F2=2)。</p><p class="problem-source">来源：<code>hw09.pdf</code> · 7</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>不断在正流边上找一条 \(s\)-\(t\) 路径，取路径上最小流量作为该路径流的值，并从路径各边减去该值。</p>
+<p>每次迭代至少让一条边流量归零，故总迭代次数不超过正流边数，从而路径数 \(\le |E|\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>算法</strong>：当 \(|f| &gt; 0\) 时重复：</p>
+<ol>
+<li>仅用满足 \(f_e &gt; 0\) 的边找一条 \(s\)-\(t\) 路径 \(p\)。</li>
+<li>令 \(F = \min_{e \in p} f_e\)（即路径上最小流量）。</li>
+<li>将 \(p\) 加入路径集合，对应流量值为 \(F\)。</li>
+<li>对 \(p\) 上每条边 \(e\)，令 \(f_e \leftarrow f_e - F\)。</li>
+</ol>
+<p><strong>解释</strong>：每轮迭代至少让一条边的流量变为 0，因此正流边数每轮至少减 1。初始正流边数至多为 \(|E|\)，故至多运行 \(|E|\) 轮，输出至多 \(|E|\) 条路径。</p></div><p class="problem-source">解答来源：<code>hw09-sol.pdf</code> · 13 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 7 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">8</span><strong>编程题：最大流 / 最小割</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>本周编程题将实现最大流的 Edmonds-Karp 算法（Edmonds-Karp algorithm），并学习如何由最大流解计算最小割（Minimum Cut）。</p>
+<p>访问 notebook 的两种方式：</p>
+<ol>
+<li>本地：从编程作业仓库 <code>https://github.com/Berkeley-CS170/cs170-fa23-coding</code> clone（或 pull）并进入 <code>hw09</code> 文件夹，参见 <code>README.md</code> 配置本地环境。</li>
+<li>Datahub：点击对应链接并进入 <code>hw09</code> 文件夹，在 Berkeley DataHub 上完成。</li>
+</ol>
+<p><strong>注意</strong>：</p>
+<ul>
+<li>
+<p><strong>提交说明</strong>：请下载完成后的 <code>.zip</code> 提交文件，上传到 Gradescope 的 "Homework 9 Coding Portion" 作业。</p>
+</li>
+<li>
+<p><strong>OH/HWP 说明</strong>：课程指定的编程助教在 office hour 和 homework party 提供概念与调试帮助。</p>
+</li>
+<li>
+<p><strong>Edstem 说明</strong>：概念性问题请在公共帖子提问；如需调试帮助，先尝试公共帖。发帖时请：
+  1. 描述你在提问前已采取的调试步骤；
+  2. 描述你遇到的具体错误；
+  3. 提供少量测试用例，以及期望输出与实际输出。
+  若工作人员要求你改为私密帖，请附上以上所有内容及完整函数实现。</p>
+</li>
+<li>
+<p><strong>学术诚信说明</strong>：我们意识到部分算法的代码可能在网上容易获得，但强烈建议不要直接复制，而应参考 notebook 中提供的资源自行实现。我们也承认某些算法的实现方式可能有限，你的解答可能与其他网上解答相似。</p>
+</li>
+</ul>
+<p><strong>0.1 网络流：Edmonds-Karp</strong></p>
+<p>安装依赖并导入库（使用 networkx、numpy、otter 等），加载 <code>generated_testcases.pkl</code> 测试用例，实现 <code>rand_graph(size=None)</code> 生成随机有向图（边随机赋予 <code>capacity</code> 与初始 <code>flow=0</code>）。</p>
+<p>Edmonds-Karp 是 Ford-Fulkerson 的一种确定化实现：用 BFS 找增广路径（augmenting path），沿路径增广，重复直到不存在增广路径。</p>
+<p><strong>Q1) 找增积路径（Find Augmenting Path）</strong>（3 分）</p>
+<p>实现 <code>bfs_augmenting_path(g, s, t)</code>：用 BFS 找出一条从 \(s\) 到 \(t\) 且仍有可用流量（<code>capacity &gt; flow</code>）的路径，返回结点列表（首尾为 \(s, t\)）；若不存在则返回空列表。</p>
+<p><strong>Q2) Edmonds-Karp</strong></p>
+<p>实现 <code>edmonds_karp(g, s, t)</code>：返回 <code>(流量, 最终图)</code>。提示：先实现辅助函数 <code>augment(g, path)</code> 计算瓶颈并更新正反向边流量；注意不要修改原图 <code>G</code>（可用 <code>g.copy()</code>）；可利用 <code>nx.algorithms.flow.build_residual_network</code>。</p>
+<p><strong>Q3) 最小割（Min-Cut）</strong></p>
+<p>实现 <code>find_min_cut(g, s, t)</code>：返回包含 \(s\) 所在割集 \(S\) 的所有结点。提示：在最大流后的残差图中，从 \(s\) 沿 <code>flow &gt; 0</code> 的边进行遍历，可达结点均属 \(S\)。</p>
+<p><strong>0.2 提交</strong></p>
+<p>按顺序运行所有 cell 后再运行导出 cell，生成 <code>.zip</code> 提交文件。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>Q1 用 deque 做 BFS，入队时检查 <code>capacity &gt; flow</code>。</p>
+<p>Q2 的 <code>augment</code> 函数先扫一遍路径求最小残差容量，再扫一遍更新正反向边。Q3 在 <code>edmonds_karp</code> 返回的残差图上从 <code>s</code> 做 DFS/BFS，只走 <code>flow &gt; 0</code> 的边。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>本题需提交代码；代码实现请参见 <code>hw09.pdf</code> 第 8 页 notebook 中 BEGIN SOLUTION 与 END SOLUTION 之间的参考实现。核心思路：</p>
+<ul>
+<li>
+<p><code>bfs_augmenting_path</code>：标准 BFS，维护 <code>visited</code> 集合与路径，遇到 <code>t</code> 即返回；</p>
+</li>
+<li>
+<p><code>augment</code>：先求瓶颈 <code>flow = min(capacity - flow)</code>，再对路径上每条边 <code>flow += 增广量</code>、反向边 <code>flow -= 增广量</code>；</p>
+</li>
+<li>
+<p><code>edmonds_karp</code>：循环调用 BFS 与 <code>augment</code> 直到无增广路径；</p>
+</li>
+<li>
+<p><code>find_min_cut</code>：在残差图上从 <code>s</code> 出发沿 <code>flow &gt; 0</code> 的边遍历，可达结点集即为 \(S\)。</p>
+</li>
+</ul></div><p class="problem-source">解答来源：<code>hw09.pdf</code> · 8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw09.pdf</code> · 8 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>hw09.pdf</code></li>
+      <li><code>hw09-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

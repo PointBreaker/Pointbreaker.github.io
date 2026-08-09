@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CS 170 Fall 2023 Homework 8 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 作业 8</p>
+    <h1>CS 170 2023年秋季 作业8</h1>
+    <p class="lede">CS 170 2023年秋季作业8包含两道题：第1题为学习小组成员登记；第2题为鸡蛋掉落问题的复习，通过定义新子问题 \(M(x,m)\) 重新推导递推关系，并在此基础上计算最少扔蛋次数 \(f(n,m)\)，同时讨论空间优化与鸡蛋有2条命的变体。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>dynamic programming</li><li>egg drop</li><li>recurrence</li><li>space optimization</li><li>knights</li><li>independent set</li><li>tree DP</li><li>bitmask</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>hw08.pdf</code>、<code>hw08-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>hw08.pdf</code>、<code>hw08-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>学习小组成员</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>列出你的学习小组成员的姓名和 SID（学生证号）。如果你没有合作者，必须明确写出 "none"。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>本题无算法提示，按要求如实填写即可。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>本题无需算法解答，只需如实填写本人学习小组成员的姓名与 SID；若无合作者，填写 "none" 即可。</p></div><p class="problem-source">解答来源：<code>hw08-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw08.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>鸡蛋掉落（复习）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4>回顾
+<p>重新回顾作业 7 中的鸡蛋掉落（Egg Drop）问题：</p>
+<p>你有 \(m\) 个相同的鸡蛋和一栋 \(n\) 层的大楼。你需要找出最高的楼层 \(\ell \in \{0, 1, 2, \ldots, n\}\)，使得从该楼层扔下鸡蛋不会碎。鸡蛋从楼层 \(\ell\) 或更低楼层扔下时永远不会碎，而从楼层 \(\ell + 1\) 或更高楼层扔下时一定会碎。（\(\ell = 0\) 表示鸡蛋总是碎）。一旦鸡蛋碎了，就不能再使用。但如果鸡蛋没碎，可以重复使用。</p>
+<p>设 \(f(n, m)\) 为找出 \(\ell\) 所需的最少扔蛋次数（无论 \(\ell\) 取何值）。</p>
+<p>我们不直接求解 \(f(n, m)\)，而是定义一个新的子问题 \(M(x, m)\)：表示在使用 \(m\) 个鸡蛋、最多扔 \(x\) 次的情况下，能够保证找出 \(\ell\) 的最大楼层数。</p>
+<p>例如，\(M(2, 2) = 3\)，因为一栋 3 层的大楼是能用 2 个鸡蛋、在最多 2 次扔蛋内保证找出 \(\ell\) 的最高大楼。</p>
+问题
+<p><strong>(a)</strong> 找出 \(M(x, m)\) 的递推关系，使得它能在给定先前子问题的情况下以常数时间计算。简要证明你的递推式。</p>
+<blockquote>
+<p>提示：作为起点，如果鸡蛋碎了，第一次从哪一层楼扔下鸡蛋仍然能保证用剩下的 \(x-1\) 次扔蛋和 \(m-1\) 个鸡蛋解决问题？</p>
+</blockquote>
+<p><strong>(b)</strong> 给出一个计算 \(M(x, m)\) 的算法，给定 \(x\) 和 \(m\)，并分析其运行时间。</p>
+<p><strong>(c)</strong> 修改你在 (b) 中的算法，计算 \(f(n, m)\)，给定 \(n\) 和 \(m\)。</p>
+<blockquote>
+<p>提示：如果我们能在多于 \(n\) 层楼的情况下找出 \(\ell\)，那么我们也能在恰好 \(n\) 层楼的情况下找出 \(\ell\)。</p>
+</blockquote>
+<p><strong>(d)</strong> 证明 (c) 中算法的运行时间是 \(O(nm)\)。与你上周作业中找到的运行时间进行比较。</p>
+<p><strong>(e)</strong> 证明 (c) 中的算法可以仅用 \(O(m)\) 的空间实现。</p>
+<p><strong>(f)</strong> 假设我们有一台特殊的机器，能够在鸡蛋第一次碎后“复活”它，使其可以再次使用。换句话说，每个鸡蛋有 2 条命。基于这个问题的修改，为 \(M\) 写出新的递推关系。</p>
+<blockquote>
+<p>提示：你可能需要为你的子问题添加一个额外的参数。</p>
+</blockquote></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑第一次扔鸡蛋时，选择哪一层能在“碎”和“不碎”两种情况下覆盖最多的总楼层数；关注 \(M(x,m)\) 在两种情形下的分解方式。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong></p>
+<p>\[ M(x, m) = M(x-1, m-1) + M(x-1, m) + 1 \]</p>
+<p>我们首先推导 \(i\)，即在给定 \(x\) 次扔蛋和 \(m\) 个鸡蛋的情况下，第一次扔鸡蛋的最优楼层。如果鸡蛋从第 \(i\) 层扔下后碎了，问题就转化为第 \(0\) 层到第 \(i-1\) 层，我们可以用剩下的 \(x-1\) 次扔蛋和 \(m-1\) 个鸡蛋解决这个子问题。对于 \(x-1\) 次扔蛋和 \(m-1\) 个鸡蛋，最优策略可以区分 \(M(x-1, m-1) + 1\) 层楼，所以我们应该选择 \(i = M(x-1, m-1) + 1\)。</p>
+<p>另一方面，如果鸡蛋没碎，问题就转化为第 \(i\) 层到第 \(n\) 层，用 \(x-1\) 次扔蛋和 \(m\) 个鸡蛋。使用这么多扔蛋次数和鸡蛋能区分的最大楼层数是 \(M(x-1, m) + 1\)，所以我们可以解决 \(n\) 大到 \(i + M(x-1, m) = M(x-1, m-1) + M(x-1, m) + 1\) 的子问题。</p>
+<p><strong>(b)</strong> 对于基本情况，我们取 \(M(0, m) = 0\)（对任意 \(m\)）和 \(M(x, 0) = 0\)（对任意 \(x\)）。从 \(x = 1\) 开始，我们计算所有 \(1 \le m' \le m\) 的 \(M(x, m')\)，然后对递增的 \(x\) 重复此过程，直到计算出所有需要的 \(M(x, m)\)。返回 \(M(x, m)\)。</p>
+<p>我们计算 \(xm\) 个子问题，每个子问题花费常数时间，所以总运行时间是 \(\Theta(xm)\)。</p>
+<p><strong>(c)</strong> 同样地，从 \(x = 1\) 开始，我们计算所有 \(1 \le m' \le m\) 的 \(M(x, m')\)，并对递增的 \(x\) 重复此过程。这次，我们第一次找到满足 \(M(x, m) \ge n\) 的 \(x\) 时停止，并返回这个 \(x\) 值。</p>
+<p><strong>(d)</strong> 因为只有 \(n\) 层楼，最优扔蛋次数 \(x\) 最多为 \(n\)。由 (b) 我们知道运行时间是 \(\Theta(xm)\)，所以如果 \(x \le n\)，我们知道运行时间必须是 \(O(nm)\)。（这是一个非常宽松的上界，但比直接使用 \(f(n, m)\) 的递推式得到的朴素 \(O(n^2m)\) 时间算法要好得多。）</p>
+<p><strong>(e)</strong> 当我们在计算所有 \(1 \le m' \le m\) 的 \(M(x, m')\) 时，我们只需要存储前一轮 \(x-1\) 对应的 \(M(x-1, m')\) 和当前轮 \(x\) 对应的 \(M(x, m')\)，即我们只需要存储 \(O(m)\) 个值。特别地，在计算出所有 \(m'\) 的 \(M(x, m')\) 后，我们可以删除存储的 \(M(x-1, m')\) 值。</p>
+<p><strong>(f)</strong> 设 \(M_1(x, m)\) 为当第 \(m\) 个鸡蛋还剩 1 条命时的 \(M(x, m)\)，\(M_2(x, m)\) 为当第 \(m\) 个鸡蛋还剩 2 条命时的 \(M(x, m)\)。那么我们的递推关系如下：</p>
+<p>\[ M_1(x, m) = M_2(x-1, m-1) + M_1(x-1, m) + 1 \]</p>
+<p>\[ M_2(x, m) = M_1(x-1, m) + M_2(x-1, m) + 1 \]</p>
+<p><strong>备选解法：</strong> 注意这个修改实际上使我们的鸡蛋数量翻倍。因此，我们根本不需要修改递推关系，只需返回 \(M(x, 2m)\) 作为答案。</p></div><p class="problem-source">解答来源：<code>hw08-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw08.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>骑士问题 (Knightmare)</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给出一个动态规划算法，计算在 \(L \times H\)（其中 \(L &lt; H\)）的棋盘上放置骑士的方案数，使得任意两个骑士之间不能互相攻击（棋盘上可以有任意数量的骑士，包括零个）。骑士可以按照 \(2 \times 1\) 的 L 形在任何方向移动。</p>
+<p>提供四部分解答。算法的运行时间应为 \(O(2^{3L} L H)\)，结果对 1337 取模返回。</p>
+<p>提示：如果骑士位于第 \(i\) 行，它能影响棋盘上的哪些行？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑骑士的攻击范围会影响到哪些行，并思考如何用位串表示行状态。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>算法</strong>：我们使用长度为 \(L\) 的位串来表示棋盘每一行的配置（1 表示对应格子有骑士，0 表示没有）。</p>
+<p>算法的主要思想如下：我们解决 \((h-1) \times L\) 棋盘的有效配置数的子问题，并用它来解决 \(h \times L\) 的情况。注意，当我们逐行递增 \(h\) 时，第 \(h\) 行的骑士只会影响第 \(h+1\) 行和第 \(h+2\) 行的配置。因此，我们定义 \(K(h, u, v)\) 为前 \(h\) 行中，第 \((h-1)\) 行为 \(u\)、第 \(h\) 行为 \(v\) 的可能配置数，然后用动态规划解决此问题。</p>
+<p>如果按位串列表的对应方式放置骑士（第一行按第一个位串，第二行按第二个位串，依此类推）不会导致两个骑士互相攻击，则该位串列表是有效的。那么对于所有 \(u, v\) 对，\(K(2, u, v) = 1\) 当且仅当 \(u, v\) 有效，否则为 0。</p>
+<p>对于 \(K(h, v, w)\)，当 \(h &gt; 2\) 时：</p>
+<p>\[
+K(h, v, w) = \sum_{u: u,v,w \text{ 有效}} K(h-1, u, v) \bmod 1337
+\]</p>
+<p><strong>正确性证明</strong>：唯一的以行配置 \(u, v\) 结尾的 2 行骑士配置就是配置 \(u, v\) 本身。因此 \(K(2, v, w) = 1\) 当且仅当 \(u, v\) 有效，否则 \(K(2, v, w) = 0\)。</p>
+<p>对于 \(h &gt; 2\)，上述递推关系是正确的，因为对于任意以 \(v, w\) 结尾的有效 \(h\) 行配置，前 \(h-1\) 行必须是以 \(u, v\) 结尾的有效配置（对于某个 \(u\)），并且对于同一个 \(u\)，最后三行 \(u, v, w\) 也必须是有效配置。此外，这种 \(h\) 行配置与 \((h-1)\) 行配置之间的对应关系是双射。</p>
+<p><strong>运行时间分析</strong>：对于每一行，我们遍历该行所有可能的骑士配置，并对每个配置执行对所有可能有效的前两行配置的求和。检查配置是否有效需要 \(O(L)\) 时间。因此，计算单行子问题需要 \(O(2^{3L} L)\) 时间，总运行时间为 \(O(2^{3L} L H)\) 次操作。虽然可能的配置数量可能是指数级的（最多 \(2^{LH}\)），但我们只关心对 1337 取模的结果，这意味着所有数字都是固定大小的，因此对这些数字的算术运算是常数时间。最终运行时间为 \(O(2^{3L} L H)\)。</p>
+<p><strong>四部分解答</strong>：</p>
+<p>(a) <strong>子问题</strong>：\(f(h, u, v)\) 表示前 \(h\) 行中，第 \((h-1)\) 行配置为 \(u\)、第 \(h\) 行配置为 \(v\) 的有效配置数（对 1337 取模）。</p>
+<p>(b) <strong>递推关系与基本情况</strong>：当 \(h &gt; 2\) 时，\(f(h, v, w) = \sum_{u: u,v,w \text{ 有效}} f(h-1, u, v) \bmod 1337\)。基本情况为 \(f(2, u, v) = 1\) 当且仅当 \(u, v\) 有效，否则为 0。不需要其他基本情况。</p>
+<p>(c) <strong>正确性证明</strong>：见上述正确性证明。</p>
+<p>(d) <strong>运行时间与空间复杂度</strong>：运行时间为 \(O(2^{3L} L H)\)。对于空间复杂度，共有 \(O(H \cdot 2^{2L})\) 个子问题（\(H\) 行，第 \((H-1)\) 行有 \(2^L\) 种设置，第 \(H\) 行有 \(2^L\) 种设置）。每个子问题是对 1337 取模的配置数，上界为 1337，因此总空间为 \(O(2^{2L} H)\)。注意，由于每个子问题仅依赖于前一行的子问题，我们可以通过回收前面行的空间将空间减少 \(H\) 倍，降至 \(O(2^{2L})\)。</p></div><p class="problem-source">解答来源：<code>hw08-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw08.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>最大 k-独立集问题 (Max Independent Set Again)</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一棵有 \(n\) 个节点的连通树 \(T\) 和一个指定的根 \(r\)，每个顶点 \(v\) 有一个权重 \(A[v]\)。节点集合 \(S\) 是 \(T\) 的一个 \(k\)-独立集，如果 \(|S| = k\) 且 \(S\) 中任意两个节点在 \(T\) 中没有边相连。这样的集合的权重为 \(w(S) = \sum_{v \in S} A[v]\)。</p>
+<p>给定整数 \(k \leq n\)，你的任务是找到 \(T\) 的任意 \(k\)-独立集的最大可能权重。我们首先解决 \(T\) 是二叉树的特殊情况，然后将解法推广到一般树 \(T\)。</p>
+<p>(a) 假设 \(T\) 是二叉树，即每个节点最多有 2 个子节点。描述一个 \(O(nk^2)\) 算法解决此特殊情况，并分析其运行时间。不需要证明正确性和分析空间复杂度。</p>
+<p>(b) 现在考虑任意树 \(T\)，对每个节点的子节点数没有限制。描述如何添加最多 \(O(n)\) 个"虚拟"节点（权重为 0 的节点）将 \(T\) 转换为二叉树 \(T_b\)。</p>
+<p>(c) 利用 (a) 和 (b) 的解答，描述一个 \(O(nk^2)\) 算法解决一般情况（即 \(T\) 为任意树），并分析其运行时间。不需要证明正确性和分析空间复杂度。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑在树上使用动态规划，记录每个节点是否被选取的状态，并思考如何将节点配额分配给子树。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a) 算法描述</strong>：设 \(f_0[v][i]\) 表示以 \(v\) 为根的子树中，大小为 \(i\) 且 \(v\) 不在集合中的最大权重独立集。设 \(f_1[v][i]\) 表示以 \(v\) 为根的子树中，大小为 \(i\) 的整体最大权重独立集。最终答案为 \(f_1[r][k]\)。</p>
+<p>对于每个 \(v, i\)，我们用以下递推关系计算 \(f_b[v][i]\)（其中 \(b \in \{0, 1\}\)）：</p>
+<p>\[
+f_0[v][i] = \max_{0 \leq j \leq i} f_1[\text{left}(v)][j] + f_1[\text{right}(v)][i - j]
+\]</p>
+<p>\[
+f_1[v][i] = \max\left(f_0[v][i], \max_{0 \leq j \leq i-1} A[v] + f_0[\text{left}(v)][j] + f_0[\text{right}(v)][i - j - 1]\right)
+\]</p>
+<p>其中 \(\text{left}(v)\) 和 \(\text{right}(v)\) 分别是 \(v\) 的左子节点和右子节点。这里的思想是需要在左右子树之间"分配"独立集中的 \(k\) 个节点，同时跟踪 \(v\) 是否在独立集中以保持顶点独立性。</p>
+<p>基本情况：设 \(f_b[v][0] = 0\)（\(b \in \{0, 1\}\)），对于每个叶节点 \(\ell\) 和 \(j \in [k]\)，设 \(f_0[\ell][j] = 0\)，\(f_1[\ell][j] = A[\ell]\)。</p>
+<p>子问题的求解顺序是从叶节点到根节点，即后序遍历。</p>
+<p><strong>运行时间分析</strong>：对于每个 \(b \in \{0, 1\}\)，共有 \(nk\) 个子问题（\(v\) 可取 \(n\) 个值，\(j\) 可取 \(k\) 个值）。每个子问题需要 \(O(k)\) 时间，因为需要在 \(j \in [i]\) 或 \(j \in [i-1]\) 上取最大值。因此总运行时间为 \(2 \cdot nk \cdot O(k) = O(nk^2)\)。</p>
+<p><strong>(b) 转换方法</strong>：对于 \(T\) 中每个有超过两个子节点的节点 \(v\)，添加一个权重为 0 的虚拟节点作为 \(v\) 的右子节点，并将 \(v\) 除最左边外的所有子节点连接到该虚拟节点。递归执行此修改将得到一棵二叉树，同时添加最多 \(O(N)\) 个虚拟节点。</p>
+<p>例如，如果 \(T\) 是以下树（其中 \(A[v_i] = i\)）：</p>
+<pre><code>v1
+|\
+v2 v3 v4 v5
+</code></pre>
+<p>按照描述的过程后，我们将得到以下二叉树 \(T_b\)：</p>
+<pre><code>v1
+|\
+v2 vd
+   /\
+  vd v3
+     /\
+    v4 v5
+</code></pre>
+<p>其中所有虚拟节点 \(v_d\) 的 \(A[v_d] = 0\)。</p>
+<p><strong>(c) 推广到一般情况</strong>：为了解决一般 \(T\) 的问题，我们想用 (b) 将其转换为二叉树 \(T_b\)，然后在 \(T_b\) 上运行 (a) 的算法。但实际上我们必须调整 (a) 的递推关系以考虑新添加的虚拟节点！</p>
+<p>为此，我们需要定义虚拟节点的子问题，使其传播其父节点分配给它们的"状态"（即它们是否在 \(k\)-独立集中）。例如，在 (b) 的树示例中，我们希望如果 \(v_1\) 包含在 \(k\)-独立集中，则我们的算法将通过 \(v_d\) 传播非包含性，以确保 \(v_3, v_4, v_5\) 都不被包含。</p>
+<p><strong>算法描述</strong>：我们重新定义子问题如下：</p>
+<ul>
+<li>
+<p>\(f_0[v][i]\) = 以 \(v\) 为根的子树中，大小为 \(i\) 且 \(v\) 不在集合中的最大权重独立集</p>
+</li>
+<li>
+<p>\(f_1[v][i]\) = 以 \(v\) 为根的子树中，大小为 \(i\) 且 \(v\) 在集合中的最大权重独立集</p>
+</li>
+<li>
+<p>\(f[v][i]\) = 以 \(v\) 为根的子树中，大小为 \(i\) 的整体最大权重独立集</p>
+</li>
+</ul>
+<p>最终答案为 \(f[r][k]\)，其中 \(T_b\) 由 (b) 的过程从 \(T\) 得到。然后我们修改递推关系如下：</p>
+<p>\[
+f_0[v][i] = \begin{cases}
+\max_{0 \leq j \leq i} f[\text{left}(v)][j] + f[\text{right}(v)][i - j] &amp; \text{if } A[v] \neq 0 \\
+\max_{0 \leq j \leq i} f_0[\text{left}(v)][j] + f_0[\text{right}(v)][i - j] &amp; \text{if } A[v] = 0
+\end{cases}
+\]</p>
+<p>\[
+f_1[v][i] = \begin{cases}
+\max_{0 \leq j \leq i-1} A[v] + f_0[\text{left}(v)][j] + f_0[\text{right}(v)][i - j - 1] &amp; \text{if } A[v] \neq 0 \\
+\max_{0 \leq j \leq i} f_1[\text{left}(v)][j] + f_1[\text{right}(v)][i - j] &amp; \text{if } A[v] = 0
+\end{cases}
+\]</p>
+<p>\[
+f[v][i] = \max(f_0[v][i], f_1[v][i])
+\]</p>
+<p>基本情况和子问题的求解顺序与 (a) 相同。</p>
+<p><strong>运行时间分析</strong>：将 \(T\) 转换为 \(T_b\) 需要 \(O(|V| + |E|) = O(n)\) 时间。注意 \(T_b\) 比 \(T\) 多 \(O(n)\) 个节点（以及相应边），因此在 \(T_b\) 上运行 (a) 仍需要 \(O(nk^2)\) 时间。因此总运行时间为 \(O(n) + O(nk^2) = O(nk^2)\)。</p>
+<p><strong>替代解法</strong>：实际上有一种方法可以直接解决一般 \(T\) 的问题，即无需转换为二叉树。设 \(f_0\) 和 \(f_1\) 与 (a) 中定义相同。注意，为了计算 \(f_b[v][i]\)（\(b \in \{0, 1\}\)），我们需要考虑 \(v\) 的每个子节点的 \(f_{\bar{b}}\) 值。然而，如果 \(v\) 有多个子节点，我们还需要考虑在其子树之间分配 \(i\) 的所有可能方式。一种方法是计算额外的 DP 子问题。</p>
+<p>设 \(c_\alpha\) 为 \(v\) 的第 \(\alpha\) 个子节点（按某种顺序）。定义 \(g_1[v][\alpha][i]\) 为 \(c_0, \ldots, c_\alpha\) 的子树并集中的最大权重 \(k\)-独立集。类似地定义 \(g_0[v][\alpha][i]\)，附加约束为 \(c_0, \ldots, c_\alpha\) 都不在集合中。</p>
+<p>那么我们有以下递推关系：</p>
+<p>\[
+g_b[v][\alpha][i] = \begin{cases}
+f_b[c_0][i] &amp; \text{if } \alpha = 0 \\
+\max_{0 \leq j \leq i} g_b[v][\alpha - 1][j] + f_b[c_\alpha][i - j] &amp; \text{if } \alpha &gt; 0
+\end{cases}
+\]</p>
+<p>对于 \(b \in \{0, 1\}\)。假设 \(v\) 有 \(d(v)\) 个子节点。在如上计算 \(v\) 的 \(g\) 后，我们可以如下计算 \(i &gt; 1\) 时的 \(f[v][i]\)：</p>
+<p>\[
+f_0[v][i] = g_1[d(v)][i]
+\]</p>
+<p>\[
+f_1[v][i] = A[v] + \max(f_0[v][i], g_0[d(v)][i - 1])
+\]</p>
+<p><strong>运行时间分析</strong>：虽然 \(g_b\) DP 看起来像三维数组，但对于每个 \(v\) 只有 \(d(v)\) 个可能的 \(\alpha\) 值。由于 \(\sum_v d(v) = n - 1\)，我们只需要计算 \(O(nk)\) 个 \(g_b\) 值。因此，包括 \(g_b\) 在内，共有 \(O(nk) + O(nk) = O(nk)\) 个子问题，每个子问题需要 \(O(k)\) 时间。这产生总运行时间 \(O(nk) \cdot O(k) = O(nk^2)\)。</p></div><p class="problem-source">解答来源：<code>hw08-sol.pdf</code> · 4-7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw08.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">1</span><strong>树上的加权独立集</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在课堂上，我们学习了求解树上最大独立集的算法（可参考 https://people.eecs.berkeley.edu/~vazirani/algorithms/chap6.pdf#page=21 进行复习）。</p>
+<p>在本问题中，我们增加一些变化：假设每个顶点 \(i\) 有权重 \(w[i]\)，我们要找到总权重最大的独立集。此外，你必须使用<strong>自顶向下（top-down）</strong>的方法来实现算法。</p>
+<p>与课堂上讨论的算法只返回最大独立集的大小不同，这里要求你返回<strong>实际独立集中的顶点列表</strong>。为了找到实际的独立集，建议维护一个与 DP 数组分离的数组，帮助我们回溯重建实际集合（在 DP 表的每个条目中存储当前完整集合开销过大，会导致评测失败）。</p>
+<p><strong>提示</strong>：计算节点的子节点和孙节点时，可以复用之前作业中的代码。</p>
+<p><strong>函数签名</strong>：</p>
+<pre><code class="language-python">def max_independent_set(adjacency_list, weights):
+    """
+    Return a list containing the vertices in the maximum weighted independent set.
+
+    args:
+        adjacency_list: List[List[int]] = 树的邻接表
+        weights: List[int] = 顶点权重列表，weights[i] 为顶点 i 的权重
+
+    return:
+        List[int] = 最大加权独立集中顶点的标签列表
+    """
+</code></pre></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>通过 DFS 后序编号确定父子关系；自顶向下记忆化搜索，对每个节点记录选/不选两种情况的最大权重；用额外数组保存选择状态以便回溯重建独立集。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>算法思路</strong>：</p>
+<ol>
+<li>
+<p><strong>DFS 后序编号</strong>：对树进行 DFS，计算每个节点的后序编号 <code>post[u]</code>。对于边 \((u, v)\)，若 \(v\) 是 \(u\) 的子节点，则 <code>post[v] &lt; post[u]</code>。</p>
+</li>
+<li>
+<p><strong>自顶向下 DP</strong>：定义 <code>dp[u]</code> 为二元组 <code>(最大权重, 是否选择 u)</code>：</p>
+</li>
+</ol>
+<ul>
+<li>
+<p>选择 \(u\)：权重为 \(w[u] + \sum_{v \in \text{grandchildren}(u)} \text{dp}[v].\text{weight}\)</p>
+</li>
+<li>
+<p>不选择 \(u\)：权重为 \(\sum_{v \in \text{children}(u)} \text{dp}[v].\text{weight}\)</p>
+</li>
+<li>
+<p>取两者较大值</p>
+</li>
+</ul>
+<ol>
+<li><strong>回溯重建</strong>：从根节点开始，根据 <code>dp[u]</code> 中的选择标志决定：</li>
+</ol>
+<ul>
+<li>
+<p>若选择 \(u\)，将 \(u\) 加入独立集，递归检查孙节点</p>
+</li>
+<li>
+<p>若不选择 \(u\)，递归检查子节点</p>
+</li>
+</ul>
+<p><strong>代码实现</strong>：</p>
+<pre><code class="language-python">def max_independent_set(adjacency_list, weights):
+    """
+    Return a list containing the vertices in the maximum weighted independent set.
+    """
+    n = len(weights)
+    if n == 0:
+        return []
+
+    # DFS post number computation (modified from HW4)
+    def get_post(adj_list):
+        time, post, visited = 1, {}, set()
+        unvisited = lambda x: x not in visited
+        def explore(u):
+            nonlocal time
+            visited.add(u)
+            time += 1
+            for v in filter(unvisited, adj_list[u]):
+                explore(v)
+            post[u] = time
+            time += 1
+        for i in filter(unvisited, range(len(adj_list))):
+            explore(i)
+        return post
+
+    post = get_post(adjacency_list)
+
+    # helper function to get the children of node u based on DFS post numbers
+    def get_children(u):
+        yield from filter(lambda v: post[v] &lt; post[u], adjacency_list[u])
+
+    def get_grandchildren(u):
+        for v in get_children(u):
+            yield from get_children(v)
+
+    # initialize the DP array
+    dp = [None] * n
+
+    def independent_set_helper(u):
+        if dp[u] is None:
+            choices = (
+                (weights[u] + sum(independent_set_helper(v)[0] for v in get_grandchildren(u)), True),
+                (sum(independent_set_helper(v)[0] for v in get_children(u)), False),
+            )
+            dp[u] = max(choices)
+        return dp[u]
+
+    # compute the DP values (root doesn't really matter, we choose 0 for ease)
+    independent_set_helper(0)
+
+    # reconstruct the sequence starting from the root
+    independent_set = []
+    to_check = [0]
+    while to_check:
+        u = to_check.pop()
+        if dp[u][1]:
+            # u is included in the independent set, so its children are not.
+            independent_set.append(u)
+            to_check.extend(get_grandchildren(u))
+        else:
+            # u is not included in the independent set, so check its children.
+            to_check.extend(get_children(u))
+
+    return independent_set
+</code></pre>
+<p><strong>正确性证明</strong>（归纳法）：</p>
+<ul>
+<li>
+<p><strong>基础情况</strong>：叶子节点 \(u\)，<code>dp[u] = max((w[u], True), (0, False))</code>，显然最优。</p>
+</li>
+<li>
+<p><strong>归纳假设</strong>：假设对于 \(u\) 的所有子节点和孙节点，<code>dp</code> 值已正确计算。</p>
+</li>
+<li>
+<p><strong>归纳步骤</strong>：对于节点 \(u\)，若选择 \(u\) 则不能选择子节点，总权重为 \(w[u]\) 加所有孙节点的最优解之和；若不选择 \(u\) 则总权重为所有子节点的最优解之和。两者取最大即为以 \(u\) 为根的子树的最优解。</p>
+</li>
+</ul>
+<p><strong>复杂度分析</strong>：</p>
+<ul>
+<li>
+<p>时间：\(O(n)\)，每个节点仅访问一次，子节点和孙节点的枚举总计 \(O(n)\)。</p>
+</li>
+<li>
+<p>空间：\(O(n)\)，DP 数组和递归栈。</p>
+</li>
+</ul></div><p class="problem-source">解答来源：<code>hw08-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw08-sol.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>旅行商问题动态规划</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>现在实现旅行商问题（TSP）的动态规划算法。暴力解法即使在中等规模的测试用例上也会慢得无法忍受，但我们可以使用动态规划在稍微合理一些（但仍然是指数级）的时间内得到解（可参考第 14 讲讲义或 https://people.eecs.berkeley.edu/~vazirani/algorithms/chap6.pdf#page=20 复习）。</p>
+<p>与之前的问题一样，要求你返回<strong>实际的路径（tour）</strong>，而不是路径的代价。同样可以通过回溯子问题数组来重建路径。</p>
+<p><strong>实现注意</strong>：由于子问题定义中包含一个集合参数，不能只用二维数组存储子问题。建议将子问题存储在字典中，键为 \((S, i)\) 形式的元组，其中 \(i\) 表示返回起点前最后访问的城市，\(S\) 是已访问城市的集合。</p>
+<p>为确保键可哈希，建议使用 Python 内置的 <code>frozenset</code> 类来表示 \(S\)。<code>frozenset</code> 的使用方式与普通集合相同，但它是不可变且可哈希的（详见 https://docs.python.org/3/library/stdtypes.html#frozenset）。</p>
+<p><strong>替代方法</strong>：使用二维数组，但用位掩码（bitmask）表示已访问城市集合。\(S\) 表示为 \(n\) 位无符号整数，第 \(i\) 位为 1 当且仅当第 \(i\) 个城市在集合中。</p>
+<p>与之前一样，在每个步骤存储整个路径太耗内存会导致评测失败。建议维护一个单独的字典或数组，存储较少的信息但仍能帮助你重建路径。</p>
+<p><strong>函数签名</strong>：</p>
+<pre><code class="language-python">def tsp_dp(dist_arr):
+    """Compute the exact solution to the TSP using dynamic programming and returns the optimal path.
+
+    Args:
+        dist_arr (ndarray[int]): n x n 距离矩阵，dist_arr[i][j] 为城市 i 到城市 j 的距离。
+
+    Returns:
+        List[int]: 表示最优路径的城市索引列表。
+    """
+</code></pre></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>用 frozenset 或位掩码表示已访问城市集合，DP 状态 (S, i) 表示从城市 i 出发、经过集合 S 所有城市后返回起点的最小代价，用额外字典记录前驱城市以便回溯。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>算法思路</strong>：</p>
+<ol>
+<li>
+<p><strong>DP 状态定义</strong>：<code>dp[(S, i)]</code> 表示从城市 \(i\) 出发，经过集合 \(S\) 中所有城市后返回起点（城市 0）的最短距离。</p>
+</li>
+<li>
+<p><strong>状态转移</strong>：</p>
+</li>
+</ol>
+<p>\[\text{dp}[(S, i)] = \min_{\text{city} \in S} \left\{ \text{dist}[i][\text{city}] + \text{dp}[(S \setminus \{\text{city}\}, \text{city})] \right\}\]</p>
+<p>边界条件：\(S = \emptyset\) 时，<code>dp[(S, i)] = dist[0][i]</code>（直接返回起点）。</p>
+<ol>
+<li><strong>回溯重建</strong>：用字典 <code>prev[(S, i)]</code> 记录使代价最小的城市，从初始状态 \((\{1, ..., n-1\}, 0)\) 开始逐步重建路径。</li>
+</ol>
+<p><strong>代码实现</strong>：</p>
+<pre><code class="language-python">def tsp_dp(dist_arr):
+    """Compute the exact solution to the TSP using dynamic programming and returns the optimal path."""
+    n = len(dist_arr)
+    dp = {}
+    prev = {}
+
+    def tsp_helper(S, i):
+        if (S, i) in dp:
+            return dp[(S, i)]
+        if S == frozenset():
+            return dist_arr[0][i]  # Return to the starting city
+        min_cost = float('inf')
+        prev_city = None
+        for city in S:
+            cost = dist_arr[i][city] + tsp_helper(S.difference({city}), city)
+            min_cost, prev_city = min((min_cost, prev_city), (cost, city))
+        dp[(S, i)] = min_cost
+        prev[(S, i)] = prev_city
+        return min_cost
+
+    best_distance = tsp_helper(frozenset(range(1, n)), 0)
+
+    # Backtracking to reconstruct tour
+    S = frozenset(range(1, n))
+    city = 0  # start at the origin
+    tour = [0]
+    while S:
+        city = prev[(S, city)]
+        tour.append(city)
+        S = S.difference({city})
+
+    return tour
+</code></pre>
+<p><strong>正确性证明</strong>（归纳法）：</p>
+<ul>
+<li>
+<p><strong>基础情况</strong>：\(S = \emptyset\) 时，唯一选择是返回起点，代价为 <code>dist[0][i]</code>，显然最优。</p>
+</li>
+<li>
+<p><strong>归纳假设</strong>：假设对于所有真子集 \(S' \subsetneq S\) 和任意城市 \(i\)，<code>dp[(S', i)]</code> 已正确计算。</p>
+</li>
+<li>
+<p><strong>归纳步骤</strong>：对于状态 \((S, i)\)，路径必须从 \(i\) 前往 \(S\) 中某城市 <code>city</code>，再从 <code>city</code> 经过 \(S \setminus \{\text{city}\}\) 返回起点。由归纳假设，子问题最优，故取最小值即为 \((S, i)\) 的最优解。</p>
+</li>
+</ul>
+<p><strong>复杂度分析</strong>：</p>
+<ul>
+<li>
+<p>时间：\(O(n^2 \cdot 2^n)\)，共有 \(O(n \cdot 2^n)\) 个状态，每个状态转移耗时 \(O(n)\)。</p>
+</li>
+<li>
+<p>空间：\(O(n \cdot 2^n)\)，存储 DP 表和前驱字典。</p>
+</li>
+</ul></div><p class="problem-source">解答来源：<code>hw08-sol.pdf</code> · 5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw08-sol.pdf</code> · 4 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>hw08.pdf</code></li>
+      <li><code>hw08-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

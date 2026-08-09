@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 11: NP-Completeness — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 11</p>
+    <h1>讨论课 11：NP 完全性</h1>
+    <p class="lede">本节围绕 NP 完全性的核心概念展开练习。内容涵盖复杂度类 NP、P、NP-Complete（NP-Complete）与 NP-Hard（NP-Hard）的定义；判断「固定次数多项式算法能否推广到整个 NP」；辨析无向 Rudrata 路径（哈密顿路径）到 DAG 最长路径的归约是否成立并利用双向性构造反例；通过选择题判断 2-SAT、最小生成树等问题的复杂度归属；将 Directed Rudrata Cycle 归约到 California Cycle 证明其 NP-难性；最后论证若 P=NP 则可在多项式时间内破解给定加密算法。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>NP-Completeness</li><li>NP-Hard</li><li>Polynomial Reduction</li><li>Rudrata Path</li><li>Hamiltonian Path</li><li>Longest Path in DAG</li><li>California Cycle</li><li>2-SAT</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis11.pdf</code>、<code>dis11-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis11.pdf</code>、<code>dis11-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>NP 问题的运行时间</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>判断正误（并给出简要证明）：假设我们能证明，对于某个固定的常数 \(k\)，某个 NP-完全问题 \(P\) 存在时间复杂度为 \(O(n^k)\) 的算法。那么 NP 中的每个问题都存在时间复杂度为 \(O(n^k)\) 的算法。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>注意从任意问题 \(L \in \text{NP}\) 到 \(P\) 的多项式归约会引入「规模膨胀」：归约本身的运行时间是输入规模 \(n\) 的某个多项式，归约后实例的大小也是 \(n\) 的某个多项式，但这些多项式的次数可能彼此不同，也可能与 \(k\) 不同。尝试构造一种情形，使得归约后实例的规模是原规模的二次（或更高次）多项式。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>False</strong>。</p>
+<p>从任意问题 \(L \in \text{NP}\) 到 \(P\) 的归约 \(f_L\) 保证在时间 \(O(n^{c_L})\) 内运行，并产生一个大小为 \(O(n^{c'_L})\) 的 \(P\) 的实例，其中 \(c_L\) 与 \(c'_L\) 是常数。然而，这两个常数可以任意地大于 \(k\)。</p>
+<p>例如，如果从某个 NP 问题 \(L\) 到 \(P\) 的归约耗时 \(O(n^2)\)，而 \(P\) 有一个 \(O(n)\) 的算法，那么我们为 \(L\) 得到的算法将至少需要 \(\Omega(n^2)\) 的时间，而不是 \(O(n)\)。因此，仅凭「某个 NP-完全问题有 \(O(n^k)\) 算法」不能推出「NP 中所有问题都有 \(O(n^k)\) 算法」。</p></div><p class="problem-source">解答来源：<code>dis11-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis11.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>归约热身：无向 Rudrata 路径到 DAG 最长路径</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在无向 Rudrata 路径问题（Undirected Rudrata Path，即哈密顿路径问题 Hamiltonian Path Problem）中，给定一个具有无向边的图 \(G\) 作为输入，目标是判断 \(G\) 中是否存在一条恰好经过每个顶点一次的路径。</p>
+<p>在 DAG 最长路径问题（Longest Path in a DAG）中，给定一个有向无环图（DAG）和一个变量 \(k\) 作为输入，目标是判断该 DAG 中是否存在长度至少为 \(k\) 的路径。</p>
+<p>下面的归约是否正确？如果正确，给出一个简明的证明；如果不正确，说明理由并给出一个反例。</p>
+<blockquote>
+<p>「无向 Rudrata 路径可以归约到 DAG 最长路径。对于给定的无向图 \(G\)，我们使用深度优先搜索（DFS）找到 \(G\) 的一种遍历，并根据该遍历为 \(G\) 中的所有边指定方向：边的指向与它们被首次遍历的方向一致，回边（back edges）被省略，从而得到一个 DAG。如果该 DAG 中最长路径包含 \(|V|-1\) 条边，那么 \(G\) 中必定存在一条 Rudrata 路径，因为任何具有 \(|V|-1\) 条边的简单路径都必须经过每个顶点；若这一点成立，我们就可以说原图中存在一条 Rudrata 路径。由于运行 DFS 耗时多项式时间 \(O(|V|+|E|)\)，该归约是合法的。」</p>
+</blockquote></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 反例图：左侧为原无向图（4 个顶点 A-B-C-D 构成的路径，含弦边 A-C），右侧为按特定 DFS 序定向后得到的 DAG（A→C, C→B, C→D），展示最长路径长度从 3 降为 2</h4><p>原无向图 G：顶点 {A,B,C,D}，边 {A-B, B-C, C-D, A-C}（或等价结构，使得存在 Rudrata 路径 A-B-C-D）
+DFS 定向后的 DAG：有向边 {A→C, C→B, C→D}，最长路径长度 = 2（如 A→C→B 或 A→C→D）</p><p class="problem-source">来源：<code>dis11-sol.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>一个正确的归约必须证明「双向性」：原实例有解 <strong>当且仅当</strong> 变换后的实例有解。题目中的论述只证明了「DAG 有长度为 \(|V|-1\) 的路径 \(\Rightarrow\) 原图有 Rudrata 路径」这一个方向。试着思考：如果原图 \(G\) 确实有一条 Rudrata 路径，按照上述 DFS 定向方式，得到的 DAG 是否一定也存在长度为 \(|V|-1\) 的路径？构造一个 4 个顶点的图，使得 DFS 访问顶点的顺序「打乱」了原 Rudrata 路径上边的方向。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>该归约<strong>不正确</strong>。</p>
+<p>论述中确实证明了：如果 DAG 中最长路径的长度为 \(|V|-1\)，那么 \(G\) 中存在 Rudrata 路径。然而，要证明一个归约正确，必须证明<strong>双向性</strong>——即若通过变换把问题 A 的实例 \(I\) 变成问题 B 的实例 \(I'\)，则 \(I\) 有解 <strong>当且仅当</strong> \(I'\) 有解。在上述「归约」中，有一个方向不成立：如果 \(G\) 有 Rudrata 路径，我们产生的 DAG <strong>不一定</strong> 存在长度为 \(|V|-1\) 的路径——这取决于我们为边选择方向的方式（即 DFS 的遍历顺序）。</p>
+<p><strong>具体反例</strong>：考虑一个 4 个顶点的图，其顶点为 \(A, B, C, D\)，原图中存在一条 Rudrata 路径。在该图上执行 DFS 时，有可能先访问节点 \(C\) 再访问节点 \(B\)（例如因为存在边 \(A\text{--}C\) 且 DFS 优先走了这条边），于是生成的 DAG 中各边的方向为 \(A \to C\)、\(C \to B\)、\(C \to D\)（或等价定向），其最长路径长度为 2，而不是 3。尽管原图确实存在 Rudrata 路径，但得到的 DAG 中不存在长度为 3 的路径，因此该归约在「仅当」方向上失败。</p></div><p class="problem-source">解答来源：<code>dis11-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis11.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>是不是 NP：复杂度分类选择题</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>对于下列每个陈述，选出（唯一的）使该陈述成立的条件。</p>
+<p><strong>(a)</strong> 如果 \(B\) 是 NP-完全的（NP-complete），那么对于任意问题 \(A \in \text{NP}\)，存在从 \(A\) 到 \(B\) 的多项式时间归约。</p>
+<ul>
+<li>
+<p>总是成立（Always True）</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} = \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} \neq \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>总是不成立（Always False）</p>
+</li>
+</ul>
+<p><strong>(b)</strong> 如果 \(B\) 属于 NP，那么对于任意问题 \(A \in \text{P}\)，存在从 \(A\) 到 \(B\) 的多项式时间归约。</p>
+<ul>
+<li>
+<p>总是成立（Always True）</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} = \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} \neq \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>总是不成立（Always False）</p>
+</li>
+</ul>
+<p><strong>(c)</strong> 2-SAT 是 NP-完全的。</p>
+<ul>
+<li>
+<p>总是成立（Always True）</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} = \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} \neq \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>总是不成立（Always False）</p>
+</li>
+</ul>
+<p><strong>(d)</strong> 最小生成树（Minimum Spanning Tree）属于 NP。</p>
+<ul>
+<li>
+<p>总是成立（Always True）</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} = \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>当且仅当 \(\text{P} \neq \text{NP}\) 时成立</p>
+</li>
+<li>
+<p>总是不成立（Always False）</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 回顾 NP-完全的定义：一个问题若属于 NP，且 NP 中所有问题都能归约到它，则它是 NP-完全的。(b) 如果 \(A\) 已经能在多项式时间内求解，那么在归约过程中我们是否还有「额外时间」直接解出 \(A\) 的答案？(c) 2-SAT 是否已知有多项式时间算法？如果 \(\text{P} \neq \text{NP}\)，NP-完全问题（如 3-SAT）能否归约到它？(d) 如果一个问题的解能在多项式时间内<strong>验证</strong>，它就属于 NP。MST 的判定版本（是否存在代价不超过预算 \(b\) 的生成树）能否在多项式时间内验证？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a) 总是成立（Always True）</strong>。</p>
+<p>这正是 NP-难（NP-hard）的定义，而所有 NP-完全问题都是 NP-难的。</p>
+<p><strong>(b) 总是成立（Always True）</strong>。</p>
+<p>由于归约本身允许多项式时间，我们完全可以在归约过程中直接求解任意 \(A\) 的实例（因为 \(A \in \text{P}\)），然后根据答案映射到 \(B\) 的某个有解或无解的固定实例。</p>
+<p><strong>(c) 当且仅当 \(\text{P} = \text{NP}\) 时成立</strong>。</p>
+<p>根据定义，一个 NP-完全问题必须属于 NP，且 NP 中所有问题都存在到它的多项式归约。</p>
+<ul>
+<li>
+<p>如果 \(\text{P} \neq \text{NP}\)，则不可能存在从 3-SAT 这类 NP-完全问题到 2-SAT 的多项式时间归约（否则 2-SAT 将是 NP-难的，与它已在 P 中矛盾）。</p>
+</li>
+<li>
+<p>如果 \(\text{P} = \text{NP}\)，则存在如下多项式归约：由于 \(\text{P} = \text{NP}\)，存在多项式时间算法求解 3-SAT。归约时先求解 3-SAT 实例——若有解，则映射到一个可满足的 2-SAT 实例；若无解，则映射到一个不可满足的 2-SAT 实例。于是 NP 中所有问题（均可归约到 3-SAT）都多项式归约到 2-SAT。</p>
+</li>
+</ul>
+<p><strong>(d) 总是成立（Always True）</strong>。</p>
+<p>MST 可在多项式时间内求解，因此也可在多项式时间内验证。其判定版本为：「是否存在一棵总代价不超过预算 \(b\) 的生成树？」给定一个候选生成树，可在多项式时间内验证其合法性与总代价。</p></div><p class="problem-source">解答来源：<code>dis11-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis11.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>California Cycle（加州环）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>证明下面的问题是 NP-难的（NP-hard）。</p>
+<ul>
+<li>
+<p><strong>输入</strong>：一张有向图 \(G = (V, E)\)，其中每个顶点被染成蓝色或金色，即 \(V = V_{\text{blue}} \cup V_{\text{gold}}\)。</p>
+</li>
+<li>
+<p><strong>目标</strong>：找出一个「加州环」（Californian cycle），即一条经过 \(G\) 中<strong>所有</strong>顶点的有向环，且环上顶点颜色必须蓝、金交替出现。</p>
+</li>
+</ul>
+<p>提示：使用 Directed Rudrata Cycle（有向 Rudrata 环）进行归约。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · California Cycle 归约构造示意图：展示原图 G 中的一个顶点 v 如何被拆为蓝色 v_b 与金色 v_g，原边 (u,v) 如何变为 u_g→v_b，以及 v_b→v_g 的蓝金边</h4><p>原图 G：有向边 (u, v)
+新图 G'：</p>
+<ul>
+<li>
+<p>顶点：{u_b, u_g, v_b, v_g}</p>
+</li>
+<li>
+<p>蓝金边：u_b→u_g, v_b→v_g</p>
+</li>
+<li>
+<p>原边对应：u_g→v_b
+展示一个 3 顶点有向环如何映射为蓝金交替的 California Cycle</p>
+</li>
+</ul><p class="problem-source">来源：<code>dis11-sol.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>关键观察：在 California Cycle 中，每个顶点必须恰好有一条入边和一条出边被使用，且颜色必须交替。考虑把原图 \(G\) 的每个顶点 \(v\) 拆成两个顶点：一个蓝色副本 \(v_b\) 和一个金色副本 \(v_g\)。原图中的每条有向边 \((u, v)\) 应该如何对应到新图中连接蓝/金副本的边？思考如何让任意一个有向环都自然地变成蓝金交替的环。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>我们通过将 Directed Rudrata Cycle 归约到 Californian Cycle 来证明后者的 NP-难性。</p>
+<p>给定一个有向图 \(G = (V, E)\)，构造新图 \(G' = (V', E')\) 如下：</p>
+<ul>
+<li>
+<p>\(V'\) 包含顶点集 \(V\) 的两个副本：对每个 \(v \in V\)，有一个蓝色节点 \(v_b\) 和一个金色节点 \(v_g\)。</p>
+</li>
+<li>
+<p>对每个 \(v \in V\)，在 \(G'\) 中加一条从 \(v_b\) 到 \(v_g\) 的边。</p>
+</li>
+<li>
+<p>对每条 \((u, v) \in E\)，在 \(G'\) 中加一条从 \(u_g\) 到 \(v_b\) 的边。</p>
+</li>
+</ul>
+<p>另一种理解方式是：对每个节点 \(v \in V\)，我们将其所有入边重定向到 \(v_g\)，所有出边都从 \(v_b\) 出发（在 \(G'\) 中）。</p>
+<p><strong>正确性说明</strong>：</p>
+<ul>
+<li>
+<p>\(G\) 中的任意一个环都对应 \(G'\) 中一个蓝金交替的环：原环上每条边 \((u, v)\) 变成 \(u_g \to v_b\)，再经蓝金边 \(v_b \to v_g\) 回到下一个起点。因此若 \(G\) 包含 Rudrata 环，则 \(G'\) 包含 California Cycle。</p>
+</li>
+<li>
+<p>反之，\(G'\) 中每条从蓝节点到金节点的边的两个端点都对应 \(G\) 中同一个顶点。因此若 \(G'\) 有 California Cycle，只需忽略该环中所有蓝金边（\(v_b \to v_g\)），就能得到 \(G\) 中的一个 Rudrata 环。</p>
+</li>
+</ul>
+<p>该构造可在多项式时间内完成，因此 Directed Rudrata Cycle \(\leq_P\) California Cycle，California Cycle 是 NP-难的。</p></div><p class="problem-source">解答来源：<code>dis11-sol.pdf</code> · 3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis11.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>破解加密</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>经过多年的研究，Horizon Wireless 发布了一种加密算法 \(E\)，它能在 \(O(n^2)\) 时间内加密一个 \(n\) 比特的消息。证明：如果 \(\text{P} = \text{NP}\)，那么该加密算法可以在多项式时间内被破解。更准确地说，论证如果 \(\text{P} = \text{NP}\)，下面的解密问题可以在多项式时间内求解。</p>
+<p><strong>Decrypt</strong>：</p>
+<ul>
+<li>
+<p><strong>输入</strong>：一条加密消息 \(M\)（使用算法 \(E\) 加密得到）</p>
+</li>
+<li>
+<p><strong>目标</strong>：对 \(M\) 进行解密。</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>要说明一个问题是 NP 问题，需要给出一个多项式时间的验证器（verifier）：给定一个候选解，如何在多项式时间内验证它是正确的解密结果？验证过程需要调用加密算法 \(E\)，而 \(E\) 的运行时间是已知的。然后思考：若 \(\text{P} = \text{NP}\)，一个 NP 问题会落到哪个复杂度类中？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>首先注意到 \(\text{Decrypt} \in \text{NP}\)。这是因为：给定加密消息 \(M\) 的一个候选解密结果 \(x\)，我们可以运行 \(E(x)\) 并检查它是否输出 \(M\)。由于 \(E(x)\) 有一个 \(O(N^2)\) 的算法，我们可以在多项式时间内完成这一检查。因此，Decrypt 是一个 NP 问题。</p>
+<p>现在，如果 \(\text{P} = \text{NP}\)，那么 Decrypt 也将在 P 中。这意味着 Decrypt 可以在多项式时间内求解——即我们可以在多项式时间内恢复出任意密文 \(M\) 对应的明文，从而「破解」该加密算法。</p></div><p class="problem-source">解答来源：<code>dis11-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis11.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis11.pdf</code></li>
+      <li><code>dis11-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

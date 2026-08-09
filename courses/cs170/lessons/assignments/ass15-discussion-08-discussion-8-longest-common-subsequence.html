@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 8: Longest Common Subsequence — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 8</p>
+    <h1>讨论课 8：最长公共子序列</h1>
+    <p class="lede">在 LIS 之后引入最长公共子序列（LCS）问题：给定两个整数数组 A 和 B，求它们的最长公共子序列的长度。基于编辑距离的子问题定义，设计 O(nm) 时间 DP 算法，定义子问题、递推式、求解顺序，并分析时间/空间复杂度及空间优化。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Dynamic Programming</li><li>Longest Common Subsequence</li><li>LCS</li><li>Edit Distance</li><li>Space Optimization</li><li>set-cover</li><li>dynamic-programming</li><li>subset-dp</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis08.pdf</code>、<code>dis08-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 7 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis08.pdf</code>、<code>dis08-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>最长公共子序列（Longest Common Subsequence）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在课上我们见过最长递增子序列（LIS）。现在考虑最长公共子序列（LCS）问题：给定两个整数数组 \(A\) 与 \(B\)，求它们的最长公共子序列的长度。若没有公共元素，返回 \(0\)。</p>
+<p>例如 \(A = [1, 2, 3, 4, 5]\)、\(B = [1, 3, 5, 7]\)，它们的最长公共子序列为 \([1, 3, 5]\)，长度为 \(3\)。</p>
+<p>我们将设计一个在 \(O(nm)\) 时间内解决该问题的算法，其中 \(n\) 为 \(A\) 的长度、\(m\) 为 \(B\) 的长度。</p>
+<ol>
+<li>定义你的子问题。（提示：参考 Edit Distance 的子问题定义。）</li>
+<li>写出递推关系。</li>
+<li>我们按什么顺序求解子问题？</li>
+<li>该 DP 算法的时间复杂度是多少？</li>
+<li>你的 DP 算法的空间复杂度是多少？能否优化？</li>
+</ol></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>子问题可以定义为「前缀 \(A[0:i]\) 与 \(B[0:j]\) 的 LCS 长度」。递推时分两种情况讨论：若末尾元素相等，则一定可以把它接在更短前缀的 LCS 之后；否则至少有一段的末尾元素不在最终解中，取「舍去 \(A\) 末尾」与「舍去 \(B\) 末尾」两种情况的最大值。求解顺序与填表顺序一致。空间上每一行只依赖前一行与当前行的前一列，因此只需保留两行/两列。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>令 \(L[i][j]\) 表示 \(A\) 的前 \(i\) 个元素（即 \(A[0:i]\)）与 \(B\) 的前 \(j\) 个元素（即 \(B[0:j]\)）的最长公共子序列长度，最终答案为 \(L[n][m]\)。</p>
+<p>递推式如下：</p>
+<p>\[L[i][j] = \begin{cases}
+0 &amp; \text{若 } i = 0 \text{ 或 } j = 0, \\
+L[i-1][j-1] + 1 &amp; \text{若 } A[i-1] = B[j-1], \\
+\max\{L[i-1][j],\ L[i][j-1]\} &amp; \text{否则}.
+\end{cases}\]</p>
+<p><strong>正确性证明（归纳法）：</strong> 对 \(i+j\) 进行归纳。基础情况 \(i=0\) 或 \(j=0\) 时空前缀的 LCS 长度为 \(0\)，成立。归纳步骤：若 \(A[i-1] = B[j-1]\)，则任意一个最长公共子序列都可以以该公共元素结尾，因此它等于前缀 \(A[0:i-1]\) 与 \(B[0:j-1]\) 的 LCS 加 \(1\)；否则 \(A[i-1]\) 与 \(B[j-1]\) 中至少有一个不在最终解中，故 LCS 必为「舍去 \(A\) 末尾」或「舍去 \(B\) 末尾」两种情况的最大值。</p>
+<p><strong>求解顺序：</strong> 按 \(i\) 从 \(0\) 到 \(n\)、在每个 \(i\) 内按 \(j\) 从 \(0\) 到 \(m\) 的顺序填表，使得 \(L[i-1][j-1]\)、\(L[i-1][j]\)、\(L[i][j-1]\) 在计算 \(L[i][j]\) 时都已被求出。</p>
+<p><strong>时间复杂度：</strong> DP 表有 \((n+1)(m+1)\) 个状态，每个状态 \(O(1)\) 计算，总时间 \(O(nm)\)。</p>
+<p><strong>空间复杂度：</strong> 朴素实现存储整张表需 \(O(nm)\)。但计算 \(L[i][j]\) 只涉及 \(i-1\)、\(j-1\) 与 \(i\)、\(j\) 相关的子问题，因此只需保留 DP 表的最后两行（或最后两列），空间可优化至 \(O(2\min\{n,m\}) = O(\min\{n,m\})\)。</p></div><p class="problem-source">解答来源：<code>dis08-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis08.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>最优集合覆盖 (Optimal Set Covering)</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4>2. 最优集合覆盖 (Optimal Set Covering)
+<p>回顾课堂上学过的集合覆盖问题。给定集合族 \(S_1, S_2, \ldots, S_m\)，其中每个 \(S_i\) 是全集 \(U = \{1, 2, \ldots, n\}\) 的子集，我们希望从该族中选出最少数量的集合，使得它们的并集包含 \(U\) 中的所有元素。我们已经在课上看到贪心算法只能达到近似比。在本题中，我们将使用动态规划给出精确解。</p>
+<p><strong>(a)</strong> 尝试所有可能性的暴力解法需要多长时间？在最坏情况下 \(m\) 相对于 \(n\) 可以多大？</p>
+<p><strong>(b)</strong> 正如课上所见，这里我们无法指望多项式时间算法，但我们可以通过以 \(n\) 的指数时间来代替 \(m\) 的指数时间，从而做得比 \(m\) 的指数时间更好。描述一个在 \(O(2^n \cdot nm)\) 时间内完成此任务的动态规划算法。</p>
+<ul>
+<li>
+<p>(a) 定义子问题。</p>
+</li>
+<li>
+<p>(b) 写出递推关系。</p>
+</li>
+<li>
+<p>(c) 描述求解子问题的顺序。</p>
+</li>
+<li>
+<p>(d) 分析该动态规划算法的时间复杂度。</p>
+</li>
+<li>
+<p>(e) 分析空间复杂度。</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p><strong>提示：</strong> 考虑用子集 \(T \subseteq U\)（可用位掩码表示）作为 DP 的状态维度之一，另一个维度是已考虑的前 \(i\) 个集合。在"选"与"不选"第 \(i\) 个集合之间做选择，并思考如何从 \(f(\cdot, i-1)\) 的已知值推出 \(f(\cdot, i)\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><h3>(a) 暴力解法</h3>
+<p>对于大小为 \(m\) 的集合族，共有 \(2^m\) 种选择。我们可以在 \(O(mn)\) 时间内检查每种选择（遍历每个集合的每个元素），因此总时间复杂度为 \(O(2^m \cdot mn)\)。</p>
+<p>\(U\) 的子集总数为 \(2^n\)，因此在最坏情况下 \(m\) 可以达到 \(O(2^n)\)。此时暴力解法的时间复杂度非常大（双重指数级）。</p>
+<h3>(b) 动态规划算法</h3>
+<h4>子问题定义</h4>
+<p>对于子集 \(T \subseteq U\)，定义 \(f(T, i)\) 为使用集合族 \(S_1, S_2, \ldots, S_i\) 覆盖子集 \(T\) 所需的最少集合数。最终答案为 \(f(U, m)\)。</p>
+<h4>递推关系</h4>
+<p>对于每个 \(S_i\)，我们考虑两种可能：</p>
+<ul>
+<li>
+<p><strong>不选 \(S_i\)</strong>：需要用 \(S_1, \ldots, S_{i-1}\) 覆盖整个 \(T\)，代价为 \(f(T, i-1)\)。</p>
+</li>
+<li>
+<p><strong>选择 \(S_i\)</strong>：\(S_i\) 覆盖了 \(T\) 中的部分元素，剩余部分 \(T \setminus S_i\) 需要用 \(S_1, \ldots, S_{i-1}\) 覆盖，代价为 \(f(T \setminus S_i, i-1) + 1\)。</p>
+</li>
+</ul>
+<p>因此递推关系为：</p>
+<p>\[f(T, i) = \begin{cases} 0 &amp; \text{若 } T = \emptyset \\ \infty &amp; \text{若 } i = 0 \text{ 且 } |T| &gt; 0 \\ \min\{f(T, i-1), f(T \setminus S_i, i-1) + 1\} &amp; \text{否则} \end{cases}\]</p>
+<h4>求解顺序</h4>
+<p>按递增的 \(i\) 顺序求解子问题。对于固定的 \(i\)，\(T\) 可以按任意顺序遍历（通常用位掩码表示子集）。</p>
+<h4>时间复杂度</h4>
+<p>共有 \(2^n \cdot m\) 个状态。对于每个状态，计算 \(T \setminus S_i\) 需要 \(O(n)\) 时间（遍历元素做集合差）。因此总时间复杂度为 \(O(2^n \cdot mn)\)，满足题目要求。</p>
+<h4>空间复杂度</h4>
+<p>朴素的空间复杂度与状态数成正比，为 \(O(2^n \cdot m)\)。但注意到对于任意 \(f(T, i)\)，只需要用到子问题 \(f(\cdot, i-1)\)。因此只需同时存储两层（\(f(\cdot, i)\) 和 \(f(\cdot, i-1)\)），共 \(2 \cdot 2^n\) 个子问题，优化后的空间复杂度为 \(O(2^n)\)。</p></div><p class="problem-source">解答来源：<code>dis08-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis08.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>寻找更多反例</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>本题探讨为何某些问题必须使用动态规划而非快速贪心算法。为以下贪心算法给出反例。</p>
+<p>(a) 对于旅行商问题（TSP），首先将每个顶点的邻接表按边权排序。然后运行 DFS \(N\) 次，每次从不同顶点 \(v = 1, 2, \ldots, N\) 开始。每次遇到回边时，检查它是否构成一个长度为 \(N\) 的环，如果是则记录该环的权重。返回目前为止找到的所有此类环中权重最小者。</p>
+<p>(b) 对于最长递增子序列（LIS）问题，考虑如下算法：从数组中最小的元素开始构建 LIS，然后按顺序遍历其右侧的元素。每次遇到一个大于当前 LIS 末尾元素的 \(A[i]\) 时，就将 \(A[i]\) 加入 LIS。</p>
+<p>(c) 能否为上述算法构造一个反例，使得数组中最小的元素是 \(A[0]\)？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · TSP 反例的四个顶点完全图，标注所有边权</h4><pre><code>顶点：A, B, C, D
+边权：
+
+- A-B: 1
+
+- A-C: 3
+
+- A-D: 1
+
+- B-C: 100
+
+- B-D: 2
+
+- C-D: 4
+
+最优回路：A → B → D → C → A，权重 = 10
+贪心回路：A → D → B → C → A，权重 = 106
+</code></pre><p class="problem-source">来源：<code>dis08-sol.pdf</code> · 4</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>思考贪心策略在局部最优选择后为何无法达到全局最优。对于 TSP，考虑贪心选择最小边后被迫使用大权重的边完成回路的情况。对于 LIS，考虑选择最小起始元素后限制了后续扩展空间的情况。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 该算法等价于：对每个可能的起始节点，反复选择未访问且到当前节点边权最小的节点作为下一个访问节点。</p>
+<p>考虑 \(N = 4\) 的反例：</p>
+<p>顶点 \(A, B, C, D\) 构成完全图，边权如下：</p>
+<table>
+<thead>
+<tr>
+<th>边</th>
+<th>权重</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>\(A\)-\(B\)</td>
+<td>1</td>
+</tr>
+<tr>
+<td>\(A\)-\(C\)</td>
+<td>3</td>
+</tr>
+<tr>
+<td>\(A\)-\(D\)</td>
+<td>1（最小）</td>
+</tr>
+<tr>
+<td>\(B\)-\(C\)</td>
+<td>100</td>
+</tr>
+<tr>
+<td>\(B\)-\(D\)</td>
+<td>2</td>
+</tr>
+<tr>
+<td>\(C\)-\(D\)</td>
+<td>4</td>
+</tr>
+</tbody>
+</table>
+<p>任何此类 DFS 总会包含边 \(A\)-\(D\)，因为它是最小权重的边。然而这会导致回路包含边 \(B\)-\(C\)，从而使权重爆炸。最优解不使用边 \(A\)-\(D\)，而是走 \(A\)-\(B\)-\(D\)-\(C\)-\(A\)，总权重为 \(1 + 2 + 4 + 3 = 10\)。而贪心算法得到的回路 \(A\)-\(D\)-\(B\)-\(C\)-\(A\) 权重为 \(1 + 2 + 100 + 3 = 106\)。</p>
+<p>(b) \(A = [7, 6, 8, 5]\)。LIS 为 \([7, 8]\)，但贪心算法输出 \([5]\)。</p>
+<p>(c) \(A = [3, 9, 7, 8]\)。此时 LIS 为 \([3, 7, 8]\)，但贪心算法输出 \([3, 9]\)。</p></div><p class="problem-source">解答来源：<code>dis08-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis08.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>戳气球问题</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定 \(n\) 个气球组成的序列，每个气球大小不同。戳破一个气球产生的噪音等于 \(g_{\text{left}} \cdot g_{\text{popped}} \cdot g_{\text{right}}\)，其中 \(g_{\text{popped}}\) 是被戳破气球的大小，\(g_{\text{left}}\) 和 \(g_{\text{right}}\) 分别是其左右邻居气球的大小。如果左侧没有气球，则设 \(g_{\text{left}} = 1\)；如果右侧没有气球，则设 \(g_{\text{right}} = 1\)。</p>
+<p>戳破一个气球后，其左右邻居变为相邻。（注意总噪音取决于戳破气球的顺序。）</p>
+<p>本题将设计多项式时间动态规划算法计算戳破气球能产生的最大噪音。</p>
+<p><strong>示例：</strong></p>
+<ul>
+<li>
+<p>输入（气球大小序列）：\(4, 5, 7\)</p>
+</li>
+<li>
+<p>输出（最优戳破顺序的总噪音）：\(175\)</p>
+</li>
+</ul>
+<p><strong>示例推演：</strong></p>
+<ul>
+<li>
+<p>当前状态 \([4, 5, 7]\) → 戳破 \(5\)，噪音 = \(4 \cdot 5 \cdot 7 = 140\)</p>
+</li>
+<li>
+<p>当前状态 \([4, 7]\) → 戳破 \(4\)，噪音 = \(1 \cdot 4 \cdot 7 = 28\)</p>
+</li>
+<li>
+<p>当前状态 \([7]\) → 戳破 \(7\)，噪音 = \(1 \cdot 7 \cdot 1 = 7\)</p>
+</li>
+<li>
+<p>总噪音 = \(140 + 28 + 7 = 175\)</p>
+</li>
+</ul>
+<p>(a) 定义子问题如下：
+\(C(i, j)\) = 在子列表 \(i, i+1, \ldots, j\) 中的气球在其他气球之前被戳破所能产生的最大噪音。
+基础情况是什么？有没有需要特别考虑的情况？</p>
+<p>(b) 写出子问题 \(C(i, j)\) 的递推关系。
+提示：假设第 \(k\) 个气球（\(k \in [i, j]\)）是最后一个被戳破的，在 \([i, j]\) 中所有其他气球都被戳破之后。到目前为止产生的总噪音是多少？</p>
+<p>(c) 使用该子问题的动态规划算法的时间复杂度是多少？空间复杂度是多少？
+注意：可以假设所有算术运算都是常数时间。</p>
+<p>(d) 是否可能进一步优化空间复杂度？无论哪种情况，请解释你的推理。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 戳气球示例的推演过程：4, 5, 7 三个气球的戳破顺序与状态变化</h4><pre><code>初始状态：[4, 5, 7]
+
+步骤1：戳破 5（索引2）
+  左邻居=4, 右邻居=7
+  噪音 = 4 × 5 × 7 = 140
+  状态：[4, 7]
+
+步骤2：戳破 4（索引1）
+  左邻居=1(虚拟), 右邻居=7
+  噪音 = 1 × 4 × 7 = 28
+  状态：[7]
+
+步骤3：戳破 7（索引3）
+  左邻居=1(虚拟), 右邻居=1(虚拟)
+  噪音 = 1 × 7 × 1 = 7
+  状态：[]
+
+总噪音 = 140 + 28 + 7 = 175
+</code></pre><p class="problem-source">来源：<code>dis08.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑区间 DP：当区间 \([i, j]\) 中最后一个被戳破的气球是 \(k\) 时，\(k\) 的左右邻居是 \(g_{i-1}\) 和 \(g_{j+1}\)（即区间外的相邻气球）。将问题分解为左子区间 \([i, k-1]\) 和右子区间 \([k+1, j]\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) <strong>基础情况</strong>：当需要戳破的子列表只有一个气球 \(g_{\text{popped}}\) 时，返回噪音 \(g_{\text{left}} \cdot g_{\text{popped}} \cdot g_{\text{right}}\)。此外，需要初始化 \(g_0 = 1\) 和 \(g_{n+1} = 1\)，假设输入为 \(1\) 到 \(n\)。在算法中我们永远不会真正戳破这两个气球，它们只是左右两侧的虚拟气球。</p>
+<p>(b) <strong>递推关系</strong>：</p>
+<p>\[C(i, j) = \max_{i \leq k \leq j} \{C(i, k-1) + C(k+1, j) + g_{i-1} \cdot g_k \cdot g_{j+1}\}\]</p>
+<p><strong>理由</strong>：树的叶节点代表最后一个被戳破的气球，这里 \(k\) 代表最后一个被戳破气球的索引。然后我们可以递归向上，在每一层找到使子树值（该序列产生的噪音）最大化的分割点 \(k\)。</p>
+<p>(c) 该算法的时间复杂度为 \(O(n^3)\)，因为有 \(O(n^2)\) 个子问题，每个子问题需要 \(O(n)\) 时间计算（给定较小子问题的答案）。空间复杂度为 \(O(n^2)\)，因为有 \(O(n^2)\) 个子问题，每个子问题大小为 \(O(1)\)。</p>
+<p>(d) 不可能将空间复杂度优化到 \(o(n^2)\)。这是因为在计算每个 \(C(i, j)\) 时，我们需要 \([i, j]\) 范围内的所有较小子问题。因此在 DP 算法的每次迭代中，我们都需要所有 \(O(n^2)\) 个子问题。</p></div><p class="problem-source">解答来源：<code>dis08-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis08.pdf</code> · 3-4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>LP 基础（标准形等价转化）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>线性规划 (Linear Program) 是在线性约束下求线性目标函数最优值的问题。设变量 \(x \in \mathbb{R}^n\)，参数 \(A \in \mathbb{R}^{m \times n}, b \in \mathbb{R}^m, c \in \mathbb{R}^n\)。线性规划的<strong>标准形 (canonical form)</strong> 为</p>
+<p>\[\begin{aligned}
+\text{maximize} \quad &amp; c^\top x \\
+\text{subject to} \quad &amp; Ax \le b \\
+&amp; x \ge 0
+\end{aligned}\]</p>
+<p>任何一个线性规划都可以写成标准形。请验证以下情形如何改写为标准形：</p>
+<ol>
+<li>若目标函数是<strong>最小化</strong>（minimization）？</li>
+<li>若约束为 \(Ax \ge b\)？</li>
+<li>若约束为 \(Ax = b\)？</li>
+<li>若约束为 \(x \le 0\)？</li>
+<li>若变量<strong>无约束</strong> \(x \in \mathbb{R}\)？</li>
+</ol></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>标准形要求：目标为最大化、约束为 "\(\le\)"、变量非负。思考如何通过取负、拆分等式、变量替换等方式保持问题等价，而不改变可行域与最优值。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(i) 对目标函数取负号：把 \(\min\; c^\top x\) 改写为 \(\max\; {-c}^\top x\)。</p>
+<p>(ii) 对不等式两边同乘 \(-1\)：把 \(Ax \ge b\) 改写为 \(-Ax \le -b\)。</p>
+<p>(iii) 把等式拆成两个不等式：\(Ax = b\) 等价于 \(Ax \le b\) 且 \(Ax \ge b\)，后者再按 (ii) 处理为 \(-Ax \le -b\)。</p>
+<p>(iv) 变量替换：把每个 \(x\) 替换为 \(-z\)，并加入约束 \(z \ge 0\)。</p>
+<p>(v) 把每个无约束变量 \(x\) 替换为 \(x^+ - x^-\)，并加入约束 \(x^+, x^- \ge 0\)。注意：对原 LP 的任意可行解，都存在一个目标函数值相同的变换后 LP 的可行解；反之亦然。</p></div><p class="problem-source">解答来源：<code>dis08-sol.pdf</code> · 6-7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis08.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>求对偶 LP</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>考虑如下线性规划：</p>
+<p>\[\begin{aligned}
+\text{maximize} \quad &amp; 4x_1 + 7x_2 \\
+\text{subject to} \quad &amp; x_1 + 2x_2 \le 10 \\
+&amp; 3x_1 + x_2 \le 14 \\
+&amp; 2x_1 + 3x_2 \le 11 \\
+&amp; x_1, x_2 \ge 0
+\end{aligned}\]</p>
+<p>构造该线性规划的<strong>对偶 (dual)</strong>。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>标准形 \(\max\{c^\top x : Ax \le b,\, x\ge 0\}\) 的对偶为 \(\min\{y^\top b : y^\top A \ge c^\top,\, y \ge 0\}\)。对每个原始约束引入一个非负对偶变量 \(y_i\)，写出对偶约束时注意系数矩阵的转置关系。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>对第 1、2、3 个约束分别引入非负乘子 \(y_1, y_2, y_3 \ge 0\)，把约束加权相加得</p>
+<p>\[(y_1 + 3y_2 + 2y_3)x_1 + (2y_1 + y_2 + 3y_3)x_2 \le 10y_1 + 14y_2 + 11y_3.\]</p>
+<p>为了得到 \(4x_1 + 7x_2\) 的一个上界，需要</p>
+<p>\[y_1 + 3y_2 + 2y_3 \ge 4, \qquad 2y_1 + y_2 + 3y_3 \ge 7,\]</p>
+<p>且 \(y_1, y_2, y_3 \ge 0\)（否则不等号方向会翻转）。取最紧的可能上界，得到对偶 LP：</p>
+<p>\[\begin{aligned}
+\text{minimize} \quad &amp; 10y_1 + 14y_2 + 11y_3 \\
+\text{subject to} \quad &amp; y_1 + 3y_2 + 2y_3 \ge 4 \\
+&amp; 2y_1 + y_2 + 3y_3 \ge 7 \\
+&amp; y_1, y_2, y_3 \ge 0
+\end{aligned}\]</p>
+<p><strong>正确性说明：</strong> 由弱对偶性，任意原始可行 \(x\) 与对偶可行 \(y\) 满足 \(c^\top x \le y^\top b\)；上述对偶正是让这个上界尽可能小，从而在最优时与原始最优值相等（强对偶性）。<strong>复杂度：</strong> 该对偶仍是多项式规模（3 个变量、2 个主约束），可用椭球法或内点法在多项式时间求解。</p></div><p class="problem-source">解答来源：<code>dis08-sol.pdf</code> · 8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis08.pdf</code> · 6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">7</span><strong>LP 与线性回归（最小绝对偏差）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>统计学中最重要的问题之一是<strong>线性回归</strong>：给定平面上的数据点 \((x_1, y_1), (x_2, y_2), \dots, (x_n, y_n)\)，用直线 \(y = a + bx\) 拟合这些数据。通常采用最小二乘法，但也可以用线性规划求解其他拟合准则。</p>
+<p>现考虑<strong>最小化绝对偏差之和</strong>：</p>
+<p>\[\min_{a,b} \; \sum_{i=1}^{n} \bigl\, y_i - (a + b x_i) \bigr\,.\]</p>
+<p>请以 \(a, b\) 为变量，写出一个求解该问题的<strong>线性规划</strong>。</p>
+<p><strong>提示：</strong> 引入新变量 \(z_i\) 以及相应的约束，把 \(\bigl\, y_i - (a + b x_i) \bigr\,\) 在 LP 中表示出来。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>绝对值不是线性函数。关键观察：满足 \(z \ge x\) 且 \(z \ge -x\) 的最小 \(z\) 恰好是 \(z = \bigl\, x \bigr\,\)。利用这个技巧把每个绝对值用一个辅助变量 \(z_i\) 替换。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>关键观察：满足 \(z \ge x\) 且 \(z \ge -x\) 的最小 \(z\) 等于 \(\bigl\, x \bigr\,\)。据此引入辅助变量 \(z_i \ge 0\)，构造如下线性规划：</p>
+<p>\[\begin{aligned}
+\text{minimize} \quad &amp; \sum_{i=1}^{n} z_i \\
+\text{subject to} \quad &amp; y_i - (a + b x_i) \le z_i, \qquad 1 \le i \le n \\
+&amp; (a + b x_i) - y_i \le z_i, \qquad 1 \le i \le n
+\end{aligned}\]</p>
+<p>（\(a, b\) 无约束，\(z_i \ge 0\)；若要求标准形，可把 \(a, b\) 写成 \(a^+-a^-, b^+-b^-\)。）</p>
+<p><strong>正确性说明：</strong> 由于目标是最小化 \(\sum_i z_i\)，在最优解处 \(z_i\) 会被取为 \(\max\bigl(y_i-(a+bx_i),\, (a+bx_i)-y_i\bigr)\)，而这恰好等于 \(\bigl\, y_i-(a+bx_i) \bigr\,\)。若某解中 \(z_i &gt; \bigl\, y_i-(a+bx_i) \bigr\,\)，则可把 \(z_i\) 缩小到 \(\bigl\, y_i-(a+bx_i) \bigr\,\) 而得到更小的目标值，与最优性矛盾。因此新 LP 与原绝对偏差问题等价，且确实是一个线性规划。</p>
+<p><strong>复杂度：</strong> 该 LP 有 \(O(n)\) 个变量（\(a, b\) 与 \(n\) 个 \(z_i\)）和 \(O(n)\) 个约束，可在多项式时间求解（椭球法或内点法）。</p></div><p class="problem-source">解答来源：<code>dis08-sol.pdf</code> · 9-10 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis08.pdf</code> · 6 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis08.pdf</code></li>
+      <li><code>dis08-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

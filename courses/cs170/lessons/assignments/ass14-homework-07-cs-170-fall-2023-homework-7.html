@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CS 170 Fall 2023 Homework 7 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 作业 7</p>
+    <h1>CS 170 2023年秋季 作业7：动态规划</h1>
+    <p class="lede">CS 170 Fall 2023 第七份作业，主题为动态规划（dynamic programming）。包含五个书面题：Study Group、Non-Prefix Code（非前缀编码译码判定）、Ideal Targets（DAG 上每个顶点的最高分可达顶点）、Egg Drop（鸡蛋掉落最少次数）、My Dog Ate My Homework（网格切割分离咬过的方格），以及一个编程题：实现最长递增子序列（LIS）与编辑距离（Edit Distance）的全局对齐。所有 DP 书面题要求按「四部分解法」（子问题定义、递推、正确性证明、时间与空间分析）作答。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>dynamic programming</li><li>Non-Prefix Code</li><li>word break</li><li>Ideal Targets</li><li>DAG</li><li>Egg Drop</li><li>grid cutting</li><li>Longest Increasing Subsequence</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>hw07.pdf</code>、<code>hw07-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>hw07.pdf</code>、<code>hw07-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>Study Group（学习小组）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>列出你的学习小组中每位成员的姓名与 SID（学号）。如果你没有合作者，必须明确写出 "none"。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>本题无算法内容，仅用于登记互评与协作信息。如果你独自完成，请直接填写 "none" 并继续下一题。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>本题无需解答，学生应据实填写本人与组员的姓名及 SID；若独自完成则填写 "none"。</p></div><p class="problem-source">解答来源：<code>hw07-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw07.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>Non-Prefix Code（非前缀编码译码判定）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>课上我们已知道霍夫曼编码（Huffman code）满足前缀性质（Prefix Property）：每个符号对应的比特串都不会是其他任何符号对应比特串的前缀。此类编码的一个良好性质是：给定一个比特串，至多只有一种方式把它解码回符号序列。然而，一旦处理的编码不满足前缀性质，这一点就不再成立。例如，考虑如下编码：把 A 映射到 1，B 映射到 01，C 映射到 101。则比特串 101 可被解释为两种方式：C 或 AB。</p>
+<p>你的任务是：给定一个比特串 s，判断它是否可能被解释为一个符号序列。编码中符号到比特串的映射会以字典 d 的形式给出（例如上例中 d = {A : 1, B: 01, C: 101}）；你可以假设能以常数时间访问字典中任意符号。</p>
+<p>(a) 描述一个算法，在至多 \(O(nk\ell)\) 时间内解决此问题，其中 \(n\) 是输入比特串 \(s\) 的长度，\(k\) 是符号个数，\(\ell\) 是各符号对应比特串长度的上界。请按四部分解法（4-part solution）作答。</p>
+<p>(b)（可选）如何修改 (a) 中的算法，把运行时间提升到 \(O((n + k)\ell)\)？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑把问题分解为前缀子问题：定义 \(A[i]\) 表示 \(s\) 的前 \(i\) 位（即 \(s[: i]\)）是否能被解释成若干编码的连接。对每个位置 \(i\)，尝试把某个符号 \(a\) 的编码 \(d[a]\) 当作「最后一个符号」，并检查它是否与 \(s[: i]\) 的后缀匹配。</p>
+<p>自检要点：请明确写出 \(A[0]\) 的基准值及其含义；在递推中注意区分「后缀匹配」与「前缀」；思考若改用字典树（trie）存储 \(d\)，内层比较能否被加速。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>Main Idea</strong>: 定义子问题如下：令 \(A[i]\) 为一个布尔变量，表示前缀 \(s[: i]\) 能否被表示成若干编码的连接。我们可以用以下递推关系，借助 \(j &lt; i\) 的 \(A[j]\) 来计算 \(A[i]\)：</p>
+<p>\[
+A[i] = \bigvee_{\substack{a \in d \\ s[i-\operatorname{length}(d[a])+1:i] = d[a]}} A[i - \operatorname{length}(d[a])]
+\]</p>
+<p>这里规定 \(A[0] = \text{TRUE}\)。算法直接按上述公式计算即可。</p>
+<p><strong>Pseudocode</strong>:</p>
+<pre><code>procedure Translate(s):
+    Create an array A of length n + 1 and initialize all entries to FALSE.
+    Let A[0] = TRUE
+    for i := 1 to n do
+        for each symbol a in d do
+            if i ≥ length(d[a]) and d[a] = s[i − length(d[a]) + 1 : i] then
+                A[i] = A[i] ∨ A[i − length(d[a])]
+    return A[n]
+</code></pre>
+<p><strong>Proof of Correctness</strong>: 用简单归纳法证明。</p>
+<p><em>基础情况</em>：当 \(i = 0\) 时，\(s[: 0]\) 就是空串，可以被解释为空符号序列，故 \(A[0] = \text{TRUE}\)。</p>
+<p><em>归纳步骤</em>：设 \(A[0], \ldots, A[i - 1]\) 都已取到正确值，证明递推给出 \(A[i]\) 的正确值。我们把 \(s[: i]\) 的所有解释 \(a_1 \ldots a_k\) 按最后一个符号 \(a_k\) 分类。对于 \(a_k = a\)，若 \(s[: i]\) 的后缀与 \(d[a]\) 吻合，则每个解释 \(a_1 \ldots a_k\) 与 \(s[: i - \operatorname{length}(d[a])]\) 的一个解释 \(a_1 \ldots a_{k-1}\) 一一对应；由归纳假设，\(A[i - \operatorname{length}(d[a])]\) 已正确告诉我们 \(s[: i - \operatorname{length}(d[a])]\) 是否可解释。若后缀与 \(d[a]\) 不同，则不存在以 \(a\) 结尾的解释。对所有符号 \(a\) 取逻辑或（\(\lor\)），递推就给出了 \(A[i]\) 的正确值。</p>
+<p>程序正是实现了该递推，故输出 \(A[n]\)，即 \(s\) 是否可解释。</p>
+<p><strong>Runtime Analysis</strong>: 外层 for 循环 \(n\) 次，内层 for 循环 \(k\) 次。每次循环内比较两个字符串是否相等耗时 \(O(\operatorname{length}(d[a])) \leq O(\ell)\)。故总运行时间为 \(O(nk\ell)\)。</p>
+<p>（注意：若改用字典树（trie）而非每次重新构造字符串，可把运行时间提升到 \(O((n + k)\)ℓ))，但获满分并不要求这一点。）</p>
+<p><strong>Space Complexity Analysis</strong>: 我们存储了 \(n\) 个子问题 \(A[\cdot]\)，每个子问题占用常数空间，故整体空间复杂度为 \(O(n)\)。</p>
+<p>（注意：由于任意 \(A[i]\) 只依赖于前 \(\ell\) 个子问题，空间可进一步优化到 \(O(\ell)\)。）</p></div><p class="problem-source">解答来源：<code>hw07-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw07.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>Ideal Targets（理想目标顶点）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一个无加权边的有向无环图（DAG）\(G = (V, E)\)。每个顶点 \(v \in V\) 有一个整数分数 \(s[v]\)。对于顶点 \(v\)，我们称顶点 \(u\) 为 \(v\) 的「理想目标」（ideal target），当且仅当：</p>
+<ol>
+<li>可以从 \(v\) 到达 \(u\)。</li>
+<li>\(s[u]\) 取到最大值。</li>
+</ol>
+<p>换句话说，在 \(v\) 能到达的所有顶点中，\(u\)（即 \(v\) 的理想目标）是分数最大的那个。</p>
+<p>给定所有顶点的分数，描述一个线性时间算法，找出每个顶点 \(v\) 的理想目标。（注意 \(v\) 自身可以成为它的理想目标。）</p>
+<p>仅需给出算法描述与运行时间分析（Runtime Analysis）。正确性证明与空间复杂度分析不要求。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>在 DAG 上按逆拓扑序（reverse topological order）进行动态规划。对每个顶点 \(v\)，维护它所有「出边邻居」的理想目标中分数最大的那个；再把 \(v\) 自身与这些候选比较。</p>
+<p>自检要点：确认每个顶点与每条边都被常数次访问；确认递推只用到「拓扑序更后」的顶点的值。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>算法：在 DAG 上按顶点逆拓扑序进行动态规划。</p>
+<p>对每个顶点 \(v\) 计算 \(dp[v]\)，表示一个二元组，包含 \(v\) 的理想目标及其分数。例如若 \(x\) 是 \(v\) 的理想目标，则 \(dp[v] = (x, s[x])\)。</p>
+<p>递推更新如下：</p>
+<p>\[
+dp[v] = \max_{(v,u) \in E} dp[u]\tag{1}
+\]</p>
+<p>随后再令 \(dp[v] = \max(dp[v], (v, s[v]))\)。这里所有的 \(\max\) 都按 \(dp[\cdot]\) 二元组的第二个分量（分数）取。</p>
+<p>由于该算法对每个顶点和每条边都只访问常数次，整体运行时间为 \(O(|V| + |E|)\)。</p></div><p class="problem-source">解答来源：<code>hw07-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw07.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>Egg Drop（鸡蛋掉落）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你有 \(m\) 枚相同的鸡蛋与一栋 \(n\) 层的大楼。你需要找出最高的楼层 \(\ell \in \{0, 1, 2, \ldots, n\}\)，使得从该楼层扔下鸡蛋时鸡蛋不会碎。鸡蛋从 \(\ell\) 层或更低的楼层扔下时永远不会碎，而从 \(\ell + 1\) 层或更高的楼层扔下时总会碎。（\(\ell = 0\) 表示鸡蛋总会碎。）一旦鸡蛋摔碎，就不能再使用；若鸡蛋没碎，则可以重复使用。</p>
+<p>设 \(f(n, m)\) 为：无论 \(\ell\) 取何值，要找出 \(\ell\) 所需的最少鸡蛋投掷次数。</p>
+<p>(a) 求 \(f(1, m)\)、\(f(0, m)\)、\(f(n, 1)\)、\(f(n, 0)\)，并简要解释你的答案。</p>
+<p>(b) 考虑在还剩 \(n\) 层楼、\(m\) 枚鸡蛋时，从第 \(x\) 层扔下一枚鸡蛋。它要么碎，要么不碎。在每一种情形下，用 \(f(\cdot, \cdot)\)、\(n\)、\(m\) 和/或 \(x\) 表示找出 \(\ell\) 还需要的最少投掷次数。</p>
+<p>(c) 求 \(f(n, m)\) 的递推关系。</p>
+<p>提示：每当你扔一枚鸡蛋，把「鸡蛋碎」与「鸡蛋不破」中导致更多投掷次数的那一个称为「最坏情况事件」（worst-case event）。由于我们需要无论 \(\ell\) 取何值都能找出 \(\ell\)，你应该假设最坏情况事件总是发生。</p>
+<p>(d) 若要用动态规划计算给定 \(n\)、\(m\) 的 \(f(n, m)\)，子问题应按什么顺序求解？</p>
+<p>(e) 根据前面各部分的回答，分析你 DP 算法的时间复杂度。</p>
+<p>(f) 分析你 DP 算法的空间复杂度。</p>
+<p>(g)（额外学分 Extra Credit）能否修改上述算法以使用更少的空间？如果可以，描述你的修改并重新分析空间复杂度；若不行，请简要说明理由。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先彻底弄清边界情形：0 层楼、1 层楼、0 枚鸡蛋、1 枚鸡蛋分别意味着什么。</p>
+<p>在 (c) 中，注意「先取 max、再取 min」的顺序：对固定楼层 \(x\)，扔一次后需要取两种情形的最坏值（\(\max\)）；然后你在 \(1 \ldots n\) 中挑选最优的 \(x\)（\(\min\)）。自检时，请验证递推是否与 (a) 的边界一致。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 我们有：</p>
+<ul>
+<li>
+<p>\(f(1, m) = 1\)，因为只需从那唯一的一层楼扔一次鸡蛋，就能判断它在该层是否会碎。</p>
+</li>
+<li>
+<p>\(f(0, m) = 0\)，因为 \(\ell\) 只有一个可能的值。</p>
+</li>
+<li>
+<p>\(f(n, 1) = n\)，因为只有一枚鸡蛋，唯一策略是从第 1 层开始逐层向上扔，直到它碎为止。</p>
+</li>
+<li>
+<p>\(f(n, 0) = \infty\)（当 \(n &gt; 0\) 时），因为没有鸡蛋可扔，问题不可解。</p>
+</li>
+</ul>
+<p>(b) 若鸡蛋碎了，则只需考虑第 1 到 \(x - 1\) 层，且由于碎了一枚鸡蛋，剩余 \(m - 1\) 枚，此时还需要 \(f(x - 1, m - 1)\) 次投掷。若鸡蛋没碎，则只需考虑第 \(x + 1\) 到 \(n\) 层，且仍有 \(m\) 枚鸡蛋，此时还需要 \(f(n - x, m)\) 次投掷。</p>
+<p>(c) 递推关系为</p>
+<p>\[
+f(n, m) = 1 + \min_{x \in \{1, \ldots, n\}} \max\{f(x - 1, m - 1),\ f(n - x, m)\}
+\]</p>
+<p>当在第 \(x\) 层扔鸡蛋时，最坏情况下需要 \(\max\{f(x - 1, m - 1), f(n - x, m)\}\) 次投掷；最优策略会从 \(n\) 层楼中选择最好的一层，因此还需要 \(\min_{x\in\{1\ldots n\}} \max\{f(x - 1, m - 1), f(n - x, m)\}\) 次投掷。</p>
+<p>(d) 按 \(m\)、\(n\) 的递增顺序求解子问题，即：</p>
+<pre><code>for j in range(m+1):
+    for i in range(n+1):
+        solve f(i, j)
+</code></pre>
+<p>(e) 共有 \(nm\) 个子问题，每个子问题耗时 \(O(n)\)，故整体运行时间为 \(O(n^2 m)\)。</p>
+<p>(f) 唯一需要存储的是 DP 数组 \(f\)，它包含 \(nm\) 个元素。故整体空间复杂度为 \(O(nm)\)。</p>
+<p>(g) 可以！注意在 (c) 的递推中，我们只用到了 \(f(\cdot, m)\) 与 \(f(\cdot, m - 1)\) 的值。因此只需保存目前已计算出的最后两「列」。伪代码如下：</p>
+<pre><code>def eggdrop(n, m):
+    if m == 0:          # m = 0 的边界
+        return float("inf")
+    if n == 0:
+        return 0
+    curr = [i for i in range(n+1)]   # m = 1 的边界
+    for j in range(2, m+1):
+        prev = copy(curr)
+        for i in range(j+1):
+            curr[i] = i
+        for i in range(j+1, n+1):
+            curr[i] = 1 + min([
+                max(prev[x-1], curr[i-x])
+                for x in range(1, i+1)
+            ])
+    return curr[n]
+</code></pre></div><p class="problem-source">解答来源：<code>hw07-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw07.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>My Dog Ate My Homework（我的狗吃了我的作业）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>某天早晨你醒来，发现你的狗咬掉了一些你的 CS 170 作业纸。作业纸是一个由方格组成的 \(m \times n\) 矩形网格。其中有些方格被咬穿了洞，你不能使用带洞的纸张。你希望把纸张切成若干块，从而把所有被咬破的方格与所有干净、未被咬的方格分离开来，以便尽可能多地保留你的作业。</p>
+<p>例如，下面是一张 \(6 \times 4\) 的纸，被咬过的方格用 \(*\) 标记。如图所示，可以恰好用四刀就把咬坏的部分分离出去。</p>
+<p>（每次切割只能是水平或垂直的，并且一次只对一块纸进行切割。）</p>
+<p>请设计一个基于动态规划的算法，找出把所有咬坏部分分离出去所需的最少切割数。形式化地，问题如下：</p>
+<ul>
+<li>
+<p>输入：纸张尺寸 \(m \times n\)，以及数组 \(A[i, j]\)，当且仅当第 \((i, j)\) 个方格被咬了洞时 \(A[i, j] = 1\)。</p>
+</li>
+<li>
+<p>目标：求出最小的切割数，使得切割后每一块的 \(A[i, j]\) 取值要么全为 0，要么全为 1。</p>
+</li>
+</ul>
+<p>(a) 定义你的子问题。</p>
+<p>提示：试着做一次任意切割。你得到了哪两个子问题？</p>
+<p>(b) 写出你的子问题的递推关系。一个完整正确的递推关系必须明确给出基准情形（base cases）。</p>
+<p>(c) 描述在你的 DP 算法中应该按什么顺序求解子问题。</p>
+<p>(d) 你的 DP 算法的时间复杂度是多少？请给出理由。</p>
+<p>(e) 你的算法的空间复杂度是多少？请给出理由。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 6 × 4 网格示例：被咬方格用 * 标记，并展示四次切割逐步把咬坏部分分离的过程。</h4><p>原始 6 行 × 4 列网格（* 表示被咬，字母/数字表示作业内容）：</p>
+<pre><code>第1行: *  *  *  (空白)
+第2行: C  S  *  (空白)
+第3行: 1  7  0  *
+第4行: *  (空白) (空白) (空白)
+第5行: *  *  (空白) (空白)
+第6行: *  *  (空白) (空白)
+</code></pre>
+<p>随后四幅子图依次展示第 1、2、3、4 刀后的切割结果（每刀均为水平或垂直、一次仅切一块）。</p><p class="problem-source">来源：<code>hw07.pdf</code> · 5</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>用子矩阵的左上角 \((i_1, j_1)\) 与右下角 \((i_2, j_2)\) 来定义子问题。任意一次水平或垂直切割都会把当前矩形划分成两个更小的矩形，从而化成两个独立的子问题。</p>
+<p>基准情形：当子矩阵中所有方格的 \(A\) 值已经全相同（全 0 或全 1）时，切割数为 0。自检时，请确认你在求最小值时遍历了所有可能的水平与垂直切割位置。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) <strong>子问题定义</strong>：定义 \(B[i_1, j_1, i_2, j_2]\) 为将子矩阵 \(A[i_1 \ldots i_2, j_1 \ldots j_2]\) 分离成「全为咬破块」或「全为干净块」所需的最少切割数。</p>
+<p>(b) <strong>递推关系</strong>：</p>
+<p>\[
+B[i_1, j_1, i_2, j_2] = \min
+\begin{cases}
+0, &amp; \text{若 } A[i_1 \ldots i_2,\, j_1 \ldots j_2] \text{ 的所有元素相等} \\
+1 + B[i_1, j_1, i_1 + k, j_2] + B[i_1 + k + 1, j_1, i_2, j_2], &amp; \forall k \in \{1, \ldots, i_2 - i_1\} \\
+1 + B[i_1, j_1, i_2, j_1 + k] + B[i_1, j_1 + k + 1, i_2, j_2], &amp; \forall k \in \{1, \ldots, j_2 - j_1\}
+\end{cases}
+\]</p>
+<p>（另一种等价写法是把「所有单方格块的切割数为 0」作为基准，再在合并时通过判断两块是否同为干净/咬破来确定父块是否「纯」，从而避免单独维护「纯块」检测表。）</p>
+<p>(c) <strong>子问题求解顺序</strong>：按 \((i_2 - i_1 + 1)(j_2 - j_1 + 1)\) 的递增顺序求解。即先解决所有最小子问题（例如只含一个方格的块），逐步构建 DP 数组，直到求出覆盖整张纸的结果 \(B[1, 1, m, n]\)。</p>
+<p>(d) <strong>时间复杂度分析</strong>：两种答案均可接受：\(O((m + n)m^2 n^2)\) 与 \(O(m^3 n^3)\)。</p>
+<p>共有 \(O(m^2 n^2)\) 个子问题：\((i_1, j_1)\) 有 \(O(mn)\) 种取法，\((i_2, j_2)\) 有 \(O(mn)\) 种取法。对每个子问题，我们最多考察 \(m\) 个水平分割点与 \(n\) 个垂直分割点；一次分割会产生两个已解决的小子问题，故只需找出最优分割，耗时 \(O(n + m)\)。</p>
+<p>此外，每个子问题还需检测「纯块」基准情形（全为干净或全为咬破）。暴力检测耗时 \(O(mn)\)，因此每个子问题耗时 \(O(mn + (m + n)) \to O(mn)\)。</p>
+<p>这个每子问题的 \(O(mn)\) 因子可被降到 \(O(m + n)\)（不要求也可获满分）：可预先计算每个子矩阵的「纯度」并存入表中，用前缀和可在 \(O(mn)\) 时间内完成该预处理。若能在 \(O(1)\) 时间内判定纯度（经预处理），则整体时间可达 \(O((m + n)m^2 n^2)\)。</p>
+<p>或者，可初始化所有单方格块的切割数为 0；若存在某次切割使得结果两块切割数都为 0，且这两块类型相同（同为干净或同为咬破，任取一块的一个方格与另一块比较即可），则自身也是纯块。这样可完全省去前述预处理，仍达到 \(O((m + n)m^2 n^2)\)。</p>
+<p>(e) <strong>空间复杂度分析</strong>：必须存储整个递推用的 DP 数组，故空间复杂度为 \(O(m^2 n^2)\)。</p></div><p class="problem-source">解答来源：<code>hw07-sol.pdf</code> · 7-8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw07.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>Coding Questions（编程题：LIS 与 Edit Distance）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>本周编程题要求用动态规划实现两个经典问题：最长递增子序列（Longest Increasing Subsequence, LIS）与编辑距离（Edit Distance）。你可以通过以下两种方式访问 notebook 并完成题目：</p>
+<ol>
+<li>本机运行：从编程作业仓库 <code>git clone</code>（若已克隆则 <code>git pull</code>）
+   https://github.com/Berkeley-CS170/cs170-fa23-coding
+   并进入 <code>hw07</code> 文件夹。本地搭建说明见 <code>README.md</code>。</li>
+<li>Datahub 运行：点击相应链接并进入 <code>hw07</code> 文件夹，在 Berkeley DataHub 上完成本题。</li>
+</ol>
+<p>说明：</p>
+<ul>
+<li>
+<p><strong>提交说明</strong>：请下载你完成后的提交 <code>.zip</code> 文件，并提交到名为「Homework 7 Coding Portion」的 Gradescope 作业。</p>
+</li>
+<li>
+<p><strong>OH/HWP 说明</strong>：指定的编程课程工作人员会在办公时间（office hours）与作业派对（homework parties）期间提供概念与调试方面的帮助。</p>
+</li>
+<li>
+<p><strong>Ed（Edstem）说明</strong>：概念性问题欢迎发到公共帖子。如需调试帮助，请先在公共帖子提问。为确保他人能帮助你，请务必：
+  1. 描述你在发帖到 Ed 前已采取的调试步骤。
+  2. 描述你遇到的具体错误。
+  3. 提供若干小型测试用例，以及你期望的输出与你函数实际输出。
+  如果工作人员要求你发私密 Ed 帖子，请包含以上全部内容以及你的完整函数实现。若未提供，我们会要求你补全。</p>
+</li>
+<li>
+<p><strong>学术诚信指南</strong>：我们意识到网上可能很容易找到这些算法的实现代码，但强烈建议不要直接复制这些来源的代码，而是参考 notebook 中提供的资源，自己编写代码。同时我们也承认，某些算法可能实现方式不多，你的解法可能与网上其他解法相似。</p>
+</li>
+</ul>
+<p><strong>Q1. Longest Increasing Subsequence（最长递增子序列）</strong>（2 分）</p>
+<pre><code class="language-python">def longest_increasing_subsequence(arr, n):
+    """
+    Return a list containing longest increasing subsequence of the array.
+    If there are ties, return any one of them.
+    args:
+        arr: List[int] = an array of integers
+        n: int = an int representing the length of arr
+    return:
+        List[int] containing the longest increasing subsequence. Return the
+        actual elements, not the indices of the elements.
+    """
+</code></pre>
+<p>注意：你的解法不应运行过久，若运行时间超过 10 秒则视为过慢。我们也会检查是否存在硬编码（hardcoded）解法。</p>
+<p>简化版测试 <code>test_LIS(all_arrs, all_sols, longest_increasing_subsequence, tqdm, random)</code> 会做两件事：</p>
+<ul>
+<li>
+<p><code>check_subsequence(seq, arr)</code>：断言 <code>seq</code> 严格递增（<code>seq[i] &lt; seq[i+1]</code>），并且确实是 <code>arr</code> 的一个子序列（按顺序匹配）。</p>
+</li>
+<li>
+<p>对每个 <code>(arr, sol)</code> 测试对，断言 <code>len(student_sol) == len(sol)</code>，并调用 <code>check_subsequence</code>。</p>
+</li>
+</ul>
+<p><strong>Q2. Global Alignment / Edit Distance（编辑距离全局对齐）</strong>（6 分）</p>
+<p>编辑距离问题是求把一个单词转换为另一个单词所需的最少插入、删除与替换次数。一个重要应用是计算两个字符串的全局对齐（global alignment），常用于计算生物学。</p>
+<p>两个字符串之间的一种自然距离度量是它们能被对齐（匹配）的程度。技术上，一个对齐就是把两个字符串上下对齐写出。例如，以下是 SNOWY 与 SUNNY 的两个可能对齐：</p>
+<pre><code>S−NOWY    −SNOW−Y    SUNN−Y    SUN−−NY
+Cost: 3   Cost: 5
+</code></pre>
+<p>其中 "−" 表示空隙（gap），可在任意字符串中插入任意多个。对齐的代价是字母不同的列数，而两字符串间的编辑距离就是它们最优对齐的代价。</p>
+<p>你的算法应返回全局对齐（如上所示），而不仅仅是表示编辑距离的整数。</p>
+<pre><code class="language-python">def edit_distance(x, y):
+    """
+    args:
+        x: string = the first word.
+        y: string = The second word.
+    return:
+        Tuple[String,String] = the optimum global alignment between x and y.
+        The first string in the tuple corresponds to x and the second to y.
+        Use hyphens '-' to represent gaps in each string.
+    """
+</code></pre>
+<p>算法框架：
+1. 按照课上教科书的伪代码计算 dp 子问题。
+2. 利用记忆化的子问题，通过回溯（backtracking）重建最优全局对齐。</p>
+<p>DP 递推（教科书）：</p>
+<p>\[
+dp[i][j] = \min(dp[i-1][j] + 1,\ dp[i][j-1] + 1,\ dp[i-1][j-1] + diff(i,j))
+\]</p>
+<p>其中 \(diff(i,j) = 1\) 若 \(x[i-1] \neq y[j-1]\)，否则为 0。</p>
+<p>回溯思路：从节点 \((n, m)\) 回溯到 \((0, 0)\)。每条最短路径上的边对应一次对齐操作——边 \((i-1,j) \to (i,j)\) 表示「删除」（在 y 前端加 gap，x 前端加 \(x[i-1]\)）；边 \((i,j-1) \to (i,j)\) 表示「插入」（在 x 前端加 gap，y 前端加 \(y[j-1]\)）；边 \((i-1,j-1) \to (i,j)\) 表示「替换/匹配」（前端分别加 \(x[i-1]\)、\(y[j-1]\)）。每一步根据 dp 矩阵判断哪一个前驱子问题被用于计算 \(dp[i][j]\)；若多个前驱值都等于 \(dp[i][j]\)，任选其一即可。</p>
+<p>无分值的 sanity check（供理解回溯）：</p>
+<ul>
+<li>
+<p>求 x 前 5 个字符与 y 前 6 个字符的编辑距离，对应 DAG 上从 (0,0) 到哪个节点？答案：(5, 6)。</p>
+</li>
+<li>
+<p>边 \((i-1,j) \to (i,j)\) 对应在 x_align 与 y_align 前端各加什么？答案：y_align 前端加 gap，x_align 前端加 \(x[i-1]\)（选项 [2,3]）。</p>
+</li>
+<li>
+<p>边 \((i,j-1) \to (i,j)\) 对应？答案：x_align 前端加 gap，y_align 前端加 \(y[j-1]\)（选项 [1,4]）。</p>
+</li>
+<li>
+<p>边 \((i-1,j-1) \to (i,j)\) 对应？答案：x_align 前端加 \(x[i-1]\)，y_align 前端加 \(y[j-1]\)（选项 [3,4]）。</p>
+</li>
+<li>
+<p>若 \(dp[i][j]=5\)，\(dp[i-1][j]=4\)，\(dp[i][j-1]=5\)，\(dp[i-1][j-1]=5\)，\(diff=0\)，哪些子问题可能参与计算？答案：[1,3]。</p>
+</li>
+<li>
+<p>若 \(dp[i][j]=9\)，\(dp[i-1][j]=9\)，\(dp[i][j-1]=8\)，\(dp[i-1][j-1]=9\)，\(diff=1\)，哪些子问题可能参与计算？答案：[2]。</p>
+</li>
+</ul>
+<p>注意：你的解法不应运行过久，若运行时间超过 60 秒则视为过慢。工作人员解法平均约 20 秒。</p>
+<p><strong>调试辅助</strong>：notebook 附带了 <code>test_LIS</code> 与 <code>edit_distance</code> 的简化版测试，便于本地调试。</p>
+<p><strong>提交</strong>：确保在运行导出单元之前已按顺序运行 notebook 中的所有单元，使所有图像/图形都出现在输出中。下方单元会生成供提交的 zip 文件。</p>
+<pre><code class="language-python">grader.export(pdf=False, force_save=True, run_tests=True)
+</code></pre></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 编辑距离示例：SNOWY 与 SUNNY 的两种对齐方式及其代价（Cost 3 与 Cost 5），以及 DP 有向无环图（DAG）上节点 (i,j) 与边 (i-1,j)/(i,j-1)/(i-1,j-1) 的示意。</h4><p>对齐示例：</p>
+<pre><code>S−NOWY    −SNOW−Y    SUNN−Y    SUN−−NY
+Cost: 3   Cost: 5
+</code></pre>
+<p>DAG 示意：节点 (i,j) 向 (i+1,j)、(i,j+1)、(i+1,j+1) 连边，对应删除、插入、替换/匹配三种操作。</p><p class="problem-source">来源：<code>hw07-sol.pdf</code> · 3-6</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>Q1：除了 \(dp[i]\)（以 \(i\) 结尾的 LIS 长度）外，另建一个 <code>prev[]</code> 数组记录转移来源，最后从 dp 值最大的位置倒序回溯重建序列。</p>
+<p>Q2：先按教科书伪代码填好 dp 表，再从 \((n,m)\) 回溯到 \((0,0)\)。每一步比较「删除」「插入」「替换/匹配」三种操作对应的 dp 值，选其中能导出 \(dp[i][j]\) 的那条边；若多条均可，任选其一。注意每一步都要同时给 x_align 与 y_align 添加字符（真实字符或 '-'），保持两串等长。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>本题存在本地解答（notebook 中已给出参考实现），完整代码与算法说明如下。</p>
+<p><strong>Q1. Longest Increasing Subsequence</strong></p>
+<p>思路：维护 \(dp[i]\) 表示以位置 \(i\) 结尾的最长递增子序列长度，同时用 <code>prev[i]</code> 记录最优转移的前驱下标。填完 dp 后，找到 dp 值最大的位置作为终点，沿 <code>prev</code> 倒序回溯并反转得到实际子序列。</p>
+<pre><code class="language-python">def longest_increasing_subsequence(arr, n):
+    # compute the DP array
+    dp = [1] * n
+    prev = [i for i in range(n)]
+    for i in range(n):
+        for j in range(i):
+            if arr[i] &gt; arr[j] and dp[i] &lt;= dp[j]:
+                dp[i] = dp[j] + 1
+                prev[i] = j
+    # reconstruct the sequence
+    end = dp.index(max(dp))
+    sequence = []
+    while prev[end] != end:
+        sequence.append(arr[end])
+        end = prev[end]
+    sequence.append(arr[end])
+    sequence.reverse()
+    return sequence
+</code></pre>
+<p><strong>Q2. Edit Distance / Global Alignment</strong></p>
+<p>思路：先按递推填 dp 表（删除 +1、插入 +1、替换/匹配 +diff），再从 \((n,m)\) 回溯到 \((0,0)\)，根据哪条边的代价等于 \(dp[i][j]\) 决定对齐方式，并同时构建 x_align 与 y_align，最后反转。</p>
+<pre><code class="language-python">def edit_distance(x, y):
+    n = len(x)
+    m = len(y)
+    dp = []
+    def diff(i, j):
+        return 1 if x[i - 1] != y[j - 1] else 0
+    # base cases
+    for i in range(n + 1):
+        dp.append([-1] * (m + 1))
+    for i in range(n + 1):
+        dp[i][0] = i
+    for j in range(m + 1):
+        dp[0][j] = j
+    # compute recurrence
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            by_deletion = dp[i - 1][j] + 1
+            by_insertion = dp[i][j - 1] + 1
+            by_substitution = dp[i - 1][j - 1] + diff(i, j)
+            dp[i][j] = min(by_deletion, by_insertion, by_substitution)
+    # Backtrace to compute the optimum alignment:
+    x_align, y_align = "", ""
+    i, j = n, m
+    while (i, j) != (0, 0):
+        deletion = dp[i-1][j] + 1 if i &gt; 0 else float("inf")
+        insertion = dp[i][j-1] + 1 if j &gt; 0 else float("inf")
+        substitution = (dp[i-1][j-1] + diff(i, j)) if i &gt; 0 and j &gt; 0 else float("inf")
+        moves = [
+            (deletion, (i-1, j)),
+            (insertion, (i, j-1)),
+            (substitution, (i-1, j-1)),
+        ]
+        prev_i, prev_j = min(moves)[1]
+        x_align += x[i-1] if prev_i == i-1 else '-'
+        y_align += y[j-1] if prev_j == j-1 else '-'
+        i, j = prev_i, prev_j
+    return x_align[::-1], y_align[::-1]
+</code></pre>
+<p><strong>正确性与复杂度要点</strong>：</p>
+<ul>
+<li>
+<p>LIS：\(dp[i] = \max_{j&lt;i,\ arr[j]&lt;arr[i]} (dp[j]+1)\)，基准 \(dp[i]=1\)。时间 \(O(n^2)\)，额外空间 \(O(n)\)（dp 与 prev）。</p>
+</li>
+<li>
+<p>Edit Distance：递推 \(dp[i][j] = \min(dp[i-1][j]+1,\ dp[i][j-1]+1,\ dp[i-1][j-1]+diff(i,j))\)，基准 \(dp[i][0]=i\)、\(dp[0][j]=j\)。填表时间 \(O(nm)\)，回溯重建对齐 \(O(n+m)\)。空间 \(O(nm)\)。</p>
+</li>
+</ul>
+<p>测试会验证：返回的对齐两串等长、每串仅由原串加 gap 得到、且两串间不同列数等于编辑距离（与 <code>pylev.levenshtein</code> 结果一致）。</p></div><p class="problem-source">解答来源：<code>hw07-sol.pdf</code> · 1-9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw07.pdf</code> · 6 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>hw07.pdf</code></li>
+      <li><code>hw07-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

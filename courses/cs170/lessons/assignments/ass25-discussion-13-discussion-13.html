@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 13 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 13</p>
+    <h1>讨论 13：随机算法分析与近似算法</h1>
+    <p class="lede">本讨论课复习随机算法的分析方法，包括联合界（Union Bound）、放大技术（Amplification）、Markov 不等式、Chebyshev 不等式与集中不等式（Chernoff/Hoeffding 界）；并涉及两两独立哈希（pairwise independent hashing）、流算法（streaming algorithm）、旅行商问题（TSP）的近似算法以及整数线性规划（ILP）建模。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>randomized algorithms</li><li>union bound</li><li>amplification</li><li>Markov&#x27;s inequality</li><li>Chebyshev&#x27;s inequality</li><li>concentration inequalities</li><li>pairwise independent hashing</li><li>streaming algorithm</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis13.pdf</code>、<code>dis13-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis13.pdf</code>、<code>dis13-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">discussion13-problem1</span><strong>随机算法分析原理</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>注：你的 TA 可能不会讲完所有题目，这完全没问题。讨论课工作表并不是设计在一小时内完成的。它们故意出得很长，以便作为你用来练习、巩固和拓展课堂、阅读和作业中讨论的概念的资源。</p>
+<p><strong>随机算法分析原理（Philosophy of analyzing randomized algorithms）</strong>。第一步始终是识别一个“坏事件”——即识别随机性何时导致算法失败。我们将以如下问题作为“测试平台”来复习课上学过的一些技术。</p>
+<p>设 G 是一个二分图（bipartite graph），包含 n 个左顶点、n 个右顶点，以及 n² − n + 1 条边。</p>
+<ul>
+<li>
+<p>证明 G 一定存在完美匹配（perfect matching）。</p>
+</li>
+<li>
+<p>给出一个关于 n 的多项式时间算法来找到这个完美匹配。</p>
+</li>
+</ul>
+<p>现在我们使用一些常用技术来分析以下算法 <strong>BlindMatching</strong>：</p>
+<ul>
+<li>
+<p>令 π 和 σ 是 [n] 上独立且均匀随机的排列（independent and uniformly random permutations）。</p>
+</li>
+<li>
+<p>如果 {π(1), σ(1)}, {π(2), σ(2)}, ..., {π(n), σ(n)} 构成一个有效匹配（valid matching），则输出它。</p>
+</li>
+<li>
+<p>否则输出 failed。</p>
+</li>
+</ul>
+<p><strong>Union Bound（联合界）</strong>。设 X₁, ..., Xₙ 是（不必独立的）伯努利随机变量（Bernoulli random variables，即取值为 {0,1} 的随机变量）。那么我们有如下恒等式：
+\[ \Pr[X_1 + \cdots + X_n \ge 1] \le \Pr[X_1 = 1] + \Pr[X_2 = 1] + \cdots + \Pr[X_n = 1]. \]</p>
+<p>现在使用联合界来分析 BlindMatching 算法。注意，输出 M = ({π(1), σ(1)}, ..., {π(n), σ(n)}) 是一个有效完美匹配，当且仅当所有形如 {π(i), σ(i)} 的边都在 G 中。如果其中任意一对不是 G 中的边，则发生“坏事件”。</p>
+<p>设 Xᵢ 为指示变量（indicator），表示 {π(i), σ(i)} 不在图 G 中这一事件。</p>
+<ol>
+<li>Xᵢ = 1 的概率是多少？</li>
+<li>使用联合界来给出 M 不是有效完美匹配的概率的上界。</li>
+<li>由此得出 G 存在一个有效完美匹配。</li>
+</ol>
+<p>我们得到的坏事件概率上界相当高。鉴于此，我们引入<strong>放大（amplification）</strong>技术。</p>
+<p><strong>Amplification（放大）</strong>。放大的思想是：如果我们有一个失败概率为 p 的随机算法，我们可以多次重复该算法并聚合所有运行的输出，使得新算法的失败概率显著降低。现在考虑以下算法 <strong>SpamBlindMatching</strong>：</p>
+<ul>
+<li>
+<p>独立运行 BlindMatching 共 T 次。</p>
+</li>
+<li>
+<p>如果至少有一次运行输出了一个有效完美匹配，则返回该次运行的输出。</p>
+</li>
+<li>
+<p>否则输出 failed。</p>
+</li>
+</ul>
+<p>为了看到放大的效果，请回答以下问题：
+1. SpamBlindMatching 失败概率的紧上界（tight upper bound）是多少？
+2. 如果我们希望失败概率为 δ，应将 T 设为多大？</p>
+<p>注意，SpamBlindMatching 的失败概率不仅比 BlindMatching 更低，而且还可以根据我们进行的“放大”次数来调整！</p>
+<p>现在我们转向<strong>集中现象（concentration phenomena）</strong>及其在分析随机算法中的有用性。</p>
+<p><strong>Markov 不等式（Markov's inequality）</strong>。设 X 是一个非负值随机变量，则对任意 t ≥ 0：
+\[ \Pr[X \ge t] \le \frac{\mathbb{E}[X]}{t}. \]</p>
+<ol>
+<li>Markov 不等式对可能取负值的随机变量不成立！请举出一个例子。</li>
+<li>给出 Markov 不等式的一个紧例子（tight example）。具体地，给定 μ 和 t，构造一个随机变量 X，使得 μ = E[X] 且 Pr[X ≥ t] = μ/t。</li>
+</ol>
+<p><strong>Chebyshev 不等式（Chebyshev's inequality）</strong>。设 X 是任意具有良定义方差¹的随机变量，则
+\[ \Pr\!\left[|X - \mathbb{E}[X]| &gt; t\sqrt{\mathrm{Var}[X]}\right] \le \frac{1}{t^2}. \]</p>
+<p>为了看到上述不等式的应用，考虑以下问题：</p>
+<p>设 B 是一个包含 n 个球的袋子，其中 k 个是红色，n−k 个是蓝色。我们不知道 k 的值，希望通过从 B 中有放回地抽取 ℓ 个独立样本来估计 k。</p>
+<p>设 X 为抽到的红球数量。</p>
+<ol>
+<li>E[X] 是多少？</li>
+<li>Var[X] 是多少？</li>
+<li>选择一个 ℓ 的值，并给出一个算法，该算法接收 n 和 X，输出一个数 k̂，使得 k̂ ∈ [k − ε√k, k + ε√k] 的概率至少为 1 − δ。</li>
+</ol>
+<p>¹ 在本课程中，所有随机变量都具有良定义的方差（即 Var[·] &lt; ∞）。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>联合界部分：先数清图 G 中共有多少条缺失的边，再计算单个随机对 (π(i),σ(i)) 恰好命中缺失边的概率，最后对全部 n 个指示变量求和。放大部分：全部 T 次独立运行均失败的概率是单次失败概率的 T 次方，利用 (1−1/n)^n ≤ 1/e 解出 T。</p>
+<p>Markov 部分：考虑一个关于 0 对称、期望为 0 但取值非零概率为正的分布；紧例可取两点分布，以 μ/t 概率取 t、以 1−μ/t 概率取 0。Chebyshev/袋子部分：用期望线性性与样本独立性分别算出 E[X] 与 Var[X]，再对估计量 (n/ℓ)·X 应用 Chebyshev 不等式，解出 ℓ 使偏差不超过 ε√k。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>Union Bound 部分：</strong></p>
+<ol>
+<li>
+<p>图 G 共有 n·n = n² 个可能的（左顶点, 右顶点）对，其中 n² − (n² − n + 1) = n − 1 对不是边。由于 π(i) 与 σ(i) 分别在左右顶点上均匀随机且相互独立，(π(i),σ(i)) 在全部 n² 个对上均匀分布。因此
+\[ \Pr[X_i = 1] = \frac{n-1}{n^2} = \frac{1}{n} - \frac{1}{n^2}. \]</p>
+</li>
+<li>
+<p>对 n 个指示变量 X₁, ..., Xₙ 应用联合界：
+\[ \Pr[M \text{ is not a perfect matching}] = \Pr\!\left[\sum_{i=1}^n X_i \ge 1\right] \le \sum_{i=1}^n \Pr[X_i = 1] = n \cdot \left(\frac{1}{n} - \frac{1}{n^2}\right) = 1 - \frac{1}{n}. \]</p>
+</li>
+<li>
+<p>由第 2 问，M 是完美匹配的概率至少为 1/n &gt; 0，因此 G 中必存在完美匹配。</p>
+</li>
+</ol>
+<p><strong>Amplification 部分：</strong></p>
+<ol>
+<li>
+<p>SpamBlindMatching 失败当且仅当全部 T 次独立运行均失败，故失败概率为
+\[ \left(1 - \frac{1}{n}\right)^T. \]</p>
+</li>
+<li>
+<p>设 T = n ln(1/δ)。由于 (1 − 1/n)^n ≤ 1/e，有
+\[ \left(1 - \frac{1}{n}\right)^{n \ln(1/\delta)} \le \left(\frac{1}{e}\right)^{\ln(1/\delta)} = \delta. \]</p>
+</li>
+</ol>
+<p><strong>Markov 部分：</strong></p>
+<ol>
+<li>
+<p>设 X 以 1/2 概率取 +1、1/2 概率取 −1（Uniform ±1），则 E[X] = 0，但 Pr[X ≥ 0] = 1/2 &gt; 0 = E[X]/0，违反 Markov 不等式。</p>
+</li>
+<li>
+<p>构造随机变量 X：以概率 μ/t 取值 t，以概率 1 − μ/t 取值 0。则 E[X] = t·(μ/t) + 0·(1−μ/t) = μ，且 Pr[X ≥ t] = μ/t = E[X]/t，达到 Markov 不等式的等号。</p>
+</li>
+</ol>
+<p><strong>Chebyshev/袋子部分：</strong></p>
+<ol>
+<li>
+<p>设 Xᵢ 为第 i 次抽到红球的指示变量，则 X = X₁ + ... + X_ℓ。由期望线性性：
+\[ \mathbb{E}[X] = \sum_{i=1}^\ell \mathbb{E}[X_i] = \ell \cdot \frac{k}{n}. \]</p>
+</li>
+<li>
+<p>由样本独立性：
+\[ \mathrm{Var}[X] = \sum_{i=1}^\ell \mathrm{Var}[X_i] = \ell \cdot \frac{k}{n}\!\left(1 - \frac{k}{n}\right). \]</p>
+</li>
+<li>
+<p>算法：输出 k̂ = (n/ℓ)·X。此时
+\[ \mathbb{E}[\hat{k}] = k, \quad \mathrm{Var}[\hat{k}] = \frac{n^2}{\ell^2} \cdot \ell \cdot \frac{k}{n}\!\left(1 - \frac{k}{n}\right) = \frac{kn}{\ell}\!\left(1 - \frac{k}{n}\right) \le \frac{kn}{\ell}. \]
+由 Chebyshev 不等式，k̂ 偏离 k 超过 t√(kn/ℓ) 的概率至多为 1/t²。取 t = 1/√δ，则偏离超过 √(kn/ℓ)/√δ 的概率至多为 δ。为使该偏差不超过 ε√k，需
+\[ \frac{1}{\sqrt{\delta}}\sqrt{\frac{kn}{\ell}} \le \varepsilon\sqrt{k} \;\Longrightarrow\; \sqrt{\frac{n}{\ell\delta}} \le \varepsilon \;\Longrightarrow\; \ell \ge \frac{n}{\varepsilon^2 \delta}. \]
+取 ℓ = n/(ε²δ) 即可。</p>
+</li>
+</ol></div><p class="problem-source">解答来源：<code>dis13-sol.pdf</code> · 1-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis13.pdf</code> · 1-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion13-problem2</span><strong>集中不等式复习</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>1 Concentration Inequalities Review（集中不等式复习）</strong></p>
+<ol>
+<li>
+<p>回顾 CS 70 中的 Markov 不等式：对任意非负随机变量 X 和正常数 a，有
+\[ \Pr(X \ge a) \le \frac{\mathbb{E}[X]}{a}. \]
+给出该不等式的简单证明。</p>
+</li>
+<li>
+<p>回顾 Chebyshev 不等式：对所有 λ &gt; 0，有
+\[ \Pr(|X - \mathbb{E}[X]| &gt; \lambda) \le \frac{\mathrm{Var}[X]}{\lambda^2}. \]
+给出该不等式的证明。
+提示：你可以使用 Markov 不等式。</p>
+</li>
+<li>
+<p>Chernoff/Hoeffding 界指出：对独立同分布（i.i.d.）的伯努利随机变量 X₁, ..., Xₜ，其中 p = E[Xᵢ] 且 ε &gt; 0，有
+\[ \Pr\!\left[\left|\frac{1}{t}\sum_{i=1}^t X_i - p\right| &gt; \varepsilon\right] \le 2e^{-2\varepsilon^2 t}. \]
+我们不要求你证明该界。如果你对证明感兴趣，可以询问 TA 或查阅以前的 CS 70 笔记。</p>
+</li>
+</ol></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对 Markov 不等式：将 E[X] = Σ x·Pr[X=x] 拆分为 x &lt; a 与 x ≥ a 两部分，在 x ≥ a 部分用 a 放缩 x。对 Chebyshev 不等式：考虑随机变量 Y = (X − E[X])²，对其使用 Markov 不等式，注意 E[Y] = Var[X]。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><ol>
+<li>
+<p>将期望拆分为两部分：
+\[ \mathbb{E}[X] = \sum_x x \Pr[X=x] \ge \sum_{x \ge a} x \Pr[X=x] \ge \sum_{x \ge a} a \Pr[X=x] = a \sum_{x \ge a} \Pr[X=x] = a \Pr[X \ge a]. \]
+两边同除以 a 即得。</p>
+</li>
+<li>
+<p>令 Y = (X − E[X])²，则 Y 为非负随机变量。对 Y 应用 Markov 不等式：
+\[ \Pr(|X - \mathbb{E}[X]| &gt; \lambda) = \Pr((X - \mathbb{E}[X])^2 &gt; \lambda^2) \le \frac{\mathbb{E}[(X - \mathbb{E}[X])^2]}{\lambda^2} = \frac{\mathrm{Var}[X]}{\lambda^2}. \]</p>
+</li>
+<li>
+<p>不要求证明。</p>
+</li>
+</ol></div><p class="problem-source">解答来源：<code>dis13-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis13.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion13-problem3</span><strong>单射函数</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>2 One-to-One Functions（单射函数）</strong></p>
+<p>回顾：若哈希函数族 H = {h₁, ..., hₘ : {1, ..., N} → {1, ..., R}} 满足
+\[ \Pr_{h \sim H}[h(x) = i, h(y) = j] = \frac{1}{R^2}, \]
+对所有 x ≠ y ∈ {1, ..., N} 和 i, j ∈ {1, ..., R}，则称 H 是两两独立的（pairwise independent）。</p>
+<p>设 \(H\) 是一个两两独立的哈希函数族，将元素 \(U=\{1,\ldots,n\}\) 映射到 \(\{1,\ldots,n^3\}\)。证明：从 \(H\) 中随机选取的哈希函数 \(h\) 是单射（one-to-one）的概率至少为 \(1-1/n\)。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>\(h\) 不是单射当且仅当存在某对 \(x\ne y\) 使得 \(h(x)=h(y)\)。对全部 \(\binom{n}{2}\) 个无序对使用联合界，再利用两两独立性计算每对发生碰撞的概率，并注意对碰撞值 \(c\) 求和。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>考虑从 H 中均匀随机选取的函数是单射的概率：
+\[ \Pr_{h \sim H}[h \text{ is one-to-one}] = \Pr_{h \sim H}[h(x_1) \neq h(x_2) \neq \cdots \neq h(x_n)] \]
+\[ = 1 - \Pr_{h \sim H}\!\left[\bigvee_{i \neq j} h(x_i) = h(x_j)\right] \]
+\[ \ge 1 - \sum_{i \neq j} \Pr_{h \sim H}[h(x_i) = h(x_j)] \quad \text{[联合界 Union Bound]} \]
+\[ = 1 - \sum_{i \neq j} \sum_{c=1}^{n^3} \Pr_{h \sim H}[h(x_i) = c, h(x_j) = c] \quad \text{[全概率公式 Law of Total Probability]} \]
+\[ = 1 - \sum_{i \neq j} n^3 \cdot \frac{1}{(n^3)^2} \quad \text{[H 的两两独立性 Pairwise Independence]} \]
+\[ = 1 - n(n-1) \cdot \frac{1}{n^3} \]
+\[ \ge 1 - \frac{1}{n}, \]
+得证。</p></div><p class="problem-source">解答来源：<code>dis13-sol.pdf</code> · 5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis13.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion13-problem4</span><strong>投票流算法</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>3 Streaming for Voting（投票流算法）</strong></p>
+<p>考虑以下场景。正在为一个重大选举计票，但由于资源有限，只有一台计算机可用于计票。此外，这台计算机一次只能存储一张选票的空间，外加一个额外的整数。每张选票是一个单独的比特 0 或 1，分别表示投给候选人 A 和候选人 B。</p>
+<p>(a) 在给定空间限制下，设计一个算法来判断候选人 A 或 B 是否获胜，或者是否平局。</p>
+<p>(b) 现在考虑一个有 k &gt; 2 个候选人的选举。只有当某个候选人获得超过 50% 的选票时，才存在获胜者，否则没有获胜者。如果再给我们一个整数的存储空间，设计一个算法来判断是否存在获胜者。
+为简化起见，如果没有获胜者，你的算法可以输出任意一个候选人（不一定是得票最多的）。选票现在编号为 1, 2, ..., k。
+提示：由于候选人只有获得超过 50% 的选票才能获胜，该问题实际上与 (a) 非常相似，只是现在需要跟踪获胜者。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 维护一个整数表示两位候选人的得票净差值，遇到 A 的选票减 1、遇到 B 的选票加 1，最后根据符号判断。(b) 这是经典的 Boyer-Moore 多数投票算法：维护一个候选者 m 和一个计数器 i；当计数器为 0 时把当前选票设为候选者；否则若当前选票等于候选者则加 1，否则减 1。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 将整数 i 初始化为 0。用另一个变量存储当前选票。对每张投给候选人 A 的选票，将 i 减 1。对每张投给候选人 B 的选票，将 i 加 1。
+如果最终 i 为负，则候选人 A 获胜。如果最终 i 为正，则候选人 B 获胜。如果 i 为 0，则为平局。</p>
+<p>(b) 设 m 是一个变量，取值为 [k] 中的数，表示当前选举的获胜者。设 i 是一个与上一部分类似的计数器。对流中的每个元素，执行以下操作：如果 i 为 0，则将 m 设为当前选票的值，并将 i 设为 1。否则如果 i &gt; 0 且 m 等于当前选票，则将 i 加 1。否则将 i 减 1。
+最后，如果存在多数获胜者，m 将包含它。但如果没有多数获胜者，m 仍然包含流中的某个元素。</p>
+<p>解释：不妨设候选人 1 是获胜者，即获得超过一半的选票。考虑值 j：当 m = 1 时 j = i，当 m ≠ 1 时 j = −i。直观上，j 始终编码候选人 1 当前“领先”的幅度（如果幅度为负，则候选人 1 还需要 −j + 1 张选票才能领先）。我们只需证明该值在算法结束时为正。每张投给候选人 1 的选票使 j 增加 1，而投给其他候选人的选票最多使 j 减少 1（但如果例如当 m = 3 时收到候选人 2 的选票，则可能增加 j）。由于候选人 1 获得超过一半的选票，j 在算法结束时必为正。</p></div><p class="problem-source">解答来源：<code>dis13-sol.pdf</code> · 6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis13.pdf</code> · 6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion13-problem5</span><strong>近似旅行商问题</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>4 Approximating the Traveling Salesperson Problem（近似旅行商问题）</strong></p>
+<p>回顾课上我们学到的 TSP 近似算法：
+1. 给定完全图 G = (V, E)，计算其最小生成树（MST）。
+2. 在 MST 上运行 DFS，并记录先序遍历（pre-order）访问的顶点。
+3. 输出巡游（tour）是步骤 2 中计算的顶点列表，并将第一个顶点追加到末尾。</p>
+<p>当 G 满足三角不等式时，该算法达到 2 的近似比。但如果三角不等式不成立会怎样？</p>
+<p>假设我们在以下完全图上运行该近似算法，四个顶点为 A, B, C, D，边权如下：</p>
+<ul>
+<li>
+<p>A-B: 2</p>
+</li>
+<li>
+<p>A-C: 5</p>
+</li>
+<li>
+<p>A-D: 1</p>
+</li>
+<li>
+<p>B-C: 1</p>
+</li>
+<li>
+<p>B-D: 5</p>
+</li>
+<li>
+<p>C-D: 1</p>
+</li>
+</ul>
+<p>该算法会根据 DFS 遍历过程中的不同选择返回不同的巡游。</p>
+<ol>
+<li>哪种 DFS 遍历能产生最佳的输出巡游？</li>
+<li>哪种 DFS 遍历能产生最差的输出巡游？</li>
+<li>该算法在上述实例中最坏情况下的近似比是多少？为什么它比 2 更差？</li>
+</ol></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 四个顶点 A, B, C, D 的完全图，边权标注为：A-B=2, A-C=5, A-D=1, B-C=1, B-D=5, C-D=1</h4><table>
+<thead>
+<tr>
+<th>边</th>
+<th>权重</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-B</td>
+<td>2</td>
+</tr>
+<tr>
+<td>A-C</td>
+<td>5</td>
+</tr>
+<tr>
+<td>A-D</td>
+<td>1</td>
+</tr>
+<tr>
+<td>B-C</td>
+<td>1</td>
+</tr>
+<tr>
+<td>B-D</td>
+<td>5</td>
+</tr>
+<tr>
+<td>C-D</td>
+<td>1</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>dis13.pdf</code> · 7</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先画出图并找出 MST（由三条权重为 1 或 2 的最小边组成）。MST 是一条包含 3 条边的路径，DFS 先序遍历的顺序取决于从哪个顶点开始以及优先走向哪个邻居。枚举所有可能的先序序列，计算对应巡游的总长度（相邻顶点间直接边权之和，包括回到起点的边）。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><ol>
+<li>最佳遍历：A-D-C-B、D-C-B-A、B-C-D-A 或 C-D-A-B。
+解释：MST 为 {(A,D), (D,C), (C,B)}。最优巡游使用了所有这些边。例如，如果从 A 开始遍历树，则唯一的遍历方式是沿着树走并按 D、C、B 的顺序访问顶点。另一种可能的遍历是从 D 开始，走到 C，然后 B，回溯，再前往 A。</li>
+</ol>
+<p>注意，如果从 D 开始并先走到 A，则接下来必须访问 C，这不会产生最佳输出巡游（如第 2 问所示）。</p>
+<ol>
+<li>
+<p>最差遍历：C-B-D-A 或 D-A-C-B。
+参见上述解释。
+注意，总体上最差的巡游 D-C-A-B 不可能被该算法输出，无论使用何种 DFS 遍历。</p>
+</li>
+<li>
+<p>近似比 12/5。
+由前几问，最优巡游长度为 5（A-D-C-B-A：A-D=1, D-C=1, C-B=1, B-A=2，合计 5），而算法最差的可能输出为 12（C-B-D-A-C：C-B=1, B-D=5, D-A=1, A-C=5，合计 12）。这比 2 更差是因为我们的图不满足三角不等式，具体为 ℓ(A,C) &gt; ℓ(A,B) + ℓ(B,C)（5 &gt; 2+1）且 ℓ(B,D) &gt; ℓ(A,B) + ℓ(D,A)（5 &gt; 2+1），而这正是算法保证近似比为 2 的必要条件。</p>
+</li>
+</ol></div><p class="problem-source">解答来源：<code>dis13-sol.pdf</code> · 7-8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis13.pdf</code> · 7 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">discussion13-problem6</span><strong>波霸奶茶店</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>5 Boba Shops（波霸奶茶店）</strong></p>
+<p>一个矩形城市被划分为 m × n 个街区的网格。你希望开设波霸奶茶店，使得对于城市中的每个街区，要么该街区内有一家波霸奶茶店，要么其相邻街区中有一家（假设每个街区最多有 4 个相邻街区）。在街区 ij 开设波霸奶茶店的租金成本为 rᵢⱼ。</p>
+<p>编写一个整数线性规划（integer linear program）来确定在哪些街区开设波霸奶茶店，以使总租金成本最小。</p>
+<p>(a) 你的变量是什么？它们表示什么？
+(b) 目标函数是什么？简要说明理由。
+(c) 约束条件是什么？简要说明理由。
+(d) 求解线性规划的松弛版本（非整数版本）得到一个实数解。你将如何对 LP 解进行舍入以获得问题的整数解？用最多两句话描述算法。
+(e) 你在 (d) 中算法的近似比是多少？简要说明理由。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>变量：每个街区一个 0/1 变量。目标：最小化 Σ rᵢⱼxᵢⱼ。约束：对每个街区，其自身与上下左右邻居的变量之和 ≥ 1。舍入：每个约束最多含 5 个变量，故至少有一个变量 ≥ 1/5，将其向上舍入为 1 即可满足约束。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 对每个街区有一个变量 xᵢⱼ，即 {xᵢⱼ | i ∈ {1, ..., m}, j ∈ {1, ..., n}}。该变量表示是否在该街区开设波霸奶茶店（xᵢⱼ = 1 表示开设，xᵢⱼ = 0 表示不开设）。</p>
+<p>(b) min Σᵢ₌₁ᵐ Σⱼ₌₁ⁿ rᵢⱼ xᵢⱼ。该目标函数表示最小化所有开设波霸奶茶店的街区的租金总和。或者，min t 也是正确的，只要添加约束 Σ rᵢⱼxᵢⱼ ≤ t。</p>
+<p>(c) (i) xᵢⱼ ≥ 0（或 xᵢⱼ ∈ {0,1}，或 xᵢⱼ ∈ ℤ⁺）：该约束表示每个街区要么有要么没有波霸奶茶店。
+(ii) 对每个 1 ≤ i ≤ m, 1 ≤ j ≤ n：
+xᵢⱼ + x_{i+1,j}·𝟙{i+1≤m} + x_{i−1,j}·𝟙{i−1≥1} + x_{i,j+1}·𝟙{j+1≤n} + x_{i,j−1}·𝟙{j−1≥1} ≥ 1
+该约束表示对每个街区，该街区或其相邻街区中必须有一家波霸奶茶店。𝟙{condition} 为指示函数，当条件成立时为 1，否则为 0，用于处理边缘街区可能没有全部 4 个邻居的事实。
+(iii) 如果目标函数是 min t，则需要添加约束 Σᵢ₌₁ᵐ Σⱼ₌₁ⁿ rᵢⱼ xᵢⱼ ≤ t。</p>
+<p>(d) 将所有大于或等于 1/5 的变量舍入为 1，否则舍入为 0。换言之，当且仅当 xᵢⱼ ≥ 0.2 时在街区 (i,j) 开设波霸奶茶店。</p>
+<p>(e) 使用上一部分的舍入方案可得到 5-近似。
+理由：每个约束最多包含 5 个变量，因此对每个约束，其中至少有一个变量的值 ≥ 1/5（并非所有变量都低于平均值）。舍入解的总成本最多为 5 · LP-OPT，因为对被舍入向上的任意 xᵢⱼ 有 rᵢⱼ ≤ 5rᵢⱼxᵢⱼ，而其他 (i,j) 对对舍入解的成本无贡献。由于 Integral-OPT ≥ LP-OPT（LP 是 ILP 的松弛，更一般），我们的舍入得到的值最多为 5 LP-OPT ≤ 5 Integral-OPT。因此我们得到 5-近似。</p></div><p class="problem-source">解答来源：<code>dis13-sol.pdf</code> · 8-10 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis13.pdf</code> · 8 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis13.pdf</code></li>
+      <li><code>dis13-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

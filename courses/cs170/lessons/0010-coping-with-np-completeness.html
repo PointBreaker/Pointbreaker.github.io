@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>应对 NP 完全性 — CS170</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS170 · 第 10 讲</p><h1>应对 NP 完全性</h1><p class="lede">面对难解问题，使用搜索、近似、局部搜索、随机化和特殊结构获得可用算法。</p><div class="meta"><span>预计用时：144 分钟</span><span>难度：进阶</span><span>Algorithms · Graph Algorithms · Dynamic Programming · Linear Programming</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>理解回溯法的框架（测试、扩展、选择三要素）及其在 SAT 中的应用</li><li>掌握分支限界法通过下界估计剪枝的思想，以及 TSP 的下界构造方法</li><li>理解近似比的定义，掌握基于极大匹配的 2-近似顶点覆盖算法</li><li>掌握 k-聚类最远优先遍历和度量 TSP 的 MST 近似算法，理解一般 TSP 的不可近似性</li><li>掌握 KNAPSACK FPTAS 的设计思路：为何需要缩放价值、如何缩放、以及为何缩放后动态规划的时间复杂度关于输入规模和 1/ε 均为多项式。</li><li>理解可近似性分层的四个层级，并能在具体问题（TSP、VERTEX COVER、KNAPSACK、SET COVER）与层级之间建立对应。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>NP-完全性基本概念与归约（第 8 章）</li><li>布尔可满足性（SAT）与子句化简</li><li>最小生成树（MST）算法</li><li>三角不等式与度量空间</li><li>0/1 KNAPSACK 问题的定义及其动态规划解法（O(nW) 与 O(nV) 两种形式）。</li><li>NP-完全性基础：近似算法与近似比的概念（第 9.2 节前段内容）。</li></ul><h2 id="p1-1-section-9-1-backtracking">回溯法（Backtracking）</h2><p>回溯法（Backtracking）的核心思想是：在构造解的过程中，往往只需检查解的一个局部就能判断它是否不可能扩展为完整解，从而提前剪枝。以布尔可满足性（SAT）为例，若某个子句为 (w∨x)，则所有 w = x = 0 的赋值可立即排除，一次判断就能剪掉四分之一的搜索空间。</p>
+<p>算法从原始问题 P₀ 出发，维护一个活跃子问题集合 S。每次从 S 中取出一个子问题 P，将其扩展为更小的子问题 P₁, P₂, …, Pₖ。对每个子问题执行测试：若测试报告“失败”则丢弃；若测试报告“成功”则找到解并终止；若测试报告“不确定性”则加入 S 继续搜索。当 S 为空时，宣布无解。</p>
+<p>对于 SAT，每个搜索树节点可用部分赋值描述，也可用代入后剩余的子句描述。测试规则如下：若存在空子句（empty clause）则失败；若子句全部满足则成功；否则为不确定性。扩展时，选择包含最短子句的子问题，并在该子句中选择一个变量进行分支——若该子句是单文字子句，则至少有一个分支会被立即终止。</p>
+<p>回溯法最坏情况仍是指数时间，但通过精心设计的测试、扩展与选择策略，在实际实例中往往极为高效。例如，当输入为 2SAT 实例时，该算法必在多项式时间内找到满足赋值（如果存在的话）。</p>
+<p>伪代码：</p>
+<pre><code>Start with some problem P0
+Let S = {P0}, the set of active subproblems
+Repeat while S is nonempty:
+  choose a subproblem P ∈ S and remove it from S
+  expand it into smaller subproblems P1, P2, ..., Pk
+  For each Pi:
+    If test(Pi) succeeds: halt and announce this solution
+    If test(Pi) fails: discard Pi
+    Otherwise: add Pi to S
+Announce that there is no solution
+</code></pre><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>给定布尔公式 φ(w,x,y,z) = (w∨x∨y∨z) ∧ (w∨x) ∧ (x∨y) ∧ (y∨z) ∧ (z∨w) ∧ (w∨z)，用回溯法判断其可满足性。</p>
+<p>搜索树探索过程（对应图 9.1）：
+1. 根节点：选择变量 w 分支。w=1 和 w=0 均不立即产生空子句，两个子问题都保留。
+2. 扩展 w=0 节点，选择变量 x 分支。</p>
+<ul>
+<li>
+<p>x=0：代入后剩余子句为 (y∨z) ∧ (y) ∧ (y∨z)，继续探索。</p>
+</li>
+<li>
+<p>x=1：根据文本，此部分赋值导致空子句 ()，失败，剪枝。
+3. 继续扩展其他活跃节点，选择包含最短子句的子问题，在最短子句中分支。
+4. 最终，所有分支均遇到空子句，搜索树探索完毕，S 为空，宣布 φ 不可满足。</p>
+</li>
+</ul>
+<p>关键观察：回溯法通过检查部分赋值是否产生空子句来剪枝。选择最短子句进行分支是高效策略——若子句为单文字，则至少一个分支会被立即终止。</p></div></div><h2 id="p1-2-section-9-1-branch-and-bound">分支限界法（Branch-and-bound）</h2><p>分支限界法（Branch-and-bound）将回溯思想从搜索问题推广到优化问题。与回溯法不同，它维护一个当前最优解 bestsofar，并通过计算子问题的下界（lower bound）来决定是否剪枝：若子问题的下界已超过 bestsofar，则该子问题不可能产生更优解，可直接丢弃。</p>
+<p>算法框架：从原始问题 P₀ 出发，维护活跃子问题集合 S。每次取出子问题 P 并扩展为 P₁, …, Pₖ。若 Pᵢ 是完整解，则更新 bestsofar；否则若 lowerbound(Pᵢ) &lt; bestsofar，则将 Pᵢ 加入 S 继续搜索。当 S 为空时，返回 bestsofar。</p>
+<p>以旅行商问题（TSP）为例：图 G = (V, E) 中边长 dₑ &gt; 0。部分解表示为 [a; S; b]，表示从固定起点 a 出发，经过顶点集 S（含端点 a, b），当前到达 b 的简单路径。子问题是找到从 b 回到 a 的最便宜补全路径，中间经过 V\S 中的顶点。</p>
+<p>下界估计：补全路径的代价至少为以下三者之和：
+1. 从 a 到 V\S 的最轻边；
+2. 从 b 到 V\S 的最轻边；
+3. V\S 的最小生成树（MST）。</p>
+<p>该下界可通过 MST 算法快速计算。在 8 个顶点的图示例中，分支限界法仅考察了 28 个部分解，而暴力搜索需考察 7! = 5040 个排列。</p>
+<p>伪代码：</p>
+<pre><code>Start with some problem P0
+Let S = {P0}, the set of active subproblems
+bestsofar = ∞
+Repeat while S is nonempty:
+  choose a subproblem P ∈ S and remove it from S
+  expand it into smaller subproblems P1, P2, ..., Pk
+  For each Pi:
+    If Pi is a complete solution: update bestsofar
+    else if lowerbound(Pi) &lt; bestsofar: add Pi to S
+return bestsofar
+</code></pre><h2 id="p1-3-section-9-2-approximation-vertex-cover">近似算法与顶点覆盖（Approximation Algorithms and Vertex Cover）</h2><p>面对 NP-难优化问题，若无法在多项式时间内求得精确最优解，可转而寻求近似算法（Approximation Algorithm）。对于最小化问题，算法 A 的近似比（approximation ratio）定义为：</p>
+<p>\[\rho_A = \max_I \frac{A(I)}{OPT(I)}\]</p>
+<p>其中 OPT(I) 是实例 I 的最优值。近似比衡量算法输出在最坏情况下超出最优解的倍数。对于最大化问题（如独立集），取倒数以保证比值 ≥ 1。</p>
+<p>顶点覆盖（VERTEX COVER）问题：给定无向图 G = (V, E)，找最小顶点子集 S ⊆ V 使得每条边至少有一个端点在 S 中。该问题是 NP-难的，也是集合覆盖的特例，贪心算法可给出 O(log n) 近似。</p>
+<p>更好的近似基于匹配（matching）：一组没有公共顶点的边。极大匹配（maximal matching）是无法再添加边的匹配，容易构造——反复选取与已选边不相交的边直到无法继续。</p>
+<p>关键事实：任何顶点覆盖的大小 ≥ 任何匹配的边数（因为匹配中每条边需不同端点覆盖）。因此匹配大小是 OPT 的下界。</p>
+<p>算法：找极大匹配 M，返回 S = M 中所有边的端点集合。S 必是顶点覆盖——若某边 e 未被覆盖，则 M 不是极大的（还可加 e）。S 有 2|M| 个顶点，而 OPT ≥ |M|，故：</p>
+<p>\[|S| = 2|M| \leq 2 \cdot OPT\]</p>
+<p>该算法近似比为 2，且存在达到 100% 误差的实例，故 ρ_A = 2。</p><h2 id="p1-4-section-9-2-clustering-tsp">聚类与旅行商问题的近似（Clustering and TSP Approximation）</h2><p>k-聚类（k-CLUSTER）问题：给定 n 个点 X = {x₁, …, xₙ} 及距离度量 d(·,·)，划分为 k 个簇 C₁, …, Cₖ，最小化簇直径（簇内最远两点距离）。该问题是 NP-难的。</p>
+<p>近似算法采用最远优先遍历（farthest-first traversal）：任选第一个中心 φ₁；对 i = 2 到 k，选距离已有中心最远的点作为 φᵢ（即最大化 min_{j&lt;i} d(x, φᵢ)）；然后将每个点分配到最近中心形成 k 个簇。</p>
+<p>近似比分析：设 x 是距离 φ₁, …, φₖ 最远的点（即第 k+1 个中心），r 是 x 到最近中心的距离。由三角不等式，每个点到其簇中心距离 ≤ r，故簇直径 ≤ 2r。另一方面，k+1 个点 {φ₁, …, φₖ, x} 两两距离 ≥ r，任何 k-聚类必有两点同簇，故最优直径 ≥ r。因此该算法近似比为 2。</p>
+<p>度量 TSP 的近似：若距离满足三角不等式，最小生成树（MST）是关键结构。移除 TSP 任一边得生成树，故 TSP 代价 ≥ MST 代价。将 MST 每条边复制，得欧拉回路，再通过三角不等式跳过重复顶点（shortcutting），得到哈密顿回路，长度 ≤ 2·MST ≤ 2·OPT。</p>
+<p>一般 TSP 的不可近似性：若距离不满足三角不等式，则 TSP 无法高效近似。通过从 Rudrata 路径问题的归约：给定图 G 和常数 C &gt; 0，构造 TSP 实例 I(G, C)，使得 G 有 Rudrata 路径时 OPT = n，否则 OPT ≥ n + C。若存在近似比为 ρ_A 的 TSP 近似算法，取 C = n·ρ_A，则算法输出可区分两种情况，从而在多项式时间内解决 NP-完全的 Rudrata 路径问题。因此除非 P = NP，一般 TSP 不存在高效近似算法。</p><h2 id="p2-1-knapsack-fptas">KNAPSACK 的完全多项式近似方案（FPTAS）</h2><p>KNAPSACK 是最大化问题：给定 \(n\) 个物品，重量 \(w_1,\dots,w_n\) 与价值 \(v_1,\dots,v_n\)（均为正整数），背包容量为 \(W\)，目标是选出总重量不超过 \(W\) 的物品子集，使总价值最大。</p>
+<p>第 6 章给出的动态规划可在 \(O(nW)\) 时间内求解。若改按价值枚举状态——设 \(V=\sum v_i\)，则可在 \(O(nV)\) 时间内求出达到每个可能价值所需的最小重量。但 \(W\) 与 \(V\) 都可能随输入规模指数增长（它们用 \(\log W\)、\(\log V\) 位表示），因此这两个算法都只是伪多项式时间，而非真正多项式时间。</p>
+<p><strong>核心思想</strong>：如果我们愿意接受 \((1-\varepsilon)\) 近似解（\(\varepsilon&gt;0\) 由用户指定），就可以把价值“压低精度”。例如 \(v_1=117{,}586{,}003\)、\(v_2=738{,}493{,}291\)、\(v_3=238{,}827{,}453\) 可以粗化为 \(117\)、\(738\)、\(238\)，问题整体变化不大，但动态规划的状态数会大幅下降。</p>
+<p><strong>KNAPSACK 近似算法（FPTAS）</strong>：
+1. 丢弃所有重量 \(w_i&gt;W\) 的物品（它们不可能被选中）。
+2. 记 \(v_{\max}=\max_i v_i\)。
+3. 对价值进行缩放：定义缩放后价值
+   \[
+   \hat{v}_i = \left\lfloor \frac{v_i \cdot n}{\varepsilon \cdot v_{\max}} \right\rfloor.
+   \]
+4. 对缩放后价值 \(\{\hat{v}_i\}\) 运行动态规划（按价值枚举状态）。
+5. 输出所选物品集合。</p>
+<p><strong>复杂度分析</strong>：每个 \(\hat{v}_i\) 不超过 \(n/\varepsilon\)，因此总缩放价值之和不超过 \(n^2/\varepsilon\)，动态规划的时间复杂度为 \(O(n \cdot n^2/\varepsilon) = O(n^3/\varepsilon)\)，关于输入规模和 \(1/\varepsilon\) 均为多项式。</p>
+<p><strong>正确性分析</strong>：设原问题最优解选取集合 \(S^*\)，总价值为 \(K^*\)。对同一集合，其缩放价值满足
+\[
+\sum_{i\in S^*} \hat{v}_i \ge \sum_{i\in S^*} \left(\frac{v_i n}{\varepsilon v_{\max}} - 1\right) \ge \frac{K^* n}{\varepsilon v_{\max}} - n.
+\]
+设算法在缩放问题上求得的解为 \(\hat{S}\)，则其缩放价值至少不低于上界右端。还原到原价值：
+\[
+\sum_{i\in \hat{S}} v_i \ge \sum_{i\in \hat{S}} \hat{v}_i \cdot \frac{\varepsilon v_{\max}}{n}
+\ge \left(\frac{K^* n}{\varepsilon v_{\max}} - n\right) \cdot \frac{\varepsilon v_{\max}}{n}
+= K^* - \varepsilon v_{\max} \ge K^*(1-\varepsilon),
+\]
+其中最后一步用到 \(v_{\max} \le K^*\)（最优解至少包含一个物品）。因此算法输出价值至少为最优值的 \((1-\varepsilon)\) 倍。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>考虑 \(n=3\)，容量 \(W=10\)，物品为：\((w_1,v_1)=(6,117)\)、\((w_2,v_2)=(5,738)\)、\((w_3,v_3)=(5,238)\)，取 \(\varepsilon=0.1\)。</p>
+<ol>
+<li>所有物品重量均 \(\le W\)，无需丢弃。</li>
+<li>\(v_{\max}=738\)。</li>
+<li>缩放因子为 \(\frac{n}{\varepsilon v_{\max}} = \frac{3}{0.1 \cdot 738} \approx 0.04065\)，得到</li>
+</ol>
+<ul>
+<li>
+<p>\(\hat{v}_1 = \lfloor 117 \times 0.04065 \rfloor = \lfloor 4.76 \rfloor = 4\),</p>
+</li>
+<li>
+<p>\(\hat{v}_2 = \lfloor 738 \times 0.04065 \rfloor = \lfloor 30.0 \rfloor = 30\),</p>
+</li>
+<li>
+<p>\(\hat{v}_3 = \lfloor 238 \times 0.04065 \rfloor = \lfloor 9.67 \rfloor = 9\)。
+4. 对缩放后价值 \(\{4,30,9\}\) 运行动态规划：总缩放价值之和仅 \(43\)，状态数远小于原价值之和 \(1093\)。
+5. 动态规划会选物品 2（缩放价值 30，重量 5），是否加入物品 1 或 3 取决于容量；最终输出对应原问题的近似最优解。</p>
+</li>
+</ul>
+<p>此例说明：当原始价值很大时，缩放能把动态规划的状态数从 \(O(n\sum v_i)\) 压到 \(O(n^3/\varepsilon)\)，而解的质量损失被 \(\varepsilon\) 控制。</p></div></div><h2 id="p2-2-approximability-hierarchy">NP-完全优化问题的可近似性分层</h2><p>对任意一个 NP-完全优化问题，我们自然追问：在多项式时间内能达到的最佳近似比是多少？如果找不到最优近似算法，就转而尝试证明“多项式时间下哪些近似比是不可能达到的”——这正是对一般 TSP 所做的下界证明。</p>
+<p>在 \(\mathsf{P} \neq \mathsf{NP}\) 的假设下，NP-完全优化问题按可近似性由差到优分为四层：</p>
+<ol>
+<li>
+<p><strong>不可近似</strong>：不存在任何有限的近似比。一般 TSP 属于此类（无论取多大常数作为近似比，都无法在多项式时间内达到，除非 \(\mathsf{P}=\mathsf{NP}\)）。</p>
+</li>
+<li>
+<p><strong>有常数界限，但存在下界</strong>：可以达到某个常数近似比，但不可能任意小。例如 VERTEX COVER、k-CLUSTER、满足三角不等式的 TSP。对这些问题，可近似性的精确界限是领域内最深刻的结果之一（本书未给出证明）。</p>
+</li>
+<li>
+<p><strong>无界限可近似（PTAS/FPTAS 类）</strong>：对任意 \(\varepsilon&gt;0\)，都存在多项式时间算法达到 \((1+\varepsilon)\)（最小化）或 \((1-\varepsilon)\)（最大化）的近似比。KNAPSACK 属于此类——上一节给出的 FPTAS 正是这一性质的体现。这一类问题是最“幸运”的 NP-完全问题。</p>
+</li>
+<li>
+<p><strong>以 \(\log n\) 为比率</strong>：近似比大约在 \(\Theta(\log n)\) 量级。SET COVER 是典型例子。</p>
+</li>
+</ol>
+<p><strong>重要前提</strong>：整个分层都建立在 \(\mathsf{P} \neq \mathsf{NP}\) 的假设之上。如果 \(\mathsf{P}=\mathsf{NP}\)，则分层坍缩为 \(\mathsf{P}\)，所有 NP-完全优化问题都能在多项式时间内精确求解。</p>
+<p><strong>实践启示</strong>：近似算法（及其变体）在实际典型实例上的表现往往远好于其最坏情况近似比所暗示的水平。理论保证给出的是下界（最坏情况），但日常输入通常远没有最坏情况那么“病态”。</p><h2 id="p2-3-local-search">局部搜索启发式框架与邻域设计</h2><p>局部搜索（Local Search）受进化过程启发：通过不断引入小的“变异”，尝试并保留其中表现好的。它可以应用于任何优化问题，对最小化问题的标准框架如下：</p>
+<pre><code>take any initial solution s
+while there exists s' in the neighborhood of s with cost(s') &lt; cost(s):
+    replace s with s'
+return s
+</code></pre>
+<p><strong>关键设计决策</strong>：邻域（neighborhood）结构。它定义了什么叫“与当前解接近的解”，是局部搜索的核心。</p>
+<p><strong>例一：旅行商问题（TSP）</strong>。搜索空间是 \((n-1)!\) 条不同回路。两条回路若只差两条边，则互为邻居——称为 <strong>2-change 邻域</strong>（不能只差一条边，因为回路中换一条边无法保持哈密顿回路）。一次局部移动即删去两条边、换入两条新边。每条回路有 \(O(n^2)\) 个邻居，因此每次迭代很快。</p>
+<p>但 2-change 存在大量低质量局部最优。扩大为 <strong>3-change 邻域</strong>（至多差三条边）可修复更多局部最优，但邻居数增至 \(O(n^3)\)，每次迭代更贵，且仍可能存在次优局部极小。继续扩大到 4-change、5-change……质量与效率相互竞争：邻域越小越快搜索，但低质量局部最优越多。</p>
+<p><strong>例二：图划分（GRAPH PARTITIONING）</strong>。给定带权无向图 \(G=(V,E)\) 和参数 \(\alpha \in (0,1/2]\)，要求把顶点划分为 \(A,B\) 且每部分至少 \(\alpha|V|\) 个顶点，使割 \((A,B)\) 容量最小。此问题是 NP-难的（去掉大小限制后才是可高效求解的 MINIMUM CUT）。</p>
+<p>对 \(\alpha=1/2\)（两部分恰好各半）时，定义 <strong>成对交换邻域</strong>：邻居是所有通过交换 \(a \in A\) 与 \(b \in B\) 得到的划分 \((A-\{a\}+\{b\}, B-\{b\}+\{a\})\)。</p>
+<p><strong>两难困境</strong>：局部搜索每次迭代快、实现简单，但有两个严重缺陷——（1）迭代次数可能是指数级的；（2）最终解只能保证是局部最优（优于所有直接邻居），与全局最优差距可能很大。TSP 的 2-change 和图划分的成对交换都存在远离全局最优的低质量局部最优。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>图划分中的低质量局部最优示例：考虑 16 个节点、边权为 0 或 1 的图，最优划分代价为 0（图可被完美二分）。但存在某个局部最优划分，其割代价为 2——任何单次成对交换都无法降低代价，尽管全局上存在代价为 0 的划分。这说明<strong>局部最优 ≠ 全局最优</strong>：邻域太小会“困住”搜索。</p>
+<p>对图上的 8 节点实例，共有 \(\binom{8}{4}/2 = 35\) 个不同划分，其中有 5 个局部最优：4 个坏的（代价 2）和 1 个好的（代价 0）。若从随机划分出发、每步随机选择代价更低的邻居，则落入坏解的概率至多是好解的 4 倍，因此少量重复即可找到好解——这是随机化重启思想的雏形。</p></div></div><h2 id="p2-4-escaping-local-optima">逃离局部最优：随机化重启与模拟退火</h2><p>当局部最优质量不佳时，需要额外的机制帮助搜索跳出局部极小。</p>
+<p><strong>随机化与重启（Randomization and Restarts）</strong>。随机化在局部搜索中有两种用法：（1）随机选取初始解（如随机图划分）；（2）当存在多个可改进的邻居时随机选择其一。若单次运行到达好局部最优的概率为 \(p\)，则独立重复 \(O(1/p)\) 次就很可能找到好解。图划分的 8 节点例子中，\(p\) 不太小，因此少数几次重启即可。但当问题规模增长，好局部最优在所有局部最优中的占比可能指数下降，此时简单重试失效。</p>
+<p><strong>模拟退火（Simulated Annealing）</strong>。核心改动：允许以一定代价<strong>接受使目标变差的移动</strong>，从而跳出局部极小。引入温度参数 \(T\)：</p>
+<pre><code>take any starting solution s
+repeat
+    randomly choose s' in the neighborhood of s
+    Δ = cost(s') - cost(s)
+    if Δ &lt; 0:
+        replace s with s'
+    else:
+        replace s with s' with probability e^{-Δ/T}
+</code></pre>
+<ul>
+<li>
+<p>当 \(T=0\)：退化为普通局部搜索（只接受改进）。</p>
+</li>
+<li>
+<p>当 \(T\) 很大：\(e^{-Δ/T} \approx 1\)，几乎所有移动都被接受，搜索近乎随机游走，能自由探索整个空间。</p>
+</li>
+</ul>
+<p><strong>退火策略</strong>：初始时取大 \(T\)，使搜索自由漫游、对低成本解仅有微弱偏好；随着时间推移逐步降温，偏好越来越强，系统主要停留在低成本区域，偶尔跳出以逃离局部极小；最终 \(T \to 0\) 时收敛到某个解。</p>
+<p><strong>启发来源</strong>：模拟退火借鉴自结晶物理——物质从液态缓慢冷却，粒子逐渐进入更有序的构型，最终形成晶格。</p>
+<p><strong>代价与收益</strong>：退火需要更多的局部移动才能收敛，且降温进度表（annealing schedule）的设计是一门艺术。但在解的质量显著改善的实例上，这种权衡是值得的。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>回溯法在所有情况下都必然需要指数时间。</h3><p>虽然回溯法最坏情况是指数时间，但对于某些特殊问题（如 2SAT），精心设计的回溯算法可以在多项式时间内找到解。其实际效率高度依赖于测试、扩展与选择策略的设计。</p></article><article class="summary-card"><h3>近似算法既然能接近最优解，说明它们实际上也能找到最优解。</h3><p>近似算法保证的是解的值与最优值的比值有界（如不超过 2 倍），但并不保证找到最优解。例如基于极大匹配的顶点覆盖算法存在达到 2 倍误差的实例，即返回的解确实比最优解差。</p></article><article class="summary-card"><h3>KNAPSACK 的 FPTAS 意味着 KNAPSACK 属于 P，因为可以让 ε 任意小从而得到精确解。</h3><p>FPTAS 的时间复杂度是 \(O(n^3/\varepsilon)\)，依赖于 \(1/\varepsilon\)。当 \(\varepsilon\) 趋近于 0 时，\(1/\varepsilon\) 趋向无穷大，运行时间不再是输入规模的多项式（而是关于 \(1/\varepsilon\) 的多项式）。因此对固定的 \(\varepsilon\) 它是多项式时间，但对任意精度要求它不是——这与“对任意实例都多项式时间精确求解”是两回事。</p></article><article class="summary-card"><h3>局部搜索只要把邻域设得足够大（如 (n-1)-change），就一定能返回全局最优解，因此是实用的高效精确算法。</h3><p>虽然 (n-1)-change 的 TSP 局部搜索确实能返回全局精确解（称为“精确”的局部搜索），但其邻域大小和迭代代价极大，甚至单次迭代就已不是多项式时间。质量和效率是竞争关系：精确性往往以牺牲效率为代价。事实上，除非 P=NP，否则 TSP 和 SET COVER 不存在既精确又具有多项式迭代次数的局部搜索。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="b" data-correct="正确。完成代价指的是将部分回路补全为完整回路所需的最小代价，包括从 a 进入未访问顶点集 V\S 的一条边、从 V\S 回到 b 的一条边，以及穿过 V\S 中所有顶点的路径。因此下界为：a 到 V\S 的最轻边 + b 到 V\S 的最轻边 + V\S 的最小生成树。当前部分回路的长度是已确定的代价，不属于“完成代价”的估计范畴。" data-incorrect="错误。完成代价的下界估计针对的是“剩余部分”的代价，不包括当前已确定的部分回路长度。正确组成是：从 a 到 V\S 的最轻边 + 从 b 到 V\S 的最轻边 + V\S 的最小生成树。" data-quiz="m10-m10-p1-q1"><p><strong>问题：</strong>在分支限界法求解 TSP 时，对部分回路 [a;S;b] 的“完成代价”下界估计包含以下哪些要素？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">当前部分回路的长度 + V\S 的最小生成树</button><button aria-pressed="false" data-choice="b">从 a 到 V\S 的最轻边 + 从 b 到 V\S 的最轻边 + V\S 的最小生成树</button><button aria-pressed="false" data-choice="c">从 a 到 V\S 的最轻边 + 从 b 到 V\S 的最轻边 + 当前部分回路的长度</button><button aria-pressed="false" data-choice="d">V\S 的最小生成树 + 当前部分回路的长度</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="c" data-correct="正确。算法先找出一个极大匹配 M，返回 M 中所有边的端点集合 S。S 有 2|M| 个顶点，而任何顶点覆盖必须包含 M 中每条边至少一个端点，故 |M| ≤ OPT。因此 |S| = 2|M| ≤ 2·OPT，近似比为 2。" data-incorrect="错误。该算法是近似算法而非精确算法。极大匹配的大小是 OPT 的下界（而非上界），算法返回的顶点覆盖大小不超过最优解的 2 倍。" data-quiz="m10-m10-p1-q2"><p><strong>问题：</strong>关于顶点覆盖的近似算法（基于极大匹配），以下哪项是正确的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">该算法返回的顶点覆盖大小不超过最优解的 3 倍</button><button aria-pressed="false" data-choice="b">极大匹配的大小是顶点覆盖最优值的上界</button><button aria-pressed="false" data-choice="c">该算法返回的顶点覆盖大小不超过最优解的 2 倍</button><button aria-pressed="false" data-choice="d">该算法是一个精确算法，总能找到最小顶点覆盖</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。原始 O(nV) 动态规划的状态数依赖于总价值 V，而 V 相对输入长度可以指数增长。缩放后每个价值不超过 n/ε，总状态数变为 O(n²/ε)，运行时间 O(n³/ε) 关于输入规模和 1/ε 都是多项式；同时通过上下界分析可证输出价值 ≥ (1-ε)·OPT。" data-incorrect="错误。缩放并不减少物品数量 n（排除 a）；它不能给出精确最优解，只能给出 (1-ε) 近似解（排除 c）；也没有把最大化转为最小化（排除 d）。核心目的是控制动态规划状态数，使其从依赖 ∑v_i 转为依赖 1/ε。" data-quiz="m10-m10-p2-q1"><p><strong>问题：</strong>在 KNAPSACK 的 FPTAS 中，为何要对价值进行缩放（rescale）？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">为了减少物品的数量 n，从而降低动态规划的维度。</button><button aria-pressed="false" data-choice="b">把按价值枚举的动态规划状态数从依赖 ∑v_i（可能指数级）压到依赖 1/ε（多项式级），同时把误差控制在 (1-ε) 以内。</button><button aria-pressed="false" data-choice="c">为了让动态规划可以直接在多项式时间内求出精确最优解。</button><button aria-pressed="false" data-choice="d">为了把最大化问题转化为最小化问题，以便套用标准动态规划模板。</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="c" data-correct="正确。局部搜索的根本局限在于它只追求“比所有直接邻居更好”，这正是“局部最优”的定义。局部最优与全局最优之间可能存在巨大差距，邻域越小这种差距越常见；扩大邻域可缓解但会增加每次迭代的代价。" data-incorrect="错误。局部搜索常被用于 NP-完全问题且不会无限循环（代价单调下降且有下界，排除 a）；每次迭代通常很快（如 TSP 的 2-change 邻居数为 O(n²)，排除 b）；普通局部搜索（不接受变差移动）在有限搜索空间内必然收敛，无需模拟退火（排除 d）。核心局限是只能保证局部最优。" data-quiz="m10-m10-p2-q2"><p><strong>问题：</strong>关于局部搜索，下列哪一项最准确地描述了其根本局限？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">局部搜索无法处理 NP-完全问题，因为它总是陷入无限循环。</button><button aria-pressed="false" data-choice="b">局部搜索的每次迭代太慢，导致整体不可能是多项式时间算法。</button><button aria-pressed="false" data-choice="c">局部搜索只能保证最终解是局部最优（优于所有邻居），但局部最优可能与全局最优差距很大。</button><button aria-pressed="false" data-choice="d">局部搜索必须依赖模拟退火才能收敛，否则永远无法停止。</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>回溯法和分支限界法通过部分解测试或下界估计提前剪枝，将指数搜索空间大幅压缩</li><li>近似比 ρ_A = max_I A(I)/OPT(I) 衡量最坏情况下偏离最优解的程度</li><li>顶点覆盖、k-聚类和度量 TSP 均有 2-近似算法，分别基于极大匹配、最远优先遍历和最小生成树</li><li>一般 TSP（不满足三角不等式）不存在高效近似算法，除非 P = NP</li><li>KNAPSACK 存在 FPTAS：通过缩放价值可在 O(n³/ε) 时间内得到价值至少为 (1-ε)·OPT 的解，时间关于输入规模和 1/ε 均为多项式。</li><li>在 P≠NP 假设下，NP-完全优化问题按可近似性分为四层：不可近似（一般 TSP）、有常数界限（VERTEX COVER 等）、任意精度可近似（KNAPSACK）、Θ(log n) 比率（SET COVER）。</li><li>局部搜索通过邻域结构在当前解附近寻找更优解，简单高效但只能保证局部最优；效率（小邻域、快迭代）与质量（少局部最优）是一对竞争目标。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>lectures/chap9.pdf</code> · 本段对应小节 · confidence: high · 9.1 智能穷举搜索（回溯法、分支限界法）与 9.2 近似算法（顶点覆盖、聚类、TSP）</li><li><code>lectures/chap9.pdf</code> · 第 297 页（KNAPSACK FPTAS） · confidence: high · 9.2.4 节给出 KNAPSACK 近似算法的缩放公式与正确性分析，包含 (1-ε) 近似比的推导。</li><li><code>lectures/chap9.pdf</code> · 第 297-298 页（可近似性分层） · confidence: high · 9.2.5 节将 NP-完全优化问题按可近似性分为四类，并列出代表问题。</li><li><code>lectures/chap9.pdf</code> · 本段对应小节（9.3, 9.3.1, 9.3.2, 9.3.3） · confidence: high · 9.3 节给出局部搜索通用框架；9.3.1 以 TSP 的 2-change/3-change 为例；9.3.2 讨论图划分；9.3.3 介绍随机化重启与模拟退火。</li></ul><footer id="pb-page-end"><p>CS170: Efficient Algorithms and Intractable Problems · Fall 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

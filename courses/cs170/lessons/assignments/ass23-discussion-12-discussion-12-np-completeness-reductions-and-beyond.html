@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 12: NP-Completeness Reductions and Beyond — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 12</p>
+    <h1>讨论课 12：NP 完全性归约与进阶话题</h1>
+    <p class="lede">本节继续深化 NP 完全性的训练。内容涵盖：已知 A 多项式归约到 B 时，根据其中一方的复杂度信息推导另一方；Exact 4-SAT 与 3-SAT 之间的双向归约；Cycle Cover（环覆盖）到 Bipartite Perfect Matching（二分图完美匹配）的归约；Public Funds 问题的 NP-完全性证明（Membership in NP + 从 Subset Sum 归约）；3-SAT 到整数线性规划可行性（ILP Feasibility）的归约；以及选做的 NP ⊆ EXP 上界推导及停机问题的 NP-难性讨论。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>NP Basics</li><li>Exact 4-SAT</li><li>3-SAT Reduction</li><li>Cycle Cover</li><li>Bipartite Perfect Matching</li><li>Public Funds</li><li>Subset Sum</li><li>Integer Linear Programming</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis12.pdf</code>、<code>dis12-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis12.pdf</code>、<code>dis12-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>NP 基础推断</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>假设 \(A\) 可在多项式时间内归约到 \(B\)。在每一小题中，你会得知其中一个问题的某个事实，要求你据此推断另一个问题的信息。各小题相互独立——即分析小题 (b) 时不应使用小题 (a) 给出的事实。</p>
+<p><strong>(a)</strong> \(A\) 属于 \(P\)。</p>
+<p><strong>(b)</strong> \(B\) 属于 \(P\)。</p>
+<p><strong>(c)</strong> \(A\) 是 NP-难的（NP-hard）。</p>
+<p><strong>(d)</strong> \(B\) 是 NP-难的（NP-hard）。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>「\(A\) 多项式归约到 \(B\)」意味着「用 \(B\) 的算法可以解 \(A\)」，即「解决 \(B\) 至少和解决 \(A\) 一样难」。考虑「较难」一方落在某个类中时，能推出「较易」一方什么结论；反过来，若「较易」一方落在某个类中，又能推出什么。注意「\(A\) 归约到 \(B\)」只给出一个方向的不等式关系。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>由于 \(A\) 可归约到 \(B\)，我们知道 \(B\) 的算法可用来求解 \(A\)，这意味着「求解 \(B\) 至少和求解 \(A\) 一样难」。</p>
+<p><strong>(a)</strong> 若 \(A \in P\)，则 \(B\) 至少和某个 P 中问题一样难。因此 \(B\) 可能在 \(P\)、\(NP\) 或 NP-难中，<strong>无法推出关于 \(B\) 的任何确定信息</strong>。</p>
+<p><strong>(b)</strong> 若 \(B \in P\)，则「求解 \(A\) 的难度至多和求解 \(B\) 相当」，因此 \(A\) 也属于 \(P\)。</p>
+<p><strong>(c)</strong> 若 \(A\) 是 NP-难的，则 \(B\) 至少和某个 NP-难问题一样难，因此 \(B\) 也是 NP-难的。</p>
+<p><strong>(d)</strong> 若 \(B\) 是 NP-难的，则 \(A\) 可能属于 \(P\)、\(NP\) 或 NP-难，<strong>无法推出关于 \(A\) 的任何确定信息</strong>。</p></div><p class="problem-source">解答来源：<code>dis12-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis12.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>Exact 4-SAT 与 3-SAT 的相互归约</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Exact 4-SAT 问题定义如下：</p>
+<ul>
+<li><strong>输入</strong>：\(n\) 个布尔变量 \(\{x_1, \ldots, x_n\}\) 和 \(m\) 个子句 \(\{C_1, \ldots, C_m\}\)，每个子句包含<strong>恰好 4 个互异</strong>的文字（literal）。例如下面的式子是一个 Exact 4-SAT 实例：</li>
+</ul>
+<p>\[(x_1 \lor x_2 \lor x_4 \lor x_5) \land (x_3 \lor x_4 \lor x_1 \lor x_2) \land (x_1 \lor x_3 \lor x_4 \lor x_5)
+\]</p>
+<p>注意：每个子句内的 4 个文字必须互不相同。</p>
+<ul>
+<li><strong>目标</strong>：找到对变量 \(x_1, \ldots, x_n\) 的一组赋值，使得所有子句都被满足。</li>
+</ul>
+<p><strong>(a)</strong> 给出一个从 3-SAT 到 Exact 4-SAT 的多项式时间归约。</p>
+<p><strong>(b)</strong> 给出一个从 Exact 4-SAT 到 3-SAT 的多项式时间归约。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>处理 A 到 B 的归约时，通常分两步：(1) 找到把 A 的实例转换为 B 的实例的最简单方法；(2) 调整第 (1) 步的构造，使得 B 实例的解能正确回推出 A 实例的解。</p>
+<p>(a) 最简单的想法是往每个 3-SAT 子句里引入同一个新变量 \(y\)，变成 4-SAT 子句。但这样 4-SAT 求解器只需令 \(y = \text{true}\) 就能满足所有子句，与原 3-SAT 实例是否可满足无关。如何让「原 3-SAT 子句」在变换后的实例中依然「发挥作用」？考虑为每个 3-SAT 子句<strong>创建两个</strong> 4-SAT 子句。</p>
+<p>(b) 要把 4 文字子句拆成最多 3 文字的子句，可以引入新变量 \(y\) 作为「分隔符」，把 4 个文字分成两组，每组 3 个文字（含 \(y\) 或其否定）。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a) 从 3-SAT 到 Exact 4-SAT</strong></p>
+<p>给定一个 3-SAT 实例，引入一个新变量 \(y\)。对每个 3-SAT 子句，例如 \((x_1 \lor x_2 \lor x_4)\)，创建<strong>两个</strong> 4-SAT 子句：</p>
+<p>\[(x_1 \lor x_2 \lor x_4 \lor y) \land (x_1 \lor x_2 \lor x_4 \lor \lnot y)\]</p>
+<p>把这些子句一起交给 Exact 4-SAT 求解器。</p>
+<p><strong>正确性</strong>：若求解器令 \(y = \text{true}\)，则所有含 \(y\) 的子句被立即满足，而含 \(\lnot y\)（即 \(y = \text{false}\)）的那一半子句就等价于原 3-SAT 子句，因此 \(x_i\) 的赋值必须满足原 3-SAT 实例。\(y = \text{false}\) 时同理。无论哪种情况，\(x_i\) 的赋值都必须是原 3-SAT 实例的一组有效解。</p>
+<p><strong>(b) 从 Exact 4-SAT 到 3-SAT</strong></p>
+<p>要把每个 4 文字子句转化为至多 3 文字的子句，对每个 4-SAT 子句（例如 \((x_1 \lor x_2 \lor x_3 \lor x_4)\)），引入一个新变量 \(y\)，加入以下两个子句：</p>
+<p>\[(x_1 \lor x_2 \lor y) \land (x_3 \lor x_4 \lor \lnot y)\]</p>
+<p><strong>正确性</strong>：</p>
+<ul>
+<li>
+<p>若原 4-SAT 实例可满足，则对每个子句，若前两个文字为假，令 \(y = \text{true}\) 以满足第一个子句，此时第二个子句要求 \(x_3 \lor x_4\) 为真，即原 4 文字子句被满足；否则令 \(y = \text{false}\)。因此 3-SAT 实例可满足。</p>
+</li>
+<li>
+<p>反之，若该 3-SAT 实例可满足，则由于 \(y\) 与 \(\lnot y\) 必有一个为假，每组两个子句中必有一个依赖原 4-SAT 子句的某个文字为真，因此原 4-SAT 实例也可满足。</p>
+</li>
+</ul></div><p class="problem-source">解答来源：<code>dis12-sol.pdf</code> · 2-3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis12.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>环覆盖归约到二分图完美匹配</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>在<strong>环覆盖</strong>（Cycle Cover）问题中，给定一张有向图 \(G\)，目标是找出 \(G\) 上一组有向环 \(C_1, C_2, \ldots, C_k\)，使得每个顶点恰好出现在一个环中（环不能重复访问顶点，例如 \(a \to b \to a \to c \to a\) 不是合法环，但 \(a \to b \to c \to a\) 是），或判定不存在这样的环组。</p>
+<p>在<strong>二分图完美匹配</strong>（Bipartite Perfect Matching）问题中，给定一张无向二分图（顶点可划分为 \(L \cup R\)，且 \(L\) 内部或 \(R\) 内部没有边），目标是找出图上一组边，使得每个顶点恰好与所选边中的一条相邻，或判定不存在这样的边集。</p>
+<p>给出一个从环覆盖到二分图完美匹配的归约。</p>
+<p>提示：在环覆盖中，每个顶点恰好有一条入边和一条出边。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 归约构造示意图：左侧为有向图 G 上的一个环覆盖（每个顶点入度=出度=1），右侧为对应的二分图 G&#x27;（每个 v 拆为 v_L 与 v_R，原边 (u,v) 变为 u_L–v_R 的无向边），展示完美匹配与环覆盖的对应关系</h4><p>有向图 G：顶点 {a,b,c}，边 {a→b, b→c, c→a}
+二分图 G'：L = {a_L, b_L, c_L}, R = {a_R, b_R, c_R}，无向边 {a_L–b_R, b_L–c_R, c_L–a_R}
+完美匹配 M = {a_L–b_R, b_L–c_R, c_L–a_R}</p><p class="problem-source">来源：<code>dis12-sol.pdf</code> · 4</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>环覆盖的核心局部性质是每个顶点「入度 = 出度 = 1」。如果我们把每个顶点 \(v\) 拆成两个：一个代表「出边端」（记为 \(v_L\)），一个代表「入边端」（记为 \(v_R\)），那么原图中的每条有向边 \((u, v)\) 应该对应二分图中的哪条无向边？这样一组覆盖所有顶点的环会对应二分图中的什么结构？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>给定环覆盖实例 \(G\)，构造二分图 \(G'\) 如下：对 \(G\) 的每个顶点，在 \(L\) 中放一个顶点 \(v_L\)，在 \(R\) 中放一个顶点 \(v_R\)。对 \(G\) 中的每条边 \((u, v)\)，在二分图中加入无向边 \((u_L, v_R)\)。我们断言：\(G\) 有环覆盖 <strong>当且仅当</strong> \(G'\) 有完美匹配。</p>
+<p><strong>正向</strong>：若 \(G\) 有环覆盖，则环覆盖中每个顶点恰好有一条入边，因此每个 \(v_R\) 恰好与一条所选边相邻；环覆盖中每个顶点恰好有一条出边，因此每个 \(v_L\) 恰好与一条所选边相邻。于是对应的二分图边集构成一个完美匹配。</p>
+<p><strong>反向</strong>：若 \(G'\) 有完美匹配，则通过取 \(G\) 中对应该完美匹配的边，可以构造出 \(G\) 的一个环覆盖。例如，若完美匹配中包含边 \((a_L, b_R), (b_L, c_R), \ldots, (z_L, a_R)\)，则在 \(G\) 中加入环 \(a \to b \to c \to \cdots \to z \to a\)。由于 \(v_L\) 和 \(v_R\) 都恰好与一条匹配边相邻，每个顶点都会被包含在对应的环覆盖中。</p></div><p class="problem-source">解答来源：<code>dis12-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis12.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>公共资金（Public Funds）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你要为豪宅建一道新围栏，挡住那些抗议奢侈消费的讨厌鬼。你有 \(m\) 个银行账户可供支付；账户 \(i\) 的余额为 \(b_i\)。围栏有 \(n\) 种可选方案；围栏 \(j\) 的价格为 \(c_j\) 美元。你希望<strong>至多</strong>从 \(k\) 个账户中取款来建造围栏。根据加州大学奇特的会计规则，一旦使用某个账户，就必须取出其全部余额（\(b_m\) 美元）。</p>
+<p>判断是否能够<strong>恰好</strong>支付某个围栏 \(j\) 的费用——即是否存在一个 \(j \in \{1,\ldots,n\}\)，使得在给定账户余额 \(b_1, \ldots, b_m\)、围栏价格 \(c_1, \ldots, c_n\) 以及上限 \(k\) 的条件下，能恰好取出 \(c_j\) 美元。</p>
+<p>你的任务是证明 Public Funds 是 NP-完全的（NP-complete）。</p>
+<p><strong>(a)</strong> 证明 Public Funds 属于 NP。</p>
+<p><strong>(b)</strong> 通过从子集和（Subset Sum）归约，证明 Public Funds 是 NP-难的（NP-hard）。</p>
+<p>注意：为了严格证明从 \(A\) 到 \(B\) 的归约的正确性，必须说明两件事：
+1. 如果 \(A\) 的一个实例有解，则变换后 \(B\) 的实例有解。
+2. 如果 \(B\) 的一个符合该变换格式的实例有解，则对应的 \(A\) 的实例有解。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 要证明一个判定问题属于 NP，需要给出多项式时间的验证器：给定一个候选解（例如一组选中的账户），能否在多项式时间内验证它们的余额之和恰好等于某个围栏的价格？</p>
+<p>(b) 回顾 Subset Sum：给定一组数和一个目标和 \(s\)，判断是否存在一个子集使得其元素之和恰好为 \(s\)。如何把「数」映射成「账户余额」，把「目标和 \(s\)」映射成「围栏价格」？还需要把 Subset Sum 对子集大小的限制对应到 Public Funds 的 \(k\) 上。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a) Public Funds 属于 NP。</strong></p>
+<p>我们可以在多项式时间内验证 Public Funds 的一个解：给定一组选中的账户，验证它们的余额之和是否恰好等于某个围栏的价格，以及使用的账户数是否不超过 \(k\)。这可在多项式时间内完成。</p>
+<p><strong>(b) Public Funds 是 NP-难的——从 Subset Sum 归约。</strong></p>
+<p>对 Subset Sum 的实例，设其有 \(m\) 个数、目标和为 \(s\)。构造 Public Funds 实例如下：</p>
+<ul>
+<li>
+<p>让 \(m\) 个数分别对应 \(m\) 个银行账户的余额 \(b_m\)；</p>
+</li>
+<li>
+<p>令目标和 \(s\) 对应唯一围栏的价格 \(c_1\)（即只设一个围栏）；</p>
+</li>
+<li>
+<p>将最多可使用的账户数 \(k\) 设为 \(m\)。</p>
+</li>
+</ul>
+<p><strong>正确性（双向性）</strong>：
+1. 若 Subset Sum 实例有解，则取该解中元素对应的账户，它们的余额之和恰为 \(s\)，即等于唯一围栏的价格 \(c_1\)，因此 Public Funds 实例有解。
+2. 若符合该变换格式的 Public Funds 实例有解，则算法选出的那组账户对应 Subset Sum 实例中一个和为 \(s\) 的子集，因此 Subset Sum 实例有解。</p>
+<p>因此 Subset Sum \(\leq_P\) Public Funds，Public Funds 是 NP-难的。结合 (a)，Public Funds 是 NP-完全的。</p></div><p class="problem-source">解答来源：<code>dis12-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis12.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>SAT 与整数规划</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>考虑 3-SAT 问题：输入是一组子句，每个子句是 3 个文字（literal）的 OR。例如，\((x_1 \lor x_4 \lor x_7)\) 是一个子句，当且仅当其中至少一个文字为真时取值为真。如果存在一组变量赋值使得所有子句都取值为真，则称输入是<strong>可满足的</strong>（satisfiable）。目标是判定输入是否可满足。</p>
+<p>另一方面，考虑<strong>整数线性规划可行性</strong>（Integer Linear Programming Feasibility）问题：给定一组变量以及关于这些变量的约束（没有目标函数），约束为线性不等式或 0-1 约束 \(x_i \in \{0,1\}\)。目标是判定是否存在一组变量赋值满足所有约束。</p>
+<p>给出一个从 3-SAT 到整数线性规划可行性的归约，并简要证明其正确性。不需要分析运行时间。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>关键是把布尔变量 \(x_i\) 翻译成 0-1 变量 \(x_i \in \{0,1\}\)，其中 \(x_i = 1\) 对应 \(\text{true}\)。一个子句如 \((x_1 \lor \lnot x_4 \lor x_7)\) 要求至少一个文字为真。如何用关于 \(x_1, x_4, x_7\) 的线性不等式表达「至少一个为真」？注意否定文字 \(\lnot x_i\) 应如何翻译。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>我们根据一个 3-SAT 公式显式地构造一个整数线性规划，并证明该 ILP 可行 <strong>当且仅当</strong> SAT 公式可满足。</p>
+<p>设变量为 \(x_1, \ldots, x_n\)，加入约束 \(x_i \in \{0,1\}\)；这里 \(x_i = 1\) 对应 \(x_i = \text{true}\)，\(x_i = 0\) 对应 \(x_i = \text{false}\)。</p>
+<p>接下来把布尔子句如 \((x_1 \lor \lnot x_4 \lor x_7)\) 翻译成线性约束。我们要求 \(x_1, x_4, x_7\) 中至少一个为真，即在 ILP 中要求 \(x_1 = 1\) 或 \(x_4 = 0\) 或 \(x_7 = 1\)。于是按如下方式系统地进行转换：</p>
+<p>\[x_1 \lor \lnot x_4 \lor x_7 \quad \Longleftrightarrow \quad x_1 + (1 - x_4) + x_7 \ge 1\]</p>
+<p>也就是说，把每个否定文字 \(\lnot x_i\) 替换为 \((1 - x_i)\)，把每个 OR 运算符替换为 \(+\)。该约束保证了至少一个文字为真——因为 \(x_1, (1-x_4), x_7\) 中至少有一个必须被置为 1。对每个子句都执行此变换，便得到一组关于 0-1 变量的线性约束。</p>
+<p><strong>正确性</strong>：任何可满足的赋值都对应整数规划的一组可行解，反之亦然。因此求解整数线性规划的可解性足以求解 3-SAT。</p></div><p class="problem-source">解答来源：<code>dis12-sol.pdf</code> · 7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis12.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>（选做）NP 问题算法的上界</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>(a)</strong> 回顾 3-SAT 问题：我们有 \(n\) 个变量 \(x_i\) 和 \(m\) 个子句，每个子句是至多 3 个文字的 OR（文字是变量或变量的否定）。目标是找出满足所有子句的变量赋值，或报告不存在。给出一个时间复杂度为 \(O(2^n m)\) 的 3-SAT 算法。只需描述算法。</p>
+<p><strong>(b)</strong> 利用 (a) 以及「3-SAT 是 NP-难的」这一事实，给出一个对 NP 中每个问题都成立的 \(O(2^{n^c})\) 时间算法，其中 \(c\) 是一个常数（可依赖于具体问题）。只需描述算法并分析运行时间。</p>
+<p>提示：既然 3-SAT 是 NP-难的，你可以用它来求解 NP 中的任意问题！</p>
+<p>注：这一结论通常记为 \(\text{NP} \subseteq \text{EXP}\)。</p>
+<p><strong>(c)</strong> 回顾 CS70 中的停机问题（Halting Problem）：给定一个程序（例如一个 .py 文件），判断它会永远运行还是最终停机。同时回顾停机问题不存在有限时间的算法。我们定义停机问题的输入规模为书写该程序所用的字符数。</p>
+<p>给定一个含 \(n\) 个变量、\(m\) 个子句的 3-SAT 实例，我们可以写出一个规模为 \(O(n+m)\) 的程序，当该实例可满足时停机，否则永远运行。因此存在从 3-SAT 到停机问题的多项式时间归约。</p>
+<p>根据这一归约与 (b)：停机问题是 NP-难的吗？它是 NP-完全的（NP-complete）吗？证明你的结论。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 最直接的方法是穷举所有 \(2^n\) 组赋值，对每组赋值在 \(O(m)\) 时间内检查是否满足所有子句。</p>
+<p>(b) 设 NP 中的任意问题为 \(L\)。由于 3-SAT 是 NP-难的，\(L\) 可在多项式时间内归约为一个 3-SAT 实例。该实例的变量数和子句数被原输入规模 \(n\) 的某个多项式 \(n^b\) 所界定。对其应用 (a) 的算法，总时间是多少？</p>
+<p>(c) 由归约可知停机问题至少和 3-SAT 一样难。但它是否在 NP 中？利用 (b) 的结论——NP 中每个问题都有有限时间的算法——以及停机问题没有有限时间算法这一事实。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong></p>
+<p>穷举全部 \(2^n\) 组赋值。对每组赋值，可在 \(O(m)\) 时间内检查其是否满足所有子句。因此可在 \(O(2^n m)\) 时间内找到一组满足赋值（若存在）。</p>
+<p><strong>(b)</strong></p>
+<p>设 \(L\) 是 NP 中的任意问题。由于 3-SAT 是 NP-难的，\(L\) 可在多项式时间内归约为一个 3-SAT 实例。该归约耗时多项式时间，且写出每个变量/子句至少需要 \(O(1)\) 时间，因此该 3-SAT 实例的变量数不超过 \(n^b\)，子句数也不超过 \(n^b\)，其中 \(b\) 是某个常数（对所有足够大的 \(n\) 成立）。</p>
+<p>算法：先将问题归约为 3-SAT，再用 (a) 的算法求解该 3-SAT 实例，耗时 \(O(2^{n^b} \cdot n^b) = O(2^{n^{b+1}})\)。取 \(c = b + 1\)，即为 \(O(2^{n^c})\)。</p>
+<p><strong>另一种方法</strong>：由于问题属于 NP，若答案为「是」，则存在一个多项式规模的「证据」（witness），可送入验证器在多项式时间内输出「是」；若答案为「否」，则没有任何证据能使验证器输出「是」。因此可穷举所有证据并逐一送入验证器；证据数量为多项式级别（即 \(O(2^{n^c})\)），验证器运行时间为多项式，总时间为 \(O(2^{n^c})\)。</p>
+<p><strong>(c)</strong></p>
+<p>该归约说明停机问题是 NP-难的。但我们可证明停机问题<strong>不在 NP 中</strong>，因此它不是 NP-完全的：由 (a)/(b)，NP 中任何问题都有有限时间（指数时间）算法，但停机问题没有有限时间算法。因此停机问题不是 NP-完全的（它是 NP-难的，但更难——不属于 NP）。</p></div><p class="problem-source">解答来源：<code>dis12-sol.pdf</code> · 8-9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis12.pdf</code> · 6 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis12.pdf</code></li>
+      <li><code>dis12-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

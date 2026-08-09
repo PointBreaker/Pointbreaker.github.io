@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>图上的路径 — CS170</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS170 · 第 5 讲</p><h1>图上的路径</h1><p class="lede">从 BFS 到 Dijkstra、Bellman–Ford 与 DAG 最短路，理解松弛、不变量和负边界。</p><div class="meta"><span>预计用时：108 分钟</span><span>难度：进阶</span><span>Algorithms · Graph Algorithms · Dynamic Programming · Linear Programming</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>掌握图距离的定义，理解 BFS 为何在单位边长图上产生最短路径</li><li>掌握 BFS 的算法步骤、归纳不变量与 O(|V|+|E|) 复杂度</li><li>理解 Dijkstra 算法作为 BFS 加权推广的两种推导方式</li><li>掌握 Dijkstra 算法在不同优先队列实现下的运行时间权衡</li><li>掌握二叉堆的堆序性质、上浮/下沉操作及数组表示，分析插入、删除最小值、建堆的时间复杂度</li><li>理解 d-叉堆如何通过分支因子 d 降低树高，并权衡插入与删除最小值的代价</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>图的表示（邻接表/邻接矩阵）</li><li>深度优先搜索（DFS）的基本思想</li><li>队列的基本操作（入队/出队）</li><li>完全二叉树的概念与高度性质</li><li>Dijkstra 算法的基本流程与贪心思想</li><li>拓扑排序（topological sort）与深度优先搜索</li></ul><h2 id="p1-1-sec4-1-2-bfs">距离与广度优先搜索（BFS）</h2>距离的定义
+<p>在图中，<strong>距离（distance）</strong> 指两个节点之间最短路径的长度。形式化地，节点 \(u\) 与 \(v\) 之间的距离 \(\text{dist}(u,v)\) 是所有 \(u\)-\(v\) 路径中边数的最小值（单位边长情形）。</p>
+<p>一个直观的物理模型：把每个顶点做成一个球、每条边换成一段绳子，当你把起点 \(s\) 的球向上拉起时，能被连带拉起的球恰好就是从 \(s\) 可达的顶点；而这些球低于 \(s\) 的高度就是它们到 \(s\) 的距离。边 \((D,E)\) 若不属于任何最短路径，则绳子保持松弛——这正是图 4.2 揭示的几何直觉。</p>
+层序扩展思想
+<p>把图按距离 \(s\) 的远近分成若干层：第 0 层是 \(\{s\}\)，第 1 层是距离为 1 的顶点，第 2 层是距离为 2 的顶点，依此类推。一旦我们已确定第 \(0,1,\dots,d\) 层，则第 \(d+1\) 层的顶点恰好就是那些<strong>尚未被发现</strong>但与第 \(d\) 层相邻的顶点。</p>
+<p>这提示一种迭代算法：每次只让两层"活跃"——第 \(d\) 层已被完全确定，第 \(d+1\) 层正通过扫描第 \(d\) 层的邻居被发现。</p>
+BFS 算法（Breadth-First Search，广度优先搜索）
+<pre><code>procedure bfs(G, s)
+输入：图 G = (V, E)，有向或无向；起点 s ∈ V
+输出：对所有从 s 可达的顶点 u，dist(u) 设为 s 到 u 的距离
+  for all u ∈ V:  dist(u) = ∞
+  dist(s) = 0
+  Q = [s]   // 队列，初始仅含 s
+  while Q 不为空:
+    u = eject(Q)          // 从队首弹出
+    for all edges (u,v) ∈ E:
+      if dist(v) = ∞:
+        inject(Q, v)      // 从队尾入队
+        dist(v) = dist(u) + 1
+</code></pre>
+<p>队列 \(Q\) 的语义：在距离 \(d = 1,2,3,\dots\) 的每个阶段，存在一个时刻 \(Q\) 中<strong>恰好</strong>包含所有距离为 \(d\) 的节点。</p>
+正确性（归纳不变量）
+<p>对 \(d = 0,1,2,\dots\) 归纳，断言：存在一个时刻使得
+1. 所有距离 \(\le d\) 的节点距离已被正确设置；
+2. 所有其他节点距离仍为 \(\infty\)；
+3. 队列中恰好是距离为 \(d\) 的节点。</p>
+<ul>
+<li>
+<p><strong>基础情形</strong> \(d=0\)：只有 \(s\)，\(\text{dist}(s)=0\)，\(Q=[s]\)，成立。</p>
+</li>
+<li>
+<p><strong>归纳步骤</strong>：假设对 \(d\) 成立。处理 \(Q\) 中节点时，每个距离为 \(d\) 的节点 \(u\) 的未发现邻居 \(v\) 被赋予距离 \(d+1\) 并入队。当 \(Q\) 中距离 \(d\) 的节点全部处理完毕，队列中恰好剩下距离 \(d+1\) 的节点，且它们的距离已被正确设置。</p>
+</li>
+</ul>
+<p>由此，BFS 树中从 \(s\) 出发的每条路径都是最短路径——BFS 树是<strong>最短路径树（shortest-path tree）</strong>。</p>
+复杂度
+<ul>
+<li>
+<p>每个顶点至多入队一次 → \(O(|V|)\) 次队列操作。</p>
+</li>
+<li>
+<p>内层循环在<strong>有向图</strong>中每条边被检查一次，在<strong>无向图</strong>中被检查两次 → \(O(|E|)\)。</p>
+</li>
+<li>
+<p>总时间 \(O(|V| + |E|)\)，与 DFS 同为线性。</p>
+</li>
+</ul>
+BFS vs DFS
+<ul>
+<li>
+<p>DFS 用<strong>栈</strong>（递归），一路深入再回溯，可能绕远路到达近处顶点。</p>
+</li>
+<li>
+<p>BFS 用<strong>队列</strong>，按距离递增顺序访问，像水波扩散。</p>
+</li>
+<li>
+<p>BFS 只关心从 \(s\) 出发的距离，<strong>不会</strong>重启搜索其他连通分量；不可达节点直接忽略。</p>
+</li>
+</ul><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>在图 4.1 的图上以 \(s=S\) 为起点、按字母顺序处理邻居，追踪队列与距离变化：</p>
+<table>
+<thead>
+<tr>
+<th>处理节点</th>
+<th>队列（处理后）</th>
+<th>距离更新</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>初始</td>
+<td>\([S]\)</td>
+<td>\(\text{dist}(S)=0\)</td>
+</tr>
+<tr>
+<td>\(S\)</td>
+<td>\([A,C,D,E]\)</td>
+<td>\(\text{dist}(A)=\text{dist}(C)=\text{dist}(D)=\text{dist}(E)=1\)</td>
+</tr>
+<tr>
+<td>\(A\)</td>
+<td>\([C,D,E,B]\)</td>
+<td>\(\text{dist}(B)=2\)（通过 \(A\) 发现）</td>
+</tr>
+<tr>
+<td>\(C\)</td>
+<td>\([D,E,B]\)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>\(D\)</td>
+<td>\([E,B]\)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>\(E\)</td>
+<td>\([B]\)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>\(B\)</td>
+<td>\([]\)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>BFS 树（右图）中 \(S \to A \to B\) 的长度为 2，而 DFS 树曾给出长度 3 的路径 \(S \to A \to \dots \to B\)，可见 BFS 树的所有路径都是最短的。</p></div></div><h2 id="p1-2-sec4-3-dijkstra">加权边与 Dijkstra 算法</h2>加权边
+<p>实际最短路径问题中，边长往往不同。对每条边 \(e \in E\) 标注长度 \(l_e\)（也可记 \(l(u,v)\) 或 \(l_{uv}\)）。长度可表示时间、费用等需最小化的量。本章主要考虑<strong>正整数</strong>边长。</p>
+从 BFS 到 Dijkstra：虚拟节点技巧
+<p>BFS 只能处理单位边长。一个朴素技巧：把每条边 \(e=(u,v)\) 拆成 \(l_e\) 条单位边，中间插入 \(l_e-1\) 个<strong>虚拟节点（dummy nodes）</strong>，得到新图 \(G'\)。\(G'\) 所有边长均为 1，可在 \(G'\) 上跑 BFS 得到原图 \(G\) 的距离。</p>
+<p>问题：当边长很大时，\(G'\) 充斥大量虚拟节点，BFS 把大量时间浪费在"我们并不关心"的节点上。</p>
+闹钟机制（Alarm Clock Algorithm）
+<p>为每个真实节点设置一个"闹钟"，预估到达时间。算法只在闹钟响起时"醒来"处理一个真实节点：</p>
+<ol>
+<li>初始化：为 \(s\) 设闹钟时间 0，其余节点无闹钟。</li>
+<li>重复直到无闹钟：下一个闹钟在时间 \(T\) 为节点 \(u\) 响起。</li>
+</ol>
+<ul>
+<li>
+<p>则 \(s\) 到 \(u\) 的距离就是 \(T\)。</p>
+</li>
+<li>
+<p>对 \(u\) 的每个邻居 \(v\)：若 \(v\) 无闹钟，设一个在 \(T + l(u,v)\)；若 \(v\) 的闹钟晚于 \(T + l(u,v)\)，则<strong>提前</strong>到该时间。</p>
+</li>
+</ul>
+<p>这正是一个<strong>优先队列（priority queue）</strong>语义：键值为闹钟时间，支持插入、减小键、取最小。</p>
+Dijkstra 算法（Dijkstra's Algorithm）
+<pre><code>procedure dijkstra(G, l, s)
+输入：图 G=(V,E)，正边长 l_e；起点 s
+输出：dist(u) 设为 s 到 u 的距离；prev 记录前驱
+  for all u ∈ V:  dist(u) = ∞;  prev(u) = nil
+  dist(s) = 0
+  H = makequeue(V)   // 以 dist 为键的优先队列
+  while H 不为空:
+    u = deletemin(H)
+    for all edges (u,v) ∈ E:
+      if dist(v) &gt; dist(u) + l(u,v):
+        dist(v) = dist(u) + l(u,v)
+        prev(v) = u
+        decreasekey(H, v)
+</code></pre>
+<ul>
+<li>
+<p>\(\text{dist}(u)\) 是节点 \(u\) 的当前闹钟时间（\(\infty\) 表示尚未设置）。</p>
+</li>
+<li>
+<p>\(\text{prev}\) 数组记录最短路径上的前驱，可回溯重建完整路径，是所有最短路径的紧凑摘要。</p>
+</li>
+<li>
+<p>直觉：Dijkstra 就是 BFS，只是用<strong>优先队列</strong>替代普通队列，从而按距离顺序处理节点、兼顾边长。</p>
+</li>
+</ul>
+另一种推导：已知区域 \(R\) 的扩展
+<p>从 \(s\) 向外扩展一个"已知区域" \(R\)，每次加入距离 \(s\) 最近的未知节点 \(v\)。</p>
+<p>关键观察：设 \(u\) 是 \(s\)-\(v\) 最短路径上 \(v\) 的前驱，由于边长为正，\(u\) 比 \(v\) 更接近 \(s\)，故 \(u \in R\)。因此 \(s\)-\(v\) 最短路径必然是"\(R\) 中某最短路径 + 一条边"。</p>
+<p>于是 \(v\) 就是使 \(\text{dist}(s,u) + l(u,v)\) 最小的那个外部节点。算法每次只考虑最新加入节点带来的新扩展，用优先队列实现即回到 Dijkstra。</p>
+<p><strong>归纳不变量</strong>：每次 while 循环结束后，存在 \(d\) 使得
+1. \(R\) 内节点距离 \(\le d\)，\(R\) 外节点距离 \(\ge d\)；
+2. 对每个节点 \(u\)，\(\text{dist}(u)\) 是所有中间节点被限制在 \(R\) 内的 \(s\)-\(u\) 最短路径长度（不存在则为 \(\infty\)）。</p>
+<p>基础情形 \(d=0\) 显然，归纳步骤由上述讨论可得。</p>
+运行时间
+<p>Dijkstra 与 BFS 结构相同，但优先队列操作更耗时。共有 \(|V|\) 次 deletemin 和 \(|V|+|E|\) 次 insert/decreasekey。</p>
+<table>
+<thead>
+<tr>
+<th>实现</th>
+<th>deletemin</th>
+<th>insert/decreasekey</th>
+<th>总时间</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数组</td>
+<td>\(O(|V|)\)</td>
+<td>\(O(1)\)</td>
+<td>\(O(|V|^2)\)</td>
+</tr>
+<tr>
+<td>二叉堆</td>
+<td>\(O(\log|V|)\)</td>
+<td>\(O(\log|V|)\)</td>
+<td>\(O((|V|+|E|)\log|V|)\)</td>
+</tr>
+<tr>
+<td>\(d\)-ary 堆</td>
+<td>\(O(d \frac{\log|V|}{\log d})\)</td>
+<td>\(O(\frac{\log|V|}{\log d})\)</td>
+<td>\(O((|V|\cdot d + |E|)\frac{\log|V|}{\log d})\)</td>
+</tr>
+<tr>
+<td>Fibonacci 堆</td>
+<td>\(O(\log|V|)\)</td>
+<td>\(O(1)\) 均摊</td>
+<td>\(O(|V|\log|V| + |E|)\)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>
+<p><strong>稠密图</strong>（\(|E| = \Theta(|V|^2)\)）：数组实现 \(O(|V|^2)\) 最优。</p>
+</li>
+<li>
+<p><strong>稀疏图</strong>（\(|E| = O(|V|)\)）：二叉堆 \(O(|V|\log|V|)\) 更优。</p>
+</li>
+<li>
+<p><strong>\(d\)-ary 堆</strong>取 \(d \approx |E|/|V|\)（平均度数）可在稀疏与稠密间平滑过渡；中间密度 \(|E| = |V|^{1+\varepsilon}\) 时可达 \(O(|E|)\) 线性。</p>
+</li>
+<li>
+<p><strong>Fibonacci 堆</strong>理论最优但实现复杂，实践中吸引力有限。</p>
+</li>
+</ul>
+优先队列的数组实现
+<p>最简单的优先队列：用<strong>无序数组</strong>存所有顶点的键值（初始 \(\infty\)）。</p>
+<ul>
+<li>
+<p>insert / decreasekey：直接修改键值 → \(O(1)\)。</p>
+</li>
+<li>
+<p>deletemin：线性扫描找最小 → \(O(|V|)\)。</p>
+</li>
+</ul>
+<p>总时间 \(O(|V|^2)\)，在稠密图上反而具竞争力。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>在图 4.9 的图上以 \(s=A\) 为起点运行 Dijkstra（边长：\(A\!-\!B\!=\!4\), \(A\!-\!C\!=\!2\), \(A\!-\!D\!=\!1\), \(B\!-\!C\!=\!1\), \(B\!-\!E\!=\!3\), \(C\!-\!D\!=\!3\), \(C\!-\!E\!=\!5\), \(D\!-\!E\!=\!2\)）：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>取出 \(u\)</th>
+<th>dist 数组 \((A,B,C,D,E)\)</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>初始</td>
+<td>—</td>
+<td>\((0,\infty,\infty,\infty,\infty)\)</td>
+<td>只有 \(A\) 为 0</td>
+</tr>
+<tr>
+<td>1</td>
+<td>\(A(0)\)</td>
+<td>\((0,4,2,1,\infty)\)</td>
+<td>松弛 \(A\) 的邻居：\(B=4,C=2,D=1\)</td>
+</tr>
+<tr>
+<td>2</td>
+<td>\(D(1)\)</td>
+<td>\((0,4,2,1,3)\)</td>
+<td>松弛 \(D\!-\!E\)：\(1+2=3\)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>\(C(2)\)</td>
+<td>\((0,3,2,1,3)\)</td>
+<td>松弛 \(C\!-\!B\)：\(2+1=3&lt;4\)，更新 \(B\)</td>
+</tr>
+<tr>
+<td>4</td>
+<td>\(B(3)\)</td>
+<td>\((0,3,2,1,3)\)</td>
+<td>松弛 \(B\!-\!E\)：\(3+3=6&gt;3\)，不更新</td>
+</tr>
+<tr>
+<td>5</td>
+<td>\(E(3)\)</td>
+<td>\((0,3,2,1,3)\)</td>
+<td>完成</td>
+</tr>
+</tbody>
+</table>
+<p>最终最短路径树由 prev 回溯：\(A\!\to\!D\)、\(A\!\to\!C\)、\(C\!\to\!B\)、\(D\!\to\!E\)。可见 \(A\!\to\!B\) 的最短路径是 \(A\!\to\!C\!\to\!B\)（长 3），而非直达（长 4）；\(A\!\to\!E\) 走 \(A\!\to\!D\!\to\!E\)（长 3）最优。</p></div></div><h2 id="p2-1-binary-heap">二叉堆：结构、操作与数组实现</h2><p>二叉堆（binary heap）是一种基于<strong>完全二叉树</strong>的优先队列结构，用于高效支持插入、删除最小值（delete-min）和 decrease-key 操作。</p>
+<p><strong>结构性质</strong>：完全二叉树要求除最后一层外每层都是满的，且最后一层的结点从左到右依次填满。因此，含 \(n\) 个结点的堆高度为 \(\lfloor \log_2 n \rfloor\)。堆的<strong>堆序性质</strong>（min-heap）规定：每个结点的键值不大于其子结点的键值。由此可推出：根结点始终持有整个堆的最小元素。</p>
+<p><strong>插入操作（insert）</strong>：将新元素放在树的最底层第一个空闲位置（即数组末尾），然后执行「上浮」（bubble up）：若该新元素小于其父结点，则与之交换并继续向上比较。交换次数不超过树高，因此插入的时间复杂度为 \(O(\log n)\)。<code>decrease-key</code> 操作类似，只是从该元素当前所在位置开始上浮。</p>
+<p><strong>删除最小值（delete-min）</strong>：取出根结点的值作为返回值。为了维持完全二叉树的形状，将树的最底层最右结点移到根位置，然后执行「下沉」（siftdown）：若该结点大于其任一子结点，则与较小的子结点交换并继续向下比较。下沉次数同样不超过树高，复杂度为 \(O(\log n)\)。</p>
+<p><strong>数组表示</strong>：完全二叉树可以用数组按层序（逐层向下、每层从左到右）紧凑存储，无需额外指针。若数组下标从 1 开始，则下标为 \(j\) 的结点满足：父结点下标 \(\lfloor j/2 \rfloor\)，左子 \(2j\)，右子 \(2j+1\)。上下移动均可通过整数下标运算在常数时间完成。建堆（makeheap）通过从第 \(n\) 个结点倒序到根逐个调用下沉，可在 \(O(n)\) 时间内完成（通过 \(\sum_{i=1}^{n} \log(n/i)\) 放缩可证）。</p>
+<pre><code>procedure bubbleup(h, x, i)
+  p = ⌊i/2⌋
+  while i ≠ 1 and key(h[p]) &gt; key(x):
+    h[i] = h[p]; i = p; p = ⌊i/2⌋
+  h[i] = x
+
+procedure siftdown(h, x, i)
+  c = minchild(h, i)
+  while c ≠ 0 and key(h[c]) &lt; key(x):
+    h[i] = h[c]; i = c; c = minchild(h, i)
+  h[i] = x
+</code></pre><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>初始最小堆</strong>（数组表示，下标 1 开始）：</p>
+<ul>
+<li>
+<p>数组：<code>[–, 3, 5, 10, 12, 11, 6, 8, 15, 20, 13]</code></p>
+</li>
+<li>
+<p>对应树形：</p>
+</li>
+</ul>
+<pre><code>        3
+      /   \
+     5     10
+    / \   / \
+   12 11 6   8
+  / \  /
+ 15 20 13
+</code></pre>
+<p><strong>插入 7</strong>：
+1. 将 7 放入下一个空闲位置（位置 11，作为位置 5 即结点 11 的左子）。
+2. \(7 &lt; 11\)（父），交换 → 7 升至位置 5，11 降至位置 11。
+3. \(7 &gt; 5\)（位置 5 的父为位置 2，值 5），停止。
+4. 结果数组：<code>[–, 3, 5, 10, 12, 7, 6, 8, 15, 20, 13, 11]</code></p>
+<p><strong>删除最小值</strong>（在原始堆上操作）：
+1. 取出根（3）。将最后一个元素 13（位置 10）移至根。堆现在有 9 个元素。
+2. \(13 &gt; \min(5,10) = 5\)，与 5 交换 → 13 到位置 2。
+3. \(13 &gt; \min(12,11) = 11\)，与 11 交换 → 13 到位置 5。
+4. 13 在位置 5，其子为位置 10 和 11，均超出堆范围（9 个元素），无子结点，停止。
+5. 结果数组：<code>[–, 5, 11, 10, 12, 13, 6, 8, 15, 20]</code></p>
+<p>两次操作均最多沿树高 \(O(\log n)\) 次交换。</p></div></div><h2 id="p2-2-dary-heap">d 叉堆：用分支因子换取树高</h2><p>d 叉堆（d-ary heap）是二叉堆的直接推广：每个结点最多有 \(d\) 个子结点（\(d \geq 2\)），树高因此降为 \(\Theta(\log_d n) = \Theta((\log n)/(\log d))\)。</p>
+<p><strong>插入与删除最小值的代价</strong>：插入时元素沿树高上浮，比较与交换次数正比于树高，因此速度较二叉堆提升约 \(\Theta(\log d)\) 倍，达到 \(O(\log_d n)\)。但删除最小值时，下沉（siftdown）过程需要在当前结点的 \(d\) 个子结点中选出最小者，每层耗时 \(O(d)\)，最多下沉 \(\log_d n\) 层，因此总复杂度为 \(O(d \log_d n)\)。可见增大 \(d\) 是一把双刃剑——插入更快，删除更慢。</p>
+<p><strong>数组表示</strong>：完全 d 叉树同样可以按层序存入数组。若下标从 1 开始，则下标为 \(j\) 的结点满足：父结点下标 \(\lceil (j-1)/d \rceil\)（二叉堆时即为 \(\lfloor j/2 \rfloor\)），子结点下标集合为 \(\{(j-1)d+2, \ldots, \min\{n, (j-1)d+d+1\}\}\)。与二叉堆相比，父子关系的下标换算稍复杂，但仍为常数时间运算。</p>
+<p><strong>适用场景</strong>：当应用中插入或 decrease-key 远比 delete-min 频繁时（如 Dijkstra 算法中边的松弛常触发 decrease-key），适当增大 \(d\) 可降低整体运行时间。实际取值需权衡两种操作的频率与具体常数因子。</p><h2 id="p2-3-bellman-ford">含负权边的最短路径：Bellman-Ford 算法</h2><p>Dijkstra 算法依赖一个关键假设：从起点到任一结点 \(v\) 的最短路径只经过比 \(v\)「更近」的结点。当边权可为负时，这一性质不再成立——最短路径可能先经过「更远」的结点再折返，导致贪心策略失效。</p>
+<p><strong>松弛操作（update）</strong>：对边 \((u, v)\) 执行
+\[
+\text{dist}(v) = \min\{\text{dist}(v),\ \text{dist}(u) + l(u, v)\}
+\]
+该操作是「安全」的：它不会让 \(\text{dist}(v)\) 变得过小；并且当 \(u\) 是 \(v\) 在最短路径上的前驱且 \(\text{dist}(u)\) 已正确时，它能正确设置 \(\text{dist}(v)\)。Dijkstra 算法本质上就是一个精心安排的 update 序列，但在负权边下该序列不再正确。</p>
+<p><strong>Bellman-Ford 算法</strong>：既然任何最短路径至多含 \(|V|-1\) 条边，我们只需对所有边重复执行 \(|V|-1\) 轮松弛。每轮遍历全部边，总时间复杂度为 \(O(|V| \cdot |E|)\)。</p>
+<pre><code>procedure shortest-paths(G, l, s)
+  for all u ∈ V: dist(u) = ∞, prev(u) = nil
+  dist(s) = 0
+  repeat |V|-1 times:
+    for all e ∈ E: update(e)
+</code></pre>
+<p><strong>负环检测</strong>：若图中存在从起点可达的负权环，则最短路径问题无定义（可无限绕环降低代价）。由于不含负环时最短路径至多 \(|V|-1\) 条边，第 \(|V|\) 轮松弛不应再有任何 \(\text{dist}\) 被更新。因此额外执行一轮：若仍有 \(\text{dist}\) 值减小，则报告存在负环。实际实现中，若某轮无任何更新可提前终止。</p><h2 id="p2-4-dag-shortest-path">DAG 上的线性时间最短路径</h2><p>有向无环图（DAG）天然不含环，因此不可能有负权环。DAG 上的单源最短路径可以在线性时间内求解。</p>
+<p><strong>核心观察</strong>：在 DAG 的任意路径中，顶点按拓扑序严格递增出现。因此，只要按拓扑排序（线性化）的顺序处理顶点，并在处理每个顶点时松弛其所有出边，就能保证：当处理到顶点 \(u\) 时，\(\text{dist}(u)\) 已经是从 \(s\) 到 \(u\) 的最短距离（因为所有可能到达 \(u\) 的路径上的前驱都已被处理）。这样每条最短路径上的边都会按正确顺序被处理一次。</p>
+<p><strong>算法步骤</strong>：
+1. 对 DAG 运行深度优先搜索，得到拓扑序。
+2. 初始化 \(\text{dist}(s) = 0\)，其余为 \(\infty\)。
+3. 按拓扑序遍历每个顶点 \(u\)，对每条出边 \((u, v)\) 执行松弛。</p>
+<p>该算法不要求边权为正。特别地，若将所有边权取反后运行相同算法，即可求得 DAG 上的<strong>最长路径</strong>。</p>
+<pre><code>procedure dag-shortest-paths(G, l, s)
+  for all u ∈ V: dist(u) = ∞, prev(u) = nil
+  dist(s) = 0
+  Linearize G
+  for each u ∈ V, in linearized order:
+    for all edges (u,v) ∈ E: update(u, v)
+</code></pre>
+<p>时间复杂度为 \(O(|V| + |E|)\)，是单源最短路径中最快的情形。</p><section aria-labelledby="interactive-shortest-path-stepper" class="lesson-interactives"><h2 id="interactive-shortest-path-stepper">交互推演</h2><article class="interactive-study"><h3>逐轮跟踪松弛，重点辨认 Dijkstra 永久确定顶点所依赖的非负边权假设。</h3><p>依据本地课程资料 <code>lectures/chap4.pdf、dis04.pdf、hw05.pdf</code> 重绘；交互用于解释算法状态与证明不变量，不替代正文中的完整论证。</p><figure aria-busy="true" class="course-interactive" data-interactive-src="../interactives/shortest-path-stepper.json"><img alt="有向加权图上距离估计逐步收紧" class="course-interactive-fallback" src="../figures/shortest-path-stepper-fallback.svg"/></figure></article></section><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>BFS 在任意带权图上都能算出最短路径。</h3><p>BFS 只在所有边长相等（单位长度）时才能保证最短路径。边长不同时必须用能兼顾边权的算法（如 Dijkstra）。</p></article><article class="summary-card"><h3>Dijkstra 算法可以处理任意负边长。</h3><p>Dijkstra 要求边长为正。负边长会破坏"一旦取出即已确定"的贪心性质，导致错误结果；需改用 Bellman-Ford 等算法。</p></article><article class="summary-card"><h3>二叉堆的插入和删除最小值操作都是 O(1) 的，因为底层是数组。</h3><p>虽然数组访问是 O(1)，但插入需要上浮、删除需要下沉，最多沿树高 O(log n) 次交换，复杂度是 O(log n)，不是 O(1)。</p></article><article class="summary-card"><h3>d 越大，d 叉堆在所有操作上都越快。</h3><p>增大 d 会加速插入（树高降低），但减慢 delete-min（每层需比较 d 个子结点，O(d log_d n)），需权衡两种操作的频率选择 d。</p></article><article class="summary-card"><h3>Dijkstra 算法只要对所有边权加一个常数使边权变正，就能处理负权边。</h3><p>加常数会改变不同长度路径之间的相对大小（因为各路径边数不同），可能破坏最短路径结构，这是错误的（参见习题 4.8）。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="b" data-correct="正确。BFS 按层扩展，节点首次被发现时经过的边数就是最短距离；归纳不变量保证队列中恰好是当前距离的节点，因此首次发现的距离即最终最短距离。" data-incorrect="错误。BFS 并不枚举所有路径（那是穷举），也不用栈（栈是 DFS）。核心在于按距离递增的层序首次发现节点，该时刻的距离就是最短距离。" data-quiz="m5-m5-p1-q1"><p><strong>问题：</strong>为什么在单位边长图上 BFS 树的所有路径都是最短路径？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">因为 BFS 会枚举所有可能的路径并取最短者</button><button aria-pressed="false" data-choice="b">因为 BFS 按到起点的距离递增、逐层发现节点；节点首次被发现时记录的距离就是最短距离</button><button aria-pressed="false" data-choice="c">因为 BFS 总是优先走边数最少的边</button><button aria-pressed="false" data-choice="d">因为 BFS 用栈结构保证不绕远路</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。Dijkstra 的核心思想与 BFS 相同（按距离顺序扩展），但用优先队列按当前最短距离取出节点，从而处理正边长。" data-incorrect="错误。Dijkstra 不能处理负边长（即使无负环）；在稀疏图上二叉堆 \(O((|V|+|E|)\log|V|)\) 优于数组 \(O(|V|^2)\)；Dijkstra 不重启搜索其他连通分量。" data-quiz="m5-m5-p1-q2"><p><strong>问题：</strong>关于 Dijkstra 算法，下列哪项是正确的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">只要没有负环，Dijkstra 就能正确处理含负边长的图</button><button aria-pressed="false" data-choice="b">Dijkstra 可视为 BFS 的推广，用优先队列替代普通队列以兼顾边长</button><button aria-pressed="false" data-choice="c">在稀疏图上，Dijkstra 用数组实现总是优于二叉堆</button><button aria-pressed="false" data-choice="d">Dijkstra 会重启搜索以处理其他连通分量</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。下沉时每层要在 d 个子结点中找最小值（O(d)），最多下沉 \(\log_d n\) 层，故总代价为 \(O(d \log_d n)\)。" data-incorrect="不正确。下沉过程只需比较当前结点的 d 个子结点，而非全部结点；树高是 \(\log_d n\) 而非 \(O(d \log n)\)，也不需重建整棵树。" data-quiz="m5-m5-p2-q1"><p><strong>问题：</strong>在 d 叉堆中，delete-min 操作的时间复杂度为 \(O(d \log_d n)\) 的主要原因是什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">每次下沉需要遍历全部 n 个结点才能找到最小值</button><button aria-pressed="false" data-choice="b">每次下沉需要在 d 个子结点中选出最小者，最多进行 \(\log_d n\) 层</button><button aria-pressed="false" data-choice="c">删除后需要以 O(n) 时间重建整棵树</button><button aria-pressed="false" data-choice="d">d 叉堆的高度是 \(O(d \log n)\)，导致交换次数增加</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。无负环时，最短路径至多 \(|V|-1\) 条边，|V|-1 轮松弛已足够；第 |V| 轮若仍有更新，则必存在可达负环。" data-incorrect="不正确。Bellman-Ford 可以处理含负权边但无负环的图；负环检测只需额外 1 轮而非 |V| 轮。" data-quiz="m5-m5-p2-q2"><p><strong>问题：</strong>关于 Bellman-Ford 算法与负环检测，下列哪项正确？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">只要图中存在负权边，Bellman-Ford 就无法得到正确结果</button><button aria-pressed="false" data-choice="b">算法在第 \(|V|\) 轮迭代中若仍有 dist 值被更新，则说明存在从起点可达的负环</button><button aria-pressed="false" data-choice="c">Bellman-Ford 不能处理任何含负权边的图</button><button aria-pressed="false" data-choice="d">负环检测需要额外运行 \(|V|\) 轮迭代才能完成</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>图距离是两节点间最短路径的长度；BFS 在单位边长图上按层序扩展，首次发现即最短，时间 \(O(|V|+|E|)\)。</li><li>BFS 用队列、DFS 用栈；BFS 按距离递增访问，得到最短路径树。</li><li>加权正边长图上，Dijkstra 用优先队列替代 BFS 的队列，按当前最短距离顺序确定节点；也可通过"已知区域 \(R\) 的单边扩展"推导。</li><li>Dijkstra 运行时间取决于优先队列实现：数组 \(O(|V|^2)\)、二叉堆 \(O((|V|+|E|)\log|V|)\)、Fibonacci 堆 \(O(|V|\log|V|+|E|)\)；稠密图偏好数组，稀疏图偏好堆。</li><li>二叉堆用完全二叉树加堆序性质实现优先队列，插入/删除最小值均 O(log n)，可紧凑存入数组。</li><li>d 叉堆用分支因子 d 降低树高，插入加速至 O(log_d n)，但 delete-min 减速至 O(d log_d n)。</li><li>Dijkstra 在负权边下失效；Bellman-Ford 通过 |V|-1 轮全边松弛在 O(|V|·|E|) 内求解，并可检测负环。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>lectures/chap4.pdf</code> · 本段对应小节 · confidence: high · 距离定义、BFS 算法与正确性、Dijkstra 算法与优先队列实现</li><li><code>lectures/chap4.pdf</code> · 本段对应小节 · confidence: high · 4.5.2 节定义了完全二叉树上的堆序性质，以及插入上浮/删除下沉的操作流程。</li><li><code>lectures/chap4.pdf</code> · 本段对应小节 · confidence: high · 4.5.3 节描述了 d 叉堆的结构、树高变化与操作复杂度权衡。</li><li><code>lectures/chap4.pdf</code> · 本段对应小节 · confidence: high · 4.6.1 节给出 Bellman-Ford 算法的主循环：|V|-1 轮全边松弛。</li><li><code>lectures/chap4.pdf</code> · 本段对应小节 · confidence: high · 4.6.2 节通过第 |V| 轮是否仍有更新来判断负环的存在。</li><li><code>lectures/chap4.pdf</code> · 本段对应小节 · confidence: high · 4.7 节给出 DAG 上按拓扑序松弛出边的线性时间算法。</li></ul><footer id="pb-page-end"><p>CS170: Efficient Algorithms and Intractable Problems · Fall 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

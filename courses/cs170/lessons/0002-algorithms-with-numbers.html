@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>数值算法 — CS170</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS170 · 第 2 讲</p><h1>数值算法</h1><p class="lede">覆盖二进制算术、欧几里得算法、模运算、素性测试与密码学背后的高效数值计算。</p><div class="meta"><span>预计用时：144 分钟</span><span>难度：进阶</span><span>Algorithms · Graph Algorithms · Dynamic Programming · Linear Programming</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>理解算术运算的比特级复杂度分析方法，掌握 O(n) 与 O(n²) 的典型算法</li><li>掌握模运算的基本性质、代换规则及其在简化大数计算中的作用</li><li>能用反复平方实现模幂运算并分析其 O(n³) 复杂度，理解欧几里得算法及其扩展形式</li><li>掌握费马素性检验的适用条件、Carmichael 数局限，以及何时需要 Miller–Rabin 等更强检验</li><li>区分私钥与公钥密码体制，解释 RSA 如何利用分解与素性检测的复杂度鸿沟实现数字锁</li><li>描述一次性密码本的异或加密/解密及其信息论安全与密钥一次性限制，对比 AES 的固定长度密钥与可重复使用</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>二进制表示与对数换底公式</li><li>大 O 记号及其渐近含义</li><li>递归算法的基本结构与归纳证明</li><li>模运算基本性质：同余、模逆元存在条件（gcd=1）、费马小定理</li><li>欧几里得算法与扩展欧几里得算法（求模逆元）</li><li>朴素乘法与快速模幂运算的复杂度概念</li></ul><h2 id="p1-1-sec1-1-arithmetic">基础算术与算法复杂度</h2><p>在计算机科学中，算术运算不仅是数学基础，更是理解算法复杂度的起点。本节从最基本的加法与乘法出发，建立「输入规模 \(n\)」与「运行时间」之间的精确关系。</p>
+<p><strong>加法（Addition）</strong> 两个 \(n\) 位二进制数 \(x\) 与 \(y\) 相加，结果至多 \(n+1\) 位。算法从右到左逐位相加并维护进位（carry）。由于每一位的加法都是常数时间操作，总运行时间为 \(c_0 + c_1 n\)，即 \(O(n)\)。这个算法是最优的——任何加法都至少需要读取两个输入并写出结果，这本身就要求 \(n\) 次操作。</p>
+<p><strong>乘法：竖式算法</strong> 小学所学的竖式乘法对两个 \(n\) 位数需要产生 \(n\) 个中间行（每个长度至多 \(2n\) 位），然后两两相加合并，总时间为 \(O(n^2)\)。在二进制下尤其简单：每个中间行要么是 0，要么是被适当左移的 \(x\) 本身。</p>
+<p><strong>Al Khwarizmi 的倍乘法</strong> 另一种古老算法通过反复折半乘数、加倍被乘数来计算乘积。例如计算 \(13 \times 11\)：将 11 反复折半（向下取整），同时将 13 反复加倍，直到左侧变为 1；然后删去左侧为偶数的行，把右侧剩余数相加。这种方法本质上与二进制乘法做了同一件事——只是通过奇偶性隐式提取了乘数的二进制表示。</p>
+<p><strong>递归乘法（Recursive Multiplication）</strong> 乘法可以更优雅地表述为递归形式。设 \(y \geq 0\)，则：
+\[ x \cdot y = \begin{cases} 2(x \cdot \lfloor y/2 \rfloor) &amp; \text{若 } y \text{ 为偶数} \\ x + 2(x \cdot \lfloor y/2 \rfloor) &amp; \text{若 } y \text{ 为奇数} \end{cases} \]
+基础情形为 \(y = 0\) 时返回 0。每次递归调用将 \(y\) 折半（即减少一个比特），最多 \(n\) 次调用；每次调用涉及右移、奇偶判断、左移和可能的加法，共 \(O(n)\) 比特操作，总时间仍为 \(O(n^2)\)。</p>
+<p><strong>除法（Division）</strong> 给定 \(x\) 和 \(y \neq 0\)，除法找出商 \(q\) 与余数 \(r\) 使得 \(x = yq + r\) 且 \(r &lt; y\)。其递归版本与乘法结构类似，同样需要 \(O(n^2)\) 时间。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>用递归乘法计算 \(13 \times 11\)。将 11 表示为二进制 \(1011_2\)：</p>
+<pre><code>multiply(13, 11):
+  z = multiply(13, 5)      // 11 为奇数, ⌊11/2⌋ = 5
+  return 13 + 2z
+
+multiply(13, 5):
+  z = multiply(13, 2)      // 5 为奇数, ⌊5/2⌋ = 2
+  return 13 + 2z
+
+multiply(13, 2):
+  z = multiply(13, 1)      // 2 为偶数, ⌊2/2⌋ = 1
+  return 2z
+
+multiply(13, 1):
+  z = multiply(13, 0)      // 1 为奇数, ⌊1/2⌋ = 0
+  return 13 + 2z
+
+multiply(13, 0): return 0
+</code></pre>
+<p>回代：</p>
+<ul>
+<li>
+<p>multiply(13, 0) = 0</p>
+</li>
+<li>
+<p>multiply(13, 1) = 13 + 2·0 = 13</p>
+</li>
+<li>
+<p>multiply(13, 2) = 2·13 = 26</p>
+</li>
+<li>
+<p>multiply(13, 5) = 13 + 2·26 = 65</p>
+</li>
+<li>
+<p>multiply(13, 11) = 13 + 2·65 = 143</p>
+</li>
+</ul>
+<p>验证：13 × 11 = 143，二进制 \(10001111_2\)。</p></div></div><h2 id="p1-2-sec1-2-modular-basics">模运算基础</h2><p>当反复进行加法或乘法时，数字会变得极其庞大。模运算（modular arithmetic）提供了一种处理受限整数范围的机制，是密码学的数学基础。</p>
+<p><strong>同余的定义</strong> 整数 \(x\) 模 \(N\) 的余数记作 \(x \bmod N\)：若 \(x = qN + r\) 且 \(0 \leq r &lt; N\)，则 \(x \bmod N = r\)。两个数 \(x\) 与 \(y\) 在模 \(N\) 下同余（congruent），记作 \(x \equiv y \pmod{N}\)，当且仅当 \(N\) 整除 \(x - y\)。例如 \(253 \equiv 13 \pmod{60}\)，因为 253 分钟等于 4 小时 13 分钟。</p>
+<p><strong>等价类视角</strong> 模 \(N\) 将整数划分为 \(N\) 个等价类，形如 \(\{i + kN : k \in \mathbb{Z}\}\)。同一类中的元素在模 \(N\) 下可以互相代换。例如模 3 有三个等价类：\(\{\ldots, -9, -6, -3, 0, 3, 6, 9, \ldots\}\)、\(\{\ldots, -8, -5, -2, 1, 4, 7, 10, \ldots\}\)、\(\{\ldots, -7, -4, -1, 2, 5, 8, 11, \ldots\}\)。</p>
+<p><strong>代换规则（Substitution Rule）</strong> 若 \(x \equiv x' \pmod{N}\) 且 \(y \equiv y' \pmod{N}\)，则：
+\[ x + y \equiv x' + y' \pmod{N}, \quad xy \equiv x'y' \pmod{N} \]
+这意味着在长串算术运算中，随时可以把中间结果约化为模 \(N\) 的余数，而不会改变最终结果。例如：
+\[ 2^{345} \equiv (2^5)^{69} \equiv 32^{69} \equiv 1^{69} \equiv 1 \pmod{31} \]</p>
+<p><strong>模加法与模乘法</strong> 模 \(N\) 加法先做普通加法，若和超过 \(N-1\) 则减去 \(N\)，运行时间为 \(O(n)\)，其中 \(n = \lceil \log N \rceil\)。模 \(N\) 乘法先做普通乘积（至多 \(2n\) 比特），再通过除法约化，总时间为 \(O(n^2)\)。</p>
+<p><strong>补码（Two's Complement）</strong> 补码是模运算的典型应用。用 \(n\) 比特表示区间 \([-2^{n-1}, 2^{n-1} - 1]\) 内的整数，实质上是对 \(2^n\) 取模。负数 \(x\) 被存储为 \(2^n + x\)。加法、减法可直接按位进行，忽略溢出比特。</p><h2 id="p1-3-sec1-3-exp-gcd">模幂运算、最大公约数与模除法</h2><p>本节讨论密码学中两个核心原语：模幂运算与最大公约数计算。它们的朴素实现都需指数时间，但巧妙算法可在多项式时间内解决。</p>
+<p><strong>模幂运算（Modular Exponentiation）</strong> 计算 \(x^y \bmod N\)。直接连乘 \(y-1\) 次需要 \(\approx 2^y\) 次乘法，在 \(y\) 为数百比特时完全不可行。</p>
+<p>关键观察：通过反复平方，只需 \(O(\log y)\) 步就能生成序列
+\[ x \bmod N, \; x^2 \bmod N, \; x^4 \bmod N, \; x^8 \bmod N, \; \ldots, \; x^{2^{\lfloor \log y \rfloor}} \bmod N \]
+然后将 \(y\) 的二进制表示中为 1 的那些幂次相乘。例如：
+\[ x^{25} = x^{11001_2} = x^{16} \cdot x^8 \cdot x^1 \]</p>
+<p>递归算法（图 1.4）直接实现规则：
+\[ x^y = \begin{cases} (x^{\lfloor y/2 \rfloor})^2 &amp; \text{若 } y \text{ 为偶数} \\ x \cdot (x^{\lfloor y/2 \rfloor})^2 &amp; \text{若 } y \text{ 为奇数} \end{cases} \]
+基础情形 \(y = 0\) 返回 1。每次递归将指数折半，最多 \(n\) 次调用；每次调用在模 \(N\) 下做 \(n\) 位数乘法（\(O(n^2)\)），总时间为 \(O(n^3)\)。</p>
+<p><strong>欧几里得算法（Euclid's Algorithm）</strong> 求最大公约数 \(\gcd(a, b)\)。基于欧几里得规则：若 \(x \geq y\)，则 \(\gcd(x, y) = \gcd(x \bmod y, y)\)。</p>
+<p>递归形式（图 1.5）：</p>
+<pre><code>function Euclid(a, b):
+  if b = 0: return a
+  return Euclid(b, a mod b)
+</code></pre>
+<p><strong>复杂度分析</strong> 关键引理：若 \(a \geq b\)，则 \(a \bmod b &lt; a/2\)。因此每两轮递归，两个参数的值至少减半（比特长度至少减 1）。初始为 \(n\) 比特时，最多 \(2n\) 次递归调用。每次调用含一次 \(O(n^2)\) 的除法，总时间为 \(O(n^3)\)。</p>
+<p><strong>扩展欧几里得算法（Extended Euclid）</strong> 不仅计算 \(d = \gcd(a, b)\)，还找到整数 \(x, y\) 使得 \(ax + by = d\)。基于引理：若 \(d\) 同时整除 \(a\) 和 \(b\)，且 \(d = ax + by\)，则 \(d = \gcd(a, b)\)。</p>
+<p><strong>模逆元与模除法</strong> \(a\) 模 \(N\) 的乘法逆元 \(a^{-1}\) 满足 \(a \cdot a^{-1} \equiv 1 \pmod{N}\)。逆元存在当且仅当 \(\gcd(a, N) = 1\)。此时扩展欧几里得给出 \(ax + Ny = 1\)，约化模 \(N\) 即得 \(a^{-1} = x \bmod N\)。模除法通过乘以逆元实现，耗时 \(O(n^3)\)。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>用扩展欧几里得算法求 \(\gcd(30, 18)\) 并找出 \(x, y\) 使得 \(30x + 18y = \gcd(30, 18)\)。</p>
+<p><strong>欧几里得递归过程</strong>：</p>
+<pre><code>30 = 1 × 18 + 12
+18 = 1 × 12 + 6
+12 = 2 × 6 + 0
+</code></pre>
+<p>所以 \(\gcd(30, 18) = 6\)。</p>
+<p><strong>回代求系数</strong>：</p>
+<pre><code>6 = 18 - 1 × 12
+  = 18 - 1 × (30 - 1 × 18)
+  = 18 - 30 + 18
+  = 2 × 18 - 1 × 30
+</code></pre>
+<p>所以 \(x = -1, y = 2\)，即 \(30 \times (-1) + 18 \times 2 = -30 + 36 = 6\)。</p>
+<p><strong>验证</strong>：\(30 \times (-1) + 18 \times 2 = -30 + 36 = 6 = \gcd(30, 18)\)，正确。</p></div></div><h2 id="p1-4-sec1-4-primality">素性检验与随机素数生成</h2><p>费马小定理（Fermat's Little Theorem）为素性检验提供了理论基础：若 \(p\) 是素数，则对任意 \(1 \leq a &lt; p\)，有
+\[ a^{p-1} \equiv 1 \pmod{p} \]</p>
+<p><strong>费马检验（Fermat Test）</strong> 随机选取 \(a &lt; N\)，检查 \(a^{N-1} \equiv 1 \pmod{N}\) 是否成立。若成立则返回「可能是素数」，否则返回「合数」。</p>
+<p><strong>正确性分析</strong> 费马定理不是充分必要条件：合数 \(N\) 也可能对某些 \(a\) 通过检验（如 \(341 = 11 \times 31\) 满足 \(2^{340} \equiv 1 \pmod{341}\)）。更特殊的 Carmichael 数对所有与 \(N\) 互素的 \(a\) 都能通过基础费马检验；无论重复多少次随机底数都无法可靠排除它们，因此实际素性测试应使用 Miller–Rabin 等更强方法。Carmichael 数相对稀少并不能替代这一正确性条件。</p>
+<p>关键引理：若 \(a^{N-1} \not\equiv 1 \pmod{N}\) 对某个与 \(N\) 互素的 \(a\) 成立，则至少一半的 \(a &lt; N\) 都会使检验失败。证明思路：对每个通过检验的 \(b\)，\(ab\) 必然失败，构造了一个从「通过集」到「失败集」的单射。</p>
+<p><strong>重复检验降低错误率</strong> 随机选取 \(a_1, \ldots, a_k\) 进行 \(k\) 次独立检验。若 \(N\) 为素数则必定通过；若 \(N\) 是至少存在一个费马见证的非 Carmichael 合数，则单轮误判概率至多 \(1/2\)，独立重复 \(k\) 次后的误判概率至多 \(1/2^k\)。这个界不适用于基础费马检验面对 Carmichael 数的情形；工程实践通常改用 Miller–Rabin，再通过多轮独立底数把误判率指数压低。</p>
+<p><strong>随机素数生成</strong> 由素数定理，不超过 \(x\) 的素数个数 \(\pi(x) \sim x / \ln x\)。随机 \(n\) 比特数是素数的概率约为 \(1.44/n\)。因此反复随机选取并检验，期望 \(O(n)\) 轮即可找到素数。</p><h2 id="p2-1-private-key-schemes">私钥密码体制：一次性密码本与 AES</h2><p>密码通信的典型场景由三个角色构成：Alice 与 Bob 希望私密通信，窃听者 Eve 可能截获密文。Alice 用加密函数 \(e(\cdot)\) 把明文 \(x\) 编码为 \(e(x)\) 后发送；Bob 用解密函数 \(d(\cdot)\) 恢复明文，即 \(d(e(x)) = x\)。为保证可解密，\(e\) 必须是双射（bijection），\(d\) 即为它的逆。</p>
+<p><strong>私钥体制</strong>（private-key protocol）下，Alice 与 Bob 必须事先会面，共同选定一个只有双方知道的「密码本」；Eve 只能靠收集密文去猜测密码本。</p>
+<h3>一次性密码本（One-Time Pad）</h3>
+<p>设重要消息 \(x\) 为 \(n\) 位二进制串。Alice 与 Bob 事先秘密地共同随机选取一个同样长为 \(n\) 的随机二进制串 \(r\)。加密采用按位异或（bitwise XOR）：</p>
+<p>\[e_r(x) = x \oplus r\]</p>
+<p>解密函数与加密函数完全相同（这是异或运算的特性）：</p>
+<p>\[d_r(y) = y \oplus r\]</p>
+<p><strong>正确性</strong>：\(e_r\) 是 \(n\) 位串到 \(n\) 位串的双射，因为它就是自己的逆：</p>
+<p>\[e_r(e_r(x)) = (x \oplus r) \oplus r = x \oplus (r \oplus r) = x \oplus 0 = x\]</p>
+<p><strong>安全性</strong>：若 \(r\) 每一位都由抛公平硬币决定（即 \(r\) 在 \(\{0,1\}^n\) 上均匀分布），则对 Eve 截获到的任意密文 \(y = e_r(x)\)，她无法获得关于 \(x\) 的任何信息——因为对每一个可能的原始明文 \(x'\)，都存在唯一一个 \(r'\) 使得 \(y = x' \oplus r'\)，因此所有 \(x\) 在 Eve 看来等可能。这种安全性是信息论意义上的，不依赖计算复杂度假设。</p>
+<p><strong>致命缺陷</strong>：同一密钥 \(r\) 绝不能再用第二次。若 Eve 同时知道 \(x \oplus r\) 与 \(z \oplus r\)，则二者异或得到 \(x \oplus z\)，会泄露两明文的差异信息（例如首尾是否相同、若其中一串出现长段零则另一串对应段直接暴露）。因此 \(r\) 的长度至少要与所有待交换消息的总长度一样长。</p>
+<h3>高级加密标准（AES）</h3>
+<p>一次性密码本是理论性质完全清晰的「玩具」方案；与之相对，AES 是美国国家标准与技术研究院 2001 年批准的广泛使用的私钥协议。Alice 与 Bob 仍需事先共享一个随机串 \(r\)，但 \(r\) 的长度固定为 128 位（另有 192、256 位变体），并由此确定一个固定的双射 \(e_r: \{0,1\}^{128} \to \{0,1\}^{128}\)。关键不同在于 AES 可以重复使用：长消息可被切成 128 位段逐段加密。AES 的安全性尚未被严格证明，但当前公众除了穷举尝试所有可能的 \(r\) 之外，并没有明显优于暴力破解的方法。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>设共享密钥 \(r = 01110010\)，Alice 发送明文 \(x = 11110000\)。</p>
+<p>加密：
+\[e_r(11110000) = 11110000 \oplus 01110010 = 10000010\]</p>
+<p>Bob 收到密文 \(y = 10000010\)，解密应用同一函数：
+\[d_r(10000010) = 10000010 \oplus 01110010 = 11110000 = x\]</p>
+<p>若 Eve 截获到 \(y = 10\)（假设为 2 位情形），她不知道 \(r\)，而 \((x, r)\) 的所有四组可能 \((00,10)\)、\((01,11)\)、\((10,00)\)、\((11,01)\) 都对应合法的明文-密钥组合，因此 \(x\) 在 Eve 看来等可能——这就是一次性密码本的信息论安全性。</p></div></div><h2 id="p2-2-rsa-public-key">公钥密码体制：RSA 方案</h2><p><strong>公钥体制</strong>（public-key cryptography）允许 Alice 在从未见过 Bob 的情况下也能给 Bob 发送私密消息。每个人都有一对密钥：公开钥向全世界公开，私钥（secret key）仅本人持有。Alice 用 Bob 的公开钥加密，Bob 用自己的私钥解密；Eve 即便看到任意多条给 Bob 的密文，也无法解密。RSA 正是基于数论实现这种「数字锁」的方案。</p>
+<h3>RSA 的核心数论性质</h3>
+<p>任选两个素数 \(p, q\)，令 \(N = pq\)。选取与 \((p-1)(q-1)\) 互素的整数 \(e\)，则：</p>
+<ol>
+<li>映射 \(x \mapsto x^e \bmod N\) 是集合 \(\{0,1,\dots,N-1\}\) 上的双射（无信息损失）。</li>
+<li>设 \(d\) 是 \(e\) 模 \((p-1)(q-1)\) 的逆元，即 \(ed \equiv 1 \pmod{(p-1)(q-1)}\)，则对所有 \(x \in \{0,1,\dots,N-1\}\)：</li>
+</ol>
+<p>\[(x^e)^d \equiv x \pmod N\]</p>
+<p><strong>正确性证明思路</strong>：由 \(ed \equiv 1 \pmod{(p-1)(q-1)}\) 可写 \(ed = 1 + k(p-1)(q-1)\)。需证 \(x^{ed} - x = x^{1+k(p-1)(q-1)} - x\) 恒被 \(N = pq\) 整除。模 \(p\) 分两种情况：若 \(p \mid x\)，则 \(x^{ed} \equiv x \equiv 0 \pmod p\)；否则由费马小定理 \(x^{p-1} \equiv 1 \pmod p\)，同样得到 \(x^{ed} \equiv x \pmod p\)。模 \(q\) 完全同理，因此 \(x^{ed}-x\) 同时被互素的 \(p,q\) 整除，进而被 \(N=pq\) 整除。因此 \((x^e)^d \equiv x \pmod N\)。</p>
+<h3>RSA 协议步骤</h3>
+<pre><code class="language-text">Bob 密钥生成：
+  1. 随机选取两个大素数 p、q（各 n 位）
+  2. 计算 N = pq
+  3. 选取 e，满足 gcd(e, (p-1)(q-1)) = 1（现代实现通常取 \(e=65537\)，并必须配合 OAEP 等安全填充；裸 RSA 具有确定性，不能直接用于实际消息加密）
+  4. 用扩展欧几里得算法计算 d ≡ e⁻¹ mod (p-1)(q-1)
+  公开钥 = (N, e)，私钥 = d
+
+Alice 发送消息 x：
+  查 Bob 的公开钥 (N, e)，计算 y = x^e mod N（快速模幂）并发送
+
+Bob 解密：
+  计算 y^d mod N，得到原始消息 x
+</code></pre>
+<h3>安全性假设</h3>
+<p>RSA 的安全性基于以下计算困难性假设：给定 \(N, e\) 和 \(y = x^e \bmod N\)，在多项式时间内求出 \(x\) 是计算上不可行的。Eve 要么穷举所有 \(x\)（指数时间），要么先分解 \(N\) 得到 \(p, q\) 再求 \(d\)（但大规模整数分解被普遍认为是难问题）。RSA 的精髓正在于把「困难问题」转化为安全优势。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>取 \(N = 55 = 5 \times 11\)，则 \((p-1)(q-1) = 4 \times 10 = 40\)。选加密指数 \(e = 3\)，满足 \(\gcd(3, 40) = 1\)。解密指数 \(d\) 是 \(3\) 模 \(40\) 的逆元：\(d = 27\)。</p>
+<p>对明文 \(x = 13\)：</p>
+<ul>
+<li>
+<p>加密：\(y = 13^3 \bmod 55 = 52\)</p>
+</li>
+<li>
+<p>解密：\(x = 52^{27} \bmod 55 = 13\)</p>
+</li>
+</ul>
+<p>验证了 \((x^e)^d \equiv x \pmod N\)。</p></div></div><h2 id="p2-3-universal-hashing">通用哈希族：哈希表与随机化哈希函数</h2><p>哈希（hashing）的目标是在内存与访问时间之间取得平衡。以维护约 250 个活跃 IP 地址为例：若建一个以 32 位 IP 为下标的数组，需要 \(2^{32} \approx 4 \times 10^9\) 个单元，绝大部分为空；若只用链表存 250 条记录，则访问时间与 250 成正比。哈希通过一个哈希函数 \(h\) 把庞大的地址空间压缩到一个大小与元素个数同阶的表内，使期望查找时间为 \(O(1)\)。</p>
+<h3>哈希表结构</h3>
+<p>每个 IP 地址 \(x\) 被映射到位置 \(h(x)\)，该位置存储一个「桶」（bucket），实质是一个链表，容纳所有映射到该位置的元素。若哈希函数选取得当，大多数桶内元素很少，扫描代价低。</p>
+<h3>为何需要随机化</h3>
+<p>单一哈希函数不可能对所有数据分布都表现良好。把 \(2^{32}\) 个 IP 映射到 250 个桶，必然存在至少约 \(2^{32}/250 \approx 2^{24} \approx 16{,}000{,}000\) 个地址共享同一名称（碰撞）；若它们大量出现在客户集合中，性能就会恶化。因此我们转而从一族哈希函数 \(\mathcal{H}\) 中随机选取一个。</p>
+<h3>基于素数的通用哈希族</h3>
+<p>取桶数 \(n\) 为一个略大于元素个数的素数（例如取 257）。把每个 IP 地址 \(x = (x_1, x_2, x_3, x_4)\) 视为四个模 \(n\) 的整数。随机选取四个系数 \(a = (a_1, a_2, a_3, a_4) \in \{0,1,\dots,n-1\}^4\)，定义：</p>
+<p>\[h_a(x_1,\dots,x_4) = \left(\sum_{i=1}^{4} a_i \cdot x_i\right) \bmod n\]</p>
+<p><strong>通用性（universality）</strong>：对任意两个不同的 IP 地址 \(x \neq y\)，当系数 \(a\) 在 \(\{0,\dots,n-1\}^4\) 上均匀随机选取时：</p>
+<p>\[\Pr\bigl[h_a(x) = h_a(y)\bigr] = \frac{1}{n}\]</p>
+<p><strong>证明思路</strong>：\(x\) 与 \(y\) 至少在一个分量上不同，不妨设 \(x_4 \neq y_4\)。碰撞条件等价于</p>
+<p>\[\sum_{i=1}^{3} a_i(x_i - y_i) \equiv a_4(y_4 - x_4) \pmod n\]</p>
+<p>先随机抽取 \(a_1, a_2, a_3\)，左端即为某个常数 \(c\)。由于 \(n\) 是素数且 \(x_4 \neq y_4\)，\((y_4 - x_4)\) 在模 \(n\) 下有唯一逆元，因此使等式成立的 \(a_4\) 只能是 \(c \cdot (y_4 - x_4)^{-1} \bmod n\)，在 \(n\) 个可能取值中唯一，概率为 \(1/n\)。</p>
+<h3>期望性能</h3>
+<p>设哈希表中有 \(m = 250\) 个元素。对任一待查元素 \(x\)，其他每个元素与 \(x\) 碰撞的概率为 \(1/n = 1/257\)。由期望线性性，若 \(x\) 已在表中，它所在桶的期望元素数为 \(1+(m-1)/n &lt; 2\)；若查询未存元素，则期望候选数为 \(m/n&lt;1\)。两种情况下期望查找时间都是 \(O(1)\)。</p>
+<p>一般地，取表大小 \(n\) 为略大于元素个数的素数（最好约为元素数的两倍），把定义域大小 \(N\) 放大为 \(n^k\) 后把每个数据视为 \(k\) 元模 \(n\) 整数，即得通用哈希族 \(\mathcal{H} = \{h_a : a \in \{0,\dots,n-1\}^k\}\)。</p><h2 id="p2-4-misconceptions-and-checks">辨析与知识检查</h2><p>本节整理本段中若干易混淆点，并通过练习巩固。</p>
+<p><strong>辨析 1</strong>：RSA 的安全性并非已被严格证明，它依赖于「给定 \(N, e, x^e \bmod N\) 求 \(x\) 是困难的」这一计算复杂度假设。若整数分解被高效破解，RSA 即失效。</p>
+<p><strong>辨析 2</strong>：一次性密码本的信息论安全性来自密钥 \(r\) 与明文等长且只用一次；AES 则用固定短密钥重复加密，其安全性是计算意义上的。</p>
+<p><strong>辨析 3</strong>：通用哈希族保证的是「随机选函数时，任意一对不同元素碰撞概率为 \(1/n\)」，这并不排除存在某个特定函数把大量元素映射到同一桶——只是随机选到这种坏函数的概率很小。</p>
+<p><strong>辨析 4</strong>：RSA 中 \(e\) 常用 3 是为了加速加密（\(x^3\) 只需少量乘法），但 \(e\) 必须与 \((p-1)(q-1)\) 互素，否则无法求得解密指数 \(d\)。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>现代计算机用一条指令完成加法，因此加法是 O(1) 的。</h3><p>单条指令只能处理字长范围内（如 32 位）的整数。当数字长达数千比特时，加法必须逐位进行，复杂度为 O(n)。比特复杂度反映了实现算法所需的硬件（晶体管与导线）规模。</p></article><article class="summary-card"><h3>若 a^{N-1} ≡ 1 (mod N)，则 N 一定是素数。</h3><p>费马定理不是充分必要条件。伪素数可能对部分底数通过检验，Carmichael 数甚至会对所有互素底数通过基础费马检验；简单重复无法解决后者，必须改用 Miller–Rabin 等更强测试。</p></article><article class="summary-card"><h3>模运算中任何非零数都可以做除法。</h3><p>只有与模数 N 互素的数才有乘法逆元。若 gcd(a, N) &gt; 1，则 a 在模 N 下不可逆，除法无法定义。</p></article><article class="summary-card"><h3>RSA 的安全性已经被数学严格证明，只要参数够大就绝对不可破解。</h3><p>RSA 的安全性基于一个尚未被证明的计算困难性假设：给定 \(N, e, x^e \bmod N\) 求 \(x\) 是计算上不可行的。若整数分解被高效解决，RSA 即被破解。</p></article><article class="summary-card"><h3>通用哈希族能保证每个具体的数据集合都不会出现任何碰撞。</h3><p>通用哈希族只保证：对任意一对不同元素，当函数从族中随机选取时碰撞概率为 \(1/n\)。对某些特定函数，仍可能存在大量碰撞；但随机选到这种坏函数的概率很小，从而期望性能良好。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="b" data-correct="正确。欧几里得规则 gcd(x, y) = gcd(x mod y, y) 是算法的核心。选项 A 错误——是每两轮至少减半，不是每轮；选项 C 错误——每次递归含 O(n²) 的除法，总时间为 O(n³)；选项 D 错误——扩展欧几里得适用于任意正整数。" data-incorrect="不正确。请回顾欧几里得算法的递归规则与复杂度分析：每次递归将 (a, b) 变为 (b, a mod b)，由于 a mod b &lt; a/2，每两轮参数至少减半；每次递归含 O(n²) 除法，总时间为 O(n³)。" data-quiz="m2-m2-p1-q1"><p><strong>问题：</strong>关于欧几里得算法求最大公约数，下列哪项是正确的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">每次递归调用都将两个参数的值减半</button><button aria-pressed="false" data-choice="b">算法基于规则 gcd(x, y) = gcd(x mod y, y)，其中 x ≥ y</button><button aria-pressed="false" data-choice="c">算法的运行时间是 O(n²)，因为每次递归只做常数时间操作</button><button aria-pressed="false" data-choice="d">扩展欧几里得算法只能处理素数输入</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="c" data-correct="正确。在题设明确给出单轮误判概率至多 1/2 且各轮独立时，k 轮全部误判的概率至多为 (1/2)^k。基础费马检验面对 Carmichael 数不满足该前提。" data-incorrect="先确认适用前提：只有当单轮误判概率至多为 1/2 且各轮独立时，k 轮误判率才至多为 1/2^k；Carmichael 数是基础费马检验的重要例外。" data-quiz="m2-m2-p1-q2"><p><strong>问题：</strong>对一个满足单轮费马误判概率至多为 1/2 的非 Carmichael 合数 N，独立随机选取 k 个底数重复检验，全部误判为素数的概率至多是多少？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">1/2</button><button aria-pressed="false" data-choice="b">1/k</button><button aria-pressed="false" data-choice="c">1/2^k</button><button aria-pressed="false" data-choice="d">1/n</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。写 \(ed = 1 + k(p-1)(q-1)\) 后，\(x^{ed} - x = x^{1+k(p-1)(q-1)} - x\)。由费马小定理，\(x^{p-1} \equiv 1 \pmod p\)，故该式被 \(p\) 整除；同理被 \(q\) 整除。\(p,q\) 为素数，故也被乘积 \(N\) 整除，即 \((x^e)^d \equiv x \pmod N\)。" data-incorrect="选项 b 正确。选项 a 中国剩余定理并非此处核心推导；选项 c 欧拉定理本身也需要类似论证，且不处理 \(x\) 与 \(N\) 不互素的边界情形；选项 d 只说明映射可逆，并未给出具体的 \(d\) 如何使 \((x^e)^d\) 回到 \(x\) 的代数机制。" data-quiz="m2-m2-p2-q1"><p><strong>问题：</strong>在 RSA 方案中，设 \(N = pq\)，\(e\) 与 \((p-1)(q-1)\) 互素，\(d\) 满足 \(ed \equiv 1 \pmod{(p-1)(q-1)}\)。以下哪一项是 \((x^e)^d \equiv x \pmod N\) 对所有 \(x \in \{0,1,\dots,N-1\}\) 成立的关键依据？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">中国剩余定理保证模 \(p\) 与模 \(q\) 的解可以合并</button><button aria-pressed="false" data-choice="b">由 \(ed = 1 + k(p-1)(q-1)\) 及费马小定理，\(x^{ed} - x\) 同时被 \(p\) 与 \(q\) 整除，从而被 \(N\) 整除</button><button aria-pressed="false" data-choice="c">欧拉定理直接给出 \(x^{\varphi(N)} \equiv 1 \pmod N\)，无需其他论证</button><button aria-pressed="false" data-choice="d">因为 \(x^e \bmod N\) 是双射，所以 \((x^e)^d\) 必然回到 \(x\)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。通用族的定义正是：对任意两个不同元素，随机选函数时碰撞概率恰为 \(1/n\)，等价于恰有 \(|\mathcal{H}|/n\) 个函数使它们碰撞（在均匀随机选取下）。这一性质保证了期望查找时间为 \(O(1)\)。" data-incorrect="选项 b 正确。选项 a 太强，通用族不保证每个函数都无碰撞；选项 c 要求函数被均匀随机选取，不可以概率不同；选项 d 中单系数线性函数 \(ax \bmod n\) 本身并不满足通用性，需要多系数（如本段中的四元组系数）构成的族才具备该性质。" data-quiz="m2-m2-p2-q2"><p><strong>问题：</strong>关于通用哈希族（universal family of hash functions），下列哪一项符合本段给出的定义？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">族中每个哈希函数都把任意两个不同元素映射到不同桶</button><button aria-pressed="false" data-choice="b">对任意两个不同元素 \(x, y\)，从族中随机选取函数 \(h\) 时，\(\Pr[h(x) = h(y)] = 1/n\)，\(n\) 为桶数</button><button aria-pressed="false" data-choice="c">对任意两个不同元素 \(x, y\)，族中恰好有 \(|\mathcal{H}|/n\) 个函数使 \(h(x) = h(y)\)，且每个函数被选中的概率可以不同</button><button aria-pressed="false" data-choice="d">只要桶数 \(n\) 是素数，任何线性函数 \(h(x) = ax \bmod n\) 都自动构成通用族</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>加法是 O(n)，乘法与除法为 O(n²)，模幂运算与扩展欧几里得均为 O(n³)。</li><li>模运算通过同余关系将整数划分为 N 个等价类，代换规则允许随时约化中间结果。</li><li>反复平方将模幂运算从指数时间降至多项式时间，欧几里得算法通过 a mod b 的快速约简求出最大公约数及其贝祖系数。</li><li>基础费马检验对存在见证的非 Carmichael 合数可用重复抽样降低误判率，但 Carmichael 数会系统性通过；实际应使用 Miller–Rabin 等更强测试。</li><li>私钥体制（一次性密码本、AES）要求通信双方事先共享同一密钥；一次性密码本具信息论安全但密钥必须与明文等长且只用一次，AES 用固定短密钥可重复使用，安全性基于计算困难性。</li><li>RSA 是公钥体制：Bob 公开 \((N, e)\)，私藏 \(d\)；Alice 用 \(y = x^e \bmod N\) 加密，Bob 用 \(y^d \bmod N\) 解密；正确性由 \(ed \equiv 1 \pmod{(p-1)(q-1)}\) 与费马小定理推出，安全性基于大整数分解的困难性。</li><li>通用哈希族通过随机选函数把任意一对不同元素的碰撞概率压到 \(1/n\)，从而由期望线性性保证哈希表期望查找时间为 \(O(1)\)；具体构造常取素数桶数 \(n\) 与多系数线性函数 \(h_a(x) = \sum a_i x_i \bmod n\)。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>lectures/chap1.pdf</code> · 本段对应小节 · confidence: high · 涵盖基础算术、模运算、模幂运算、欧几里得算法、扩展欧几里得算法、模逆元、费马素性检验与随机素数生成等核心内容</li><li><code>lectures/chap1.pdf</code> · 本段对应小节 · confidence: high · 密码学场景描述、RSA 性质叙述与证明、图 1.9 RSA 协议</li><li><code>lectures/chap1.pdf</code> · 本段对应小节 · confidence: high · 一次性密码本异或加密/解密、双射与信息论安全性、AES 固定长度密钥</li><li><code>lectures/chap1.pdf</code> · 本段对应小节 · confidence: high · IP 地址哈希示例、素数桶数构造、\(h_a\) 定义与 \(\Pr=1/n\) 证明</li></ul><footer id="pb-page-end"><p>CS170: Efficient Algorithms and Intractable Problems · Fall 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

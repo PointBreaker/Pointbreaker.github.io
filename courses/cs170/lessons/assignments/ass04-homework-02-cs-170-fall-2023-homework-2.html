@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CS 170 Fall 2023 Homework 2 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 作业 2</p>
+    <h1>CS 170 2023年秋季 作业2</h1>
+    <p class="lede">本次作业涵盖分治与选择算法：在两个有序数组中找第 k 小元素、统计元素和为 3 的倍数的奇数大小子集数、在变体《抵抗组织》中识别所有间谍、在狼人游戏中找出一名确定的人类，以及 Quickselect 编码实现。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>order-statistics</li><li>divide-and-conquer</li><li>binary-search</li><li>counting</li><li>subset-sum-mod3</li><li>game-identification</li><li>quickselect</li><li>randomized-algorithm</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>hw02.pdf</code>、<code>hw02-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 作业</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已收录 5/6 道并默认折叠；其余题目会明确标注无本地官方解答。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>hw02.pdf</code>、<code>hw02-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>学习小组</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>无本地官方解答</span></div><section class="problem-subsection"><h4>完整题面</h4><p>列出你的学习小组中所有成员的姓名和 SID（学生编号）。如果你没有合作者，必须明确写出 "none"。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>本题无算法内容，按要求如实填写即可。</p></div></details><div class="problem-method"><strong>答案状态</strong><p>本地资料未提供这道题的官方解答；页面只保留题面与非答案式提示。</p></div><p class="problem-source-note">题面来源：<code>hw02.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>两个有序数组</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定两个各含 \(k\) 个整数的有序数组。给出一个高效（即优于 \(O(k)\) 时间）的算法，找出这两个数组的并集中第 \(k\) 小的元素。你可以假设所有元素互不相同。</p>
+<p>你的解答应包含算法描述、正确性证明和运行时间分析（即三部分解答）。此外，请提供相应的伪代码。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑比较两个数组中间位置的元素。一次比较能否像二分搜索（binary search）一样排除常数比例的元素？注意 \(k\) 为偶数时的取整问题：可分别用下取整和上取整来划分两个半区，并在伪代码中显式处理。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>我们比较两个列表的中间元素（如果 \(k\) 是奇数；当 \(k\) 为偶数时需要稍加小心——见伪代码）。如果第一个列表的中间元素小于第二个列表的中间元素，那么所求元素不可能在第一个列表的左半部分，也不可能在第二个列表的右半部分。如果第二个列表的中间元素更小，则情况相反。因此我们可以截去这些元素，并在两个新数组上递归。</p>
+<p>当每个列表的大小都为 1 时，\(k=1\)，只需比较两个元素并返回较小的那个。</p>
+<p>为处理 \(k\) 为偶数的情况，以下给出伪代码，并基于伪代码写出正确性证明。未考虑 \(k\) 为偶数及取整问题的同学，只要主要思路正确，仍可获满分。</p>
+<p><strong>伪代码</strong></p>
+<pre><code>procedure TwoArraySelection(a[1..k], b[1..k], k)
+Let ℓ1 = ⌊k/2⌋ and ℓ2 = ⌈k/2⌉
+while a[ℓ1] ≠ b[ℓ2] and k &gt; 1 do
+    if a[ℓ1] &gt; b[ℓ2] then
+        Set a := a[1, ···, ℓ1]; b := b[ℓ2+1, ···, k]; k := ℓ1
+        Let ℓ1 = ⌊k/2⌋ and ℓ2 = ⌈k/2⌉
+    else
+        Set a := a[ℓ1+1, ···, k]; b := b[1, ···, ℓ2]; k := ℓ2
+        Let ℓ1 = ⌊k/2⌋ and ℓ2 = ⌈k/2⌉
+if k = 1 then
+    return min(a[1], b[1])
+else
+    return a[ℓ1]
+</code></pre>
+<p><strong>正确性证明</strong>
+设 \(s_k\) 为我们寻找的元素。算法首先比较 \(a[ℓ_1]\) 与 \(b[ℓ_2]\)。假设 \(a[ℓ_1] &gt; b[ℓ_2]\)。</p>
+<p>那么在 \(a\) 与 \(b\) 的并集中，最多只有 \(k-2\) 个元素比 \(b[ℓ_2]\) 小，即 \(a[1,\cdots,ℓ_1-1]\) 和 \(b[1,\cdots,ℓ_2-1]\)，因此必有 \(s_k &gt; b[ℓ_2]\)。类似地，所有元素 \(a[1,\cdots,ℓ_1]\) 和 \(b[1,\cdots,ℓ_2]\) 都小于 \(a[ℓ_1+1]\)；但这些共有 \(k\) 个元素，因此必有 \(s_k &lt; a[ℓ_1+1]\)。</p>
+<p>这表明 \(s_k\) 必包含在子数组 \(a[1,\cdots,ℓ_1]\) 与 \(b[ℓ_2+1,\cdots,k]\) 的并集中。特别地，由于我们丢弃了 \(ℓ_2\) 个小于 \(s_k\) 的元素，\(s_k\) 将是这个并集中第 \(ℓ_1\) 小的元素。</p>
+<p>然后我们在此更小的问题上递归来找 \(s_k\)。\(a[ℓ_1] &lt; b[ℓ_2]\) 的情况是对称的。</p>
+<p>若我们在 \(a[ℓ_1]=b[ℓ_2]\) 之前达到 \(k=1\)，可提前终止递归，直接返回 \(a\) 与 \(b\) 中的最小元素。也可不用此判断，但处理基本情况会更繁琐。</p>
+<p>或者，若到达 \(a[ℓ_1]=b[ℓ_2]\) 的状态，则恰好有 \(k\) 个更大的元素，因此 \(s_k = a[ℓ_1] = b[ℓ_2]\)。</p>
+<p><strong>运行时间分析</strong>
+每一步都将考虑的元素数量减半，因此算法在 \(\log k\) 次递归调用后终止。假设比较操作花费常数时间，算法运行时间为 \(\Theta(\log k)\)。</p>
+<p>（为何期望运行时间为 \(\Theta(\log k)\)？列表是有序的，一次比较就能排除常数比例的元素，类似于二分搜索。作为下界，一次比较只能提供 1 比特信息，而有 \(2k\) 种可能，因此需要 \(\Omega(\log k)\) 比特来区分。）</p>
+<p><strong>替代解法</strong>
+注意到对于给定元素 \(A[i]\)，我们可通过将其与 \(B[k-i]\) 和 \(B[k-i+1]\) 比较，在 \(O(1)\) 内确定答案在 \(A[i]\) 之前还是之后。假设所求元素在 \(A\) 中，进行如下二分搜索。设 \(A[m]\) 是数组中间元素，若 \(B[k-m] &lt; A[m] &lt; B[k-m+1]\)，则答案为 \(A[m]\)。若 \(A[m] &gt; B[k-m+1]\)，则在 \(A\) 的左半部分递归。若 \(A[m] &lt; B[k-m]\)，则在右半部分递归。</p>
+<p>若搜索在 \(A\) 上未成功，则在 \(B\) 上重复相同策略。</p>
+<p><strong>正确性</strong>：当 \(B[k-m] &lt; A[m] &lt; B[k-m+1]\) 时，\(A[m]\) 在并集中的排名为 \(m + k - m = k\)。若 \(B[k-m] &gt; A[m]\)，则 \(A[m]\) 之前少于 \(k\) 个元素，答案在右半部分。若 \(B[k-m+1] &lt; A[m]\)，则 \(A[m]\) 之前多于 \(k\) 个元素，答案在其左侧。</p>
+<p><strong>运行时间分析</strong>：二分搜索每一步需要 \(O(1)\) 次比较，然后在半个数组上递归。因此运行时间为 \(O(\log n)\)。</p></div><p class="problem-source">解答来源：<code>hw02-sol.pdf</code> · 1 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw02.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>统计 3 的倍数</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一个包含 \(n\) 个互不相同非负整数的数组 \(A\)。给出一个 \(O(n(\log n)^2)\) 时间的算法，统计 \(A\) 中元素之和为 3 的倍数的奇数大小子集的个数。</p>
+<p>你可以假设两个 \(k\) 位整数的乘法可以在 \(O(k \log k)\) 时间内完成（参见 Harvey 与 van der Hoeven）。</p>
+<p>提示 1：注意这类子集的个数可能随 \(n\) 指数增长，因此我们不能假设算术运算花费 \(O(1)\) 时间。为了界定加法和乘法的代价，请说明一个大小为 \(n\) 的数组的子集个数可以存储在一个 \(n\) 位整数中。</p>
+<p>提示 2：尝试用分治法记录元素和模 3 余 0、1、2 的奇数大小和偶数大小子集的个数。你如何在 \(O(k \log k)\) 时间内合并大小为 \(k\) 的子问题？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>在合并两个子问题时，你需要将左半部分的 6 个计数值（奇/偶 × 余 0/1/2）与右半部分的 6 个值进行组合。思考奇偶性如何相加：奇+偶=奇，偶+奇=奇，奇+奇=偶，偶+偶=偶。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>我们将数组分成两半，递归地计算 \(m = 0, 1, 2\) 时的 \(\text{num\_odd}[m]\) 和 \(\text{num\_even}[m]\)。这些分别表示元素和模 3 余 \(m\) 的奇数大小和偶数大小子集的个数。合并时，我们考虑左右子问题的所有 \(6 \times 6\) 对值，并将它们加到正确的条目中。最终输出为 \(\text{num\_odd}[0]\)。</p>
+<p><strong>合并步骤中计算 \(\text{num\_odd}\) 数组的伪代码</strong></p>
+<pre><code>Initialize num_even[m] and num_odd[m] to 0 for m = 0, 1, 2
+for i = 0, 1, 2 do
+    for j = 0, 1, 2 do
+        m ← (i + j) mod 3
+        num_odd[m] ← num_odd[m] + left_num_even[i] * right_num_odd[j]
+        num_odd[m] ← num_odd[m] + left_num_odd[i] * right_num_even[j]
+</code></pre>
+<p>我们可用 \(O(1)\) 次算术运算类似地计算 \(\text{num\_even}\)。</p>
+<p><strong>运行时间分析</strong>
+合并步骤有 \(O(1)\) 次乘法和加法。对于大小为 \(k\) 的子问题，每次操作花费 \(O(k \log k)\) 时间。由于我们在每一层都分成两半，运行时间由以下递推式给出：
+\[T(n) = 2T(n/2) + O(n \log n)\]
+展开递推式：
+\[T(n) = 2T(n/2) + cn \log n\]
+\[= \sum_{i=1}^{\log n} 2^i \cdot c(n/2^i) \log(n/2^i)\]
+\[\le \sum_{i=1}^{\log n} 2^i \cdot c(n/2^i) \log n\]
+\[= \sum_{i=1}^{\log n} cn \log n\]
+\[= cn(\log n)^2\]
+（其中 \(c\) 为某常数）。因此，运行时间为 \(O(n(\log n)^2)\)。</p></div><p class="problem-source">解答来源：<code>hw02-sol.pdf</code> · 3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw02.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>抵抗组织</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>我们在玩一款《抵抗组织》（The Resistance）的变体桌游，其中有 \(n\) 名玩家，其中 \(s\) 是间谍。在这个变体中，每一轮我们选出一个玩家子集去执行任务。如果该子集中没有间谍，则任务成功；如果至少有一名间谍参与任务，则任务失败。任务完成后，我们只知道任务的结果，而不知道参与任务的玩家中哪些是间谍。</p>
+<p>请给出一个在 \(O(s \log(n/s))\) 次任务内识别出所有间谍的策略。描述你的策略并分析所需的任务次数。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>如果你把玩家分成 \(m\) 个不相交的组并让每组都执行一次任务，至少有多少组会成功？考虑如何分组才能在每一轮淘汰至少常数比例的玩家。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>观察</strong>：如果我们将玩家分成 \(m\) 个不相交的组，让每组执行一次任务，那么至少有 \(m-s\) 组会成功，我们可以排除这些组中的玩家。</p>
+<p><strong>策略</strong>：为了在每次迭代中淘汰至少一半的玩家，将他们分成 \(2s\) 组。对于任务成功的组，我们移除这些组，并将剩余的组分成两半形成新的组集。我们重复此过程，直到每组只剩一人，此时我们就知道他们是间谍。</p>
+<p><strong>运行时间分析</strong>：在第一次迭代中，有 \(2s\) 组执行任务。每组执行任务后，由于有 \(s\) 个间谍，最多 \(s\) 个任务失败，这意味着在将失败的组拆分后，我们最多又有 \(2s\) 组。</p>
+<p>在每次迭代中，至少一半的玩家从组中被移除。因此我们在 \(O(\log(n/s))\) 次迭代后识别出间谍。所以所需的任务总数为 \(O(s \log(n/s))\)。</p>
+<p><strong>替代解法</strong>：将玩家分成两组，让每组执行一次任务。如果一组成功则丢弃这些玩家，如果一组失败则对该组递归使用相同策略，直到组大小为 1。</p>
+<p><strong>分析</strong>：画出递归树后，你会看到在第 \(i\) 层，最多 \(\min(2^i, s)\) 个任务会失败，这些节点会分支到下一层。最多有 \(\log n\) 层。因此，任务总数被以下界定：
+\[\sum_{i=1}^{\log n} \min(2^i, s) \le \sum_{i=1}^{\log s} 2^i + \sum_{i=\log s}^{\log n} s = O(s) + s(\log n - \log s) = O(s \log(n/s))\]</p></div><p class="problem-source">解答来源：<code>hw02-sol.pdf</code> · 4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw02.pdf</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>狼人</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你在和 \(n\) 个朋友玩一个聚会游戏，他们要么扮演狼人，要么扮演人类。你不知道谁是人类谁是狼人，但你的朋友们都知道。人类的数量总是多于狼人。</p>
+<p>你的目标是确定一名必定是人类的玩家。</p>
+<p>你允许的「查询」操作如下：你选出两名玩家作为搭档，询问每名玩家其搭档是人类还是狼人。当你这样做时，人类必须如实说出其搭档的身份，但狼人不一定（他们可能说谎，也可能如实说出其搭档的身份）。</p>
+<p>你的算法必须无论狼人如何行为都能正确工作。</p>
+<p>(a) 对于给定的玩家 \(x\)，设计一个使用 \(O(n)\) 次查询判断 \(x\) 是否为人类的算法。只需对你的测试给出非正式描述，并简要解释为何它有效。</p>
+<p>(b) 展示如何用 \(O(n \log n)\) 次查询找到一个人类（一次查询指选出两名玩家 \(x\) 和 \(y\)，让 \(x\) 识别 \(y\) 且让 \(y\) 识别 \(x\)）。</p>
+<p>提示：将这群人分成两组，并使用第 (a) 部分。至少有一组必须保持什么不变量？</p>
+<p>请给出三部分解答。</p>
+<p>(c)（可选，不计入成绩）你能给出一个 \(O(n)\) 次查询的算法吗？</p>
+<p>提示：不要害怕在询问过某对搭档的身份后，有时可以「丢弃」这对玩家。</p>
+<p>请给出三部分解答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (a)，考虑多数派性质：由于人类占多数，如果 \(x\) 是人类，至少有多少其他玩家会如实说 \(x\) 是人类？对于 (b)，思考将人群分成两半后，至少有一半中人类仍占多数。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 要测试玩家 \(x\) 是否为人类，我们询问其他 \(n-1\) 名玩家 \(x\) 的身份是什么。</p>
+<p><strong>断言</strong>：\(x\) 是人类当且仅当至少一半的其他玩家说 \(x\) 是人类。</p>
+<p>理由：如果 \(x\) 是人类，剩余玩家中至少一半也是人类，因此无论狼人怎么做，至少一半的玩家会说 \(x\) 是人类。另一方面，如果 \(x\) 是狼人，剩余玩家中严格多于一半是人类，因此严格少于一半的玩家能谎称 \(x\) 是人类。</p>
+<p>(b) <strong>主要思路</strong>：寻找人类的分治算法将这群朋友分成两个（近似）相等的集合 \(A\) 和 \(B\)，并在 \(A\) 和 \(B\) 上递归调用算法：\(x = \text{human}(A)\) 和 \(y = \text{human}(B)\)，然后使用第 (a) 部分的过程检查 \(x\) 或 \(y\)，返回其中被识别为人类的一个。如果只剩一名玩家，则保证是人类，返回该玩家。</p>
+<p><strong>正确性证明</strong>：我们将证明，当给定 \(n\) 名玩家且其中大多数为人类时，算法返回一名人类。对 \(n\) 进行强归纳：</p>
+<p><strong>基础情况</strong>：如果 \(n=1\)，组中只有一名玩家且为人类，算法显然正确。</p>
+<p><strong>归纳假设</strong>：命题对 \(k &lt; n\) 成立。</p>
+<p><strong>归纳步骤</strong>：将组分成 \(A\) 和 \(B\) 后，至少有一组中人类多于狼人。根据归纳假设，算法从该组正确返回一名人类，因此当对 \(x\) 和 \(y\) 调用第 (a) 部分的过程时，至少有一人被识别为人类。</p>
+<p><strong>运行时间分析</strong>：两次对 \(n/2\) 规模问题的调用，然后对返回的两名玩家与输入组中每个朋友进行线性时间比较：\(T(n) = 2T(n/2) + O(n) = O(n \log n)\)，由主定理得出。</p>
+<p>给评分者注意：如第 (c) 部分的 \(O(n)\) 查询解答也应获得满分。</p>
+<p>(c) <strong>主要思路</strong>：将朋友分成若干对，对于每对，如果任一人说对方是狼人，则丢弃两名朋友；否则丢弃任意一人，保留另一名朋友。如果 \(n\) 为奇数，使用第 (a) 部分测试落单者是否为人类。如果是，则完成；否则在剩余至多 \(n/2\) 名朋友上递归。</p>
+<p><strong>正确性证明</strong>：在算法的每次遍历后，如果之前人类占多数，人类仍然占多数。为此，设 \(n_1, n_2, n_3\) 分别为两名都是人类、两名都是狼人、各有一人的配对数量。人类占多数意味着 \(n_1 &gt; n_2\)。注意所有 \(n_3\) 对第三类配对都被丢弃，从每对 \(n_1\) 第一类配对中保留一名朋友。所以我们至多剩下 \(n_1 + n_2\) 名朋友，其中多数 \(n_1\) 是人类。可通过对此进行对 \(n\) 的强归纳转化为形式化的正确性证明。</p>
+<p><strong>运行时间分析</strong>：在大小为 \(n\) 的输入集上，算法的一次运行中，我们在 \(n\) 为奇数时花费 \(O(n)\) 工作量检查落单者是否为人类，并花费 \(O(n)\) 将剩余朋友配对并将候选集修剪至至多 \(n/2\) 名玩家。因此，运行时间由以下递推式给出：
+\[T(n) = T(n/2) + O(n) = O(n)\]
+由主定理得出。</p>
+<p><strong>替代解法</strong>：随机选择一名玩家并使用第 (a) 部分检查其是否为人类，如果不是则重复此过程。由于至少一半玩家是人类，我们找到一名人类需要检查的期望玩家数为 \(O(1)\)。由于检查需要 \(O(n)\) 次查询，整体解法在期望意义下也使用 \(O(n)\) 次查询。</p></div><p class="problem-source">解答来源：<code>hw02-sol.pdf</code> · 5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw02.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>[编码] Quickselect</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>本周作业要求你在名为 quickselect.ipynb 的 Python Jupyter 笔记本中实现 quickselect 算法。有两种方式可以访问笔记本并完成任务：</p>
+<ol>
+<li>
+<p>在本地机器上：从编码作业仓库 https://github.com/Berkeley-CS170/cs170-fa23-coding git clone（或如果你已有该仓库，则 git pull），然后导航到 hw02 文件夹。请参考 README.md 中的本地环境配置说明。</p>
+</li>
+<li>
+<p>在 Datahub 上：如果你更倾向于在 Berkeley DataHub 上完成本题，请点击此处并导航到 hw02 文件夹。</p>
+</li>
+</ol>
+<p><strong>说明</strong>：</p>
+<ul>
+<li>
+<p><strong>提交说明</strong>：请下载你完成的 quickselect.ipynb 文件，提交到名为 "Homework 2 Coding Portion" 的 gradescope 作业中。</p>
+</li>
+<li>
+<p><strong>OH/HWP 说明</strong>：指定的编码课程助教会办公时间和作业派对期间提供概念性和调试方面的帮助。</p>
+</li>
+<li>
+<p><strong>学术诚信指南</strong>：我们意识到，我们要求你实现的某些算法的代码可能在网上很容易找到，但我们强烈建议你<strong>不要</strong>直接复制这些来源的代码。相反，请尝试参考笔记本中提到的资源，自己编写代码。话虽如此，我们也承认某些算法可能没有太多不同的实现方式，你的解答可能与网上其他解答相似。</p>
+</li>
+</ul>
+<p><strong>笔记本内容概要</strong>：</p>
+<p><strong>第 0 步：环境配置</strong></p>
+<ul>
+<li>
+<p>Datahub：运行下方单元格，必要时重启内核。</p>
+</li>
+<li>
+<p>本地：激活 conda 环境 <code>conda activate cs170</code>，启动 jupyter lab，运行下方单元格并必要时重启内核。</p>
+</li>
+</ul>
+<p><strong>第 1 部分：Quickselect</strong></p>
+<p>在本笔记本中，我们将实现 quickselect 算法。Quickselect 是一种用于在未排序数组中查找第 \(k\) 小元素的高效分治算法。我们先展示一个朴素解法，再实现并与 quickselect 比较。</p>
+<p>算法详情见 https://people.eecs.berkeley.edu/~vazirani/algorithms/chap2.pdf#page=10 。</p>
+<p><strong>1.1 朴素解法</strong></p>
+<pre><code>def naive_select(array, k):
+    sorted_array = sorted(array)
+    return sorted_array[k]
+</code></pre>
+<p><strong>1.1.1 运行时间分析</strong>
+该算法先对数组排序（假设使用快排，耗时 \(O(n \log n)\)），再取下标 \(k\) 的元素（\(O(1)\)）。总体为 \(O(n \log n)\)。这不是高效解，因为只找单个元素无需排序整个数组。</p>
+<p><strong>1.2 编写分治解法</strong></p>
+<p>Quickselect 是一种随机化分治算法，能在期望 \(O(n)\) 时间内解决此问题。算法主要思想：
+1. 从数组中随机选择一个枢轴（pivot）元素
+2. 将数组划分为三部分（小于、等于、大于枢轴的元素）
+3. 在必定包含第 \(k\) 小元素的那一部分上递归</p>
+<p>请通过替换以下代码中的省略号 <code>...</code> 来实现 quickselect 算法：</p>
+<pre><code>def quick_select(array, k):
+    """
+    Returns the k-th smallest element of the array.
+    Args:
+        array (List[int]): List of integers to select from.
+        k (int): The order statistic to select (0 is the smallest, len(array)-1 is the largest).
+    """
+    # randomly pick a pivot
+    v = random.choice(array)
+    partition1 = []
+    partition2 = []
+    partition3 = []
+    # assign each element to the appropriate partition
+    for n in array:
+        if n &lt; v:
+            partition1.append(n)
+        elif n == v:
+            partition2.append(n)
+        else:
+            partition3.append(n)
+    # recurse on the partition which contains the k-th smallest element
+    if ...:
+        ...
+    elif ...:
+        ...
+    else:
+        ...
+</code></pre>
+<p><strong>1.2.1 验证</strong></p>
+<p>为更彻底地测试，可检查 quick_select 是否在大量随机数组上与 naive_select 返回相同结果。以下代码生成 1000 个随机数组和 1000 个随机 \(k\) 值，检查两种解法每次是否返回相同答案。若实现正确，将输出 "success"。此单元格不计入成绩，可随意修改以辅助调试。</p>
+<p>之后用 autograder 的测试用例检查实现（本题 5 分）：</p>
+<pre><code>grader.check("q1")
+</code></pre>
+<p><strong>第 1.3 部分：提交</strong></p>
+<p>确保在运行下方单元格之前已按顺序运行笔记本中的所有单元格，以便所有图像/图形都出现在输出中。下方单元格将生成一个 zip 文件供你提交。</p>
+<pre><code>grader.export(pdf=False, force_save=True, run_tests=True)
+</code></pre></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>Quickselect 是一种随机化分治算法（randomized divide and conquer）。选择枢轴后，将数组划分为小于、等于和大于枢轴的三部分，然后只在包含第 \(k\) 小元素的那一部分上递归。判断递归分支时，比较 \(k\) 与 partition1 和 partition2 的长度。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>quick_select 实现</strong></p>
+<pre><code>def quick_select(array, k):
+    """
+    Returns the k-th smallest element of the array.
+    Args:
+        array (List[int]): List of integers to select from.
+        k (int): The order statistic to select (0 is the smallest, len(array)-1 is the largest).
+    """
+    # randomly pick a pivot
+    v = random.choice(array)
+    partition1 = []
+    partition2 = []
+    partition3 = []
+    # assign each element to the appropriate partition
+    for n in array:
+        if n &lt; v:
+            partition1.append(n)
+        elif n == v:
+            partition2.append(n)
+        else:
+            partition3.append(n)
+    # recurse on the partition which contains the k-th smallest element
+    if k &lt; len(partition1):
+        return quick_select(partition1, k)
+    elif k &lt; len(partition1) + len(partition2):
+        return v
+    else:
+        return quick_select(partition3, k - len(partition1) - len(partition2))
+</code></pre>
+<p><strong>算法描述</strong>：随机选择枢轴 \(v\)，将数组划分为三个分区：partition1（\(&lt;v\)）、partition2（\(=v\)）、partition3（\(&gt;v\)）。若 \(k &lt; |\text{partition1}|\)，则第 \(k\) 小元素在 partition1 中，递归查找；若 \(k &lt; |\text{partition1}| + |\text{partition2}|\)，则枢轴即为答案；否则在 partition3 中递归，并将 \(k\) 减去前两个分区的长度。</p>
+<p><strong>正确性</strong>：划分后，partition1 中所有元素 \(&lt; v\)，partition2 中所有元素 \(= v\)，partition3 中所有元素 \(&gt; v\)。第 \(k\) 小元素（0 起始下标）必落在唯一确定的分区中，且在该分区内的相对顺序统计量保持不变（或在 partition3 中相应偏移）。递归在更小的数组上进行，基础情况为数组长度为 1 时直接返回唯一元素。</p>
+<p><strong>期望运行时间分析</strong>：随机选择枢轴时期望将数组划分为常数比例的两部分，期望递归深度为 \(O(\log n)\)，每层期望工作量为 \(O(n)\)，因此期望运行时间为 \(O(n)\)。详细分析参见 https://people.eecs.berkeley.edu/~vazirani/algorithms/chap2.pdf#page=11 。</p></div><p class="problem-source">解答来源：<code>hw02-sol.pdf</code> · 3 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>hw02.pdf</code> · 2 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>hw02.pdf</code></li>
+      <li><code>hw02-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

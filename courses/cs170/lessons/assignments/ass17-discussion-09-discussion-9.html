@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 9 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 9</p>
+    <h1>讨论课 9</h1>
+    <p class="lede">线性规划（LP）的标准型、对偶、单纯形法，最大流与最小割基础，残差网络，用 LP 对偶性证明最大流最小割定理，以及网络流与 LP 建模的对比。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Linear Programming</li><li>Simplex</li><li>Duality</li><li>Max Flow</li><li>Min Cut</li><li>Residual Graph</li><li>Ford-Fulkerson</li><li>LP Duality</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis09.pdf</code>、<code>dis09-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis09.pdf</code>、<code>dis09-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>单纯形法初探</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>考虑如下线性规划。</p>
+<p>\[
+\max \quad 5x + 4y
+\]</p>
+<p>满足</p>
+<p>\[
+\begin{cases}
+x + 3y \le 15 \\
+3x - 2y \le 12 \\
+4x + 5y \ge 16 \\
+x \ge 0,\; y \ge 0
+\end{cases}
+\]</p>
+<p>(a) 画出可行域（feasible region）。</p>
+<p>(b) 对此 LP 模拟单纯形法（Simplex algorithm）。访问了哪些顶点？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · LP 可行域示意图：约束直线 x+3y=15, 3x-2y=12, 4x+5y=16 与坐标轴围成的阴影多边形区域，并标注顶点 (0,4),(0,5),(6,3),(4,0)</h4><p>Vertices: (0,4), (0,5), (6,3), (4,0). Lines: x+3y=15, 3x-2y=12, 4x+5y=16, x=0, y=0.</p><p class="problem-source">来源：<code>dis09.pdf</code> · 2</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 每条约束对应一条直线和半个平面；可行域的顶点是约束边界的交点。可先求出所有两两直线的交点，再验证哪些落在可行域内。</p>
+<p>(b) 单纯形从某个顶点出发，沿目标函数更优的邻居贪心移动。可先列出全部可行域顶点并计算目标值，再从某一顶点追踪访问顺序；注意最终答案依赖于起始顶点。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 可行域如下图所示（由约束半平面的交集构成）。</p>
+<p>(b) 可行域的顶点为 \((0, 4), (0, 5), (6, 3), (4, 0)\)。依赖于起始顶点，单纯形法会以贪心方式访问顶点以最大化目标 \(5x + 4y\)。例如，假设我们从 \((0, 4)\) 出发，步骤如下：</p>
+<ul>
+<li>
+<p>在 \((0, 4)\) 处目标值为 \(5(0) + 4(4) = 16\)。其邻居为 \((0, 5)\) 与 \((4, 0)\)，目标值分别为 \(5(0) + 4(5) = 20\) 与 \(5(4) + 4(0) = 20\)。由于我们试图最大化目标函数，应移向其中一个邻居（此处两者目标值相同，不妨移向 \((0, 5)\)）。</p>
+</li>
+<li>
+<p>在 \((0, 5)\) 处目标值为 20。其邻居：\((0, 4)\) 为 16，\((6, 3)\) 为 \(5(6) + 4(3) = 42\)。由于 \(42 &gt; 20\)，移向 \((6, 3)\)。</p>
+</li>
+<li>
+<p>在 \((6, 3)\) 处目标值为 42，高于其任意邻居（\((0, 5)\) 与 \((4, 0)\) 均为 20）。因此已找到 LP 的最优点。</p>
+</li>
+</ul>
+<p>本次单纯形运行依次访问了 \((0, 4), (0, 5), (6, 3)\)。</p></div><p class="problem-source">解答来源：<code>dis09-sol.pdf</code> · 2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis09.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>工作分配</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>有 \(I\) 个人可完成 \(J\) 件工作。第 \(i\) 个人在仕事 \(j\) 上工作 1 天的价值为 \(a_{ij}\)，其中 \(i = 1, \dots, I\)，\(j = 1, \dots, J\)。每件工作在所有人投入的时间累计达到 1 天时即告完成，但部分完成仍有价值（即第 \(i\) 个人在工作 \(j\) 上工作 \(c\) 天的一部分，价值为 \(a_{ij}c\)）。问题是为每个人在一天内找到最优的工作分配，使得所有人创造的总价值最大。工作在完成后继续工作不会带来额外价值。</p>
+<p>（流（Flow）的定义、残差图（Residual Graph）、最大流（Max Flow）、Ford-Fulkerson、Edmonds-Karp、最小割（Min-Cut）的定义见题末参考节。）</p>
+<p>(a) 我们应在什么变量上进行优化？即在标准线性规划定义中，\(x\) 是什么？</p>
+<p>(b) 我们需要考虑哪些约束？提示：有三类主要约束。</p>
+<p>(c) 我们要求的最大化函数是什么？</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 变量应表示每个人在每件工作上的时间分配比例。</p>
+<p>(b) 三类约束分别关于：每个人的总时间上限、每件工作的总投入上限、以及非负性。</p>
+<p>(c) 总价值等于每个人在每件工作上的价值贡献之和，即 \(a_{ij}x_{ij}\) 的总和。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 一个分配 \(x\) 是对数值 \(x_{ij}\) 的选择，其中 \(x_{ij}\) 表示第 \(i\) 个人在工作 \(j\) 上花费的时间比例。</p>
+<p>(b) 约束如下：</p>
+<ul>
+<li>
+<p>任何第 \(i\) 个人工作的总时间不能超过 1 天：
+\[
+\sum_{j=1}^{J} x_{ij} \le 1, \quad i = 1, \dots, I.
+\]</p>
+</li>
+<li>
+<p>任何工作 \(j\) 不能被投入超过完成所需的时间：
+\[
+\sum_{i=1}^{I} x_{ij} \le 1, \quad j = 1, \dots, J.
+\]</p>
+</li>
+<li>
+<p>非负性：
+\[
+x_{ij} \ge 0, \quad i = 1, \dots, I,\; j = 1, \dots, J.
+\]</p>
+</li>
+</ul>
+<p>(c) 第 \(i\) 个人在工作 \(j\) 上工作 \(x_{ij}\) 时间所贡献的价值为 \(a_{ij}x_{ij}\)。因此净价值为
+\[
+\sum_{i=1}^{I}\sum_{j=1}^{J} a_{ij}x_{ij} = A \bullet x.
+\]</p></div><p class="problem-source">解答来源：<code>dis09-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis09.pdf</code> · 2-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>最大流最小割基础</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>对于以下每个命题，判断其真假（True or False）。若真，给出简短证明；若假，给出反例。</p>
+<p>(a) 若所有边的容量（capacity）互不相同，则最大流（max flow）唯一。</p>
+<p>(b) 若所有边的容量互不相同，则最小割（min cut）唯一。</p>
+<p>(c) 若所有边的容量都增加一个加法常数，则最小割不变。</p>
+<p>(d) 若所有边的容量都乘以一个正整数，则最小割不变。</p>
+<p>(e) 在任何最大流中，都不存在有向环，使得环上每条边都携带正流量。</p>
+<p>(f) 存在一个最大流，使得不存在有向环，其每条边都携带正流量。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · (a) 反例图：节点 S,A,B,C,T，边 S-&gt;A(7), S-&gt;B(5), A-&gt;C(4), B-&gt;C(9), A-&gt;T(2), B-&gt;T(3), C-&gt;T(3)</h4><p>节点为 S、A、B、C、T；边及容量为 S→A(7)、S→B(5)、A→C(4)、B→C(9)、A→T(2)、B→T(3)、C→T(3)。</p><p class="problem-source">来源：<code>dis09-sol.pdf</code> · 5-6</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · (b) 反例图：节点 S,A,B,C,T，边 S-&gt;A(7), S-&gt;B(1), A-&gt;C(4), B-&gt;C(8), A-&gt;T(2), B-&gt;T(3), C-&gt;T(3)；标注割 {S,A} 与 {S,A,B}</h4><p>节点为 S、A、B、C、T；边及容量为 S→A(7)、S→B(1)、A→C(4)、B→C(8)、A→T(2)、B→T(3)、C→T(3)；割 {S,A} 与 {S,A,B} 的容量均为 7。</p><p class="problem-source">来源：<code>dis09-sol.pdf</code> · 5</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · (e) 反例图：含环 A-&gt;B-&gt;C-&gt;A 的流网络，边 S-&gt;A(1), A-&gt;B(9), B-&gt;D(2), D-&gt;C(3), C-&gt;A(5), 以及其它边，使环上每条边流量为正</h4><p>节点为 S、A、B、C、D、T；边包括 S→A(1)、A→B(9)、B→D(2)、D→C(3)、C→A(5)、B→C(3)、C→T(3) 等，并包含正流量环 A→B→C→A。</p><p class="problem-source">来源：<code>dis09-sol.pdf</code> · 6</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a)(b) 边容量互异并不能保证流或割的唯一性；可构造小图使多条流或多个割达到同一最优值。</p>
+<p>(c)(d) 加法常数会改变不同割之间的相对大小，而乘以正整数保持相对顺序；思考哪个操作保持割之间的优劣关系。</p>
+<p>(e)(f) 注意量词差别：“任何” vs “存在”。对于 (e) 可尝试构造含正流量环的流；对于 (f) 可考虑消去环上流量。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 假。考虑以下图：S-&gt;A 容量 7，S-&gt;B 容量 5，A-&gt;C 容量 4，B-&gt;C 容量 9，A-&gt;T 容量 2，B-&gt;T 容量 3，C-&gt;T 容量 3（所有容量互异）。存在多个达到同一最大流值的流分配，故最大流不唯一。</p>
+<p>(b) 假。考虑以下图：S-&gt;A 容量 7，S-&gt;B 容量 1，A-&gt;C 容量 4，B-&gt;C 容量 8，A-&gt;T 容量 2，B-&gt;T 容量 3，C-&gt;T 容量 3。割 \(\{S,A\}\) 与割 \(\{S,A,B\}\) 的值均为 7，故最小割不唯一。</p>
+<p>(c) 假。将 (b) 中图中所有边的容量加 1。割 \(\{S,A\}\) 与 \(\{S,A,B\}\) 的值现在不同，最小割发生改变。</p>
+<p>(d) 真。设一个割的值为 \(\sum_{e} c_e\)，最小割的值为 \(\sum_{e'} c_{e'}\)。乘以正整数 \(a\) 后，由分配律：
+\[
+a\sum_{e'} c_{e'} - a\sum_{e} c_e = a\left(\sum_{e'} c_{e'} - \sum_{e} c_e\right),
+\]
+故割之间的优劣关系不变，最小割仍为原最小割。</p>
+<p>(e) 假。考虑存在有向环 A-&gt;B-&gt;C-&gt;A 且环上每条边流量均为正的最大流实例。</p>
+<p>(f) 真。取 (e) 中图去掉边 S-&gt;A 后的图，或任意不含正流量有向环的最大流即可。</p></div><p class="problem-source">解答来源：<code>dis09-sol.pdf</code> · 5-7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis09.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>图中的残差网络</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>考虑如下边容量如图的图：</p>
+<p>节点：S, A, B, C, T。边与容量：S-&gt;A 容量 7，S-&gt;B 容量 5，A-&gt;C 容量 4，B-&gt;C 容量 6，A-&gt;T 容量 4，B-&gt;T 容量 7，C-&gt;T 容量 7。</p>
+<p>(a) 考虑沿路径 S -&gt; A -&gt; C -&gt; T 推送 4 单位流。画出此次推送后的残差图（residual graph）。</p>
+<p>(b) 计算上述图的一个最大流。找出一个最小割。画出该最大流的残差图。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 原图：节点 S,A,B,C,T，边 S-&gt;A(7), S-&gt;B(5), A-&gt;C(4), B-&gt;C(6), A-&gt;T(4), B-&gt;T(7), C-&gt;T(7)</h4><p>节点为 S、A、B、C、T；边及容量为 S→A(7)、S→B(5)、A→C(4)、B→C(6)、A→T(4)、B→T(7)、C→T(7)。</p><p class="problem-source">来源：<code>dis09.pdf</code> · 8</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · (a) 沿 S-&gt;A-&gt;C-&gt;T 推送 4 单位流后的残差图，含正向剩余容量与反向边</h4><p>残量边为 S→A(3)、A→S(4)、C→A(4)、C→T(3)、T→C(4)；未改变的边为 S→B(5)、B→C(6)、A→T(4)、B→T(7)。</p><p class="problem-source">来源：<code>dis09-sol.pdf</code> · 8</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · (b) 数值为 11 的最大流的残差图，以及最小割划分 {S,A,B}|{C,T}</h4><p>残量边为 S→A(1)、A→S(6)、S→B(0)、B→S(5)、A→C(0)、C→A(4)、B→C(4)、C→B(2)、A→T(4)、B→T(0)、T→B(7)、C→T(3)、T→C(4)；最小割为 {S,A,B}|{C,T}，跨割边为 A→C、B→T。</p><p class="problem-source">来源：<code>dis09-sol.pdf</code> · 9</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 推送流后，每条正向边容量减少所推流量，同时出现反向边，其容量等于所推流量。</p>
+<p>(b) 可在残差图上反复寻找增广路径（如用 Edmonds-Karp 的 BFS）。最小割可从最大流后的残差图中从 S 可达的节点集合确定。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 沿 S-&gt;A-&gt;C-&gt;T 推送 4 单位流后的残差图：</p>
+<ul>
+<li>
+<p>S-&gt;A 剩余容量 3，反向边 A-&gt;S 容量 4；</p>
+</li>
+<li>
+<p>A-&gt;C 剩余容量 0（边消失），反向边 C-&gt;A 容量 4；</p>
+</li>
+<li>
+<p>C-&gt;T 剩余容量 3，反向边 T-&gt;C 容量 4；</p>
+</li>
+<li>
+<p>其余边保持不变：S-&gt;B 容量 5，B-&gt;C 容量 6，A-&gt;T 容量 4，B-&gt;T 容量 7。</p>
+</li>
+</ul>
+<p>(b) 一个数值为 11 的最大流由以下推送得到：</p>
+<ul>
+<li>
+<p>沿 S -&gt; A -&gt; C -&gt; T 推送 4 单位流；</p>
+</li>
+<li>
+<p>沿 S -&gt; B -&gt; T 推送 5 单位流；</p>
+</li>
+<li>
+<p>沿 S -&gt; A -&gt; B -&gt; T 推送 2 单位流。</p>
+</li>
+</ul>
+<p>（还存在其它同一最大流值的流。）该最大流对应的残差图：</p>
+<ul>
+<li>
+<p>S-&gt;A 容量 1（反向 A-&gt;S 容量 6）；</p>
+</li>
+<li>
+<p>S-&gt;B 容量 0（反向 B-&gt;S 容量 5）；</p>
+</li>
+<li>
+<p>A-&gt;C 容量 0（反向 C-&gt;A 容量 4）；</p>
+</li>
+<li>
+<p>B-&gt;C 容量 4（反向 C-&gt;B 容量 2）；</p>
+</li>
+<li>
+<p>A-&gt;T 容量 4；</p>
+</li>
+<li>
+<p>B-&gt;T 容量 0（反向 T-&gt;B 容量 7）；</p>
+</li>
+<li>
+<p>C-&gt;T 容量 3（反向 T-&gt;C 容量 4）。</p>
+</li>
+</ul>
+<p>一个数值为 11 的最小割为划分 \(\{S, A, B\}\) 与 \(\{C, T\}\)，跨割边为 A-&gt;C 与 B-&gt;T。</p></div><p class="problem-source">解答来源：<code>dis09-sol.pdf</code> · 8-9 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis09.pdf</code> · 8 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>最大流、最小割与对偶性</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>本练习中，我们将证明 LP 对偶性（LP duality）可用于推导最大流最小割定理（max-flow min-cut theorem）。</p>
+<p>考虑如下最大流图实例：</p>
+<p>节点：S, A, B, T。边与容量：S-&gt;A 容量 7，S-&gt;B 容量 5，A-&gt;T 容量 4，A-&gt;B 容量 4，B-&gt;T 容量 7。</p>
+<p>设 \(f_1\) 为沿路径 \(\{S, A, T\}\) 推送的流，\(f_2\) 为沿路径 \(\{S, A, B, T\}\) 推送的流，\(f_3\) 为沿路径 \(\{S, B, T\}\) 推送的流。以下是关于变量 \(f_1, f_2, f_3\) 的最大流 LP：</p>
+<p>\[
+\max \quad f_1 + f_2 + f_3
+\]</p>
+<p>满足</p>
+<p>\[
+\begin{cases}
+f_1 + f_2 \le 7 &amp; \text{（边 (S, A) 的约束）} \\
+f_3 \le 5 &amp; \text{（边 (S, B) 的约束）} \\
+f_1 \le 4 &amp; \text{（边 (A, T) 的约束）} \\
+f_2 \le 4 &amp; \text{（边 (A, B) 的约束）} \\
+f_2 + f_3 \le 7 &amp; \text{（边 (B, T) 的约束）} \\
+f_1, f_2, f_3 \ge 0
+\end{cases}
+\]</p>
+<p>目标是最大化推送的流量，约束为每条边上的流量不能超过其容量。</p>
+<p>(a) 求该线性规划的对偶（dual），其中对偶变量为图中每条边 \(e\) 对应一个变量 \(x_e\)。</p>
+<p>(b) 考虑图中的任意一个割。证明：对每个跨割的边令 \(x_e = 1\)，对每个不跨割的边令 \(x_e = 0\)，即得到对偶规划的一个可行解。</p>
+<p>(c) 基于上一部分的回答，对偶规划刻画的是哪个问题？由 LP 对偶性，你能关于该问题与最大流问题得出什么结论？</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 原图：节点 S,A,B,T，边 S-&gt;A(7), S-&gt;B(5), A-&gt;T(4), A-&gt;B(4), B-&gt;T(7)；标注三条 s-t 路径 {S,A,T}, {S,A,B,T}, {S,B,T}</h4><p>节点为 S、A、B、T；边及容量为 S→A(7)、S→B(5)、A→T(4)、A→B(4)、B→T(7)；三条路径为 f₁={S,A,T}、f₂={S,A,B,T}、f₃={S,B,T}。</p><p class="problem-source">来源：<code>dis09.pdf</code> · 5</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 原问题是最大化，约束为 \(\le\)，变量非负；对偶应为最小化 \(y^T b\) 形式，约束为 \(\ge\)。每条原变量对应一个对偶约束，每条原约束对应一个对偶变量。</p>
+<p>(b) 任意 s-t 路径必至少包含一条跨割边，因此每个对偶约束（对应一条 s-t 路径）的左侧至少为 1。</p>
+<p>(c) 对偶的目标函数是所有边容量与 \(x_e\) 乘积之和；结合 (b) 可知每个可行解对应一个割。由强对偶性，两者的最优值相等。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 对偶为：</p>
+<p>\[
+\min \quad 7x_{SA} + 5x_{SB} + 4x_{AT} + 4x_{AB} + 7x_{BT}
+\]</p>
+<p>满足</p>
+<p>\[
+\begin{cases}
+x_{SA} + x_{AT} \ge 1 &amp; \text{（对应 } f_1 \text{ 的约束）} \\
+x_{SA} + x_{AB} + x_{BT} \ge 1 &amp; \text{（对应 } f_2 \text{ 的约束）} \\
+x_{SB} + x_{BT} \ge 1 &amp; \text{（对应 } f_3 \text{ 的约束）} \\
+x_e \ge 0 \quad \forall e \in E
+\end{cases}
+\]</p>
+<p>(b) 注意到每个约束包含了对应路径上所有边的变量 \(x_e\)。对于任意 s-t 割，每条 s-t 路径都包含至少一条跨割边。因此对于任意割，所建议的解会使每条路径上至少一个 \(x_e\) 被设为 1，从而每个约束都被满足。</p>
+<p>(c) 该对偶 LP 是刻画最小割（min-cut）问题的 LP。由上一部分可知，约束描述的是对应于割的解；目标函数则要求找到值最小的割。由 LP 对偶性，对偶与原问题的最优值相等，即最大流与最小割的值相等。</p></div><p class="problem-source">解答来源：<code>dis09-sol.pdf</code> · 9-10 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis09.pdf</code> · 5,9-10 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">6</span><strong>流与线性规划</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你在有 \(m\) 个供应商（supplier）和 \(n\) 个采购方（purchaser）的市场中扮演中间人。第 \(i\) 个供应商最多可供应 \(s[i]\) 件产品，第 \(j\) 个采购方最多想购买 \(b[j]\) 件产品。</p>
+<p>然而由于法规限制，供应商 \(i\) 只能卖给距离不超过 1000 英里的采购方 \(j\)。假设给定列表 \(L\)，其中包含所有满足供应商 \(i\) 在采购方 \(j\) 的 1000 英里之内的配对 \((i, j)\)。以 \(m, n, s[1..m], b[1..n], L\) 为输入，你的任务是计算最多能售出多少件产品。算法的运行时间必须是关于 \(m\) 和 \(n\) 的多项式。</p>
+<p>对 (a)(b) 部分，假设产品是可分割的——即可以出售非整数件（分数件）产品。</p>
+<p>(a) 说明如何以网络流算法为子程序求解该问题。描述所构造的图，并解释为何网络流算法的输出给出该问题的有效解。</p>
+<p>(b) 将其表述为一个线性规划。解释为何这能正确求解该问题，且该 LP 可在多项式时间内求解。</p>
+<p>(c) 现在假设你不能出售非整数件产品。换言之，每个供应商卖给每个采购方的产品数必须为整数。哪种建模方式更好，网络流还是线性规划？解释你的回答。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 流网络结构示意图：源点 S 连接 m 个供应商节点（容量 s[i]），供应商 i 连接允许的采购方 j（容量无穷），采购方 j 连接汇点 T（容量 b[j]）</h4><p>节点包括源点 S、供应商 1…m、采购方 1…n 与汇点 T；边为 S→i（容量 s[i]）、当 (i,j)∈L 时 i→j（容量无穷大）、j→T（容量 b[j]）。</p><p class="problem-source">来源：<code>dis09-sol.pdf</code> · 11</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 构造二部图：源点到供应商、供应商到可交易的采购方、采购方到汇点，边容量分别为供应上限、无穷（或足够大）、需求上限。</p>
+<p>(b) 变量 \(x_{ij}\) 表示从供应商 \(i\) 卖给采购方 \(j\) 的数量；约束为供应上限、需求上限、仅允许 \(L\) 中的配对、非负。</p>
+<p>(c) 整数容量下，最大流算法（如 Ford-Fulkerson）保证得到整数流；而 LP 不保证整数解。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 算法：构造一个有 \(m+n+2\) 个节点的二部图。将其中两个节点标为“源点（source）”和“汇点（sink）”，将 \(m\) 个节点标为供应商，\(n\) 个节点标为采购方。创建如下边：</p>
+<ul>
+<li>
+<p>从源点到供应商 \(i\) 连一条容量为 \(s[i]\) 的边。</p>
+</li>
+<li>
+<p>对 \(L\) 中的每个配对 \((i, j)\)，从供应商 \(i\) 到采购方 \(j\) 连一条容量为无穷大（infinite）的边。</p>
+</li>
+<li>
+<p>从采购方 \(j\) 到汇点连一条容量为 \(b[j]\) 的边。</p>
+</li>
+</ul>
+<p>然后将该图输入网络流求解器，取最大流的值作为最多可售出的产品数。</p>
+<p>正确性证明：我们断言最大流的值恰好是可进行的最大交易量。为此，证明一个产品售卖策略恰好对应于该图中的一个流，反之亦然。</p>
+<p>对任意流，令 \(x_{i,j}\) 为从供应商 \(i\) 的节点流向采购方 \(j\) 的节点的流量。则一个产品售卖策略恰好从供应商 \(i\) 卖给采购方 \(j\) 共 \(x_{i,j}\) 件产品。这是一个可行策略，因为流出供应商 \(i\) 节点的流量已由源点到该节点的边容量限制在 \(s[i]\) 之内，采购方同理。反过来，任意可行售卖策略也导出一个同值的可行流。</p>
+<p>(b) 定义变量 \(x_{i,j}\)，表示从供应商 \(i\) 取走并卖给采购方 \(j\) 的产品数量。则有如下线性规划：</p>
+<p>\[
+\max \quad \sum_{i=1}^{m}\sum_{j=1}^{n} x_{i,j}
+\]</p>
+<p>满足</p>
+<p>\[
+\begin{cases}
+\sum_{i=1}^{m} x_{ij'} \le b[j'], &amp; \forall j' \in [1, n] \\
+\sum_{j=1}^{n} x_{i'j} \le s[i'], &amp; \forall i' \in [1, m] \\
+x_{ij} = 0, &amp; \forall (i, j) \notin L \\
+x_{ij} \ge 0, &amp; \forall (i, j)
+\end{cases}
+\]</p>
+<p>该 LP 有 \(mn\) 个变量和 \(O(mn)\) 个线性不等式，因此可在关于 \(m, n\) 的多项式时间内求解。</p>
+<p>(c) 网络流更好。线性规划不保证找到整数解（即使整数解存在），因此 (b) 的方法可能给出涉及售卖非整数件产品的解。相反，由于 (a) 中图的边容量均为整数，Ford-Fulkerson 最大流算法将找到整数解。因此最大流是更好的选择，因为该建模方式下存在能找到整数解的算法。</p></div><p class="problem-source">解答来源：<code>dis09-sol.pdf</code> · 11-12 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis09.pdf</code> · 6-7,11 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis09.pdf</code></li>
+      <li><code>dis09-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

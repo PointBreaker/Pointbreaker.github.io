@@ -72,6 +72,27 @@ python <skill-root>/scripts/merge_extraction_shards.py \
   --output <build-dir>/claude-extraction/result.json
 ```
 
+Apply the same output-risk control to long lecture or handout-to-lesson generation. If the requested response is likely to exceed roughly 12,000 output tokens, or the first attempt stalls or closes mid-response, split the source at stable section boundaries before retrying. Each shard must use `thematic-lesson-extraction.schema.json`, repeat identical module identity fields, and return disjoint section and quiz IDs. Keep the combined schema budgets at 3–8 sections, 2–4 quizzes, 2–5 misconceptions, and 3–7 recap items. Merge the valid shards locally without another model rewrite:
+
+```bash
+python <skill-root>/scripts/merge_lesson_shards.py \
+  --data <build-dir>/claude-extraction/lesson-part-01.json \
+  --data <build-dir>/claude-extraction/lesson-part-02.json \
+  --output <build-dir>/claude-extraction/lesson.json
+```
+
+Do not retry the same oversized prompt repeatedly. A zero-token idle timeout may be retried once; a partial response with substantial output should be reshaped into smaller shards so already-observed output risk is not repeated. This policy applies to any selected Claude Code model and does not assume a particular provider or context-window size.
+
+Before rendering model-produced lesson or work-item JSON, normalize any schema-valid dollar-delimited math and reject unmatched delimiters:
+
+```bash
+python <skill-root>/scripts/normalize_extraction_math.py \
+  --input <build-dir>/claude-extraction/result.json \
+  --output <build-dir>/claude-extraction/result-normalized.json
+```
+
+Render only the normalized artifact. This deterministic step is a safety net for workers that ignore the requested `\(...\)` / `\[...\]` convention; it does not repair malformed LaTeX or replace final math QA.
+
 For solution-bearing discussion or homework batches, normalize the worker output to the evidence-backed work-item schema used by the build, review low-confidence records and visual requirements, then render it with:
 
 ```bash

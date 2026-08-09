@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 3 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 3</p>
+    <h1>讨论 3</h1>
+    <p class="lede">本讨论涵盖快速傅里叶变换（FFT, Fast Fourier Transform）的原理与应用：从 DFT 矩阵到 FFT 递归算法，模傅里叶变换，利用 FFT 计算笛卡尔和，利用 FFT 进行近似字符串匹配，以及图遍历中的 DFS 与强连通分量（SCC, Strongly Connected Component）。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>FFT</li><li>Fast Fourier Transform</li><li>DFT</li><li>polynomial multiplication</li><li>modular FFT</li><li>Cartesian sum</li><li>pattern matching</li><li>string matching</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis03.pdf</code>、<code>dis03-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis03.pdf</code>、<code>dis03-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>FFT 引入</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>我们将用 \(\omega_n\) 表示第一个 n 次单位根 \(\omega_n = e^{2\pi i/n}\)。对于我们的目的而言，单位根（roots of unity）最重要的事实是：2n 次单位根的平方就是 n 次单位根。例如，将本原 8 次单位根（primitive 8th root）\(\omega_8 = e^{i \cdot 2\pi/8}\) 平方，就得到本原 4 次单位根：
+\[\omega_8^2 = e^{i \cdot 2\pi/8 \cdot 2} = e^{i \cdot 2\pi/4} = \omega_4.\]</p>
+<p><strong>离散傅里叶变换 (DFT, Discrete Fourier Transform)。</strong> 离散傅里叶变换将一个包含某个多项式 \(P(x) = p_0 + p_1 x + \cdots + p_{n-1} x^{n-1}\) 系数的向量 \([p_0, p_1, \ldots, p_{n-1}]\) 变换为包含 \(P(x)\) 在 n 次单位根处取值的向量 \([P(1), P(\omega_n), \ldots, P(\omega_n^{n-1})]\)。该变换通过将输入向量乘以 DFT 矩阵实现：
+\[
+\begin{bmatrix}
+P(1) \\ P(\omega_n) \\ P(\omega_n^2) \\ \vdots \\ P(\omega_n^{n-1})
+\end{bmatrix}
+=
+\begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; \cdots &amp; 1 \\
+1 &amp; \omega_n^1 &amp; \omega_n^2 &amp; \cdots &amp; \omega_n^{n-1} \\
+1 &amp; \omega_n^2 &amp; \omega_n^4 &amp; \cdots &amp; \omega_n^{2(n-1)} \\
+\vdots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+1 &amp; \omega_n^{n-1} &amp; \omega_n^{2(n-1)} &amp; \cdots &amp; \omega_n^{(n-1)(n-1)}
+\end{bmatrix}
+\cdot
+\begin{bmatrix}
+p_0 \\ p_1 \\ p_2 \\ \vdots \\ p_{n-1}
+\end{bmatrix}
+\]
+因此，使用朴素的矩阵-向量乘法算法，DFT 可以在 \(O(n^2)\) 时间内完成。</p>
+<p>我们还可以观察到，逆 DFT (IDFT, Inverse DFT) 矩阵可以表示为：
+\[
+M^{-1} = \frac{1}{n}
+\begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; \cdots &amp; 1 \\
+1 &amp; \omega_n^{-1} &amp; \omega_n^{-2} &amp; \cdots &amp; \omega_n^{-(n-1)} \\
+1 &amp; \omega_n^{-2} &amp; \omega_n^{-4} &amp; \cdots &amp; \omega_n^{-2(n-1)} \\
+\vdots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+1 &amp; \omega_n^{-(n-1)} &amp; \omega_n^{-2(n-1)} &amp; \cdots &amp; \omega_n^{-(n-1)(n-1)}
+\end{bmatrix}
+\]
+（你应该自行验证这一点！）</p>
+<p>因此，给定取值向量 \([P(1), P(\omega_n), P(\omega_n^2), \ldots, P(\omega_n^{n-1})]\)，我们可以通过以下矩阵乘法计算 IDFT 来逆转 DFT：
+\[
+\begin{bmatrix}
+p_0 \\ p_1 \\ p_2 \\ \vdots \\ p_{n-1}
+\end{bmatrix}
+= \frac{1}{n}
+\begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; \cdots &amp; 1 \\
+1 &amp; \omega_n^{-1} &amp; \omega_n^{-2} &amp; \cdots &amp; \omega_n^{-(n-1)} \\
+1 &amp; \omega_n^{-2} &amp; \omega_n^{-4} &amp; \cdots &amp; \omega_n^{-2(n-1)} \\
+\vdots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+1 &amp; \omega_n^{-(n-1)} &amp; \omega_n^{-2(n-1)} &amp; \cdots &amp; \omega_n^{-(n-1)(n-1)}
+\end{bmatrix}
+\cdot
+\begin{bmatrix}
+P(1) \\ P(\omega_n) \\ P(\omega_n^2) \\ \vdots \\ P(\omega_n^{n-1})
+\end{bmatrix}
+\]
+这可以在 \(O(n^2)\) 时间内用朴素的矩阵-向量乘法算法完成。</p>
+<p><strong>快速傅里叶变换 (FFT, Fast Fourier Transform)！</strong> 快速傅里叶变换 FFT(p, n) 是一个算法，它接收一个系数向量 \(p = [p_0, p_1, \ldots, p_{n-1}]\) 和对应的阶数 \(n\)，并仅用 \(O(n \log n)\) 时间完成 DFT。注意，为了使 FFT 能正常工作，\(p\) 总是用零填充，使得 \(n\) 是 2 的幂。</p>
+<p>如果我们令 \(P_E(x) = p_0 + p_2 x + \cdots + p_{n-2} x^{n/2-1}\) 且 \(P_O(x) = p_1 + p_3 x + \cdots + p_{n-1} x^{n/2-1}\)，则 \(P(x) = P_E(x^2) + x \cdot P_O(x^2)\)，因此 FFT(p, n) 可以表示为如下分治算法：</p>
+<ol>
+<li>计算 \(y_E = \text{FFT}(P_E, n/2)\) 和 \(y_O = \text{FFT}(P_O, n/2)\)。</li>
+<li>对于 \(j = 0, \ldots, n-1\)，利用 \(y_E, y_O\) 赋值 \(P(\omega_n^j) \leftarrow P_E((\omega_n^j)^2) + \omega_n^j \cdot P_O((\omega_n^j)^2)\)。</li>
+<li>返回所有取值 \(P(\omega_n^j)\)，其中 \(j = 0, \ldots, n-1\)。</li>
+</ol>
+<p>在实践中，你可以按照算法 1 中描述的伪代码来实现。</p>
+<p><strong>算法 1</strong> FFT(p = [p_0, p_1, \ldots, p_{n-1}], n)</p>
+<pre><code>if n == 1 then return p
+y_E = FFT([p_0, p_2, ...], n/2), y_O = FFT([p_1, p_3, ...], n/2)
+y = [0] * n
+for j in range(n/2) do
+    y[j] = y_E[j] + ω_n^j * y_O[j]
+    y[j + n/2] = y_E[j] - ω_n^j * y_O[j]
+return y
+</code></pre>
+<p><strong>(a)</strong> 让我们先通过 DFT 矩阵来计算多项式的傅里叶变换。考虑多项式 \(P(x) = 1 + 3x + 4x^2 + 2x^3\)。</p>
+<p>(i) 计算 \(P\) 的系数表示。换句话说，求 \(p\)。</p>
+<p>(ii) 计算 \(p\) 对应的 DFT 矩阵。</p>
+<p>(iii) 计算 \(p\) 的傅里叶变换。</p>
+<p><strong>(b)</strong> 在看过计算 DFT 的朴素方法后，我们来探索如何实现 FFT。</p>
+<p>(i) 设 \(p = [p_0]\)。\(\text{FFT}(p, 1)\) 是什么？</p>
+<p>(ii) 使用 FFT 算法计算 \(\text{FFT}([1, 4], 2)\) 和 \(\text{FFT}([3, 2], 2)\)。</p>
+<p>(iii) 利用前面各部分的答案计算 \(\text{FFT}([1, 3, 4, 2], 4)\)。</p>
+<p>(iv) 描述如何将系数形式、次数至多为 \(d\) 的两个多项式 \(P(x), Q(x)\) 相乘。</p>
+<p>(v) 使用上一部分的算法，将多项式 \(P(x) = 1 + 2x\) 和 \(Q(x) = 3 - x\) 以系数形式相乘。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>FFT 的核心是蝴蝶（butterfly）结构的递归：将多项式按奇偶下标拆分后，利用 \((\omega_n^j)^2 = \omega_{n/2}^j\) 将两个半长 DFT 的结果合并。对于 (b)(iv)，注意乘积多项式的次数至多为 \(2d\)，因此需要将两个多项式补零到长度不小于 \(2d+1\) 的最小的 2 的幂。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)(i)</strong> 由于
+\[P(x) = 1 + 3x + 4x^2 + 2x^3 = p_0 + p_1 x + p_2 x^2 + p_3 x^3,\]
+所以
+\[p = \begin{bmatrix} 1 &amp; 3 &amp; 4 &amp; 2 \end{bmatrix}^\top.\]</p>
+<p><strong>(a)(ii)</strong> 由于 \(p\) 的长度为 4，我们将使用 4 次单位根来构建 DFT 矩阵。因此 DFT 矩阵是一个 \(4 \times 4\) 的矩阵，我们如下得到它：
+\(\omega_4 = e^{i \cdot 2\pi/4} = e^{i \cdot \pi/2} = i\)，
+\[
+M = \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; \omega_4^1 &amp; \omega_4^2 &amp; \omega_4^3 \\
+1 &amp; \omega_4^2 &amp; \omega_4^4 &amp; \omega_4^6 \\
+1 &amp; \omega_4^3 &amp; \omega_4^6 &amp; \omega_4^9
+\end{bmatrix}
+= \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; i &amp; -1 &amp; -i \\
+1 &amp; -1 &amp; 1 &amp; -1 \\
+1 &amp; -i &amp; -1 &amp; i
+\end{bmatrix}.
+\]</p>
+<p><strong>(a)(iii)</strong> 为了计算 \(p\) 的傅里叶变换，我们将 \(p\) 乘以上一步中的 \(M\)：
+\[
+\begin{bmatrix}
+P(1) \\ P(i) \\ P(-1) \\ P(-i)
+\end{bmatrix}
+= \mathcal{F}\{p\} = M p = \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; i &amp; -1 &amp; -i \\
+1 &amp; -1 &amp; 1 &amp; -1 \\
+1 &amp; -i &amp; -1 &amp; i
+\end{bmatrix}
+\cdot
+\begin{bmatrix}
+1 \\ 3 \\ 4 \\ 2
+\end{bmatrix}
+= \begin{bmatrix}
+10 \\ -3 + i \\ 0 \\ -3 - i
+\end{bmatrix}.
+\]</p>
+<p><strong>(b)(i)</strong> 注意这是 FFT 算法的基本情形。因此 \(\text{FFT}(p, 1) = p = [p_0]\)。</p>
+<p><strong>(b)(ii)</strong> \(\text{FFT}([1, 4], 2) = [5, -3]\) 且 \(\text{FFT}([3, 2], 2) = [5, 1]\)。</p>
+<p>我们展示如何计算 \(\text{FFT}([1, 4], 2)\)，\(\text{FFT}([3, 2], 2)\) 类似。</p>
+<p>首先，由基本情形计算 \(\text{FFT}([1], 1) = [1] = E'\) 和 \(\text{FFT}([4], 1) = [4] = O'\)。注意 \(E' = [E(1)] = [1]\) 且 \(O' = [O(1)] = [4]\)，因此后续需要这些值时它们已经计算好了。</p>
+<p>设 \(P\) 为我们的结果。我们希望计算 \(P(\omega_2^0) = P(1)\) 和 \(P(\omega_2^1) = P(-1)\)。
+\[P(1) = E(1) + 1 \cdot O(1) = 1 + 4 = 5,\]
+\[P(-1) = E(1) + (-1) \cdot O(1) = 1 - 4 = -3.\]
+所以我们的答案是 \([5, -3]\)。</p>
+<p><strong>(b)(iii)</strong> \(\omega_4 = i\)。下表值得随时查阅：
+\[
+\begin{array}{c|cccc}
+\omega_4^i &amp; 1 &amp; i &amp; -1 &amp; -i \\
+\hline
+(\omega_4^i)^2 &amp; 1 &amp; -1 &amp; 1 &amp; -1
+\end{array}
+\]</p>
+<p>令 \(E' = \text{FFT}([1, 4], 2) = [5, -3]\) 且 \(O' = \text{FFT}([3, 2], 2) = [5, 1]\)。注意 \(E' = [E(1), E(-1)] = [5, -3]\) 且 \(O' = [O(1), O(-1)] = [5, 1]\)，因此在分治步骤中需要这些值时它们已经计算好了。设 \(R\) 为我们的结果，我们希望计算 \(R(1), R(i), R(-1), R(-i)\)。</p>
+<p>\[
+\begin{aligned}
+R(1) &amp;= E(1) + 1 \cdot O(1) = 5 + 5 = 10, \\
+R(i) &amp;= E(-1) + i \cdot O(-1) = -3 + i, \\
+R(-1) &amp;= E(1) - 1 \cdot O(1) = 5 - 5 = 0, \\
+R(-i) &amp;= E(-1) - i \cdot O(-1) = -3 - i.
+\end{aligned}
+\]</p>
+<p>所以我们的答案是 \([10, -3 + i, 0, -3 - i]\)。</p>
+<p><strong>(b)(iv)</strong> 思路是对 \(P\) 和 \(Q\) 都做 FFT，将取值相乘，然后做逆 FFT。注意 \(P \cdot Q\) 的次数至多为 \(2d\)，这意味着我们需要取 \(n\) 为大于 \(2d\) 的最小的 2 的幂，记为 \(2^k\)。我们可以将两个多项式都补零，使其次数为 \(2^k - 1\)。</p>
+<p>然后 \(R = \text{FFT}(P, 2^k) \cdot \text{FFT}(Q, 2^k)\)（逐元素相乘）对所有 \(i = 0, \ldots, 2^k - 1\) 计算 \(PQ(\omega_{2^k}^i)\)。</p>
+<p>我们对 \(R\) 做逆 FFT 以回到 \(P \cdot Q\) 的系数形式。</p>
+<p><strong>(b)(v)</strong> 使用 FFT：</p>
+<p>首先我们需要计算 \(\text{FFT}([1, 2, 0, 0], 4)\)。为此，我们需要计算 \(\text{FFT}([1, 0], 2) = [E(1) + 1 \cdot O(1), E(1) - 1 \cdot O(1)] = [1, 1]\) 和 \(\text{FFT}([2, 0], 2) = [E(1) + 1 \cdot O(1), E(1) - 1 \cdot O(1)] = [2, 2]\)。</p>
+<p>因此，现在我们可以计算
+\(\text{FFT}([1, 2, 0, 0], 4) = [\text{FFT}([1, 0], 2) + (1, i) \cdot \text{FFT}([2, 0], 2), \text{FFT}([1, 0], 2) - (1, i) \cdot \text{FFT}([2, 0], 2)] = [3, 1 + 2i, -1, 1 - 2i]\)。</p>
+<p>现在我们需要计算 \(\text{FFT}([3, -1, 0, 0], 4)\)。用类似的方法我们得到 \([2, 3 - i, 4, 3 + i]\)。</p>
+<p>现在我们可以将它们相乘，得到乘积的逐点表示为 \([2 \cdot 3, (1 + 2i)(3 - i), -1 \cdot 4, (1 - 2i)(3 + i)] = [6, 5 + 5i, -4, 5 - 5i]\)。</p>
+<p>现在我们使用逆 FFT 算法。我们需要计算 \(\text{iFFT}([6, 5 + 5i, -4, 5 - 5i], 4)\)。</p>
+<p>为此，我们需要计算 \(\text{iFFT}([6, -4], 2) = [E(1) + 1 \cdot O(1), E(1) - 1 \cdot O(1)] = [2, 10]\) 和 \(\text{iFFT}([5 + 5i, 5 - 5i], 2) = [E(1) + 1 \cdot O(1), E(1) - 1 \cdot O(1)] = [10, 10i]\)。因此，现在我们可以计算
+\(\text{iFFT}([6, 5 + 5i, -4, 5 - 5i], 4) = [\text{FFT}([6, -4], 2) + (1, -i) \cdot \text{FFT}([5 + 5i, 5 - 5i], 2), \text{FFT}([6, -4], 2) - (1, -i) \cdot \text{FFT}([5 + 5i, 5 - 5i], 2)] = [12, 20, -8, 0]\)。</p>
+<p>最后我们需要乘以 \(\frac{1}{4}\) 来得到最终的多项式系数表示为 \([3, 5, -2, 0]\)，即 \(3 + 5x - 2x^2\)。</p>
+<p>使用 DFT：</p>
+<p>我们首先将 \(p\) 和 \(q\) 转换为它们的向量表示，确保用 0 填充使得它们为次数 \(2^2 - 1 = 3\) 的多项式：
+\[p = [1, 2, 0, 0]^\top, \quad q = [3, -1, 0, 0]^\top.\]</p>
+<p>然后，使用 4 次单位根（\(\omega_4 = e^{i 2\pi/4} = e^{i \pi/2} = i\)），我们可以计算 FFT 矩阵：
+\[
+M = \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; \omega_4 &amp; \omega_4^2 &amp; \omega_4^3 \\
+1 &amp; \omega_4^2 &amp; \omega_4^4 &amp; \omega_4^6 \\
+1 &amp; \omega_4^3 &amp; \omega_4^6 &amp; \omega_4^9
+\end{bmatrix}
+= \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; i &amp; -1 &amp; -i \\
+1 &amp; -1 &amp; 1 &amp; -1 \\
+1 &amp; -i &amp; -1 &amp; i
+\end{bmatrix}.
+\]</p>
+<p>然后，我们可以计算 \(p\) 和 \(q\) 在 4 次单位根处的取值如下：
+\[
+P = \begin{bmatrix} P(1) \\ P(\omega_4) \\ P(\omega_4^2) \\ P(\omega_4^3) \end{bmatrix}
+= M p = \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; i &amp; -1 &amp; -i \\
+1 &amp; -1 &amp; 1 &amp; -1 \\
+1 &amp; -i &amp; -1 &amp; i
+\end{bmatrix}
+\begin{bmatrix} 1 \\ 2 \\ 0 \\ 0 \end{bmatrix}
+= \begin{bmatrix} 3 \\ 1 + 2i \\ -1 \\ 1 - 2i \end{bmatrix},
+\]
+\[
+Q = \begin{bmatrix} Q(1) \\ Q(\omega_4) \\ Q(\omega_4^2) \\ Q(\omega_4^3) \end{bmatrix}
+= M q = \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; i &amp; -1 &amp; -i \\
+1 &amp; -1 &amp; 1 &amp; -1 \\
+1 &amp; -i &amp; -1 &amp; i
+\end{bmatrix}
+\begin{bmatrix} 3 \\ -1 \\ 0 \\ 0 \end{bmatrix}
+= \begin{bmatrix} 2 \\ 3 - i \\ 4 \\ 3 + i \end{bmatrix}.
+\]</p>
+<p>然后，我们可以通过取 \(P\) 和 \(Q\) 的逐元素乘积来计算乘积 \(R(x) = P(x)Q(x)\) 在每个 4 次单位根处的取值：
+\[
+R = \begin{bmatrix} R(1) \\ R(\omega_4) \\ R(\omega_4^2) \\ R(\omega_4^3) \end{bmatrix}
+= \begin{bmatrix} P(1) \cdot Q(1) \\ P(\omega_4) \cdot Q(\omega_4) \\ P(\omega_4^2) \cdot Q(\omega_4^2) \\ P(\omega_4^3) \cdot Q(\omega_4^3) \end{bmatrix}
+= \begin{bmatrix} 3 \cdot 2 \\ (1 + 2i) \cdot (3 - i) \\ (-1) \cdot 4 \\ (1 - 2i) \cdot (3 + i) \end{bmatrix}
+= \begin{bmatrix} 6 \\ 5 + 5i \\ -4 \\ 5 - 5i \end{bmatrix}.
+\]</p>
+<p>最后，为了将 \(R\) 转换回系数形式，我们将刚才计算的结果乘以逆 FFT 矩阵：
+\[
+r = M^{-1} R = \frac{1}{4} \begin{bmatrix}
+1 &amp; 1 &amp; 1 &amp; 1 \\
+1 &amp; -i &amp; -1 &amp; i \\
+1 &amp; -1 &amp; 1 &amp; -1 \\
+1 &amp; i &amp; -1 &amp; -i
+\end{bmatrix}
+\begin{bmatrix} 6 \\ 5 + 5i \\ -4 \\ 5 - 5i \end{bmatrix}
+= \begin{bmatrix} 3 \\ 5 \\ -2 \\ 0 \end{bmatrix},
+\]
+这就是 \(R(x) = 3 + 5x - 2x^2\) 的系数表示。</p></div><p class="problem-source">解答来源：<code>dis03-sol.pdf</code> · 2-5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis03.pdf</code> · 1-3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>模傅里叶变换</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>傅里叶变换 (FT) 必须处理涉及无理数的计算，这在实践中可能难以实现。受此启发，在这个问题中你将演示如何在模运算（modular arithmetic）中进行傅里叶变换，以模 5 为例。</p>
+<p><strong>(a)</strong> 存在 \(\omega \in \{0, 1, 2, 3, 4\}\)，使得 \(\omega\) 是模 5 下的 4 次单位根，即 \(z^4 = 1\) 的解。在做模 5 的 FT 时，这个 \(\omega\) 将起到类似于我们标准 FT 中本原单位根的作用。证明 \(\{1, 2, 3, 4\}\) 是模 5 下的 4 次单位根。同时证明对于 \(\omega = 2\)，有 \(1 + \omega + \omega^2 + \omega^3 = 0 \pmod{5}\)。</p>
+<p><strong>(b)</strong> 使用 FFT，产生序列 \((0, 2, 3, 0)\) 模 5 的变换；即，使用课堂上定义的递归 FFT 算法，但在模 5 下且 \(\omega = 2\)（而非复数中的 \(\omega = i\)），对多项式 \(2x + 3x^2\) 在 \(\{1, 2, 4, 3\}\) 处求值。所有计算都应模 5 进行。提示：如果你愿意，可以用慢速方法在单位根处求值来验证你的计算。</p>
+<p><strong>(c)</strong> 现在对序列 \((0, 1, 4, 0)\) 执行逆 FFT，同样使用递归算法。回顾逆 FFT 与正 FFT 相同，但使用 \(\omega^{-1}\) 代替 \(\omega\)，并额外乘以 \(4^{-1}\) 进行归一化（normalization）。</p>
+<p><strong>(d)</strong> 现在展示如何使用模 5 的 FFT 将多项式 \(2x + 3x^2\) 和 \(3 - x\) 相乘。你可以使用事实：\((3, 4, 0, 0)\) 模 5 的 FFT 是 \((2, 1, 4, 0)\)，而无需自己计算。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>在模运算中，\(\omega\) 的幂次循环仍保持单位根的性质，但所有算术都在模 \(p\) 下进行。对于逆 FFT，注意 \(4^{-1} \equiv 4 \pmod{5}\)。你可以用直接求值（慢速方法）来验证 FFT 的结果是否正确。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 我们可以验证 \(1^4 = 1 \pmod{5}\)，\(2^4 = 16 \equiv 1 \pmod{5}\)，\(3^4 = 81 \equiv 1 \pmod{5}\)，\(4^4 = 256 \equiv 1 \pmod{5}\)。</p>
+<p>取 \(\omega = 2\)，得到以下幂次：\((\omega, \omega^2, \omega^3) = (2, 4, 3)\)。验证 \(1 + \omega + \omega^2 + \omega^3 = 1 + 2 + 4 + 3 = 10 \equiv 0 \pmod{5}\)。</p>
+<p><strong>(b)</strong> FFT 分治算法给出
+\[
+\text{FFT}(0, 2, 3, 0) = \left(\text{FFT}(0, 3) + (1, 2) \cdot \text{FFT}(2, 0),\; \text{FFT}(0, 3) - (1, 2) \cdot \text{FFT}(2, 0)\right),\]
+其中乘以 \((1, 2)\) 是逐元素的。</p>
+<p>然后，\(\text{FFT}(0, 3) = (\text{FFT}(0) + 1 \cdot \text{FFT}(3),\; \text{FFT}(0) - 1 \cdot \text{FFT}(3))\) 且 \(\text{FFT}(2, 0) = (\text{FFT}(2) + 1 \cdot \text{FFT}(0),\; \text{FFT}(2) - 1 \cdot \text{FFT}(0))\)。</p>
+<p>单元素的 FFT 不进行任何操作，所以 \(\text{FFT}(0) = 0\)，\(\text{FFT}(2) = 2\)，且 \(\text{FFT}(3) = 3\)。这意味着 \(\text{FFT}(0, 3) = (3, -3) \equiv (3, 2) \pmod{5}\)，且 \(\text{FFT}(2, 0) = (2, 2)\)。然后
+\(\text{FFT}(0, 2, 3, 0) = (3 + 2, 2 + 4, 3 - 2, 2 - 4) \equiv (0, 1, 1, 3) \pmod{5}\)。</p>
+<p><strong>(c)</strong> \(4^{-1} \equiv 4 \pmod{5}\)，所以我们的答案是 \(4 \cdot \text{iFFT}(0, 1, 4, 0)\)：
+\[
+4 \cdot \left(\text{iFFT}(0, 4) + (1, 3) \cdot \text{iFFT}(1, 0),\; \text{iFFT}(0, 4) - (1, 3) \cdot \text{iFFT}(1, 0)\right).
+\]</p>
+<p>我们还有 \(\text{iFFT}(0, 4) = (0 + 4, 0 - 4) \equiv (4, 1) \pmod{5}\) 和 \(\text{iFFT}(1, 0) = (1, 1) \pmod{5}\)（注意在 \(n = 2\) 及以下，未归一化的逆 FFT 与正 FFT 相同）。</p>
+<p>这意味着 \(\text{iFFT}(0, 1, 4, 0) = (4 + 1, 1 + 3, 4 - 1, 1 - 3) = (0, 4, 3, 3)\)，给出最终答案 \(4 \cdot (0, 4, 3, 3) = (0, 1, 2, 2)\)。</p>
+<p><strong>(d)</strong> 我们将对多项式的系数表示运行 FFT，将得到的向量逐元素相乘，然后对结果向量运行逆 FFT 以得到它们乘积的系数表示。</p>
+<p>我们已有 \(2x + 3x^2\) 的 FFT 是 (b) 中的 \((0, 1, 1, 3)\)；题目给出 \(3 - x\) 的 FFT 是 \((2, 1, 4, 0)\)（因为 \(-1 \equiv 4 \pmod{5}\)，所以 \((3, 4, 0, 0)\) 是 \(3 - x\) 的系数表示）。</p>
+<p>将它们逐元素相乘得到 \((0, 1, 4, 0)\) 作为模 5 下的答案。</p>
+<p>我们已由 (c) 的答案知道其逆 FFT 是 \((0, 1, 2, 2)\)，所以我们的最终答案是 \(x + 2x^2 + 2x^3 \pmod{5}\)。我们可以用 FOIL 直接相乘多项式来验证这是正确的。</p></div><p class="problem-source">解答来源：<code>dis03-sol.pdf</code> · 5-7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis03.pdf</code> · 3-4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>笛卡尔和</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>设 \(A\) 和 \(B\) 为范围在 0 到 \(10^n\) 之间的两个整数集合。\(A\) 和 \(B\) 的笛卡尔和（Cartesian sum）定义为
+\[A + B = \{a + b \mid a \in A, b \in B\},\]
+即所有 \(A\) 中元素与 \(B\) 中元素之和。例如，\(\{1, 3\} + \{2, 4\} = \{3, 5, 7\}\)。</p>
+<p>注意 \(A + B\) 中的值是范围在 0 到 \(20^n\) 之间的整数。设计一个在 \(O(n \log n)\) 时间内找到 \(A + B\) 中元素的算法。该算法还应告诉你，对于每个 \(c \in A + B\)，有多少对 \(a \in A, b \in B\) 满足 \(a + b = c\)。</p>
+<p>提示：注意 \((x^1 + x^3) \cdot (x^2 + x^4) = x^3 + 2x^5 + x^7\)。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>将每个集合表示为一个多项式，其中 \(x^k\) 的系数表示 \(k\) 是否在集合中。两个这样的多项式相乘后，\(x^k\) 的系数代表什么？</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>定义两个多项式 \(P\) 和 \(Q\) 如下：
+\[P = \sum_{a \in A} x^a, \quad Q = \sum_{b \in B} x^b.\]</p>
+<p>注意 \(P\) 和 \(Q\) 的次数都至多为 \(10^n\)。</p>
+<p>令 \(R(x) = P(x) \cdot Q(x) = r_0 + r_1 x + \cdots + r_{20^n} x^{20^n}\)。\(r_k\) 的公式为：
+\[r_k = \sum_{j=0}^{k} p_j q_{k-j}.\]</p>
+<p>注意 \(p_j q_{k-j}\) 要么是 0 要么是 1，且它为 1 当且仅当 \(j \in A\) 且 \(k - j \in B\)。因此 \(r_k\) 计算了满足 \(a + b = k\) 的 \(a \in A, b \in B\) 的对数。所以通过简单地读取结果多项式的系数，我们就得到了答案。</p>
+<p>我们可以使用 FFT 在 \(O(n \log n)\) 时间内计算多项式乘法，因此完成。</p></div><p class="problem-source">解答来源：<code>dis03-sol.pdf</code> · 7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis03.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>模式匹配</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>考虑以下字符串匹配问题：</p>
+<p>输入：</p>
+<ul>
+<li>
+<p>一个由 0 和 1 组成的长度为 \(n\) 的字符串 \(g\)。我们称 \(g\) 为"模式"（pattern）。</p>
+</li>
+<li>
+<p>一个由 0 和 1 组成的长度为 \(m\) 的字符串 \(s\)。我们称 \(s\) 为"序列"（sequence）。</p>
+</li>
+<li>
+<p>整数 \(k\)</p>
+</li>
+</ul>
+<p>目标：找到 \(s\) 中所有长度为 \(n\) 的子串（substring）的（起始）位置，这些子串在至少 \(n - k\) 个位置上匹配 \(g\)。</p>
+<p>示例：使用从 0 开始的索引，如果 \(g = 0111\)，\(s = 01010110111\)，且 \(k = 1\)，你的算法应输出 0、2、4 和 7。</p>
+<p><strong>(a)</strong> 给出一个 \(O(nm)\) 时间复杂度的算法。</p>
+<p>现在我们将使用 FFT 为该问题设计一个 \(O(m \log m)\) 时间复杂度的算法。在这里暂停片刻思考一下这有多奇怪。匹配字符串与单位根和复数有什么关系？</p>
+<p><strong>(b)</strong> 设计一个基于 FFT 的算法，使其在 \(O(m \log m)\) 时间内运行。写下算法，证明其正确性，并给出运行时间上界。</p>
+<p>提示：对于示例字符串 \(g\) 和 \(s\)，算法的第一步是构造以下多项式
+\[0111 \rightarrow 1 + x + x^2 - x^3,\]
+\[01010110111 \rightarrow -1 + x - x^2 + x^3 - x^4 + x^5 + x^6 - x^7 + x^8 + x^9 + x^{10}.\]
+我们是如何构造这些多项式的，为什么要这样做？然后，作为开始，尝试考虑 \(k = 0\)（即 \(g\) 完全匹配）的情况，再从那里出发。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>将每个比特映射为数值：0 映射到 -1，1 映射到 +1。这样两个相同比特的乘积为 +1，不同比特的乘积为 -1。考虑将模式串反转后构造多项式，与序列串构造的多项式相乘，利用卷积计算每个对齐位置上的点积（dot product）。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 对于 \(s\) 中的每一个起始位置 \(i \in \{0, 1, \ldots, m - n\}\)，检查子串 \(s[i : i + n - 1]\) 是否与 \(g\) 在至多 \(k\) 个位置上不同。每次检查在 \(O(n)\) 时间内完成，共有 \(O(m)\) 个起始位置，因此时间复杂度为 \(O(mn)\)。</p>
+<p><strong>(b)</strong> 我们希望在 \(s\) 的切片与 \(g\) 的对应字符匹配时增加它们的"相似性"。取这两个比特串的点积可以反映有多少对比特都是 1。为了也捕获两个比特都是 0 的情况，我们将每个 0 替换为 -1，这样当我们乘以两个相同的比特时，结果为 1，而乘以两个不同的比特时，结果为 -1。这个乘积在所有字符上的和代表了 \(s\) 的切片与 \(g\) 匹配的字符数减去不匹配的字符数。</p>
+<p>我们想要高效地为 \(s\) 的所有切片计算这些点积。将 \(s\) 和 \(g\) 的反转编码为多项式的系数，将得到两个多项式，当它们相乘时，其系数中反映了所有切片和起始索引组合的相似性比较。</p>
+<p>主要思想：令 \(g'\) 为将 \(g\) 中的 0 替换为 -1 后的结果。令
+\[p_1(x) = a_0 + a_1 x + \cdots + a_{n-1} x^{n-1},\]
+其中 \(a_d = g'(n - d - 1)\) 对所有 \(d \in \{0, 1, \ldots, n - 1\}\)。类似地，令
+\[p_2(x) = b_0 + b_1 x + \cdots + b_{m-1} x^{m-1},\]
+其中 \(b_d = s'(d)\) 对所有 \(d \in \{0, 1, \ldots, m - 1\}\)，其中 \(s'\) 同样是将 \(s\) 中的 0 替换为 -1 后的结果。</p>
+<p>注意 \(p_1(x)\) 是反转的，即系数与 \(g\) 中的比特顺序相反。</p>
+<p>现在考虑
+\[p_3(x) = p_1(x) \times p_2(x) = c_0 + c_1 x + \cdots\]
+\(p_3(x)\) 中 \(x^{n-1+j}\) 的系数为
+\[c_{n-1+j} = \sum_{i=0}^{n-1} a_{n-1-i} b_{j+i} = \sum_{i=0}^{n-1} g'(i) s'(j + i)\]
+对于任意 \(j \in \{0, 1, \ldots, m - n\}\)，这恰好是从索引 \(j\) 开始的 \(s'\) 的子串与 \(g'\) 的点积。如果这些字符串在至多 \(k\) 个位置上不同，则该点积至少为 \(n - 2k\)。因此我们只需要计算 \(p_3(x)\)，并输出所有在 0 和 \(m - n\) 之间的 \(j\)，使得 \(c_{n-1+j} \geq n - 2k\)。</p>
+<p>正确性证明：考虑映射 \(\Phi\)，它将二进制数字映射如下：
+\[\Phi(0) = -1, \quad \Phi(1) = +1.\]
+按照提示，从模式 \(g[0 : n - 1]\) 构造多项式
+\[G(x) = \sum_i G_i x^i,\]
+通过设置 \(G[i] = \Phi(g[n - 1 - i])\)。</p>
+<p>类似地，从模式 \(s[0 : m - 1]\) 构造多项式
+\[S(x) = \sum_i S_i x^i,\]
+通过设置 \(S[i] = \Phi(s[i])\)。</p>
+<p>现在考虑这两个多项式的乘积 \(G(x)\) 和 \(S(x)\)：
+\[G(x) \cdot S(x) = \left(\sum_{i=0}^{n-1} G[i] x^i\right) \cdot \left(\sum_{j=0}^{m-1} S[j] x^j\right) = \sum_{r=0}^{m+n-2} x^r \cdot \left(\sum_{\ell=0}^{r} G[\ell] \cdot S[r - \ell]\right).\]</p>
+<p>在最后一步中，我们只是写出了多项式乘法的系数。现在让我们更仔细地看一下系数。从 \(x^{n-1}\) 的系数开始，即 \(r = n - 1\)：
+\[\text{系数 of } x^r = \sum_{\ell=0}^{n-1} G[\ell] \cdot S[r - \ell] = G \cdot S[r - n + 1 : r].\]
+当 \(r = n - 1\) 时，这是 \(\Phi(g)\) 和 \(\Phi(s[: n])\) 的点积。更一般地，\(x^r\) 的系数是 \(\Phi(g)\) 和 \(\Phi(s[: r + 1])\) 的点积。注意，如果这些字符串在至多 \(k\) 个位置上不同，则该点积至少为 \(n - 2k\)，因为每个匹配的字符至少增加 \(+1\) 共 \(n - k\) 次，而每个不同的字符最多增加 \(-1\) 共 \(k\) 次。因此我们只需要计算 \(p_3(x)\)，并输出所有在 0 和 \(m - n\) 之间的 \(j\)，使得 \(c_{n-1+j} \geq n - 2k\)。</p>
+<p>运行时间分析：计算包括一次 FFT、逐元素乘积、一次逆 FFT 以及对系数的线性扫描。该算法的运行时间为 \(O(m \log m)\)，由 FFT 和逆 FFT 步骤主导，每一步都耗时 \(O(m \log m)\)。逐元素乘积和搜索 \(c(i) \geq n - 2k\) 各耗时 \(O(m)\)。</p></div><p class="problem-source">解答来源：<code>dis03-sol.pdf</code> · 8-10 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis03.pdf</code> · 5-6 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>图遍历</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>[图：一个有向图，顶点为 A, B, C, D, E, F, G, H, I, J]</p>
+<p><strong>(a)</strong> 回顾给定一棵 DFS 树时，我们可以将边分为四种类型之一：</p>
+<ul>
+<li>
+<p><strong>树边 (Tree edges)</strong> 是 DFS 树中的边，</p>
+</li>
+<li>
+<p><strong>后向边 (Back edges)</strong> 是不在 DFS 树中的边 \((u, v)\)，其中 \(v\) 是 \(u\) 在 DFS 树中的祖先，</p>
+</li>
+<li>
+<p><strong>前向边 (Forward edges)</strong> 是不在 DFS 树中的边 \((u, v)\)，其中 \(u\) 是 \(v\) 在 DFS 树中的祖先，</p>
+</li>
+<li>
+<p><strong>交叉边 (Cross edges)</strong> 是不在 DFS 树中的边 \((u, v)\)，其中 \(u\) 不是 \(v\) 的祖先，且 \(v\) 也不是 \(u\) 的祖先。</p>
+</li>
+</ul>
+<p>对上面的有向图从顶点 A 开始执行 DFS，按字母顺序打破平局。在此过程中，为每个节点标注其 pre-number 和 post-number，并将每条边标记为 Tree、Back、Forward 或 Cross。</p>
+<p><strong>(b)</strong> 强连通分量 (SCC, Strongly Connected Component) 被定义为顶点的一个子集，其中从每个顶点到另一个顶点都存在路径。上面图的 SCC 是什么？</p>
+<p><strong>(c)</strong> 将你在 (b) 中找到的每个 SCC 收缩为一个 meta-node，从而得到一个由 SCC meta-node 构成的图。在下面画出这个图，并描述其结构。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 有向图，顶点为 A, B, C, D, E, F, G, H, I, J，边集见原图。</h4><p>顶点：A, B, C, D, E, F, G, H, I, J。边：见原图（PDF 第 7 页）。</p>
+<p>参考解答中给出的 DFS 树边（Tree）与边分类（用于验证）：</p>
+<ul>
+<li>
+<p>节点 pre/post 编号：A(1/6), B(2/3), C(7/20), D(10/11), E(4/5), F(9/18), G(14/15), H(12/17), I(13/16), J(8/19)。</p>
+</li>
+<li>
+<p>边类型序列（按原图边序）：T, T, C, C, C, B, T, T, C, T, T, T, B, T。</p>
+</li>
+<li>
+<p>SCC：{A}, {B}, {E}, {G,H,I}, {C,J,F,D}。</p>
+</li>
+</ul><p class="problem-source">来源：<code>dis03.pdf</code> · 7</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>DFS 遍历时，利用 pre/post 编号的嵌套关系判断边的类型：若 \(v\) 是 \(u\) 的祖先，则 \((u,v)\) 为后向边；若 \(u\) 是 \(v\) 的祖先且 \((u,v)\) 不是树边，则为前向边；否则为交叉边。对于 SCC，考虑 Kosaraju 或 Tarjan 算法，或观察 DFS 完成时间的逆序。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(a)</strong> 从顶点 A 开始按字母顺序执行 DFS。各节点的 pre-number 和 post-number 以及每条边的分类如下（具体数值和边与原图一致）：</p>
+<p>节点 pre/post 编号：</p>
+<ul>
+<li>
+<p>A: 1/6</p>
+</li>
+<li>
+<p>B: 2/3</p>
+</li>
+<li>
+<p>C: 7/20</p>
+</li>
+<li>
+<p>D: 10/11</p>
+</li>
+<li>
+<p>E: 4/5</p>
+</li>
+<li>
+<p>F: 9/18</p>
+</li>
+<li>
+<p>G: 14/15</p>
+</li>
+<li>
+<p>H: 12/17</p>
+</li>
+<li>
+<p>I: 13/16</p>
+</li>
+<li>
+<p>J: 8/19</p>
+</li>
+</ul>
+<p>边分类（按原图中的边序）：树边（T）、树边（T）、交叉边（C）、交叉边（C）、交叉边（C）、回边（B）、树边（T）、树边（T）、交叉边（C）、树边（T）、树边（T）、树边（T）、回边（B）、树边（T）。</p>
+<p><strong>(b)</strong> 强连通分量 (SCC) 为：\(\{A\}, \{B\}, \{E\}, \{G, H, I\}, \{C, J, F, D\}\)。</p>
+<p><strong>(c)</strong> 将每个 SCC 收缩为一个 meta-node 后，得到由 meta-node 构成的图。这些 meta-node 为：\(\{C,J,F,D\}, \{G,H,I\}, \{A\}, \{E\}, \{B\}\)。该图是一个有向无环图 (DAG, Directed Acyclic Graph)，其结构由原图中跨 SCC 的边决定。</p></div><p class="problem-source">解答来源：<code>dis03-sol.pdf</code> · 11-12 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis03.pdf</code> · 7 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis03.pdf</code></li>
+      <li><code>dis03-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

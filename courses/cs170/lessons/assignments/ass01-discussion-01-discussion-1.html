@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 1 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 1</p>
+    <h1>讨论课 1：渐近分析、递推关系与分治</h1>
+    <p class="lede">本讨论课讲义涵盖渐近记号（O、Θ、Ω）的定义与极限证明、渐近复杂度比较、利用主定理与展开法求解递推关系、基于二分查找的「寻找谷底」算法，以及选做的 Hadamard 矩阵与其 O(n log n) 矩阵-向量乘法。注意：助教可能无法在课堂上覆盖所有题目，讲义故意设计得较长，旨在作为课后练习与巩固课堂、阅读和作业内容的资源。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>asymptotic notation</li><li>Big-O</li><li>Big-Omega</li><li>Big-Theta</li><li>limit</li><li>L&#x27;Hôpital&#x27;s rule</li><li>Master Theorem</li><li>recurrence relation</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis01.pdf</code>、<code>dis01-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis01.pdf</code>、<code>dis01-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>渐近与极限</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>本门课程非常关注算法的运行时间，但我们不太在意小输入规模上的具体表现（大多数算法在小输入上表现良好），而是希望比较运行时间的长期（渐近）增长。</p>
+<p><strong>渐近记号（Asymptotic Notation）</strong>：以下是 \(O(\cdot)\)、\(\Theta(\cdot)\)、\(\Omega(\cdot)\) 的定义。</p>
+<ul>
+<li>
+<p>\(f(n) = O(g(n))\)：若存在常数 \(c &gt; 0\)，使得当 \(n\) 充分大时，\(f(n) \le c \cdot g(n)\)。（渐近意义下，\(f\) 的增长至多与 \(g\) 相当）</p>
+</li>
+<li>
+<p>\(f(n) = \Omega(g(n))\)：若 \(g(n) = O(f(n))\)。（渐近意义下，\(f\) 的增长至少与 \(g\) 相当）</p>
+</li>
+<li>
+<p>\(f(n) = \Theta(g(n))\)：若 \(f(n) = O(g(n))\) 且 \(g(n) = O(f(n))\)。（渐近意义下，\(f\) 与 \(g\) 增长相同）</p>
+</li>
+</ul>
+<p>若将这些定义与数的序关系比较，\(O\) 类似于 \(\le\)，\(\Omega\) 类似于 \(\ge\)，\(\Theta\) 类似于 \(=\)（不过皆针对渐近行为而言）。</p>
+<p><strong>渐近极限法则（Asymptotic Limit Rules）</strong>：设 \(f(n), g(n) \ge 0\)。</p>
+<ul>
+<li>
+<p>若 \(\displaystyle\lim_{n \to \infty} \frac{f(n)}{g(n)} &lt; \infty\)，则 \(f(n) = O(g(n))\)。</p>
+</li>
+<li>
+<p>若 \(\displaystyle\lim_{n \to \infty} \frac{f(n)}{g(n)} = c\)，其中常数 \(c &gt; 0\)，则 \(f(n) = \Theta(g(n))\)。</p>
+</li>
+<li>
+<p>若 \(\displaystyle\lim_{n \to \infty} \frac{f(n)}{g(n)} &gt; 0\)，则 \(f(n) = \Omega(g(n))\)。</p>
+</li>
+</ul>
+<p>注意：以上皆是涉及极限的充分条件，并非 \(O\)、\(\Theta\)、\(\Omega\) 的真正定义。（你应该自行验证这些命题的正确性！）</p>
+<p>(a) 证明 \(n^3 = O(n^4)\)。</p>
+<p>(b) 找出满足 \(f(n), g(n) \ge 0\) 的函数 \(f(n), g(n)\)，使得 \(f(n) = O(g(n))\)，但 \(\displaystyle\lim_{n \to \infty} \frac{f(n)}{g(n)} \ne 0\)。</p>
+<p>(c) 证明：对任意常数 \(c &gt; 0\)，都有 \(\log n = O(n^c)\)。</p>
+<p>提示：使用洛必达法则（L'Hôpital's rule）：若 \(\lim_{n \to \infty} f(n) = \lim_{n \to \infty} g(n) = \infty\)，则 \(\lim_{n \to \infty} \frac{f(n)}{g(n)} = \lim_{n \to \infty} \frac{f'(n)}{g'(n)}\)（若右端极限存在）。</p>
+<p>(d) 找出满足 \(f(n), g(n) \ge 0\) 的函数 \(f(n), g(n)\)，使得 \(f(n) = O(g(n))\)，但 \(\displaystyle\lim_{n \to \infty} \frac{f(n)}{g(n)}\) 不存在。在这种情况下，你将无法使用极限来证明 \(f(n) = O(g(n))\)。</p>
+<p>提示：考虑振荡函数！</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于涉及极限的题目，先尝试直接计算 \(\lim_{n\to\infty} f(n)/g(n)\)；若极限为 0、正常数、无穷或不存在，分别对应不同的渐近关系。对于无法用极限处理的情形，回到 \(O\) 的定义：寻找常数 \(c\) 使得 \(f(n) \le c\cdot g(n)\) 在 \(n\) 充分大时成立。</p>
+<p>对于振荡函数类题目（如 (d)），考虑一个被常数上界压制、但比值的极限因持续振荡而不存在的函数，例如让 \(f(n)\) 在两个固定倍数之间来回摆动。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a)
+\[
+\lim_{n \to \infty} \frac{n^3}{n^4} = \lim_{n \to \infty} \frac{1}{n} = 0
+\]
+因此 \(f(n) = O(g(n))\)。</p>
+<p>(b) 令 \(f(n) = 3n\)，\(g(n) = 5n\)。则 \(\lim_{n \to \infty} \frac{f(n)}{g(n)} = \frac{3}{5}\)，即 \(f(n) = \Theta(g(n))\)。由 \(\Theta\) 的定义，此时仍有 \(f(n) = O(g(n))\) 成立。</p>
+<p>(c) 由洛必达法则：
+\[
+\lim_{n \to \infty} \frac{\log n}{n^c} = \lim_{n \to \infty} \frac{n^{-1}}{c n^{c-1}} = \lim_{n \to \infty} \frac{1}{c n^c} = 0
+\]
+因此 \(\log n = O(n^c)\)。</p>
+<p>(d) 令 \(f(x) = x(\sin x + 1)\)，\(g(x) = x\)。由于 \(\sin x + 1 \le 2\)，故对所有 \(x \ge 0\) 有 \(f(x) \le 2 \cdot g(x)\)，所以 \(f(x) = O(g(x))\)。</p>
+<p>然而，若尝试计算极限：
+\[
+\lim_{x \to \infty} \frac{x(\sin x + 1)}{x} = \lim_{x \to \infty} (\sin x + 1)
+\]
+该极限不存在（正弦函数永远振荡）。</p></div><p class="problem-source">解答来源：<code>dis01-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis01.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>渐近复杂度比较</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>(a) 将下列函数排序，使得对所有 \(i, j\)，若 \(f_i\) 排在 \(f_j\) 之前，则 \(f_i = O(f_j)\)。无需证明你的答案。</p>
+<ul>
+<li>
+<p>\(f_1(n) = 3n\)</p>
+</li>
+<li>
+<p>\(f_2(n) = n^{1/3}\)</p>
+</li>
+<li>
+<p>\(f_3(n) = 12\)</p>
+</li>
+<li>
+<p>\(f_4(n) = 2^{\log_2 n}\)</p>
+</li>
+<li>
+<p>\(f_5(n) = \sqrt{n}\)</p>
+</li>
+<li>
+<p>\(f_6(n) = 2^n\)</p>
+</li>
+<li>
+<p>\(f_7(n) = \log_2 n\)</p>
+</li>
+<li>
+<p>\(f_8(n) = 2^{\sqrt{n}}\)</p>
+</li>
+<li>
+<p>\(f_9(n) = n^3\)</p>
+</li>
+</ul>
+<p>答案可以只写成函数列表，例如 \(f_8, f_9, f_1, \ldots\)</p>
+<p>(b) 在以下各小题中，判断 \(f = O(g)\)、\(f = \Omega(g)\)，还是两者都成立（此时 \(f = \Theta(g)\)）。对每个答案给出简要证明。回顾：按渐近增长率，对数 &lt; 多项式 &lt; 指数。</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>\(f(n)\)</th>
+<th>\(g(n)\)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(i)</td>
+<td>\(\log_3 n\)</td>
+<td>\(\log_4 n\)</td>
+</tr>
+<tr>
+<td>(ii)</td>
+<td>\(n \log(n^4)\)</td>
+<td>\(n^2 \log(n^3)\)</td>
+</tr>
+<tr>
+<td>(iii)</td>
+<td>\(\sqrt{n}\)</td>
+<td>\((\log n)^3\)</td>
+</tr>
+<tr>
+<td>(iv)</td>
+<td>\(n + \log n\)</td>
+<td>\(n + (\log n)^2\)</td>
+</tr>
+</tbody>
+</table></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 第 2 题 (b) 的函数对比表，四行两列，列出 f(n) 与 g(n)</h4><table>
+<thead>
+<tr>
+<th></th>
+<th>f(n)</th>
+<th>g(n)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(i)</td>
+<td>log_3 n</td>
+<td>log_4 n</td>
+</tr>
+<tr>
+<td>(ii)</td>
+<td>n log(n^4)</td>
+<td>n^2 log(n^3)</td>
+</tr>
+<tr>
+<td>(iii)</td>
+<td>\(\sqrt{n}\)</td>
+<td>(log n)^3</td>
+</tr>
+<tr>
+<td>(iv)</td>
+<td>n + log n</td>
+<td>n + (log n)^2</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>dis01.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (a)，先化简每个函数：\(2^{\log_2 n} = n\)。再按「常数 &lt; 对数 &lt; 幂次根号 &lt; 线性 &lt; 多项式 &lt; 根号指数 &lt; 指数」的框架排序。对于 (b)，常用手段包括换底公式、提取主项、以及洛必达法则。</p>
+<p>自检方法：排序后取相邻两项验证 \(f_i = O(f_{i+1})\) 是否成立；对 (b) 每个小题检查是否忽略了低阶项或常数因子的影响。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) \(f_3, f_7, f_2, f_5, f_4, f_9, f_8, f_6, f_1\)</p>
+<p>(b)
+(i) \(f = \Theta(g)\)；利用对数换底公式，\(\frac{\log n}{\log 3}\) 与 \(\frac{\log n}{\log 4}\) 仅差一个常数因子。</p>
+<p>(ii) \(f = O(g)\)；\(f(n) = 4n \log n\)，\(g(n) = 3n^2 \log n\)，\(g\) 中多项式次数更高。</p>
+<p>(iii) \(f = \Omega(g)\)；任何多项式都支配对数乘积。亦可通过以下极限证明：
+\[
+\lim_{n \to \infty} \frac{f(n)}{g(n)} = \lim_{n \to \infty} \frac{\sqrt{n}}{(\log n)^3} = \lim_{n \to \infty} \frac{\frac{1}{2\sqrt{n}}}{3(\log n)^2 \cdot \frac{1}{n}} \text{ [洛必达法则]} = \lim_{n \to \infty} \frac{\sqrt{n}}{6(\log n)^2} = \lim_{n \to \infty} \frac{\sqrt{n}}{24 \log n} \text{ [洛必达法则]} = \lim_{n \to \infty} \frac{\sqrt{n}}{48} \text{ [洛必达法则]} = \infty
+\]</p>
+<p>(iv) \(f = \Theta(g)\)；\(f\) 和 \(g\) 都呈 \(\Theta(n)\) 增长，因为线性项主导了其他项。亦可通过以下极限证明：
+\[
+\lim_{n \to \infty} \frac{f(n)}{g(n)} = \lim_{n \to \infty} \frac{n + \log n}{n + (\log n)^2} = \lim_{n \to \infty} \frac{1 + \frac{1}{n}}{1 + \frac{2 \log n}{n}} \text{ [洛必达法则]} = 1
+\]</p></div><p class="problem-source">解答来源：<code>dis01-sol.pdf</code> · 3-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis01.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>递推关系</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p><strong>主定理（Master Theorem）</strong>：若递推关系形如 \(T(n) = aT\left(\frac{n}{b}\right) + O(n^d)\)，其中常数 \(a &gt; 0\)，\(b &gt; 1\)，\(d \ge 0\)，则
+\[
+T(n) = \begin{cases}
+O(n^d) &amp; \text{若 } d &gt; \log_b a \\
+O(n^d \log n) &amp; \text{若 } d = \log_b a \\
+O(n^{\log_b a}) &amp; \text{若 } d &lt; \log_b a
+\end{cases}
+\]</p>
+<p>注意，若递推关系不在 \(T(n) = aT\left(\frac{n}{b}\right) + O(n^d)\) 的形式，就不能使用主定理！此时可以尝试以下策略：</p>
+<ol>
+<li><strong>「展开」递推关系</strong>：本质上是递归地将更小的子问题（如 \(T(n/2)\) 或 \(T(n-1)\)）不断代入 \(T(n)\)，试图找出模式或直接计算整个表达式。</li>
+<li><strong>画树！</strong>：用树形表示来计算每个子问题的调用总数，将每层的工作量相加。</li>
+<li><strong>夹逼（Squeeze）</strong>：对某些无法直接求解的递推关系，可以通过基于已知递推关系计算运行时间的上下界来间接求解。具体地，若上下界渐近增长相同，则得到答案！</li>
+<li><strong>夹逼 + 猜测与验证</strong>：若用前一种方法无法得到渐近等价的上下界，则退而猜测并检验界之间的合理运行时间（可查阅 "The Substitution Method for Solving Recurrences – Brilliant" 了解具体做法）。在本课程中，若你不得不使用此方法，\(T(n)\) 的表达式总会看起来「很整洁」。</li>
+</ol>
+<p>还有更多本课程范围之外的策略，感兴趣的读者推荐阅读：http://www.iiitdm.ac.in/old/Faculty_Teaching/Sadagopan/pdf/DAA/recurrence-relations-V3.pdf</p>
+<p>求解以下递推关系，假设基本情况 \(T(0) = T(1) = 1\)：</p>
+<p>(a) \(T(n) = 2 \cdot T(n/2) + O(n)\)</p>
+<p>(b) \(T(n) = T(n - 1) + n\)</p>
+<p>(c) \(T(n) = 3 \cdot T(n - 2) + 5\)</p>
+<p>(d) \(T(n) = 2 \cdot T(n/2) + O(n \log n)\)</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 第 3 题 (d) 的递归树：根节点为 O(n log n)，每层节点数加倍、每个节点规模减半，第 i 层每个节点为 O((n/2^i) log(n/2^i))</h4><p>递归树层级结构：</p>
+<ul>
+<li>
+<p>第 0 层：1 个节点，工作量 O(n log n)</p>
+</li>
+<li>
+<p>第 1 层：2 个节点，每个 O((n/2) log(n/2))</p>
+</li>
+<li>
+<p>第 2 层：4 个节点，每个 O((n/4) log(n/4))</p>
+</li>
+<li>
+<p>...</p>
+</li>
+<li>
+<p>第 i 层：2^i 个节点，每个 O((n/2^i) log(n/2^i))</p>
+</li>
+<li>
+<p>叶节点层：共 log n 层，叶节点工作量 O(1)</p>
+</li>
+</ul><p class="problem-source">来源：<code>dis01-sol.pdf</code> · 7</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (a)，识别 \(a, b, d\) 并套用主定理；注意 \(\log_b a\) 与 \(d\) 的大小关系。对于 (b) 和 (c)，它们不是 \(aT(n/b)\) 形式，需要逐层展开寻找规律，注意等差/等比数列求和。对于 (d)，主定理不直接适用，尝试递归树方法，逐层求和。</p>
+<p>自检方法：展开后检查基本情况的系数是否正确；对 (d) 的级数求和确认是否化简为 \(\sum n(\log n - i)\) 的形式。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 可以使用主定理！注意到 \(a = 2\)，\(b = 2\)，\(d = 1\)，有 \(\log_b a = \log_2 2 = 1 = d\)。因此由主定理：
+\[
+T(n) = O(n^d \log n) = O(n \log n)
+\]</p>
+<p>(b) 由于无法使用主定理，采用「展开」策略：
+\[
+\begin{aligned}
+T(n) &amp;= T(n-1) + n \\
+&amp;= (T(n-2) + (n-1)) + n \\
+&amp;= ((T(n-3) + (n-2)) + (n-1)) + n \\
+&amp;= \cdots \text{（继续展开）} \\
+&amp;= T(1) + 2 + 3 + \cdots + (n-2) + (n-1) + n \\
+&amp;= 1 + 2 + 3 + \cdots + (n-2) + (n-1) + n \\
+&amp;= \sum_{i=1}^{n} i \\
+&amp;= \frac{n(n+1)}{2} \\
+&amp;= O(n^2)
+\end{aligned}
+\]</p>
+<p>(c) 继续展开！
+\[
+\begin{aligned}
+T(n) &amp;= 3T(n-2) + 5 \\
+&amp;= 3^2 T(n-4) + 5 \cdot 3 + 5 \\
+&amp;= 3^3 T(n-6) + 5 \cdot 3^2 + 5 \cdot 3 + 5 \\
+&amp;= 3^4 T(n-8) + 5 \cdot 3^3 + 5 \cdot 3^2 + 5 \cdot 3 + 5 \\
+&amp;= \cdots \\
+&amp;= 3^{\lfloor n/2 \rfloor} T(n \bmod 2) + 5 \cdot 3^{\lfloor n/2 \rfloor - 1} + 5 \cdot 3^{\lfloor n/2 \rfloor - 2} + \cdots + 5 \cdot 3^2 + 5 \cdot 3 + 5 \\
+&amp;= 1 \cdot 3^{\lfloor n/2 \rfloor} + 5 \cdot 3^{\lfloor n/2 \rfloor - 1} + 5 \cdot 3^{\lfloor n/2 \rfloor - 2} + \cdots + 5 \cdot 3^2 + 5 \cdot 3 + 5 \\
+&amp;= 3^{\lfloor n/2 \rfloor} + 5 \cdot \frac{3^{\lfloor n/2 \rfloor} - 1}{3 - 1} \\
+&amp;= \frac{7}{2} \cdot 3^{\lfloor n/2 \rfloor} - \frac{5}{2} \\
+&amp;= O(3^{n/2})
+\end{aligned}
+\]</p>
+<p>(d) 使用递归树方法。节点表示一次递归调用所做的工作：</p>
+<p>第 0 层：\(O(n \log n)\)
+第 1 层：\(2\) 个节点，每个 \(O\left(\frac{n}{2} \log \frac{n}{2}\right)\)，合计 \(O\left(n \log \frac{n}{2}\right)\)
+第 2 层：\(4\) 个节点，每个 \(O\left(\frac{n}{4} \log \frac{n}{4}\right)\)，合计 \(O\left(n \log \frac{n}{4}\right)\)
+\(\ldots\)</p>
+<p>将各层相加：
+\[
+\begin{aligned}
+T(n) &amp;= O(n \log n) + O\left(n \log \frac{n}{2}\right) + O\left(n \log \frac{n}{4}\right) + \cdots + O(1) \\
+&amp;= O\left(\sum_{i=0}^{\lfloor \log n \rfloor} n \log \frac{n}{2^i}\right) \\
+&amp;= O\left(\sum_{i=0}^{\lfloor \log n \rfloor} n (\log n - i)\right) \\
+&amp;= O\left(n \left(\log^2 n - \sum_{i=0}^{\lfloor \log n \rfloor} i\right)\right) \\
+&amp;= O\left(n \left(\log^2 n - \frac{1}{2} \log^2 n\right)\right) \\
+&amp;= O(n \log^2 n)
+\end{aligned}
+\]</p></div><p class="problem-source">解答来源：<code>dis01-sol.pdf</code> · 5-7 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis01.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>寻找谷底</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一个长度为 \(N\) 的整数数组 \(A\)。\(A\) 具有以下性质：它在元素 \(j\) 之前单调递减，从 \(j\) 开始单调递增。换句话说，存在某个 \(j\)，使得当 \(i &lt; j\) 时有 \(A[i] &gt; A[i+1]\)，当 \(i \ge j\) 时有 \(A[i] &lt; A[i+1]\)。在事先不知道 \(j\) 的前提下，给出一个高效算法找出 \(j\)。</p>
+<p>为简单起见，可以假设 \(N\) 是 2 的幂。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>这本质上是一个在「先减后增」单峰序列上的二分查找问题。关键观察：比较中间两个元素 \(A[N/2]\) 与 \(A[N/2 + 1]\) 的大小关系，就能判断谷底 \(j\) 落在左半还是右半。</p>
+<p>自检方法：考虑边界情况——当数组只剩一个元素时，它是否一定是谷底？验证递归后下标的偏移是否正确。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p><strong>(i) 主要思路</strong>：若 \(A\) 只有 1 个元素，直接输出 1。否则，检查 \(A[N/2] &lt; A[N/2 + 1]\) 是否成立。若成立，则递归调用算法于子数组 \(A[1 : N/2]\)。否则，递归调用算法于子数组 \(A[N/2 + 1 : N]\)（并将 \(N/2\) 加到答案上）。</p>
+<p><strong>(ii) 正确性证明</strong>：当 \(A\) 的大小为 1 时，算法正确，因为 \(j\) 唯一可能的取值就是 1。若 \(A[N/2] &lt; A[N/2 + 1]\)，则我们知道 \(j \le N/2\)，因此 \(j\) 包含在我们递归调用的子数组中，可以归纳地假设递归调用找到了正确的下标。否则，我们知道 \(j &gt; N/2\)，同样有 \(j\) 包含在递归调用的子数组中，并且可以归纳地假设递归调用找到了正确的下标（在加上 \(N/2\) 之前）。</p>
+<p><strong>(iii) 运行时间分析</strong>：算法花费 \(O(1)\) 时间比较 \(A[N/2]\) 与 \(A[N/2 + 1]\)。每次比较后我们将问题规模减半，因此从长度为 \(N\) 的数组到长度为 1 的数组需要 \(\log N\) 次递归调用。故总运行时间为 \(O(\log N)\)。</p></div><p class="problem-source">解答来源：<code>dis01-sol.pdf</code> · 8 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis01.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5</span><strong>（选做）Hadamard 矩阵</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Hadamard 矩阵（Hadamard matrices）\(H_0, H_1, H_2, \ldots\) 定义如下：</p>
+<ul>
+<li>
+<p>\(H_0\) 是 \(1 \times 1\) 矩阵 \([1]\)</p>
+</li>
+<li>
+<p>对 \(k &gt; 0\)，\(H_k\) 是 \(2^k \times 2^k\) 矩阵：
+\[
+H_k = \begin{bmatrix} H_{k-1} &amp; H_{k-1} \\ H_{k-1} &amp; -H_{k-1} \end{bmatrix}
+\]</p>
+</li>
+</ul>
+<p>(a) 写出 Hadamard 矩阵 \(H_0\)、\(H_1\) 和 \(H_2\)。</p>
+<p>(b) 计算矩阵-向量乘积 \(H_2 \cdot v\)，其中 \(H_2\) 是你在上面求得的 Hadamard 矩阵，且
+\[
+v = \begin{bmatrix} 1 \\ -1 \\ -1 \\ 1 \end{bmatrix}
+\]
+注意由于 \(H_2\) 是 \(4 \times 4\) 矩阵，向量长度为 4，结果将是一个长度为 4 的向量。</p>
+<p>(c) 现在我们计算另一个量。取 \(v_1\) 和 \(v_2\) 分别为 \(v\) 的上半部分和下半部分，即
+\[
+v_1 = \begin{bmatrix} 1 \\ -1 \end{bmatrix}, \quad v_2 = \begin{bmatrix} -1 \\ 1 \end{bmatrix}, \quad v = \begin{bmatrix} v_1 \\ v_2 \end{bmatrix}
+\]
+计算 \(u_1 = H_1(v_1 + v_2)\) 和 \(u_2 = H_1(v_1 - v_2)\)，得到两个长度为 2 的向量。将 \(u_1\) 叠在 \(u_2\) 上方得到长度为 4 的向量 \(u\)。你观察到 \(u\) 有什么特点？</p>
+<p>(d) 设
+\[
+v = \begin{bmatrix} v_1 \\ v_2 \end{bmatrix}
+\]
+是长度为 \(n = 2^k\) 的列向量。\(v_1\) 和 \(v_2\) 分别是该向量的上半部分和下半部分，因此它们各自是长度为 \(n/2 = 2^{k-1}\) 的向量。用 \(H_{k-1}\)、\(v_1\)、\(v_2\) 表示矩阵-向量乘积 \(H_k v\)（注意 \(H_{k-1}\) 是维度为 \(n/2 \times n/2\)，即 \(2^{k-1} \times 2^{k-1}\) 的矩阵）。由于 \(H_k\) 是 \(n \times n\) 矩阵，\(v\) 是长度为 \(n\) 的向量，结果将是长度为 \(n\) 的向量。</p>
+<p>(e) 利用 (c) 的结果，给出一个计算矩阵-向量乘积 \(H_k v\) 的分治算法，并证明它可以在 \(O(n \log n)\) 次操作内完成。假设涉及的数都足够小，基本的算术运算（如加法和乘法）都花费单位时间。你不需要证明正确性。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 第 5 题 (a) 的 Hadamard 矩阵 H0、H1、H2</h4><p>H0 = [1]</p>
+<p>H1 = [[1, 1], [1, -1]]</p>
+<p>H2 = [[1, 1, 1, 1], [1, -1, 1, -1], [1, 1, -1, -1], [1, -1, -1, 1]]</p><p class="problem-source">来源：<code>dis01-sol.pdf</code> · 9</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 第 5 题 (d) 的分块矩阵-向量乘积 H_k v 的表达式</h4><p>H_k v = [H_{k-1} v_1 + H_{k-1} v_2; H_{k-1} v_1 - H_{k-1} v_2] = [H_{k-1}(v_1+v_2); H_{k-1}(v_1-v_2)]</p><p class="problem-source">来源：<code>dis01-sol.pdf</code> · 10</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (a)-(c)，从定义出发逐步计算，观察分块矩阵与向量上半/下半部分的关系；对于 (d)，将 \(v\) 按上半 \(v_1\)、下半 \(v_2\) 分块，写出 \(H_k v\) 的分块形式；对于 (e)，利用 (d) 将问题归约为两个规模为 \(n/2\) 的子问题，加上 \(O(n)\) 的合并代价。</p>
+<p>自检方法：验证 (c) 得到的 \(u\) 是否等于 (b) 的 \(H_2 v\)；对 (e) 检查递推式 \(T(n) = 2T(n/2) + O(n)\) 是否符合主定理情形二。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a)
+\[
+H_0 = [1]
+\]
+\[
+H_1 = \begin{bmatrix} 1 &amp; 1 \\ 1 &amp; -1 \end{bmatrix}
+\]
+\[
+H_2 = \begin{bmatrix} 1 &amp; 1 &amp; 1 &amp; 1 \\ 1 &amp; -1 &amp; 1 &amp; -1 \\ 1 &amp; 1 &amp; -1 &amp; -1 \\ 1 &amp; -1 &amp; -1 &amp; 1 \end{bmatrix}
+\]</p>
+<p>(b)
+\[
+H_2 v = \begin{bmatrix} 1 &amp; 1 &amp; 1 &amp; 1 \\ 1 &amp; -1 &amp; 1 &amp; -1 \\ 1 &amp; 1 &amp; -1 &amp; -1 \\ 1 &amp; -1 &amp; -1 &amp; 1 \end{bmatrix} \begin{bmatrix} 1 \\ -1 \\ -1 \\ 1 \end{bmatrix} = \begin{bmatrix} 0 \\ 0 \\ 0 \\ 4 \end{bmatrix}
+\]</p>
+<p>(c)
+\[
+H_1(v_1 + v_2) = \begin{bmatrix} 1 &amp; 1 \\ 1 &amp; -1 \end{bmatrix} \begin{bmatrix} 0 \\ 0 \end{bmatrix} = \begin{bmatrix} 0 \\ 0 \end{bmatrix}
+\]
+\[
+H_1(v_1 - v_2) = \begin{bmatrix} 1 &amp; 1 \\ 1 &amp; -1 \end{bmatrix} \begin{bmatrix} 2 \\ -2 \end{bmatrix} = \begin{bmatrix} 0 \\ 4 \end{bmatrix}
+\]
+我们观察到
+\[
+u = \begin{bmatrix} 0 \\ 0 \\ 0 \\ 4 \end{bmatrix} = H_2 v
+\]</p>
+<p>(d)
+\[
+H_k v = \begin{bmatrix} H_{k-1} v_1 + H_{k-1} v_2 \\ H_{k-1} v_1 - H_{k-1} v_2 \end{bmatrix} = \begin{bmatrix} H_{k-1}(v_1 + v_2) \\ H_{k-1}(v_1 - v_2) \end{bmatrix}
+\]</p>
+<p>(e) 计算 (d) 中描述的两个子问题，并按 (c) 的方式合并。设 \(T(n)\) 表示计算 \(H_k v\) 所需的操作数。我们需要求出向量 \(v_1 + v_2\) 和 \(v_1 - v_2\)，这需要 \(O(n)\) 次操作。我们还需要计算矩阵-向量乘积 \(H_{k-1}(v_1 + v_2)\) 和 \(H_{k-1}(v_1 - v_2)\)，各需要 \(T(n/2)\) 次操作。因此运行时间的递推关系为：
+\[
+T(n) = 2T\left(\frac{n}{2}\right) + O(n)
+\]
+使用主定理，得到 \(T(n) = O(n \log n)\)。</p></div><p class="problem-source">解答来源：<code>dis01-sol.pdf</code> · 9-11 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis01.pdf</code> · 6-7 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis01.pdf</code></li>
+      <li><code>dis01-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Discussion 7 — CS170</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260808b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260808b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">CS170 · 讨论课 7</p>
+    <h1>讨论 7</h1>
+    <p class="lede">动态规划专题练习：种树问题（打家劫舍类DP）、最大子数组和（Kadane算法）、找零问题（无限/有限硬币）、铜管切割（钢条切割）。注：TA 可能不会在课堂上覆盖所有问题，讨论讲义设计得较长，旨在作为课后练习与巩固资源。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>dynamic programming</li><li>planting trees</li><li>maximum subarray sum</li><li>Kadane&#x27;s algorithm</li><li>coin change</li><li>rod cutting</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>dis07.pdf</code>、<code>dis07-sol.pdf</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 讨论课</p><h2 id="complete-problems">完整题目、提示与答案</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 4 道大题。本地官方解答已完整收录并默认折叠；建议先独立完成，再逐题核对推导。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>所有题面均已本土化，并补足网页离线作答所需的数值、代码、表格与约束。</li><li>题目与答案分层展示，展开答案前可先查看提示。</li><li>本地来源：<code>dis07.pdf</code>、<code>dis07-sol.pdf</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">1</span><strong>种树问题</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你有一个花园，想在花园里种一些苹果树，使得它们结出尽可能多的苹果。花园里有 \(n\) 个位置相邻的坑位，编号从 \(1\) 到 \(n\)，你可以在其中放置一棵树。根据每个位置的土壤质量，你知道如果在第 \(i\) 个坑位种一棵树，它会恰好结出 \(x_i\) 个苹果。然而，每棵树都需要生长空间，所以如果你在第 \(i\) 个坑位种了一棵树，就不能在第 \(i-1\) 或 \(i+1\) 个坑位种树。你的花园最多能产出多少个苹果？</p>
+<p>(a) 给出一个输入示例，使得：</p>
+<ul>
+<li>
+<p>从第一个或第二个坑位开始，然后每隔一个坑位种一棵树（即要么在坑位 \(1, 3, 5, \ldots\) 种树，要么在坑位 \(2, 4, 6, \ldots\) 种树）无法得到最优解。</p>
+</li>
+<li>
+<p>以下算法无法得到最优解：只要还能种树，就在允许种树且 \(x_i\) 值最大的坑位种一棵树。</p>
+</li>
+</ul>
+<p>(b) 为了解决这个问题，我们考虑解决如下更一般的问题："仅使用坑位 \(1\) 到 \(i\) 最多能产出多少个苹果？"。设 \(f(i)\) 表示任意 \(i\) 对应此问题的答案。定义 \(f(0) = 0\)，因为当没有坑位时，我们无法种任何树。\(f(1)\) 是多少？\(f(2)\) 是多少？</p>
+<p>(c) 假设你知道仅使用坑位 \(1\) 到 \(i\) 种树的最优方式不在坑位 \(i\) 种树。在这种情况下，用 \(x_i\) 和某个 \(j &lt; i\) 对应的 \(f(j)\) 来表示 \(f(i)\)。（提示：剩下哪些坑位？在这些坑位中种树的最优方式是什么？）</p>
+<p>(d) 假设你知道仅使用坑位 \(1\) 到 \(i\) 种树的最优方式在坑位 \(i\) 种树。在这种情况下，用 \(x_i\) 和某个 \(j &lt; i\) 对应的 \(f(j)\) 来表示 \(f(i)\)。</p>
+<p>(e) 描述一个线性时间算法来计算你的花园最多能产出多少个苹果。（提示：对每个 \(i\) 计算 \(f(i)\)。你应该能结合前两部分的结果，在 \(O(1)\) 时间内完成每次计算。）</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (a)，尝试构造小的反例，使得「隔位种树」或「每次选最大的 \(x_i\)」的贪心策略导致全局次优——注意两端都被浪费的情况。对于 (b)-(d)，关注最优子结构：第 \(i\) 个坑位的最优解只依赖于更小规模子问题的最优解；分别考虑「种 \(i\)」与「不种 \(i\)」会把问题归约到哪些前缀。对于 (e)，把 (c)(d) 的递推式合并，按递增顺序填表即可。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 对于「隔位种树」算法，一个简单的反例输入是 \([2, 1, 1, 2]\)。此时最优解是在坑位 \(1\) 和 \(4\) 种树。对于贪心算法（每次选最大的 \(x_i\)），一个简单的反例输入是 \([2, 3, 2]\)。此时贪心算法会在坑位 \(2\) 种树，但最优解是在坑位 \(1\) 和 \(3\) 种树。</p>
+<p>(b) \(f(1) = x_1\)，\(f(2) = \max\{x_1, x_2\}\)。</p>
+<p>(c) 如果不在坑位 \(i\) 种树，那么在坑位 \(1\) 到 \(i\) 种树的最优方式，等同于在坑位 \(1\) 到 \(i-1\) 种树的最优方式。因此，\(f(i) = f(i-1)\)。</p>
+<p>(d) 如果在坑位 \(i\) 种树，那么我们会从该树获得 \(x_i\) 个苹果。然而，我们无法在坑位 \(i-1\) 种树，因此只允许在坑位 \(1\) 到 \(i-2\) 种树。于是，我们可以选取在坑位 \(1\) 到 \(i-2\) 种树的最优方式，再在该方案基础上加上坑位 \(i\) 的一棵树，从而得到在坑位 \(1\) 到 \(i\) 种树的最优方式。因此 \(f(i) = f(i-2) + x_i\)。</p>
+<p>(e) 初始化一个长度为 \(n\) 的数组，其中第 \(i\) 个元素将存储 \(f(i)\)。先填入 \(f(1)\)，然后按顺序使用公式 \(f(i) = \max\{f(i-1), x_i + f(i-2)\}\) 填满表格的其余部分。最后返回表格中的 \(f(n)\)。</p></div><p class="problem-source">解答来源：<code>dis07-sol.pdf</code> · 1-2 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis07.pdf</code> · 1-2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">2</span><strong>最大子数组和（再次讨论）</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>给定一个包含 \(n\) 个整数的数组 \(A\)，最大子数组和（maximum subarray sum）是 \(A\) 的任意连续子数组的最大和（包括空子数组）。换句话说，最大子数组和为：</p>
+<p>\[
+\max_{i \le j} \sum_{k=i}^{j} A[k]
+\]</p>
+<p>例如，\([-2, 1, -3, 4, -1, 2, 1, -5, 4]\) 的最大子数组和为 \(6\)，即连续子数组 \([4, -1, 2, 1]\) 的和。</p>
+<p>在讨论 2 中，我们看到了如何使用分治法在 \(O(n \log n)\) 时间内找到最大子数组和。这个问题实际上可以在线性时间内解决。描述一个 \(O(n)\) 时间的算法，并证明其正确性。</p>
+<p>提示：使用动态规划。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>考虑定义子问题 \(dp[i]\) 为以位置 \(i\) 结尾（非空）的最大子数组和。思考它与 \(dp[i-1]\) 的关系：要么延续前面的子数组，要么从 \(i\) 重新开始一个新的子数组。用归纳法证明时，关键不变量是 \(dp[i]\) 始终保存以 \(i\) 结尾的最优解；自检时可验证当 \(dp[i-1] &lt; 0\) 时，加上它反而会使和变小，因此应当舍弃。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>算法描述：</p>
+<ul>
+<li>
+<p>子问题定义：\(dp[i]\) 表示以索引 \(i\) 结尾（非空）的最大和子数组。</p>
+</li>
+<li>
+<p>基本情况：\(dp[0] = A[0]\)</p>
+</li>
+<li>
+<p>递推关系：我们按 \(i\) 递增的顺序计算 \(dp\) 值（\(i = 1, \ldots, n-1\)），递推式为 \(dp[i] = \max(0, dp[i-1]) + A[i]\)。</p>
+</li>
+<li>
+<p>最终答案：输出最大的 \(dp[i]\)，若为负数则输出 \(0\)。</p>
+</li>
+</ul>
+<p>以下是说明该算法的伪代码：</p>
+<p>def max_subarray_sum(A):
+    n = len(A)
+    dp = [0 for i in range(n)]
+    # 基本情况
+    dp[0] = A[0]
+    # 使用动态规划计算 dp 数组的其余部分
+    for i in range(1, n):
+        dp[i] = max(0, dp[i-1]) + A[i]
+    return max(max(dp), 0)</p>
+<p>注意，此解法使用 \(O(n)\) 空间，因为需要存储整个 \(dp\) 数组。然而，计算某个 \(dp[i]\) 时只用到前一项 \(dp[i-1]\)，因此可以通过仅维护一个「滚动和」来优化空间复杂度：</p>
+<p>def max_subarray_sum(A):
+    n = len(A)
+    # 基本情况
+    max_sub_sum = running_sum = A[0]
+    # 使用动态规划计算 dp 数组的其余部分
+    for i in range(1, n):
+        running_sum = max(0, running_sum) + A[i]
+        max_sub_sum = max(max_sub_sum, running_sum)
+    return max(max_sub_sum, 0)</p>
+<p>此解法使用 \(O(1)\) 空间，因为只需维护三个整数 \(n\)、\(max\_sub\_sum\) 和 \(running\_sum\)！（注意：在确定空间复杂度时不计入输入 \(A\) 的空间。）</p>
+<p>另外，如果你做过很多 LeetCode 题目，可能会认出这就是 Kadane 算法。</p>
+<p>正确性证明：使用归纳法证明对所有 \(i \ge 0\)，\(dp[i]\) 都是正确的。</p>
+<ul>
+<li>
+<p>基本情况（\(i = 0\)）：只有一个元素时，唯一的子数组选项是 \(A[0]\)。</p>
+</li>
+<li>
+<p>归纳假设（\(i = k\)）：假设 \(dp[k]\) 是以索引 \(k\) 结尾的最大和子数组的正确值。</p>
+</li>
+<li>
+<p>归纳步骤（\(i = k \Rightarrow i = k+1\)）：计算 \(dp[k+1]\) 时，我们要么使用 \(dp[k]\)，要么忽略它（重新开始一个子数组和）。分两种情况：</p>
+</li>
+<li>
+<p>当 \(dp[k] \ge 0\) 时，最优策略是使用它并加上 \(A[k+1]\)，以期最大化 \(dp[k+1]\)。</p>
+</li>
+<li>
+<p>当 \(dp[k] &lt; 0\) 时，最优策略是丢弃它，直接从 \(k+1\) 开始一个新的子数组和。因为若 \(dp[k] &lt; 0\)，则 \(dp[k] + A[k+1] &lt; 0 + A[k+1] = A[k+1]\)。</p>
+</li>
+</ul>
+<p>两种情况总结如下：</p>
+<p>\[
+dp[k+1] = \begin{cases} dp[k] + A[k+1] &amp; dp[k] \ge 0 \\ A[k+1] &amp; dp[k] &lt; 0 \end{cases} = \max(dp[k], 0) + A[k+1]
+\]</p>
+<p>这正是我们的递推关系。</p>
+<p>运行时间分析：由于我们执行 \(O(n)\) 次常数时间操作，总体运行时间为 \(O(n)\)。</p></div><p class="problem-source">解答来源：<code>dis07-sol.pdf</code> · 2-4 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis07.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3</span><strong>找零问题</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>你有无限供应的面额为 \(v_1, \ldots, v_n \in \mathbb{N}\) 的硬币，以及一个价值 \(W \in \mathbb{N}\)。你的目标是使用最少数量的硬币凑出 \(W\)，即找出一组总价值为 \(W\) 的最小硬币集合。</p>
+<p>(a) 设计一个动态规划算法来解决找零问题。它的运行时间是多少？</p>
+<p>(b) 现在你有一个额外的约束：每种面额的硬币只有一枚。你之前的算法还能用吗？如果不能，设计一个新算法。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>对于 (a)，定义 \(f(w)\) 为凑出金额 \(w\) 的最少硬币数；考虑最后一枚硬币的面额即可得到递推式，注意处理无法凑出（\(\infty\)）的情况。对于 (b)，当每种面额只有一枚时，需要多一个维度记录已考虑的硬币前缀。状态转移时要区分「选第 \(i\) 枚硬币」与「不选第 \(i\) 枚硬币」两种决策。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>(a) 对 \(0 \le w \le W\)，定义</p>
+<p>\[
+f(w) = \text{凑出金额 } w \text{ 所需的最少硬币数量。}
+\]</p>
+<p>它满足</p>
+<p>\[
+f(w) = \begin{cases} 0 &amp; \text{若 } w = 0, \\ 1 + \min_{j: v_j \le w} f(w - v_j) &amp; \text{若 } w &gt; 0, \\ \infty &amp; \text{若无法凑出} \end{cases}
+\]</p>
+<p>答案是 \(f(W)\)，其中 \(\infty\) 表示不可能。时间复杂度为 \(O(nW)\)。</p>
+<p>(b) 对 \(0 \le i \le n\) 和 \(0 \le w \le W\)，定义</p>
+<p>\[
+f(i, w) = \text{使用前 } i \text{ 枚硬币凑出金额 } w \text{ 所需的最少硬币数量（每种面额仅一枚）。}
+\]</p>
+<p>它满足</p>
+<p>\[
+f(i, w) = \begin{cases} 0 &amp; \text{若 } i = 0 \text{ 且 } w = 0, \\ f(i-1, w) &amp; \text{若 } i &gt; 0, \\ 1 + f(i-1, w - v_i) &amp; \text{若 } i &gt; 0 \text{ 且 } v_i \le w, \\ \infty &amp; \text{否则} \end{cases}
+\]</p>
+<p>问题的答案是 \(f(n, W)\)。时间复杂度为 \(O(nW)\)。</p></div><p class="problem-source">解答来源：<code>dis07-sol.pdf</code> · 4-5 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis07.pdf</code> · 3 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4</span><strong>铜管切割</strong><span class="problem-topics">题目 · 提示 · 答案</span></summary><div class="problem-body"><div class="problem-badges"><span>官方题面翻译</span><span class="offline-ready">可离线作答</span><span>官方解答已收录</span></div><section class="problem-subsection"><h4>完整题面</h4><p>Bubbles 有一根长度为 \(n\) 英寸的铜管和一个非负整数数组，包含所有长度不超过 \(n\) 的管件的价格。他希望通过切割铜管并出售管件来获得最大价值。例如，如果铜管长度为 \(8\)，不同管件的价格如下所示，那么可获得的最大价值为 \(22\)（通过切割成两根长度分别为 \(2\) 和 \(6\) 的管件）。</p>
+<table>
+<thead>
+<tr>
+<th>length</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+<th>8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>price</td>
+<td>1</td>
+<td>5</td>
+<td>8</td>
+<td>9</td>
+<td>10</td>
+<td>17</td>
+<td>17</td>
+<td>20</td>
+</tr>
+</tbody>
+</table>
+<p>给出一个动态规划算法，使 Bubbles 能够在给定任意管件长度和价格集合的情况下，找到可获得的最大价值。清晰描述你的算法并分析其运行时间（不需要证明正确性）。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · 铜管长度与价格对应表（length vs price）</h4><table>
+<thead>
+<tr>
+<th>length</th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+<th>6</th>
+<th>7</th>
+<th>8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>price</td>
+<td>1</td>
+<td>5</td>
+<td>8</td>
+<td>9</td>
+<td>10</td>
+<td>17</td>
+<td>17</td>
+<td>20</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>dis07.pdf</code> · 3</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>定义子问题为长度为 \(k\) 的管件的最优价值 \(val[k]\)。枚举第一段的切割长度 \(i\)（\(1 \le i \le k\)），则剩余部分为长度为 \(k-i\) 的子问题。由于子问题的解已计算过，只需取所有可能切割中的最大值。自检时可用题目给出的 \(n=8\) 样例验证：\(val[8]\) 应等于 \(22\)。</p></div></details><details class="problem-disclosure solution-disclosure"><summary>展开官方参考解答</summary><div class="problem-disclosure-body"><p>核心思路：我们创建一个递归公式，其中对每个长度为 \(k\) 的子问题，选择切割长度 \(i\)，使得 \(Price(i) + Value(k-i)\) 最大化。这里 \(Price(i)\) 是出售长度为 \(i\) 的整根管件的价格，\(Value(k-i)\) 是长度为 \(k-i\) 的管件经过最优切割后获得的价值。</p>
+<p>def cutPipe(price, n):
+    val = [0 for x in range(n+1)]
+    val[0] = 0
+    # 自底向上构建 val[] 表格并返回表中最后一项
+    for i from 1 to n:
+        max_val = 0
+        for j from 0 to i-1:
+            max_val = max(max_val, price[j] + val[i-j-1])
+        val[i] = max_val
+    return val[n]</p>
+<p>证明：对铜管长度进行归纳，可证明解的正确性。设 \(cutPipe(n)\) 为长度为 \(n\) 的管件的最优解。基本情况：若管件长度为 \(1\)，则 \(cutPipe(1) = Price(1) = Val(1)\)。归纳：假设对所有长度小于等于 \(k\) 的管件都已找到最优价格。若算法第一次切割 \(x_1\) 不是最优的，则存在 \(x'_1\) 使得 \(Val((k+1) - x_1) + Price(x_1) &lt; Val((k+1) - x'_1) + Price(x'_1)\)。由归纳假设，这意味着 \(cutPipe((k+1) - x_1) + Price(x_1) &lt; cutPipe((k+1) - x'_1) + Price(x'_1)\)。因此算法必然选择了 \(x'_1\) 而非 \(x_1\)（矛盾）。因此，由归纳法可知，对所有 \(n &gt; 0\)，\(cutPipe(n) = Val(n)\)。</p>
+<p>运行时间：算法包含两层嵌套 for 循环，运行时间为 \(O(n^2)\)。</p></div><p class="problem-source">解答来源：<code>dis07-sol.pdf</code> · 5-6 · confidence: high</p></details><p class="problem-source-note">题面来源：<code>dis07.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>dis07.pdf</code></li>
+      <li><code>dis07-sol.pdf</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>

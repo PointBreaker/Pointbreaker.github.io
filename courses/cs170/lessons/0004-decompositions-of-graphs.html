@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>图的分解与遍历 — CS170</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260808b" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260808b" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">CS170 · 第 4 讲</p><h1>图的分解与遍历</h1><p class="lede">用 DFS/BFS、连通分量、DAG 与强连通分量把全局图结构拆成可分析的局部结构。</p><div class="meta"><span>预计用时：144 分钟</span><span>难度：进阶</span><span>Algorithms · Graph Algorithms · Dynamic Programming · Linear Programming</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>掌握邻接矩阵与邻接表的空间与时间权衡，能根据 |E| 与 |V| 的关系选择合适的表示</li><li>理解深度优先搜索的不变量与正确性论证，能在无向图上运行 DFS 并识别树边与回边</li><li>利用 pre/post 序对有向图的边分类，并据此判断环的存在性</li><li>掌握 DAG 的拓扑排序原理及强连通分量的定义，理解有向图连通性的二层结构</li><li>理解后序编号如何刻画 SCC 之间的偏序关系（性质 1–3）</li><li>掌握利用反向图定位汇点 SCC 的转换技巧</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>基本集合论与渐近记号（大 O 表示法）</li><li>递归与调用栈的基本工作原理</li><li>链表与数组的基本操作</li><li>深度优先搜索（DFS）与 pre/post 编号</li><li>强连通分量与 meta-图的基本概念</li><li>有向无环图的拓扑排序</li></ul><h2 id="p1-1-sec3-1-representation">图的表示：邻接矩阵与邻接表</h2><p>一个图由顶点集 V 与边集 E 共同确定。在计算机中存储图有两种基本方式，它们对后续算法的选择有决定性影响。</p>
+<p>邻接矩阵是一个 n × n 数组（其中 n = |V|），其元素定义为：a_ij = 1 若存在从 v_i 到 v_j 的边，否则为 0。对于无向图，矩阵是对称的。它的最大优势是边的存在性查询可在 O(1) 时间内完成——只需一次内存访问。然而，矩阵本身占据 Θ(n²) 空间，当边数远小于 n² 时会造成巨大浪费。</p>
+<p>邻接表则为每个顶点维护一条链表，存放从该顶点出发的边所指向的邻居。整个结构的空间开销为 Θ(|E|)（有向图每条边出现一次，无向图出现两次）。代价是检查某条特定边 (u,v) 是否存在需要遍历 u 的邻接表，不再是常数时间；但遍历某个顶点的所有邻居却异常高效——而这恰恰是图算法中最频繁的操作。</p>
+<p>稠密与稀疏的关键判据是 |E| 在范围 [|, |V|²] 中的位置：靠近上界为稠密图，靠近下界为稀疏图。以万维网为例，已知顶点数达数十亿，但每个页面平均仅有约六个超链接，|E| 仅比 |V| 略大，属于极度稀疏。此时邻接矩阵需要数千万太比特的内存，远超全球存储总量；而邻接表仅需数 TB，完全可以随身携带。表示方法的选择本质上由图的稀疏程度决定。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>假设一个无向图有 |V| = 1000 个顶点、|E| = 3000 条边。邻接矩阵需要 1000² = 10⁶ 个条目；邻接表每条边存储两次，共约 2|E| = 6000 个条目。后者空间仅为前者的 0.6%，且遍历邻居的操作在邻接表上远快于在矩阵的整行扫描。因此对于这种稀疏图，邻接表是更优选择。</p></div></div><h2 id="p1-2-sec3-2-dfs-undirected">无向图的深度优先搜索与连通分量</h2><p>深度优先搜索（Depth-First Search, DFS）是一种线性时间算法，能揭示图的大量结构信息。其核心子程序 explore(G,v) 从顶点 v 出发，借助粉笔（visited 数组，标记已访问顶点以防绕圈）与绳子（栈，用于回到之前发现但未及探索的岔路）两种原语遍历所有从 v 可达的顶点。算法首次发现顶点时调用 previsit，最终离开时调用 postvisit。</p>
+<p>伪代码：
+procedure explore(G, v)
+  visited(v) = true
+  previsit(v)
+  for each edge (v,u) in E:
+    if not visited(u): explore(u)
+  postvisit(v)</p>
+<p>正确性：explore 不会越界（只沿边移动），也不会遗漏——若存在从 v 到某顶点 u 的路径，取路径上最后一个被访问的顶点 z 及其后继 w，当 explore 处理 z 时必然会发现并递归访问 w，矛盾。这本质上是一种归纳论证。</p>
+<p>实际遍历中经过的边构成树边（tree edges），形成搜索树；被忽略的边则指向已访问顶点，称为回边（back edges）。</p>
+<p>完整的 DFS 在外层循环中反复调用 explore，确保每个顶点恰好被探索一次：
+procedure dfs(G)
+  for all v in V: visited(v) = false
+  for all v in V:
+    if not visited(v): explore(v)</p>
+<p>时间复杂度：步骤 1（标记与 pre/postvisit）总计 O(|V|)；步骤 2 中每条边 {x,y} 在 explore(x) 与 explore(y) 中各被检查一次，总计 O(|E|)。整体为 O(|V|+|E|)，与输入规模成线性关系，已是最优。</p>
+<p>连通分量：无向图的一个连通分量是极大连通子图。explore 恰好能识别出起点所在的连通分量。在 previsit 中设置 ccnum[v] = cc，并在每次外层循环调用 explore 前递增 cc，即可为所有顶点标记连通分量编号，从而在线性时间内完成连通性判定与分量分解。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>在图 3.6(a) 的 12 顶点图上从 A 开始 DFS（按字母顺序打破平局）。explore(A) 遍历 A→B→E→I→J 等，形成第一棵搜索树；外层循环随后从未访问的 C 重启，得到第二棵树 C→D→H→L→K→G；最后从 F 重启得到第三棵树。三棵树构成一片森林，对应三个连通分量：{A,B,E,I,J}、{C,D,G,H,K,L}、{F}。</p></div></div><h2 id="p1-3-sec3-3-dfs-directed">有向图的边分类、环检测与拓扑排序</h2><p>DFS 可直接用于有向图，但需严格沿边的方向遍历。此时边的分类更为精细：树边（tree edges）属于 DFS 森林；前向边（forward edges）指向非子节点的后代；后向边（back edges）指向祖先；交叉边（cross edges）则指向既非后代也非祖先、且已完成探索的顶点。</p>
+<p>借助 pre 与 post 时间戳（由全局计数器 clock 在 previsit/postvisit 时递增），可以精确判定边 (u,v) 的类型：若 pre(u) &lt; pre(v) &lt; post(v) &lt; post(u)，则 u 是 v 的祖先，边为树边或前向边；若 pre(v) &lt; pre(u) &lt; post(u) &lt; post(v)，则 v 是 u 的祖先，边为后向边；若两个区间不相交（如 pre(u) &lt; post(u) &lt; pre(v) &lt; post(v)），则边为交叉边。</p>
+<p>环检测：有向图存在环当且仅当 DFS 中发现后向边。一方面，后向边 (u,v) 加上搜索树中从 v 到 u 的路径即构成环；另一方面，取环上最先被发现的顶点 v_i，其前驱在搜索树中必为它的后代，因此该入边是后向边。</p>
+<p>DAG 的拓扑排序：有向无环图（DAG）没有后向边，因此每条边 (u,v) 都满足 post(u) &gt; post(v)。将顶点按 post 值递减排序，即可得到一个线性序，使得所有边都从早指向晚——这正是拓扑排序。该性质同时表明：无环性、可线性化、DFS 中无后向边三者是等价的。此外，DAG 中 post 最小的顶点必为汇点（无出边），post 最大的顶点必为源点（无入边），因此每个 DAG 至少有一个源点和一个汇点。</p><h2 id="p1-4-sec3-4-scc">强连通分量与有向图的二层连通结构</h2><p>无向图的连通性很直接，但有向图的连通性更为微妙。仅凭底层图"连在一起"并不提供有用信息（例如图 3.9(a) 中 G 无法到达 B）。正确的定义是：顶点 u 与 v 强连通，当且仅当存在从 u 到 v 的路径且存在从 v 到 u 的路径。</p>
+<p>这一关系是等价关系，将 V 划分为若干个强连通分量（Strongly Connected Components, SCCs）。每个 SCC 是极大的双向连通子图。</p>
+<p>将每个 SCC 收缩为一个超节点（meta-node），并在超节点之间按原图方向连边，得到收缩图（meta-graph）。收缩图必定是一个 DAG——因为若收缩图中存在环，则环上所有 SCC 会因彼此双向可达而合并为一个更大的 SCC，矛盾。</p>
+<p>这一结论揭示了有向图连通性的二层结构：顶层是一个简单的 DAG（可拓扑排序、结构清晰）；若需更精细的信息，则可深入某个超节点内部，查看完整的强连通分量。这种分层视角是后续算法（如 2-SAT、蕴含图）的重要基础。</p><h2 id="p2-1-scc-postorder-properties">后序编号与 SCC 的偏序关系</h2><p>在讨论如何高效找出所有强连通分量之前，我们需要更精确地理解深度优先搜索（DFS）的后序编号（post number）与 SCC 结构之间的关系。这些性质是整个算法的理论基础。</p>
+<p><strong>性质 1（可达性封闭）</strong>。若从节点 \(u\) 启动 <code>explore</code>，则当且仅当所有从 \(u\) 可达的节点都被访问过后，该调用才会终止。这意味着：如果我们恰好在某个汇点 SCC（sink SCC，即在 meta-图中没有出边的 SCC）内部启动 <code>explore</code>，那么此次调用将恰好遍历该 SCC 的全部节点后停止。图 3.9 中有两个汇点 SCC，例如从节点 K 启动 <code>explore</code>，会完整遍历较大的那个 SCC 后停下。</p>
+<p>这给出了一种找出一个 SCC 的思路，但留下两个关键问题：(A) 如何确定一个节点必定落在某个汇点 SCC 中？(B) 找到第一个 SCC 之后如何继续？</p>
+<p><strong>性质 2（源点 SCC 中的最大后序编号）</strong>。在 DFS 中后序编号最大的节点必定位于某个源点 SCC（source SCC）中。</p>
+<p><strong>性质 3（SCC 之间的后序编号偏序）</strong>。设 \(C\) 与 \(C'\) 是两个不同的强连通分量，若存在从 \(C\) 中某节点到 \(C'\) 中某节点的边，则 \(C\) 中的最大后序编号大于 \(C'\) 中的最大后序编号。</p>
+<p><em>证明</em>。分两种情况。若 DFS 先访问 \(C\)，则由性质 1，\(C\) 与 \(C'\) 都将在搜索「卡住」前被完全遍历，因此 \(C\) 中第一个被访问的节点的后序编号高于 \(C'\) 中所有节点。若 DFS 先访问 \(C'\)，则搜索会在遍历完 \(C'\) 后就卡住，根本不会访问 \(C\)，此时结论直接成立。</p>
+<p>性质 3 表明：将 SCC 按其最大后序编号降序排列，即可对 SCC 进行线性化。这推广了 DAG 上的拓扑排序算法——在 DAG 中，每个节点自身就是一个 SCC。</p><h2 id="p2-2-scc-reverse-graph">反向图：从源点 SCC 到汇点 SCC</h2><p>性质 2 能帮我们在原图 \(G\) 中找到一个源点 SCC 中的节点，但我们真正需要的是汇点 SCC 中的节点。看似手头的工具与需求恰好相反，而反向图（reverse graph）的概念恰好弥合了这一落差。</p>
+<p><strong>反向图 \(G^R\)</strong>。\(G^R\) 与 \(G\) 拥有相同的节点集，但所有边的方向反转，即 \(E^R = \{(v, u) : (u, v) \in E\}\)。关键观察是：\(G^R\) 与 \(G\) 具有完全相同的强连通分量（因为强连通性只关心双向可达，反转所有边不改变任意两节点间的双向可达关系）。</p>
+<p>因此，对 \(G^R\) 运行 DFS，后序编号最大的节点会落在 \(G^R\) 的某个源点 SCC 中——而这恰好对应于原图 \(G\) 的一个汇点 SCC。<strong>问题 (A) 由此得解</strong>。</p>
+<p><strong>问题 (B) 的解决</strong>。找到第一个汇点 SCC 之后如何继续？性质 3 再次给出答案：当我们找出第一个 SCC 并将其从图中删除后，剩余节点中后序编号最大的那个必定属于剩余图中的一个汇点 SCC。因此，我们只需沿用第一步在 \(G^R\) 上得到的后序编号，依次输出第二个、第三个 SCC，直到全部输出完毕。</p><h2 id="p2-3-scc-kosaraju-algorithm">Kosaraju 算法与执行示例</h2><p>综合以上分析，我们得到 Kosaraju 算法（Kosaraju's algorithm），它通过两次 DFS 在线性时间内找出有向图的所有强连通分量。</p>
+<p><strong>算法步骤</strong></p>
+<ol>
+<li>对反向图 \(G^R\) 运行 DFS，记录每个节点的后序编号。</li>
+<li>在原图 \(G\) 上运行 DFS，但在选择下一个待探索节点时，严格按照第一步得到的后序编号<strong>降序</strong>进行。每次从一个未访问节点启动的 <code>explore</code> 恰好遍历一个 SCC。</li>
+</ol>
+<p><strong>伪代码</strong></p>
+<pre><code>Kosaraju(G):
+    G_rev = reverse(G)            // 构造反向图
+    post = DFS(G_rev)             // 第一次 DFS，得到后序编号
+    order = vertices sorted by decreasing post
+    visited = set()
+    SCCs = []
+    for u in order:
+        if u not in visited:
+            component = explore(G, u, visited)
+            SCCs.append(component)
+    return SCCs
+</code></pre>
+<p>该算法的时间复杂度为 \(O(V + E)\)，常数因子约为普通 DFS 的两倍。</p>
+<p><strong>实现细节</strong>：构造 \(G^R\) 的邻接表只需遍历原图每条边一次，耗时 \(O(V + E)\)；而后序编号的范围是 \(1\) 到 \(n\)，可用计数排序在 \(O(n)\) 内完成排序。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p>以图 3.9 的有向图为例，演示 Kosaraju 算法的完整执行过程。</p>
+<p><strong>第一步：在 \(G^R\) 上运行 DFS</strong></p>
+<p>假设按字典序（A, B, C, ...）作为节点选择的优先级，对反向图 \(G^R\)（如图 3.10 所示）运行 DFS，得到后序编号。按后序编号降序排列的节点序列为：</p>
+<p>\[G,\ I,\ J,\ L,\ K,\ H,\ D,\ C,\ F,\ B,\ E,\ A\]</p>
+<p><strong>第二步：在 \(G\) 上按降序剥离 SCC</strong></p>
+<p>按照上述顺序依次在原图 \(G\) 上对未访问节点启动 <code>explore</code>：</p>
+<ol>
+<li><strong>从 G 启动</strong>：可到达 H, I, J, K, L，得到 SCC \(\{G, H, I, J, K, L\}\)。</li>
+<li><strong>从 D 启动</strong>：D 无法到达其他未访问节点，得到 SCC \(\{D\}\)。</li>
+<li><strong>从 C 启动</strong>：C 可到达 F，得到 SCC \(\{C, F\}\)。</li>
+<li><strong>从 B 启动</strong>：B 可到达 E，得到 SCC \(\{B, E\}\)。</li>
+<li><strong>从 A 启动</strong>：A 无未访问的可达节点，得到 SCC \(\{A\}\)。</li>
+</ol>
+<p>最终，算法按以下顺序输出强连通分量：</p>
+<p>\[\{G,H,I,J,K,L\},\ \{D\},\ \{C,F\},\ \{B,E\},\ \{A\}\]</p>
+<p>注意第一个 SCC \(\{G,H,I,J,K,L\}\) 正是图 3.9 中较大的那个汇点 SCC。</p></div></div><h2 id="p2-4-scc-linear-time-and-crawling">线性时间复杂度与网页抓取启示</h2><p>Kosaraju 算法由两次 DFS 构成，每次耗时 \(O(V + E)\)。加上构造反向图的 \(O(V + E)\) 和计数排序的 \(O(n)\)，整体时间复杂度为 \(O(V + E)\)，是线性时间算法。</p>
+<p><strong>与网页抓取的联系</strong></p>
+<p>实际中的万维网图并非预先给定，节点需要在搜索过程中逐个发现，且递归不可行。网页抓取（crawling）使用的算法与 DFS 非常相似：维护一个显式栈，存放已发现但未探索的节点。这个「栈」并非严格的 LIFO——它优先处理看起来「最有趣」的节点（启发式准则），目的是防止栈溢出，并确保未探索的节点极不可能通向大片新区域。</p>
+<p>抓取通常由多台计算机并行执行：每台计算机从栈顶取下一个待探索节点，下载对应的网页文件，扫描其中的超链接。发现新文档时不做递归调用，而是将其压入中央栈。判断一个文档是否「新」以及为其命名的方式是通过哈希（hashing）。研究者曾在 Web 图上运行 SCC 算法，发现了非常有趣的结构。</p><section aria-labelledby="interactive-graph-traversal-stepper" class="lesson-interactives"><h2 id="interactive-graph-traversal-stepper">交互推演</h2><article class="interactive-study"><h3>在同一张图上切换 BFS 与 DFS 的状态，观察队列分层和递归回退的差异。</h3><p>依据本地课程资料 <code>lectures/chap3.pdf、dis04.pdf</code> 重绘；交互用于解释算法状态与证明不变量，不替代正文中的完整论证。</p><figure aria-busy="true" class="course-interactive" data-interactive-src="../interactives/graph-traversal-stepper.json"><img alt="同一张图上的 BFS 分层与 DFS 深入顺序" class="course-interactive-fallback" src="../figures/graph-traversal-stepper-fallback.svg"/></figure></article></section><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>邻接矩阵因为查询快，所以总是比邻接表更好。</h3><p>邻接矩阵的 O(1) 边查询优势被其 Θ(|V|²) 的空间开销所抵消。对于稀疏图（如万维网），邻接表的空间 Θ(|E|) 远小于矩阵，且遍历邻居的操作更高效。表示方法的选择取决于 |E| 相对于 |V|² 的大小。</p></article><article class="summary-card"><h3>有向图的连通分量与无向图一样，只需底层连通即可。</h3><p>有向图的正确连通概念是强连通：必须双向都有路径。仅底层无向图连通并不能保证顶点互相可达，因此需要强连通分量这一更精细的划分。</p></article><article class="summary-card"><h3>只要图是连通的，就一定可以拓扑排序。</h3><p>拓扑排序仅适用于有向无环图（DAG）。即使底层无向图连通，只要存在有向环，拓扑排序就不可能。无环性、可线性化、DFS 中无后向边三者等价，与单纯的连通性无关。</p></article><article class="summary-card"><h3>在原图 G 上运行 DFS，后序编号最大的节点会落在汇点 SCC 中。</h3><p>根据性质 2，后序编号最大的节点落在源点 SCC 中，而非汇点 SCC。为了定位汇点 SCC，必须先在反向图 G^R 上运行 DFS。</p></article><article class="summary-card"><h3>Kosaraju 算法需要分别对 G 和 G^R 各运行一次完整的 SCC 提取过程。</h3><p>算法只在 G^R 上运行一次 DFS 来获取后序编号，第二次遍历是在原图 G 上按后序编号降序逐个剥离 SCC，并非在 G^R 上再次提取 SCC。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="c" data-correct="正确。邻接矩阵的空间为 Θ(|V|²)，与边数无关；邻接表的空间为 Θ(|E|)。当 |E| 远小于 |V|²（稀疏图）时，邻接表显著节省空间。这也是万维网等超大规模稀疏图必须使用邻接表的根本原因。" data-incorrect="错误。选项 A 描述的是邻接表的特性；选项 B 错误，邻接表查边需要遍历链表；选项 D 错误，邻接矩阵空间是 Θ(|V|²)。正确答案是 C：稀疏图中邻接表更省空间。" data-quiz="m4-m4-p1-q1"><p><strong>问题：</strong>关于图的邻接矩阵与邻接表表示，以下哪项说法正确？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">邻接矩阵在稀疏图上更省空间，因为只存储存在的边</button><button aria-pressed="false" data-choice="b">邻接表检查某条特定边是否存在总是需要 O(1) 时间</button><button aria-pressed="false" data-choice="c">对于边数远小于 |V|² 的图，邻接表通常比邻接矩阵更省空间</button><button aria-pressed="false" data-choice="d">邻接矩阵的空间复杂度是 O(|E|)</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="d" data-correct="正确。两个区间 [pre(u), post(u)] 与 [pre(v), post(v)] 完全不相交，说明 v 在 u 被完全探索之后才被发现，二者没有祖先—后代关系，因此是交叉边（cross edge）。" data-incorrect="错误。树边和前向边要求 u 是 v 的祖先（区间嵌套且 pre(u) &lt; pre(v)）；后向边要求 v 是 u 的祖先（区间嵌套且 pre(v) &lt; pre(u)）。本题区间不相交，只能是交叉边。" data-quiz="m4-m4-p1-q2"><p><strong>问题：</strong>在有向图的 DFS 中，设边 (u,v) 的两个端点满足 pre(u) &lt; post(u) &lt; pre(v) &lt; post(v)，则该边属于哪种类型？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">树边</button><button aria-pressed="false" data-choice="b">前向边</button><button aria-pressed="false" data-choice="c">后向边</button><button aria-pressed="false" data-choice="d">交叉边</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。G^R 与 G 具有相同的强连通分量，但源点与汇点互换。性质 2 指出后序编号最大的节点在源点 SCC 中，因此在 G^R 上取最大后序编号的节点，就对应于 G 中的一个汇点 SCC。" data-incorrect="不正确。G^R 与 G 的 SCC 完全相同（排除 a）；G^R 不一定无环（排除 c）；构造邻接表并非主要动机（排除 d）。关键是源点与汇点的对偶关系。" data-quiz="m4-m4-p2-q1"><p><strong>问题：</strong>在 Kosaraju 算法中，为什么需要在反向图 G^R 上运行第一次 DFS？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">因为 G^R 的 SCC 与 G 不同，可以得到简化</button><button aria-pressed="false" data-choice="b">因为 G^R 上后序编号最大的节点落在 G^R 的源点 SCC 中，而这对应 G 的汇点 SCC</button><button aria-pressed="false" data-choice="c">因为 G^R 一定是无环图</button><button aria-pressed="false" data-choice="d">因为 G^R 的邻接表更容易构造</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="b" data-correct="正确。两次 DFS 各耗时 O(V+E)，而按后序编号排序可用计数排序在 O(n) 完成，整体为线性时间 O(V+E)。" data-incorrect="不正确。算法的核心优势正是线性时间：两次 DFS 各 O(V+E)，排序用计数排序 O(n)，总复杂度为 O(V+E)，而非更高的复杂度。" data-quiz="m4-m4-p2-q2"><p><strong>问题：</strong>关于 Kosaraju 算法的时间复杂度，下列哪项正确？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">时间复杂度为 O(V^2)，因为要处理所有节点对</button><button aria-pressed="false" data-choice="b">时间复杂度为 O(V + E)，由两次 DFS 和线性时间的排序构成</button><button aria-pressed="false" data-choice="c">时间复杂度为 O(V log V)，因为需要对后序编号排序</button><button aria-pressed="false" data-choice="d">时间复杂度为 O(V·E)，因为要反复遍历边</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>图的表示由稀疏程度决定：稠密图用邻接矩阵，稀疏图用邻接表</li><li>DFS 通过 visited 数组与递归栈实现线性时间遍历，树边构成搜索森林，pre/post 序的嵌套区间刻画祖先关系</li><li>有向图有环当且仅当 DFS 出现后向边；DAG 按 post 递减排序即得拓扑序，三者等价</li><li>强连通分量将图划分为双向连通区域，收缩图必为 DAG，形成顶层 DAG、底层 SCC 的二层结构</li><li>后序编号最大的节点位于源点 SCC 中；SCC 可按最大后序编号降序线性化。</li><li>反向图 G^R 的源点 SCC 对应原图 G 的汇点 SCC，由此可定位汇点 SCC。</li><li>Kosaraju 算法通过两次 DFS 在线性时间内找出所有 SCC。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>lectures/chap3.pdf</code> · 本段对应小节 · confidence: high · 3.1.1 邻接矩阵与邻接表的空间/时间权衡；3.2 无向图 DFS 的 explore 过程、正确性论证与 O(|V|+|E|) 复杂度；3.2.3 连通分量标记；3.2.4 pre/post 序与嵌套区间性质；3.3.1 有向图边分类与 pre/post 序判定；3.3.2 DAG 的环检测与拓扑排序；3.4 强连通分量定义与收缩图的 DAG 性质</li><li><code>lectures/chap3.pdf</code> · 本段对应小节 · confidence: high · 本段详细阐述了性质 1–3、反向图 G^R 的构造动机，以及两步算法的具体描述与图 3.9 的执行示例。</li></ul><footer id="pb-page-end"><p>CS170: Efficient Algorithms and Intractable Problems · Fall 2023</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260808b"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260808b"></script>
+</body>
+</html>
