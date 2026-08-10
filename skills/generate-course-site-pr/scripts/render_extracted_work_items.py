@@ -302,7 +302,7 @@ def hydrate_stub_guide(page: str, document: dict, item: dict | None = None) -> s
     return hydrated
 
 
-def generated_page(course: dict, document: dict, relative_assets: str) -> str:
+def generated_page(course: dict, document: dict, relative_assets: str, shared_asset_version: str) -> str:
     code = html.escape(str(course.get("code") or course.get("courseCode") or course.get("id", "")))
     number = html.escape(str(document["number"]))
     title = html.escape(normalize_math_delimiters(str(document.get("titleZh") or document.get("titleEn") or f"Discussion {number}")))
@@ -321,8 +321,8 @@ def generated_page(course: dict, document: dict, relative_assets: str) -> str:
   <script defer src="{relative_assets}assets/vendor/katex.min.js"></script>
   <script defer src="{relative_assets}assets/vendor/katex-auto-render.min.js"></script>
   <script defer src="{relative_assets}assets/course/math-render.js"></script>
-  <link rel="stylesheet" href="{relative_assets}assets/course/lesson.css?v=20260808b">
-  <link rel="stylesheet" href="{relative_assets}assets/course/interactive.css?v=20260808b">
+  <link rel="stylesheet" href="{relative_assets}assets/course/lesson.css?v={shared_asset_version}">
+  <link rel="stylesheet" href="{relative_assets}assets/course/interactive.css?v={shared_asset_version}">
 </head>
 <body>
   <div class="page">
@@ -339,8 +339,8 @@ def generated_page(course: dict, document: dict, relative_assets: str) -> str:
   <script src="{relative_assets}assets/vendor/prism-python.js"></script>
   <script src="{relative_assets}assets/vendor/prism-bash.js"></script>
   <script src="{relative_assets}assets/course/quiz.js"></script>
-  <script defer src="{relative_assets}assets/course/lesson-ui.js?v=20260808b"></script>
-  <script defer src="{relative_assets}assets/course/interactive.js?v=20260808b"></script>
+  <script defer src="{relative_assets}assets/course/lesson-ui.js?v={shared_asset_version}"></script>
+  <script defer src="{relative_assets}assets/course/interactive.js?v={shared_asset_version}"></script>
 </body>
 </html>
 '''
@@ -370,6 +370,8 @@ def main() -> int:
     args = parser.parse_args()
 
     repo = Path(args.repo).expanduser().resolve()
+    platform = json.loads((repo / "site-platform.json").read_text(encoding="utf-8"))
+    shared_asset_version = str(platform["sharedAssetVersion"])
     course_dir = repo / "courses" / args.slug
     info_path = course_dir / "course-info.json"
     info = json.loads(info_path.read_text(encoding="utf-8"))
@@ -453,7 +455,7 @@ def main() -> int:
             item["assGuideFile"] = relative
             page_path = course_dir / relative
             page_path.parent.mkdir(parents=True, exist_ok=True)
-            page_path.write_text(generated_page(info, document, "../../../../"), encoding="utf-8")
+            page_path.write_text(generated_page(info, document, "../../../../", shared_asset_version), encoding="utf-8")
         rendered.append(str(page_path))
 
     info["assignments"] = assignments

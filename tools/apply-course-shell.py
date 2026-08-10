@@ -8,7 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STYLE_PATH = "assets/course/lesson.css"
-STYLE_VERSION = "20260806e"
+PLATFORM = json.loads((ROOT / "site-platform.json").read_text(encoding="utf-8"))
+STYLE_VERSION = str(PLATFORM["sharedAssetVersion"])
 STYLE_MARKER = f"{STYLE_PATH}?v={STYLE_VERSION}"
 INTERACTIVE_STYLE_PATH = "assets/course/interactive.css"
 INTERACTIVE_STYLE_MARKER = f"{INTERACTIVE_STYLE_PATH}?v={STYLE_VERSION}"
@@ -24,7 +25,8 @@ def relative_asset_prefix(path: Path) -> str:
 
 
 def update_page(path: Path) -> bool:
-    original = path.read_text(encoding="utf-8")
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        original = handle.read()
     text = original
     prefix = relative_asset_prefix(path)
     stylesheet = f'  <link rel="stylesheet" href="{prefix}{STYLE_MARKER}">\n'
@@ -65,7 +67,8 @@ def update_page(path: Path) -> bool:
         text = text.replace("</body>", f"{script}</body>", 1)
     if text == original:
         return False
-    path.write_text(text, encoding="utf-8")
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(text)
     return True
 
 

@@ -106,10 +106,11 @@ python <skill-root>/scripts/validate_course.py \
 python <skill-root>/scripts/validate_interactive.py --repo /path/to/repo --slug <slug>
 python <skill-root>/scripts/validate_assignment_localization.py --repo /path/to/repo --slug <slug>
 python /path/to/repo/tools/check-course-layout.py
+python /path/to/repo/tools/check-table-columns.py
 git diff --check
 ```
 
-Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at least two lectures, every page type, representative math and code, quiz feedback, the GitHub Discussion drawer, mobile width, links, and browser console. On courses with exams, verify stage boundaries, `Lecture → HW → Exam` order, non-repeated lectures, separate HW/Exam counts and filters, and every work-item link. On desktop, verify that opening Discussion reserves space instead of covering the lesson. Treat placeholders, math errors, clipped layouts, missing shared assets, broken navigation, invalid dependency stages, and overlapping discussion UI as blockers.
+Serve the repository locally. Inspect the homepage catalog entry, Dashboard, at least two lectures, every page type, representative math and code, quiz feedback, the GitHub Discussion drawer, mobile width, links, and browser console. On courses with exams, verify stage boundaries, `Lecture → HW → Exam` order, non-repeated lectures, separate HW/Exam counts and filters, and every work-item link. On desktop, verify that opening Discussion reserves space instead of covering the lesson. For every table-bearing page type, verify that `.pb-table-scroll` has non-zero intrinsic width on desktop, stays within its parent, and becomes a full-width horizontal scroller on mobile; never combine `width: fit-content` with inline-size or size containment. Treat placeholders, math errors, clipped layouts, collapsed or trailing-blank tables, missing shared assets, broken navigation, invalid dependency stages, and overlapping discussion UI as blockers.
 
 ### 8. Open the PR
 

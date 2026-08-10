@@ -4,7 +4,7 @@
 
 - Repository: `PointBreaker/Pointbreaker.github.io`
 - Base branch: `main`
-- Required platform file: `site-platform.json`, version 3 or newer
+- Required platform file: `site-platform.json`, version 3 or newer, with `sharedAssetVersion` as the single cache-busting version for shared lesson and interactive assets
 - Course catalog: `courses.json`
 - Course root: `courses/`
 - Shared design assets: `assets/course/`

@@ -15,7 +15,6 @@ SLUG_RE = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
 TODO_MARKER = "COURSE_CONTENT_TODO"
-SHARED_ASSET_VERSION = "20260808b"
 DASHBOARD_ASSET_VERSION = "20260808a"
 EXAM_RE = re.compile(r"\b(exam|quiz|midterm|final)\b|考试|测验|期中|期末", re.IGNORECASE)
 FINAL_RE = re.compile(r"\bfinal\b|期末", re.IGNORECASE)
@@ -103,6 +102,8 @@ def check_platform(repo: Path) -> dict:
         raise RuntimeError(f"CourseStack platform v{PLATFORM_VERSION}+ is required")
     if platform.get("coursesRoot") != COURSES_ROOT:
         raise RuntimeError(f"CourseStack platform must use coursesRoot={COURSES_ROOT!r}")
+    if not platform.get("sharedAssetVersion"):
+        raise RuntimeError("CourseStack platform must declare sharedAssetVersion")
     if not (repo / COURSES_ROOT).is_dir():
         raise RuntimeError(f"target repository is missing the shared {COURSES_ROOT}/ directory")
     for relative in platform.get("sharedAssets", {}).values():
@@ -149,7 +150,7 @@ def dashboard_page(plan: dict, root_prefix: str) -> str:
 '''
 
 
-def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix: str, sources: list[str], guide: bool) -> str:
+def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix: str, sources: list[str], guide: bool, shared_asset_version: str) -> str:
     safe_title = html.escape(title)
     safe_course = html.escape(course_code)
     source_items = "\n".join(f"      <li><code>{html.escape(item)}</code></li>" for item in sources)
@@ -163,8 +164,8 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
   <link rel="stylesheet" href="{root_prefix}assets/course/base.css">
 {guide_css}  <link rel="stylesheet" href="{root_prefix}assets/vendor/prism.css">
   <link rel="stylesheet" href="{root_prefix}assets/vendor/katex.min.css">
-  <link rel="stylesheet" href="{root_prefix}assets/course/lesson.css?v={SHARED_ASSET_VERSION}">
-  <link rel="stylesheet" href="{root_prefix}assets/course/interactive.css?v={SHARED_ASSET_VERSION}">
+  <link rel="stylesheet" href="{root_prefix}assets/course/lesson.css?v={shared_asset_version}">
+  <link rel="stylesheet" href="{root_prefix}assets/course/interactive.css?v={shared_asset_version}">
   <script defer src="{root_prefix}assets/vendor/katex.min.js"></script>
   <script defer src="{root_prefix}assets/vendor/katex-auto-render.min.js"></script>
   <script defer src="{root_prefix}assets/course/math-render.js"></script>
@@ -184,8 +185,8 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
   <script src="{root_prefix}assets/vendor/prism-python.js"></script>
   <script src="{root_prefix}assets/vendor/prism-bash.js"></script>
   <script src="{root_prefix}assets/course/quiz.js"></script>
-  <script defer src="{root_prefix}assets/course/interactive.js?v={SHARED_ASSET_VERSION}"></script>
-  <script defer src="{root_prefix}assets/course/lesson-ui.js?v={SHARED_ASSET_VERSION}"></script>
+  <script defer src="{root_prefix}assets/course/interactive.js?v={shared_asset_version}"></script>
+  <script defer src="{root_prefix}assets/course/lesson-ui.js?v={shared_asset_version}"></script>
 </body>
 </html>
 '''
@@ -229,7 +230,8 @@ def main() -> int:
     plan_path = Path(args.plan).expanduser().resolve()
     if not (repo / ".git").exists() or not (repo / "index.html").is_file():
         parser.error(f"not a CourseStack site clone: {repo}")
-    check_platform(repo)
+    platform = check_platform(repo)
+    shared_asset_version = str(platform["sharedAssetVersion"])
     plan = load_json(plan_path)
     validate_plan(plan)
 
@@ -245,7 +247,7 @@ def main() -> int:
         record["lessonFile"] = f"lessons/{filename}"
         lecture_records.append(record)
         page_path = course_dir / "lessons" / filename
-        page = stub_page(plan["courseCode"], lecture["number"], lecture["title"], "第", relative_asset_prefix(page_path, repo), lecture.get("sourceFiles", []), False)
+        page = stub_page(plan["courseCode"], lecture["number"], lecture["title"], "第", relative_asset_prefix(page_path, repo), lecture.get("sourceFiles", []), False, shared_asset_version)
         page_path.write_text(page, encoding="utf-8")
 
     assignment_records = []
@@ -255,7 +257,7 @@ def main() -> int:
         record["assGuideFile"] = f"lessons/assignments/{filename}"
         assignment_records.append(record)
         page_path = course_dir / "lessons" / "assignments" / filename
-        page = stub_page(plan["courseCode"], item["number"], item["title"], item.get("kind", "Assignment"), relative_asset_prefix(page_path, repo), item.get("sourceFiles", []), True)
+        page = stub_page(plan["courseCode"], item["number"], item["title"], item.get("kind", "Assignment"), relative_asset_prefix(page_path, repo), item.get("sourceFiles", []), True, shared_asset_version)
         page_path.write_text(page, encoding="utf-8")
 
     course_info = {

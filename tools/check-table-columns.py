@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import json
 from pathlib import Path
 
 from bs4 import BeautifulSoup, Tag
@@ -89,10 +90,38 @@ def check_shared_table_shell(root: Path) -> list[str]:
     compact_css = "".join(css.split())
     if ".pb-table-scroll{box-sizing:border-box;width:fit-content;max-width:100%" not in compact_css:
         findings.append("table scroll container must shrink to its table instead of leaving a trailing blank area")
+    wrapper_rule = compact_css.partition(".pb-table-scroll{")[2].partition("}")[0]
+    if "contain:paint" not in wrapper_rule:
+        findings.append("table scroll container must use paint-only containment")
+    if "contain:inline-size" in compact_css or "contain:size" in compact_css or "contain:strict" in compact_css:
+        findings.append("table scroll container must not use size containment because fit-content can collapse")
     if "min-width:100%" in compact_css.partition(".pb-table-scrolltable{")[2].partition("}")[0]:
         findings.append("shared table styles must not stretch narrow tables to the full lesson width")
+    if ".pb-table-scrolltable{display:table;width:max-content!important" not in compact_css:
+        findings.append("wrapped tables must preserve table layout and intrinsic content width")
+    if ".component-table{display:table;}" not in compact_css:
+        findings.append("component tables must remain table layout on desktop")
     if "pb-table-scroll" not in javascript or "appendChild(table)" not in javascript:
         findings.append("lesson-ui.js does not wrap tables in the shared scroll container")
+    return findings
+
+
+def check_table_page_shell(path: Path, root: Path) -> list[str]:
+    source = path.read_text(encoding="utf-8", errors="replace")
+    if "<table" not in source.lower():
+        return []
+    findings: list[str] = []
+    platform_path = root / "site-platform.json"
+    if not platform_path.is_file():
+        return ["site-platform.json is missing"]
+    version = str(json.loads(platform_path.read_text(encoding="utf-8")).get("sharedAssetVersion", ""))
+    label = path.relative_to(root) if path.is_relative_to(root) else path
+    if not version:
+        findings.append("site-platform.json is missing sharedAssetVersion")
+    elif f"assets/course/lesson.css?v={version}" not in source:
+        findings.append(f"{label}: table page does not use current lesson.css cache version {version}")
+    if "assets/course/lesson-ui.js" not in source:
+        findings.append(f"{label}: table page is missing lesson-ui.js table wrapping")
     return findings
 
 
@@ -104,6 +133,7 @@ def main() -> int:
     findings = check_shared_table_shell(root)
     for path in sorted(root.rglob("*.html")):
         if ".git" not in path.parts:
+            findings.extend(check_table_page_shell(path, root))
             findings.extend(find_empty_columns(path))
     if findings:
         print("\n".join(findings))

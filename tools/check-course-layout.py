@@ -7,6 +7,7 @@ import argparse
 from html.parser import HTMLParser
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Optional
 from urllib.parse import unquote, urlsplit
@@ -15,6 +16,13 @@ from urllib.parse import unquote, urlsplit
 DEFAULT_ROOT = Path(__file__).resolve().parents[1]
 COURSES_ROOT = "courses"
 PLATFORM_VERSION = 3
+ASSET_VERSION_RE = re.compile(r"^\d{8}[a-z0-9]+$")
+VERSIONED_READING_ASSETS = (
+    "assets/course/lesson.css",
+    "assets/course/interactive.css",
+    "assets/course/lesson-ui.js",
+    "assets/course/interactive.js",
+)
 
 
 class ReferenceParser(HTMLParser):
@@ -63,6 +71,9 @@ def main() -> int:
         findings.append(f"site platform must be v{PLATFORM_VERSION}+")
     if platform.get("coursesRoot") != COURSES_ROOT:
         findings.append(f"site platform must declare coursesRoot={COURSES_ROOT!r}")
+    shared_asset_version = str(platform.get("sharedAssetVersion", ""))
+    if not ASSET_VERSION_RE.fullmatch(shared_asset_version):
+        findings.append("site platform must declare a date-based sharedAssetVersion")
 
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     seen_ids: set[str] = set()
@@ -122,8 +133,26 @@ def main() -> int:
             pages.extend(item.rglob("*.html"))
 
     for page in sorted(set(pages)):
+        source = page.read_text(encoding="utf-8", errors="replace")
         parser = ReferenceParser()
-        parser.feed(page.read_text(encoding="utf-8", errors="replace"))
+        parser.feed(source)
+        relative = page.relative_to(root)
+        is_course_content = (
+            len(relative.parts) >= 3
+            and relative.parts[0] == COURSES_ROOT
+            and relative.parts[2:] != ("index.html",)
+        )
+        if is_course_content and shared_asset_version:
+            for asset in VERSIONED_READING_ASSETS:
+                reference_count = source.count(asset)
+                if reference_count != 1:
+                    findings.append(
+                        f"{relative}: expected one shared reading asset reference, found {reference_count}: {asset}"
+                    )
+                if f"{asset}?v={shared_asset_version}" not in source:
+                    findings.append(
+                        f"{relative}: shared reading asset is not pinned to {shared_asset_version}: {asset}"
+                    )
         for reference in parser.references:
             target = local_target(page, reference, root)
             if target is None:

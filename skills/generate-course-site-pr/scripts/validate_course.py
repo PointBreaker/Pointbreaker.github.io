@@ -19,7 +19,6 @@ DOLLAR_MATH_RE = re.compile(r"(?<!\\)\$[^$\n]{1,300}(?<!\\)\$")
 PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
-SHARED_ASSET_VERSION = "20260808b"
 EXAM_RE = re.compile(r"\b(exam|quiz|midterm|final)\b|考试|测验|期中|期末", re.IGNORECASE)
 FINAL_RE = re.compile(r"\bfinal\b|期末", re.IGNORECASE)
 
@@ -96,7 +95,7 @@ def validate_local_ref(page: Path, repo: Path, value: str) -> str | None:
     return None
 
 
-def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
+def page_errors(page: Path, repo: Path, course: Path, shared_asset_version: str) -> list[str]:
     source = page.read_text(encoding="utf-8", errors="replace")
     errors: list[str] = []
     label = page.relative_to(course).as_posix()
@@ -118,14 +117,14 @@ def page_errors(page: Path, repo: Path, course: Path) -> list[str]:
             errors.append(f"{label}: missing shared CourseStack reading shell")
         if "assets/course/interactive.css" not in source or "assets/course/interactive.js" not in source:
             errors.append(f"{label}: missing shared CourseStack interactive runtime")
-        if f"assets/course/lesson.css?v={SHARED_ASSET_VERSION}" not in source:
-            errors.append(f"{label}: shared lesson stylesheet is missing cache version {SHARED_ASSET_VERSION}")
-        if f"assets/course/lesson-ui.js?v={SHARED_ASSET_VERSION}" not in source:
-            errors.append(f"{label}: shared lesson UI is missing cache version {SHARED_ASSET_VERSION}")
-        if f"assets/course/interactive.css?v={SHARED_ASSET_VERSION}" not in source:
-            errors.append(f"{label}: shared interactive stylesheet is missing cache version {SHARED_ASSET_VERSION}")
-        if f"assets/course/interactive.js?v={SHARED_ASSET_VERSION}" not in source:
-            errors.append(f"{label}: shared interactive runtime is missing cache version {SHARED_ASSET_VERSION}")
+        if f"assets/course/lesson.css?v={shared_asset_version}" not in source:
+            errors.append(f"{label}: shared lesson stylesheet is missing cache version {shared_asset_version}")
+        if f"assets/course/lesson-ui.js?v={shared_asset_version}" not in source:
+            errors.append(f"{label}: shared lesson UI is missing cache version {shared_asset_version}")
+        if f"assets/course/interactive.css?v={shared_asset_version}" not in source:
+            errors.append(f"{label}: shared interactive stylesheet is missing cache version {shared_asset_version}")
+        if f"assets/course/interactive.js?v={shared_asset_version}" not in source:
+            errors.append(f"{label}: shared interactive runtime is missing cache version {shared_asset_version}")
         for quiz in parser.quizzes:
             if not quiz["answer"]:
                 errors.append(f"{label}: quiz {quiz['id']} missing data-answer")
@@ -251,6 +250,7 @@ def main() -> int:
     catalog_path = repo / "courses.json"
     platform = load_json(platform_path) if platform_path.is_file() else {}
     courses_root = platform.get("coursesRoot", COURSES_ROOT)
+    shared_asset_version = str(platform.get("sharedAssetVersion", ""))
     course = repo / courses_root / args.slug
     interactive_stats = {"interactiveEmbeds": 0, "interactiveSpecs": 0}
     required = [course / "index.html", course / "course-info.json", course / "api/status.json", platform_path, catalog_path]
@@ -261,13 +261,15 @@ def main() -> int:
         errors.append(f"CourseStack platform v{PLATFORM_VERSION}+ is required")
     if platform_path.is_file() and courses_root != COURSES_ROOT:
         errors.append(f"CourseStack platform must use coursesRoot={COURSES_ROOT!r}")
+    if platform_path.is_file() and not shared_asset_version:
+        errors.append("CourseStack platform must declare sharedAssetVersion")
     if (repo / args.slug).exists():
         errors.append(f"legacy root-level course directory must not exist: {args.slug}")
     if not course.is_dir():
         errors.append(f"missing course directory: {course}")
     else:
         for page in sorted(course.rglob("*.html")):
-            errors.extend(page_errors(page, repo, course))
+            errors.extend(page_errors(page, repo, course, shared_asset_version))
         interactive_errors, interactive_stats = validate_interactives(repo, course)
         errors.extend(interactive_errors)
 
