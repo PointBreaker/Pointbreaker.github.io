@@ -137,6 +137,15 @@ def page_errors(page: Path, repo: Path, course: Path, shared_asset_version: str)
         if not parser.quizzes and not is_work_item:
             errors.append(f"{label}: contains no quizzes")
     visible = strip_protected_blocks(source)
+    if page.name != "index.html":
+        for index, match in enumerate(re.finditer(r"<pre\b[^>]*>(.*?)</pre>", source, re.IGNORECASE | re.DOTALL), 1):
+            body = match.group(1)
+            code_match = re.search(r"<code\b([^>]*)>", body, re.IGNORECASE)
+            if not code_match:
+                errors.append(f"{label}: code block {index} must contain a code element")
+                continue
+            if not re.search(r"\bclass\s*=\s*([\"'])[^\"']*\blanguage-[\w-]+", code_match.group(1), re.IGNORECASE):
+                errors.append(f"{label}: code block {index} must declare a language-* class")
     if DOLLAR_MATH_RE.search(visible):
         errors.append(f"{label}: contains unsupported $...$ math delimiters")
     for left, right in ((r"\(", r"\)"), (r"\[", r"\]")):

@@ -84,6 +84,54 @@
     scrollContainer.appendChild(table);
   });
 
+  const grammarAliases = {
+    c: 'clike',
+    cpp: 'clike',
+    matlab: 'clike',
+    pseudocode: 'clike',
+    json: 'javascript',
+    shell: 'bash',
+    sh: 'bash'
+  };
+  const inferCodeLanguage = (source) => {
+    const text = source.trim();
+    if (!text) return 'plaintext';
+    if (/^\s*[\[{][\s\S]*[\]}]\s*$/.test(text)) {
+      try { JSON.parse(text); return 'json'; } catch (_) { /* keep looking */ }
+    }
+    if (/^#!.*\b(?:bash|sh|zsh)\b/m.test(text) || /(?:^|\n)\s*(?:sudo\s+)?(?:apt|brew|cargo|cd|chmod|curl|docker|git|make|mkdir|npm|pip|python\d*|rm|ssh)\b/m.test(text)) return 'bash';
+    if (/\b(?:def|elif|import|from|lambda|print|yield)\b/.test(text) || /(?:^|\n)\s*@\w+(?:\.\w+)*(?:\([^\n]*\))?\s*\n\s*(?:class|def)\b/m.test(text)) return 'python';
+    if (/^\s*#include\s*[<"]/m.test(text) || /\b(?:int|void|char|double|float|size_t)\s+\w+\s*\([^;]*\)\s*\{/.test(text) || /\b(?:std::|printf\s*\(|malloc\s*\()/m.test(text)) return /\b(?:std::|namespace\b|template\s*<)/.test(text) ? 'cpp' : 'c';
+    if (/\b(?:function|procedure|algorithm)\s+\w+|(?:^|\n)\s*(?:for|while)\b.*(?:do|:)|(?:^|\n)\s*(?:return|if)\b.*(?:then|:)/im.test(text)) return 'pseudocode';
+    if (/^\s*function\b[^\n=]*=/m.test(text) || /(?:^|\n)\s*(?:end|elseif)\s*$/m.test(text) || /\b(?:zeros|ones|linspace|subplot)\s*\(/.test(text)) return 'matlab';
+    return 'plaintext';
+  };
+  const normalizeCodeBlocks = () => {
+    page.querySelectorAll('pre').forEach((pre) => {
+      let code = pre.querySelector(':scope > code');
+      if (!code) {
+        code = document.createElement('code');
+        code.textContent = pre.textContent;
+        pre.replaceChildren(code);
+      }
+      const currentLanguage = [...code.classList].find((name) => name.startsWith('language-'))?.slice(9)
+        || [...pre.classList].find((name) => name.startsWith('language-'))?.slice(9);
+      const language = currentLanguage || inferCodeLanguage(code.textContent);
+      pre.classList.add(`language-${language}`);
+      code.classList.add(`language-${language}`);
+      pre.dataset.language = language === 'plaintext' || language === 'text' ? 'text' : language;
+
+      if (window.Prism) {
+        const grammarName = grammarAliases[language] || language;
+        if (!window.Prism.languages[language] && window.Prism.languages[grammarName]) {
+          window.Prism.languages[language] = window.Prism.languages[grammarName];
+        }
+        window.Prism.highlightElement(code);
+      }
+    });
+  };
+  normalizeCodeBlocks();
+
   page.querySelectorAll('pre').forEach((pre) => {
     if (pre.querySelector('.pb-copy-code')) return;
     const button = document.createElement('button');

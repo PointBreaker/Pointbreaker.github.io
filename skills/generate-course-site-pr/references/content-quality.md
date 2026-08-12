@@ -52,8 +52,10 @@ Use concise Chinese explanations while retaining important English terms in pare
 - Use `\(...\)` inline and `\[...\]` for display math.
 - Never split identifiers with math delimiters. For example, write `<code>optimizer.zero_grad(set_to_none=True)</code>` as a single code node.
 - Never use `$...$`, `$$...$$`, or LaTeX inside `<code>`/`<pre>`.
+- Prefer built-in KaTeX commands. If official material relies on custom macros, define them once in the shared math runtime and include the macro in browser QA; never ship KaTeX's red unknown-command fallback.
 - Check every symbol definition, tensor shape, unit, asymptotic condition, and numerical substitution.
 - Keep code executable in spirit: use real APIs, specify version-sensitive behavior, and separate pseudocode from runnable examples.
+- Wrap every code sample in `<pre><code class="language-...">`. Choose a precise Prism language; use `pseudocode` for structured algorithm notation and `plaintext` only for diagrams, transcripts, or intentionally unhighlighted text.
 
 ## Assignment localization and offline completeness
 

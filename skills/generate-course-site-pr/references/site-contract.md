@@ -117,7 +117,7 @@ Each lecture and work-item page must:
 - Load shared base, lesson, interactive, KaTeX, Prism, math-render, quiz, and lesson-UI assets using correct relative paths.
 - Use semantic headings with stable IDs.
 - Use only `\(...\)` and `\[...\]` for math.
-- Put code inside escaped `<pre><code class="language-...">` blocks.
+- Put code inside escaped `<pre><code class="language-...">` blocks. Bare `pre` elements and missing language classes fail validation.
 - Give each quiz a unique `data-quiz` and a valid container `data-answer`.
 - Give every interactive a course-local JSON spec and exactly one static fallback image with meaningful alt text. Use only Interactive v1 kinds documented in `references/interactive-content.md`.
 - Include a primary-source reference section.

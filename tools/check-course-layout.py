@@ -22,6 +22,7 @@ VERSIONED_READING_ASSETS = (
     "assets/course/interactive.css",
     "assets/course/lesson-ui.js",
     "assets/course/interactive.js",
+    "assets/course/math-render.js",
 )
 
 

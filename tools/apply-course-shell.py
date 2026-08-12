@@ -17,6 +17,8 @@ SCRIPT_PATH = "assets/course/lesson-ui.js"
 SCRIPT_MARKER = f"{SCRIPT_PATH}?v={STYLE_VERSION}"
 INTERACTIVE_SCRIPT_PATH = "assets/course/interactive.js"
 INTERACTIVE_SCRIPT_MARKER = f"{INTERACTIVE_SCRIPT_PATH}?v={STYLE_VERSION}"
+MATH_SCRIPT_PATH = "assets/course/math-render.js"
+MATH_SCRIPT_MARKER = f"{MATH_SCRIPT_PATH}?v={STYLE_VERSION}"
 
 
 def relative_asset_prefix(path: Path) -> str:
@@ -33,6 +35,7 @@ def update_page(path: Path) -> bool:
     interactive_stylesheet = f'  <link rel="stylesheet" href="{prefix}{INTERACTIVE_STYLE_MARKER}">\n'
     script = f'  <script defer src="{prefix}{SCRIPT_MARKER}"></script>\n'
     interactive_script = f'  <script defer src="{prefix}{INTERACTIVE_SCRIPT_MARKER}"></script>\n'
+    math_script = f'  <script defer src="{prefix}{MATH_SCRIPT_MARKER}"></script>\n'
     if STYLE_PATH in text:
         text = re.sub(
             rf"(?P<lead>href=[\"'])(?:\.\./)*{re.escape(STYLE_PATH)}(?:\?v=[^\"']*)?",
@@ -57,6 +60,14 @@ def update_page(path: Path) -> bool:
         )
     else:
         text = text.replace("</body>", f"{interactive_script}</body>", 1)
+    if MATH_SCRIPT_PATH in text:
+        text = re.sub(
+            rf"(?P<lead>src=[\"'])(?:\.\./)*{re.escape(MATH_SCRIPT_PATH)}(?:\?v=[^\"']*)?",
+            rf"\g<lead>{prefix}{MATH_SCRIPT_MARKER}",
+            text,
+        )
+    else:
+        text = text.replace("</head>", f"{math_script}</head>", 1)
     if SCRIPT_PATH in text:
         text = re.sub(
             rf"(?P<lead>src=[\"'])(?:\.\./)*{re.escape(SCRIPT_PATH)}(?:\?v=[^\"']*)?",
