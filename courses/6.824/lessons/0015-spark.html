@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="从 lineage 理解内存计算的容错">
+  <title>Spark：弹性分布式数据集 — MIT 6.824</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260812b">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260812b">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js?v=20260812b"></script>
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">MIT 6.824 · Lecture 15</p>
+    <h1>Spark：弹性分布式数据集</h1>
+    <p class="lede">从 lineage 理解内存计算的容错</p>
+    <section aria-labelledby="objectives">
+      <h2 id="objectives">学习目标</h2>
+      <ul><li>复述本讲系统模型、接口与故障假设。</li><li>从消息与状态转换推导核心不变量。</li><li>能设计一个故障注入实验验证关键语义。</li></ul>
+    </section>
+    <section>
+      <h2 id="concept-map">概念路线</h2>
+      <p>阅读时依次回答：谁保存权威状态？操作何时算成功？消息重复或节点重启时，哪个不变量阻止错误结果？</p>
+    </section>
+    <section>
+      <h2 id="topic-1">RDD 抽象</h2>
+      <p>RDD 是不可变分区集合；转换惰性构建 lineage，action 触发 job。不可变性使重算与并行推理更简单。</p>
+    </section>
+    <section>
+      <h2 id="topic-2">窄与宽依赖</h2>
+      <p>窄依赖允许父分区独立流水执行；宽依赖需要 shuffle，是 stage 边界并带来网络、磁盘与 straggler 成本。</p>
+    </section>
+    <section>
+      <h2 id="topic-3">故障恢复</h2>
+      <p>丢失分区可沿 lineage 重算；长 lineage 或昂贵输入适合 checkpoint。缓存是性能选择，不是唯一正确副本。</p>
+    </section>
+    <section>
+      <h2 id="topic-4">调度实践</h2>
+      <p>数据本地性、推测执行和分区器影响性能。闭包捕获、数据倾斜和小文件会造成意外放大。</p>
+    </section>
+    <section>
+      <h2 id="worked-check">动手推演</h2>
+      <ol><li>画出客户端、协调/领导节点和两个副本，标注所有持久状态。</li><li>任选一条回复，在回复发送前让节点崩溃；判断客户端可安全重试的条件。</li><li>把同一请求复制、延迟并乱序投递，检查状态是否仍满足不变量。</li></ol>
+      <pre><code class="language-pseudocode">for event in randomized(network, crash, restart):
+    system.step(event)
+    assert safety_invariant(system.history)</code></pre>
+    </section>
+    <section>
+      <h2 id="quiz">理解检查</h2>
+      <div class="quiz" data-quiz="15-invariant" data-answer="b" data-correct="正确：超时只描述观察结果，不能证明远端没有执行。" data-incorrect="重新区分请求丢失、响应丢失和服务器仍在执行三种情况。"><p><strong>问题：</strong>客户端 RPC 超时后，哪项结论始终成立？</p><div class="quiz-options"><button data-choice="a" aria-pressed="false">服务器一定没有执行</button><button data-choice="b" aria-pressed="false">客户端无法仅凭超时判断服务器是否执行</button><button data-choice="c" aria-pressed="false">服务器一定已经执行两次</button></div></div>
+      <div class="quiz" data-quiz="15-design" data-answer="a" data-correct="正确：不变量是选择机制和测试策略的依据。" data-incorrect="先优化性能会掩盖语义缺口。"><p><strong>问题：</strong>设计容错协议的第一步应是什么？</p><div class="quiz-options"><button data-choice="a" aria-pressed="false">明确 API 语义、故障模型和必须保持的不变量</button><button data-choice="b" aria-pressed="false">先增加重试次数</button><button data-choice="c" aria-pressed="false">先缩短所有超时</button></div></div>
+    </section>
+    <section><h2 id="recap">复习清单</h2><ul><li>能解释正常路径，也能解释每个持久化点之前和之后的崩溃。</li><li>能区分 safety、liveness、availability 与 performance。</li><li>能指出论文假设在真实部署中可能失效的地方。</li></ul></section>
+    <h2 id="sources">一手资料与继续学习</h2>
+    <ul>
+      <li><a href="https://pdos.csail.mit.edu/6.824/schedule.html">MIT 6.824 官方课程表、Lecture notes、论文与 Labs 入口</a></li>
+      <li>本页是面向自学的中文重组讲义；论文结论、实验 API 与测试要求应以官方当期资料为准。</li>
+    </ul>
+  </main>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260812b"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260812b"></script>
+</body>
+</html>
