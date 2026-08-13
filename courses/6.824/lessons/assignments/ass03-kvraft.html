@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="从状态设计、实现步骤到故障注入的完整动手路线。">
+  <title>Lab 3：容错键值服务 — MIT 6.824</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260812b">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260812b">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js?v=20260812b"></script>
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">MIT 6.824 · Lab 3</p>
+    <h1>Lab 3：容错键值服务</h1>
+    <p class="lede">从状态设计、实现步骤到故障注入的完整动手路线。</p>
+    <section class="assignment-guide">
+      <h2 id="outcome">完成标准</h2>
+      <p>本导读给出可独立实施的架构、状态、不变量和测试路线；官方 starter code 的函数签名、测试名与提交规则可能随学期变化，开始编码前请从官方课程表进入对应 Lab 核对。</p>
+      <h2 id="prerequisites">前置准备</h2>
+      <ul><li>通读依赖讲义，并用自己的话写出安全性与活性目标。</li><li>先运行原始测试并保存基线；启用 Go race detector。</li><li>禁止用固定 sleep 代替状态条件，禁止持锁执行阻塞 RPC/channel 操作。</li></ul>
+      <h2 id="implementation">分步实现</h2>
+      <ol><li>Clerk 生成稳定 clientID 与递增 requestID；超时重试同一请求，并记住最近 leader 以优化下一次尝试。</li><li>服务端把 Get/Put/Append 统一封装为 Op 交给 Raft；为日志 index 建等待通道，但必须核对最终应用的 clientID/requestID。</li><li>状态机保存 KV 数据与去重表；重复请求直接返回缓存结果。去重更新与业务更新必须由同一条已提交日志原子驱动。</li><li>当 Raft state 超过阈值时编码 KV、去重表与 lastApplied 创建快照；恢复时在对外服务前装载。</li></ol>
+      <h2 id="state-table">状态设计清单</h2>
+      <div class="pb-table-scroll"><table><thead><tr><th>类别</th><th>必须回答的问题</th></tr></thead><tbody><tr><td>权威状态</td><td>谁能修改？是否需要复制或持久化？</td></tr><tr><td>请求身份</td><td>重复、迟到和跨重启请求如何识别？</td></tr><tr><td>完成条件</td><td>何时可对客户端返回成功？</td></tr><tr><td>后台任务</td><td>如何停止、重试并避免 goroutine 泄漏？</td></tr></tbody></table></div>
+      <h2 id="validation">测试矩阵</h2>
+      <ul><li>用单客户端建立串行 oracle。</li><li>多客户端并发 Append 后检查每段恰好出现一次。</li><li>隔离旧 leader 并让请求超时重试。</li><li>在请求进行中持续重启服务器并触发快照。</li></ul>
+      <pre><code class="language-bash">go test -race ./...
+go test -run TestName -count=20
+go test ./... &gt; test.log</code></pre>
+      <h2 id="debugging">调试方法</h2>
+      <ol><li>日志至少记录节点、term/config、index、request ID 和状态转换；不要只打印“failed”。</li><li>固定随机种子复现失败，再缩小到最短事件序列。</li><li>断言单调量：term、commitIndex、lastApplied 和配置号不得倒退。</li><li>测试结束确认 ticker、RPC 重试和等待通道全部退出。</li></ol>
+      <h2 id="submission">自我验收</h2>
+      <p>能够解释每一个锁、持久化点、重试循环和超时；能够画出一次正常执行与一次故障恢复；连续多轮竞态测试通过后再提交。本站不提供答案代码，避免破坏实验的学习目标。</p>
+    </section>
+    <h2 id="sources">一手资料与继续学习</h2>
+    <ul>
+      <li><a href="https://pdos.csail.mit.edu/6.824/schedule.html">MIT 6.824 官方课程表、Lecture notes、论文与 Labs 入口</a></li>
+      <li>本页是面向自学的中文重组讲义；论文结论、实验 API 与测试要求应以官方当期资料为准。</li>
+    </ul>
+  </main>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260812b"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260812b"></script>
+</body>
+</html>

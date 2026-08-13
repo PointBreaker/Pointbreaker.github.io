@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="把论文机制和四个实验串成统一设计方法">
+  <title>课程综合：从不变量到可运行系统 — MIT 6.824</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260812b">
+  <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260812b">
+  <script defer src="../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../assets/course/math-render.js?v=20260812b"></script>
+</head>
+<body>
+  <main class="page">
+    <p class="eyebrow">MIT 6.824 · Lecture 20</p>
+    <h1>课程综合：从不变量到可运行系统</h1>
+    <p class="lede">把论文机制和四个实验串成统一设计方法</p>
+    <section aria-labelledby="objectives">
+      <h2 id="objectives">学习目标</h2>
+      <ul><li>复述本讲系统模型、接口与故障假设。</li><li>从消息与状态转换推导核心不变量。</li><li>能设计一个故障注入实验验证关键语义。</li></ul>
+    </section>
+    <section>
+      <h2 id="concept-map">概念路线</h2>
+      <p>阅读时依次回答：谁保存权威状态？操作何时算成功？消息重复或节点重启时，哪个不变量阻止错误结果？</p>
+    </section>
+    <section>
+      <h2 id="topic-1">机制地图</h2>
+      <p>MapReduce 重做任务；Raft 复制决定；KV 服务提供客户端语义；分片系统处理动态所有权。每层都建立在下一层明确语义上。</p>
+    </section>
+    <section>
+      <h2 id="topic-2">设计顺序</h2>
+      <p>写出 API 语义、状态机和持久边界；列出故障；定义不变量；再选择日志、复制、锁、租约、版本和重试机制。</p>
+    </section>
+    <section>
+      <h2 id="topic-3">验证方法</h2>
+      <p>确定性单元测试覆盖状态转移，随机测试探索调度，故障注入覆盖分区与重启，线性化检查验证并发历史。</p>
+    </section>
+    <section>
+      <h2 id="topic-4">动手延伸</h2>
+      <p>测量不同心跳/批量/快照参数；实现可观测性；写故障复盘；比较另一种复制或一致性模型的适用边界。</p>
+    </section>
+    <section>
+      <h2 id="worked-check">动手推演</h2>
+      <ol><li>画出客户端、协调/领导节点和两个副本，标注所有持久状态。</li><li>任选一条回复，在回复发送前让节点崩溃；判断客户端可安全重试的条件。</li><li>把同一请求复制、延迟并乱序投递，检查状态是否仍满足不变量。</li></ol>
+      <pre><code class="language-pseudocode">for event in randomized(network, crash, restart):
+    system.step(event)
+    assert safety_invariant(system.history)</code></pre>
+    </section>
+    <section>
+      <h2 id="quiz">理解检查</h2>
+      <div class="quiz" data-quiz="20-invariant" data-answer="b" data-correct="正确：超时只描述观察结果，不能证明远端没有执行。" data-incorrect="重新区分请求丢失、响应丢失和服务器仍在执行三种情况。"><p><strong>问题：</strong>客户端 RPC 超时后，哪项结论始终成立？</p><div class="quiz-options"><button data-choice="a" aria-pressed="false">服务器一定没有执行</button><button data-choice="b" aria-pressed="false">客户端无法仅凭超时判断服务器是否执行</button><button data-choice="c" aria-pressed="false">服务器一定已经执行两次</button></div></div>
+      <div class="quiz" data-quiz="20-design" data-answer="a" data-correct="正确：不变量是选择机制和测试策略的依据。" data-incorrect="先优化性能会掩盖语义缺口。"><p><strong>问题：</strong>设计容错协议的第一步应是什么？</p><div class="quiz-options"><button data-choice="a" aria-pressed="false">明确 API 语义、故障模型和必须保持的不变量</button><button data-choice="b" aria-pressed="false">先增加重试次数</button><button data-choice="c" aria-pressed="false">先缩短所有超时</button></div></div>
+    </section>
+    <section><h2 id="recap">复习清单</h2><ul><li>能解释正常路径，也能解释每个持久化点之前和之后的崩溃。</li><li>能区分 safety、liveness、availability 与 performance。</li><li>能指出论文假设在真实部署中可能失效的地方。</li></ul></section>
+    <h2 id="sources">一手资料与继续学习</h2>
+    <ul>
+      <li><a href="https://pdos.csail.mit.edu/6.824/schedule.html">MIT 6.824 官方课程表、Lecture notes、论文与 Labs 入口</a></li>
+      <li>本页是面向自学的中文重组讲义；论文结论、实验 API 与测试要求应以官方当期资料为准。</li>
+    </ul>
+  </main>
+  <script src="../../../assets/vendor/prism.js"></script>
+  <script src="../../../assets/course/quiz.js"></script>
+  <script defer src="../../../assets/course/interactive.js?v=20260812b"></script>
+  <script defer src="../../../assets/course/lesson-ui.js?v=20260812b"></script>
+</body>
+</html>
