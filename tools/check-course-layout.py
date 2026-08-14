@@ -24,6 +24,12 @@ VERSIONED_READING_ASSETS = (
     "assets/course/interactive.js",
     "assets/course/math-render.js",
 )
+BLOCK_CODE_GUARD_SELECTOR = ".page pre > code"
+BLOCK_CODE_GUARD_DECLARATIONS = {
+    "white-space": "inherit",
+    "overflow-wrap": "normal",
+    "word-break": "normal",
+}
 
 
 class ReferenceParser(HTMLParser):
@@ -55,6 +61,19 @@ def local_target(page: Path, value: str, root: Path) -> Optional[Path]:
     return (page.parent / path_text).resolve()
 
 
+def css_rule_declarations(source: str, selector: str) -> dict[str, str]:
+    match = re.search(rf"{re.escape(selector)}\s*\{{(?P<body>[^}}]*)\}}", source)
+    if not match:
+        return {}
+    declarations: dict[str, str] = {}
+    for item in match.group("body").split(";"):
+        if ":" not in item:
+            continue
+        property_name, value = item.split(":", 1)
+        declarations[property_name.strip()] = value.strip()
+    return declarations
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", nargs="?", default=DEFAULT_ROOT)
@@ -75,6 +94,20 @@ def main() -> int:
     shared_asset_version = str(platform.get("sharedAssetVersion", ""))
     if not ASSET_VERSION_RE.fullmatch(shared_asset_version):
         findings.append("site platform must declare a date-based sharedAssetVersion")
+
+    lesson_style_path = root / "assets/course/lesson.css"
+    if not lesson_style_path.is_file():
+        findings.append("missing shared lesson stylesheet: assets/course/lesson.css")
+    else:
+        lesson_style = lesson_style_path.read_text(encoding="utf-8")
+        block_code_guard = css_rule_declarations(lesson_style, BLOCK_CODE_GUARD_SELECTOR)
+        for property_name, expected_value in BLOCK_CODE_GUARD_DECLARATIONS.items():
+            actual_value = block_code_guard.get(property_name)
+            if actual_value != expected_value:
+                findings.append(
+                    f"assets/course/lesson.css: {BLOCK_CODE_GUARD_SELECTOR} must set "
+                    f"{property_name}: {expected_value} (got {actual_value or 'missing'})"
+                )
 
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
     seen_ids: set[str] = set()
