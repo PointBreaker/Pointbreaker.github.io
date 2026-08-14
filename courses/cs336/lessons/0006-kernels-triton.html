@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260812b">
   <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260812b">
   <script defer src="../../../assets/course/math-render.js?v=20260812b"></script>
+  <link rel="stylesheet" href="../assets/code-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -210,13 +211,13 @@ y = module.gelu(x)</code></pre>
     <h3>Triton 是什么？</h3>
     <p>Triton 是 OpenAI 2021 年发布的 GPU 编程语言——用 Python 语法写 GPU kernel。</p>
 
-    <table>
+    <div class="pb-table-scroll"><table>
       <tr><th>任务</th><th>CUDA</th><th>Triton</th></tr>
       <tr><td>Memory coalescing</td><td>手动</td><td>自动</td></tr>
       <tr><td>Shared memory 管理</td><td>手动</td><td>自动</td></tr>
       <tr><td>SM 内调度</td><td>手动</td><td>自动</td></tr>
       <tr><td>跨 SM 调度</td><td>手动</td><td>手动</td></tr>
-    </table>
+    </table></div>
 
     <h3>Triton 编程模型</h3>
     <pre><code class="language-python">import triton
@@ -371,6 +372,26 @@ def matmul_kernel(A, B, C, M, N, K, BLOCK_M: tl.constexpr, ...):
 # → 27 个 A 块 + 27 个 B 块 = 54 次加载
 
 # Triton 的 L2 swizzle 自动优化这个</code></pre>
+
+    <h3>Spring 2026：Blackwell、TMEM 与 thread block clusters</h3>
+    <p>官方 Lecture 6 将 A100、H100 与 B200 放在同一张硬件表里，并强调 kernel 优化需要跟随硬件数据路径变化，而不能只复用 2025 年的 Hopper 直觉。</p>
+    <div class="pb-table-scroll"><table>
+      <tr><th>变化</th><th>它解决什么</th><th>写 kernel 时的含义</th></tr>
+      <tr><td>B200 / <code>sm100</code></td><td>148 SM、192 GB HBM、约 8 TB/s HBM 带宽</td><td>重新测 ridge point、tile 数和 wave quantization；不要照搬 H100 参数</td></tr>
+      <tr><td>TMEM</td><td>Blackwell Tensor Core 专用的 tensor memory，位于 register/shared-memory 数据路径之间</td><td>通常由编译器或库管理；它改变矩阵 kernel 的内部搬运与累加策略</td></tr>
+      <tr><td>Thread block clusters</td><td>H100/B200 上多个 block 可协作并访问 distributed shared memory</td><td>跨 block 复用成为可能，但同步、布局和资源占用更复杂</td></tr>
+    </table></div>
+
+    <h3>Occupancy 不是单一百分比</h3>
+    <ul>
+      <li><strong>Warp occupancy：</strong>register/shared-memory 使用量限制同一 SM 可驻留的 warp 数；更低不一定更慢，因为 thread coarsening 可能提高单 warp 工作量。</li>
+      <li><strong>Block occupancy：</strong>thread blocks 以 wave 调度到 SM。B200 有 148 个 SM，若只发 160 个 blocks，第二个 wave 只有 12 个 blocks，出现明显的 wave quantization。</li>
+      <li><strong>Bank conflicts 与 swizzling：</strong>shared memory 的 32 个 bank 会把同 bank 不同地址的访问串行化；row-xor-column 等 swizzle 用布局变换换取并行 bank 访问。</li>
+      <li><strong>Memory coalescing：</strong>warp 的 HBM 访问应尽量落入连续 cache line；否则即使 FLOPs 相同，实际带宽也会大幅下降。</li>
+    </ul>
+    <div class="card idea">
+      <p><strong>测量闭环：</strong><code>torch.cuda.synchronize()</code> 保证计时边界正确；PyTorch Profiler 用于高层算子归因；Nsight Systems/Compute 用于观察 kernel 时间线、通信重叠、访存与 occupancy。优化前后必须在目标 GPU（尤其 B200）重测。</p>
+    </div>
 
     <hr class="rule">
 
@@ -530,6 +551,7 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260812b"></script>
+  <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260812b"></script>
 </body>
 </html>

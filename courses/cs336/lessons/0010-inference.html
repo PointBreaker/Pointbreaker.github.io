@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260812b">
   <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260812b">
   <script defer src="../../../assets/course/math-render.js?v=20260812b"></script>
+  <link rel="stylesheet" href="../assets/code-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -231,6 +232,22 @@ x_quantized = round(x / scale)
 
 # 效果: 4× 内存降低, 3.2× 加速</code></pre>
 
+    <h2 id="pruning-distillation">模型剪枝与蒸馏</h2>
+
+    <h3>Pruning：删除低价值结构</h3>
+    <p>剪枝试图移除对输出影响较小的权重、通道、attention heads 或整个层。非结构化稀疏只减少非零元素，若硬件/库不能跳过稀疏位置，wall-clock 不一定变快；结构化剪枝更容易映射到 dense kernel，但通常更伤精度。</p>
+    <ul>
+      <li><strong>目标：</strong>让实际矩阵形状或可执行稀疏模式变小，而不是只让 checkpoint 更容易压缩。</li>
+      <li><strong>验证：</strong>同时报告质量、显存、TTFT、inter-token latency 与吞吐；不能只报告参数量。</li>
+    </ul>
+
+    <h3>Distillation：让更快的学生模仿教师</h3>
+    <p>Spring 2026 官方 trace 给出的 recipe 是：先定义更快的 student 架构，再用原模型的输出/中间分布初始化或训练它，最后通过蒸馏修复精度。蒸馏可以与 GQA、local attention、较浅网络或更窄 hidden size 组合。</p>
+    <pre><code class="language-python">loss = alpha * cross_entropy(student_logits, labels) \
+     + (1 - alpha) * kl_div(student_logits / T, teacher_logits / T) * T**2
+
+# 关键权衡：教师生成数据有成本；student 的架构必须真的对应更低推理开销。</code></pre>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -349,6 +366,16 @@ x_quantized = round(x / scale)
 
 # 类似操作系统的 fork()</code></pre>
 
+    <h3>Serving engines：把算法变成动态系统</h3>
+    <table>
+      <tr><th>系统</th><th>官方 trace 强调的定位</th></tr>
+      <tr><td>vLLM</td><td>PagedAttention 与通用高吞吐 serving 的常用默认选择</td></tr>
+      <tr><td>SGLang</td><td>RadixAttention / prefix reuse，适合 agentic 与共享前缀工作负载</td></tr>
+      <tr><td>TensorRT-LLM</td><td>NVIDIA GPU 上高度优化的 kernel、量化和多 GPU runtime</td></tr>
+      <tr><td>llama.cpp</td><td>CPU / 本地推理与紧凑量化生态</td></tr>
+    </table>
+    <p>引擎名称不是性能保证。最终结果取决于模型结构、量化格式、batch 到达过程、prefix reuse、GPU 型号和调度策略，必须在真实请求分布上测 TTFT、吞吐与尾延迟。</p>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -378,7 +405,7 @@ x_quantized = round(x / scale)
     <table>
       <tr><th>方向</th><th>技术</th><th>效果</th></tr>
       <tr><td>减少 KV cache</td><td>GQA, MLA, CLA, local</td><td>2-32× 内存节省</td></tr>
-      <tr><td>减少权重量化</td><td>int8, int4, AWQ</td><td>2-8× 内存/速度</td></tr>
+      <tr><td>减少模型成本</td><td>量化、结构化剪枝、蒸馏</td><td>降低权重流量与计算量；收益需实测</td></tr>
       <tr><td>投机解码</td><td>draft model</td><td>2-3× 加速</td></tr>
       <tr><td>系统优化</td><td>continuous batching, paged attention</td><td>10-20× 吞吐</td></tr>
     </table>
@@ -504,6 +531,7 @@ x_quantized = round(x / scale)
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260812b"></script>
+  <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260812b"></script>
 </body>
 </html>

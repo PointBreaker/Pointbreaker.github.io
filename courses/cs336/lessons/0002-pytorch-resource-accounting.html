@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260812b">
   <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260812b">
   <script defer src="../../../assets/course/math-render.js?v=20260812b"></script>
+  <link rel="stylesheet" href="../assets/code-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -195,6 +196,7 @@ y.contiguous().view(2, 3)  # OK，但会拷贝</code></pre>
       <tr><td>float16</td><td>2</td><td>5</td><td>10</td><td>±6.5×10⁴</td><td>中</td></tr>
       <tr><td>bfloat16</td><td>2</td><td>8</td><td>7</td><td>±3.4×10³⁸</td><td>低</td></tr>
       <tr><td>fp8 (E4M3)</td><td>1</td><td>4</td><td>3</td><td>±448</td><td>很低</td></tr>
+      <tr><td>NVFP4</td><td>0.5（不含 block scale）</td><td>编码依实现</td><td>4-bit 离散值</td><td>依赖分块缩放</td><td>极低</td></tr>
     </table>
 
     <h3>为什么 bfloat16 是深度学习的宠儿？</h3>
@@ -216,6 +218,18 @@ print(x)  # tensor([1.0000e-8])  ← 保留了</code></pre>
       <li><strong>E5M2</strong>：5 位指数 + 2 位尾数，范围更大、精度更低，常用于反向梯度。</li>
     </ul>
     <p>这是 NVIDIA Transformer Engine 常见的 hybrid recipe，不是硬性规则；实际训练还需要缩放、amax 统计，并通常以更高精度累加。</p>
+
+    <h3>FP4 / NVFP4：Spring 2026 新增的极低精度视角</h3>
+    <p>Spring 2026 官方 trace 进一步讨论了 NVIDIA 在 2025 年公开的 <strong>NVFP4</strong>：每个值只有 4 bit，并为小块数据保存独立 scale。这样扩大了局部动态范围，但同一块中的值共享尺度，因此表示能力与误差会强烈依赖分块方式。</p>
+    <pre><code class="language-python"># 官方 trace 给出的 NVFP4 离散值直觉
+values = [-6, -4, -3, -2, -1.5, -1, -0.5,
+           0, 0.5, 1, 1.5, 2, 3, 4, 6]
+
+# 真实存储成本不能只写成 0.5 byte/value：
+# 还要计入每个 block 的 scale，以及可能保留的高精度副本/累加器。</code></pre>
+    <div class="card warning">
+      <p><strong>不要把“4 bit”直接等同于“训练显存缩小 8×”。</strong> 参数、梯度、激活、optimizer state 与累加器不一定都使用 NVFP4；分块 scale 和量化元数据也有成本。资源核算必须按实际 recipe 分项计算。</p>
+    </div>
 
     <div class="card idea">
       <p><strong>GPT-3 的一个 FFN 矩阵有多大？</strong></p>
@@ -699,6 +713,7 @@ bf16 激活值: ~half → 显著节省！
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260812b"></script>
+  <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260812b"></script>
 </body>
 </html>

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260812b">
   <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260812b">
   <script defer src="../../../../assets/course/math-render.js?v=20260812b"></script>
+  <link rel="stylesheet" href="../../assets/code-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -425,9 +426,8 @@ $ wget https://data.commoncrawl.org/crawl-data/CC-MAIN-2025-18/segments/17448891
 <p>从 HTML 抽取文本具有挑战性。通常，任何抽取流程都会寻找 HTML 中的可见内容（如 <code>&lt;p&gt;</code> 标签，这些标签本应包含文本块），但这仍可能抽取远超我们在浏览器中打开页面时感知到的"主体内容"的部分。例如，打开 StackOverflow 时，主体内容在问题和回答中，但菜单选项、指向 StackExchange 其他无关页面的链接、页脚、登录/注册链接——这些全是可见文本，却很难可靠地与主体内容区分开。</p>
 <p>许多工具实现了文本抽取流程。本作业使用 <strong>Resiliparse</strong> 库执行文本抽取。Resiliparse 还能帮助解决一个更基础的问题：检测包含原始内容的字节串的文本编码。尽管网上大多数页面使用 UTF-8 编码（据 Wikipedia 称占 98.2%），你的文本抽取流程仍应能稳健处理其他编码。</p>
 <blockquote>
-<p><strong>提示</strong>：建议使用 <strong>FastWARC</strong> 库遍历 WARC 文件中的记录。以下类可能有用：
-<code>python
-from fastwarc.warc import ArchiveIterator, WarcRecordType</code></p>
+<p><strong>提示</strong>：建议使用 <strong>FastWARC</strong> 库遍历 WARC 文件中的记录。以下类可能有用：</p>
+<pre><code class="language-python">from fastwarc.warc import ArchiveIterator, WarcRecordType</code></pre>
 </blockquote>
 问题 (3 分)
 <p><strong>(a)</strong> 编写一个函数，从包含原始 HTML 的字节串中抽取文本。使用 <code>resiliparse.extract.html2text.extract_plain_text</code> 执行抽取。该函数需要字符串作为输入，因此你需要先将字节串解码为 Unicode 串。注意输入的字节串可能<strong>不是</strong> UTF-8 编码，因此你的函数应能在 UTF-8 解码失败时检测编码。Resiliparse 提供了 <code>resiliparse.parse.encoding.detect_encoding()</code>，可能会有所帮助。</p>
@@ -649,10 +649,10 @@ J(S, T) = \frac{|S \cap T|}{|S \cup T|}
 <p>你的函数应将每个输入文件以相同名称重写到输出目录，但仅写入以下文档：(a) 非候选重复和/或 (b) 从聚类桶中随机选择保留的。例如，如果输入路径是 <code>a/1.txt</code> 和 <code>a/2.txt</code>，输出目录是 <code>b/</code>，你的函数应写入文件 <code>b/1.txt</code> 和 <code>b/2.txt</code>。实现适配器 <code>[run_minhash_deduplication]</code> 并确保它通过 <code>uv run pytest -k test_minhash_deduplication</code>。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：Jaccard 相似度、MinHash 签名、局部敏感哈希（LSH）、n-gram、NFD unicode 规范化。实施顺序：(1) 对每篇文档进行文本规范化（小写、去标点、规范化空白、去重音、NFD）；(2) 生成词级 n-gram 集合；(3) 使用 k 个哈希函数计算 minhash 签名；(4) 将签名分成 b 个带，每个带 r 个哈希（k=br），通过 LSH 将至少一个带匹配的文档对作为候选重复；(5) 计算候选对的真实 n-gram Jaccard 相似度；(6) 将超过阈值的对视为重复，构建聚类并随机保留每聚类一篇文档。调试策略：在少量文档上验证 minhash 签名维度是否正确；检查带划分是否满足整除关系；验证 Jaccard 计算在已知相似/不相似文档对上的表现。自检方法：运行 <code>uv run pytest -k test_minhash_deduplication</code>；构造包含近似重复模板文档的测试用例验证召回。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment4_data.pdf</code> · 10-11 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">filter_data</span><strong>过滤语言建模数据（filter_data）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
 <p>你已经在本作业前半部分实现了多种用于过滤网页爬取数据的基本模块（HTML 抽取、语言识别、PII 脱敏、有害内容检测、Gopher 质量规则、质量分类器、精确/近似去重）。现在要把它们投入实际使用，生成可用于语言建模的训练数据。</p>
 <p>Together 集群上为你准备了 5000 个 CC WET 文件作为起点，路径为：</p>
-<pre><code>/data/CC/CC*.warc.wet.gz
+<pre><code class="language-text">/data/CC/CC*.warc.wet.gz
 </code></pre>
 <p>你的目标是对这些 CC dump 进行过滤，使得训练出的 Transformer 语言模型在 <strong>Paloma benchmark 的 C4 100 domains 子集</strong> 上<strong>最小化验证 perplexity</strong>。注意：你<strong>不得修改模型架构或训练过程</strong>，目标只是构造最优数据。该数据集包含 C4 语言建模数据集中最常见的 100 个 domain 的样本。验证数据已放置在 Together 集群：</p>
-<pre><code>/data/paloma/tokenized_paloma_c4_100_domains_validation.bin
+<pre><code class="language-text">/data/paloma/tokenized_paloma_c4_100_domains_validation.bin
 </code></pre>
 <p>（使用 GPT-2 tokenizer 已 tokenize）。你可以用以下方式加载并查看：</p>
 <pre><code class="language-python">import numpy as np
@@ -926,6 +926,7 @@ ids_array.tofile(output_path)
   </div>
   <script src="../../assets/quiz.js"></script>
   <script defer src="../../../../assets/course/lesson-ui.js?v=20260812b"></script>
+  <script defer src="../../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../../assets/course/interactive.js?v=20260812b"></script>
 </body>
 </html>
