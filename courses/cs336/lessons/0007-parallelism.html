@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260812b">
   <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260812b">
   <script defer src="../../../assets/course/math-render.js?v=20260812b"></script>
+  <link rel="stylesheet" href="../assets/code-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -59,8 +60,8 @@
     <!-- ============================================================ -->
     <h2 id="collectives">通信原语</h2>
 
-    <h3>七种基本通信操作</h3>
-    <table>
+    <h3>八种基本通信操作</h3>
+    <div class="pb-table-scroll"><table>
       <tr><th>操作</th><th>输入</th><th>输出</th><th>描述</th></tr>
       <tr><td>Broadcast</td><td>1 个 GPU 有数据</td><td>所有 GPU 有数据</td><td>一对多</td></tr>
       <tr><td>Scatter</td><td>1 个 GPU 有大数据</td><td>所有 GPU 各有一片</td><td>分片分发</td></tr>
@@ -69,7 +70,8 @@
       <tr><td>All-Gather</td><td>所有 GPU 各有一片</td><td>所有 GPU 有完整数据</td><td>Gather 到所有</td></tr>
       <tr><td>Reduce-Scatter</td><td>所有 GPU 有完整数据</td><td>所有 GPU 各有一片结果</td><td>Reduce + Scatter</td></tr>
       <tr><td>All-Reduce</td><td>所有 GPU 有数据</td><td>所有 GPU 有结果</td><td>Reduce + Broadcast</td></tr>
-    </table>
+      <tr><td>All-to-All</td><td>每个 GPU 有发往各 rank 的分片</td><td>每个 GPU 收到来自各 rank 的分片</td><td>MoE token routing / transpose-like exchange</td></tr>
+    </table></div>
 
     <h3>关键等式</h3>
     <pre><code class="language-python">All-Reduce = Reduce-Scatter + All-Gather
@@ -90,6 +92,47 @@
 # All-Gather:
 # 每个 rank 发送并接收约: (N-1)/N × data_size
 # 近似: data_size</code></pre>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="network-substrate">网络 substrate：从 HBM 到跨节点 collective</h2>
+
+    <pre><code class="language-python">GPU registers / shared memory / L2
+              ↓
+             HBM
+              ↓
+     NVLink / NVSwitch        # scale-up：节点内高带宽域
+              ↓
+        PCIe → HCA / NIC
+              ↓
+ InfiniBand RDMA 或 Ethernet + RoCE
+              ↓
+       multi-node collective  # scale-out：跨节点扩展</code></pre>
+
+    <div class="pb-table-scroll"><table>
+      <tr><th>层</th><th>职责</th><th>关键限制</th></tr>
+      <tr><td>NVLink / NVSwitch</td><td>节点内 GPU 直连与交换 fabric；B200 NVLink 5 的每 GPU 聚合带宽可达约 1.8 TB/s</td><td>只覆盖有限的 scale-up domain</td></tr>
+      <tr><td>PCIe</td><td>GPU 连接 CPU 与 HCA/NIC 的主机 I/O 总线</td><td>链路代际、lane 数与拓扑会形成 oversubscription</td></tr>
+      <tr><td>HCA / NIC</td><td>把 GPU/主机流量送入节点间网络</td><td>NIC 数量、rail 绑定和 NUMA/PCIe 亲和性</td></tr>
+      <tr><td>InfiniBand</td><td>面向数据中心的低延迟、高带宽 fabric，原生支持 RDMA</td><td>跨交换机跳数、拥塞与 rail 拓扑</td></tr>
+      <tr><td>Ethernet + RoCE</td><td>在融合以太网上承载 RDMA，绕开传统 TCP/CPU 数据路径</td><td>需要无损/拥塞控制工程，性能更依赖网络配置</td></tr>
+      <tr><td>GPUDirect RDMA</td><td>远端 NIC 直接读写 GPU memory，避免 CPU bounce buffer</td><td>需要 GPU、NIC、驱动与拓扑共同支持</td></tr>
+    </table></div>
+
+    <h3>Scale-up、scale-out 与并行策略放置</h3>
+    <ul>
+      <li><strong>TP / EP 偏好 scale-up：</strong>它们在每层或每个 MoE block 触发高频 collective，对延迟和带宽都敏感，通常先放入 NVLink/NVSwitch 域。</li>
+      <li><strong>PP 可以跨较慢网络：</strong>它主要在 stage 边界传 activation/gradient；通过足够大的 microbatch 和 1F1B schedule，可以用计算覆盖较粗粒度通信。</li>
+      <li><strong>DP/FSDP 常扩展到 scale-out：</strong>通信频率较低但 payload 大，需要 bucket、prefetch、reduce-scatter/all-gather 与计算重叠。</li>
+    </ul>
+
+    <h3>NCCL 为什么必须感知 topology</h3>
+    <p>NCCL 会探测节点、PCIe switch、NVLink/NVSwitch 与网络接口，选择 ring/tree、分层 collective、channel 数和 GPU↔NIC 路径。逻辑通信量相同，不代表 wall-clock cost 相同：</p>
+    <pre><code class="language-python">time ≈ latency_steps × per_step_latency + bytes / effective_bandwidth
+
+# effective_bandwidth 受最慢链路、拓扑冲突、拥塞、协议效率和 overlap 影响。
+# 因此报告 collective 时必须同时给出消息大小、world size、拓扑和实测时间。</code></pre>
 
     <hr class="rule">
 
@@ -468,6 +511,7 @@ optimizer.step()</code></pre>
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260812b"></script>
+  <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260812b"></script>
 </body>
 </html>

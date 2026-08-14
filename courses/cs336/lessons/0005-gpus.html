@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260812b">
   <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260812b">
   <script defer src="../../../assets/course/math-render.js?v=20260812b"></script>
+  <link rel="stylesheet" href="../assets/code-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -37,13 +38,13 @@
     <h2 id="gpu-basics">GPU 架构概览</h2>
 
     <h3>CPU vs GPU</h3>
-    <table>
+    <div class="pb-table-scroll"><table>
       <tr><th>特性</th><th>CPU</th><th>GPU</th></tr>
       <tr><td>核心数</td><td>~16-64 复杂核心</td><td>~1000s 简单核心</td></tr>
       <tr><td>优化目标</td><td>低延迟（latency）</td><td>高吞吐（throughput）</td></tr>
       <tr><td>适合任务</td><td>串行、分支密集</td><td>并行、计算密集</td></tr>
       <tr><td>内存</td><td>低延迟，大容量</td><td>高带宽，较大容量</td></tr>
-    </table>
+    </table></div>
 
     <h3>A100 GPU 架构</h3>
     <pre><code class="language-python">A100 SM (Streaming Multiprocessor) 结构:
@@ -71,6 +72,12 @@
 ├── 50 MB L2 cache
 └── 80 GB HBM3
     带宽: 3.35 TB/s</code></pre>
+
+    <h3>B200 / Blackwell：从 FP8 走向 MXFP8 / MXFP4</h3>
+    <p>Spring 2026 官方讲义把 Blackwell 作为新的硬件案例：B200 提供 148 个 SM、192 GB HBM 与约 8 TB/s HBM 带宽，并引入更强的低精度矩阵计算路径。这里最重要的不是背峰值数字，而是理解 <strong>MXFP8 / MXFP4 使用多个局部 scale</strong>，用额外元数据换取低 bit 宽下更可用的动态范围。</p>
+    <div class="card idea">
+      <p><strong>新鲜度边界：</strong>MXFP4/NVFP4 的支持不代表任意 PyTorch kernel 会自动得到 Blackwell 峰值。布局、scale recipe、累加精度、Tensor Core 指令与库版本必须同时匹配。</p>
+    </div>
 
     <hr class="rule">
 
@@ -298,6 +305,18 @@ else:
     </table>
     <p><small>表中 Tensor Core 稀疏列要求满足 NVIDIA 的 2:4 structured sparsity；不能把该峰值当作任意稀疏模型都能获得的吞吐。</small></p>
 
+    <h3>TPU：相似目标，不同执行模型</h3>
+    <p>Spring 2026 官方 Lecture 5 明确把 TPU 放进 GPU 旁边比较。两者都把<strong>轻量控制、大型矩阵单元、片上快速存储与 HBM</strong>组合在一起，但 TPU 的核心抽象更偏向编译器调度的大块矩阵程序，而不是 GPU 的 warp/SIMT 线程层次。</p>
+    <div class="pb-table-scroll"><table>
+      <tr><th>维度</th><th>GPU</th><th>TPU</th></tr>
+      <tr><td>主要计算单元</td><td>SM 内 CUDA cores + Tensor Cores</td><td>MXU（Matrix Multiply Unit，通常以 systolic-array 思路实现）+ VPU</td></tr>
+      <tr><td>执行抽象</td><td>thread → warp → block → grid；SIMT 与分支发散很重要</td><td>较粗粒度 block/program；没有 GPU 式 warp 抽象</td></tr>
+      <tr><td>片上存储</td><td>register、shared memory/L1、L2</td><td>vector memory / on-chip buffers，围绕 MXU 数据流组织</td></tr>
+      <tr><td>软件栈</td><td>CUDA、Triton、PyTorch compiler</td><td>JAX/XLA 常把模型与 sharding 一起交给编译器</td></tr>
+      <tr><td>扩展方式</td><td>NVLink/NVSwitch + InfiniBand/RoCE</td><td>TPU interconnect / pod；同样需要拓扑感知的 sharding</td></tr>
+    </table></div>
+    <p><strong>PointBreaker 补充解释：</strong>systolic array 与 JAX/XLA 是理解 TPU 的常用工程视角；官方讲义的核心结论是 GPU 与 TPU 都受矩阵单元、HBM 带宽和互联约束，但编程抽象与网络组织不同。具体 sharding 选择在第 7–8 课继续展开。</p>
+
     <h3>训练时间的理想化估算</h3>
     <pre><code class="language-python"># 仅用于展示 units：GPT-3 175B 报告的训练计算量约 3.14e23 FLOPs，
 # 1024 张 GPU 全程保持 MFU=0.5，且忽略停机、评估和 I/O。
@@ -502,6 +521,7 @@ def fused_operation(x, w):
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260812b"></script>
+  <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260812b"></script>
 </body>
 </html>
