@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
   <script defer src="../../../../assets/course/math-render.js?v=20260814f"></script>
   <link rel="stylesheet" href="../../assets/code-format.css?v=20260814a">
+  <link rel="stylesheet" href="../../assets/handout-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -34,6 +35,164 @@
       <p><strong>Spring 2026 官方资料（v26.1.3）：</strong><a href="https://github.com/stanford-cs336/assignment2-systems">代码仓库</a> · <a href="https://github.com/stanford-cs336/assignment2-systems/blob/main/cs336_assignment2_systems.pdf">作业说明</a> · <a href="https://cs336.stanford.edu/#schedule">课程日程</a></p>
       <p><strong>版本说明：</strong>本页先给出 Spring 2026 官方题目映射与 delta，再保留旧版详细本土化内容作为 legacy supplement。遇到题号、接口、测试或硬件要求冲突时，以 Spring 2026 官方 PDF、仓库和下方“2026 权威映射”为准。</p>
     </div>
+
+    <nav class="assignment-jump-links" aria-label="作业页快速导航">
+      <a href="#assignment-route">任务路线</a>
+      <a href="#knowledge-tree">知识树</a>
+      <a href="#assignment-cheatsheet">Cheatsheet</a>
+      <a href="#spring-2026-delta">2026 权威题图</a>
+    </nav>
+
+    <section aria-labelledby="assignment-overview-title">
+      <div class="assignment-mission-grid">
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">Mission</span>
+          <h2 id="assignment-overview-title">把“能跑”推进到“可测、可解释、可扩展”</h2>
+          <p>这份作业的主角不是某一个 kernel，而是一条性能工程证据链：先建立可信基线，再定位时间与显存瓶颈，然后分别优化单卡数据移动和多卡状态冗余，最后用统一口径比较正确性、显存与吞吐。</p>
+          <p><strong>阅读策略：</strong>每次优化都写清楚基线、假设、改动、正确性检查和性能结果。若没有同步、warmup 与控制变量，数字本身不能构成结论。</p>
+        </div>
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">You will build</span>
+          <h3>完成后的四类系统能力</h3>
+          <ul class="assignment-outcomes">
+            <li>可复现的 benchmark、profile 与 memory accounting</li>
+            <li>Activation checkpointing 与 FlashAttention-2</li>
+            <li>DDP、gradient overlap 与 optimizer-state sharding</li>
+            <li>FSDP 与多维并行的通信/显存核算</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assignment-route" aria-labelledby="assignment-route-title">
+      <p class="eyebrow">Dependency-first route</p>
+      <h2 id="assignment-route-title">五阶段任务路线</h2>
+      <ol class="assignment-route assignment-route-5">
+        <li><strong>Measure</strong><span>同步 GPU、warmup、多次采样；用 profiler 区分 compute、memory 与 communication。</span></li>
+        <li><strong>Trade compute for memory</strong><span>用 activation checkpointing 重算中间激活，并核对峰值显存与额外 FLOPs。</span></li>
+        <li><strong>Move less data</strong><span>用 tiling 与 online softmax 实现 FlashAttention-2，避免物化完整 attention matrix。</span></li>
+        <li><strong>Overlap communication</strong><span>从 naive DDP 到扁平化、逐参数 overlap，观察 All-Reduce 与 backward 的时间线。</span></li>
+        <li><strong>Shard model state</strong><span>分片 optimizer state、参数与梯度，再推导 DP / FSDP / TP / 2D 并行开销。</span></li>
+      </ol>
+    </section>
+
+    <section id="knowledge-tree" aria-labelledby="knowledge-tree-title">
+      <p class="eyebrow">Recursive prerequisite map</p>
+      <h2 id="knowledge-tree-title">递归知识树：性能问题究竟卡在哪一层？</h2>
+      <div class="knowledge-tree">
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 01 · Measurement</span>
+          <h3>数字是否可信？</h3>
+          <p>对应 benchmark、Nsight profile 与 memory profile。</p>
+          <ul>
+            <li>CPU launch → asynchronous GPU work
+              <ul><li>计时边界需要同步</li><li>首次运行包含初始化与 JIT</li></ul>
+            </li>
+            <li>Sample → statistic
+              <ul><li>warmup、重复次数、方差</li><li>固定 shape、dtype 与硬件状态</li></ul>
+            </li>
+            <li>Trace → bottleneck
+              <ul><li>kernel duration / gaps</li><li>peak allocated 与 reserved memory</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 02 · Kernel</span>
+          <h3>为什么算术不多，kernel 仍然很慢？</h3>
+          <p>对应 Triton 与 FlashAttention-2。</p>
+          <ul>
+            <li>GPU memory hierarchy
+              <ul><li>HBM → SRAM/register</li><li>coalescing、occupancy、tile size</li></ul>
+            </li>
+            <li>Attention decomposition
+              <ul><li>(QK^\top)、mask、softmax、(PV)</li><li>完整 (T\times T) matrix 的 I/O 成本</li></ul>
+            </li>
+            <li>Online softmax
+              <ul><li>running max</li><li>running normalizer 与 rescaling</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 03 · Communication</span>
+          <h3>多卡为什么没有线性加速？</h3>
+          <p>对应 collectives、DDP bucketing 与 overlap。</p>
+          <ul>
+            <li>Gradient production → All-Reduce
+              <ul><li>参数逐个 ready</li><li>bucket 决定通信启动粒度</li></ul>
+            </li>
+            <li>Collective cost
+              <ul><li>latency 与 bandwidth 项</li><li>ring 的数据量与链路占用</li></ul>
+            </li>
+            <li>Overlap boundary
+              <ul><li>通信能否隐藏在 backward 中</li><li>共享网络资源时不能重复计算收益</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 04 · State sharding</span>
+          <h3>每张卡到底保存了哪些重复状态？</h3>
+          <p>对应 optimizer sharding、FSDP 与二维并行核算。</p>
+          <ul>
+            <li>Per-parameter state
+              <ul><li>parameter / gradient</li><li>Adam moments 与 master weights</li></ul>
+            </li>
+            <li>Shard → materialize → free
+              <ul><li>All-Gather 参数</li><li>Reduce-Scatter 梯度</li></ul>
+            </li>
+            <li>Parallel axes
+              <ul><li>DP/FSDP replica groups</li><li>TP groups 与 FSDP×TP 网格</li></ul>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="assignment-cheatsheet" aria-labelledby="assignment-cheatsheet-title">
+      <p class="eyebrow">Before optimizing</p>
+      <h2 id="assignment-cheatsheet-title">开工 Cheatsheet</h2>
+      <div class="cheatsheet-grid">
+        <article class="cheat-card">
+          <h3>Benchmark contract</h3>
+          <ul>
+            <li>计时区间前后同步 GPU；记录 warmup 与 measurement 次数。</li>
+            <li>固定 batch、sequence length、dtype、模型配置和编译模式。</li>
+            <li>同时报告 latency、tokens/s、峰值显存与正确性误差。</li>
+            <li>profile 用于解释变化，benchmark 用于量化变化。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>FlashAttention invariants</h3>
+          <p class="formula-line">\(m_{new}=\max(m_{old},\max s_{tile})\)</p>
+          <p class="formula-line">\(\ell_{new}=e^{m_{old}-m_{new}}\ell_{old}+\sum e^{s_{tile}-m_{new}}\)</p>
+          <ul>
+            <li>不物化完整 (T\times T) scores。</li>
+            <li>causal mask、边界 mask 与 backward 数值必须和参考实现对齐。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Distributed timeline</h3>
+          <ul>
+            <li>Backward 产生梯度的顺序决定 collective 可启动的时间。</li>
+            <li>Bucket 太小：latency 多；太大：启动晚、overlap 少。</li>
+            <li>用 trace 证明 overlap，不只比较总运行时间。</li>
+            <li>gradient accumulation 会改变通信频率与有效 batch。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Memory accounting</h3>
+          <ul>
+            <li>分开计算 parameters、gradients、optimizer states、activations。</li>
+            <li>明确每项 dtype 与字节数，区分 steady state 和峰值。</li>
+            <li>FSDP 峰值取决于参数何时 All-Gather、何时释放。</li>
+            <li>理论核算与实测不一致时，检查 allocator cache 与临时 buffer。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <details class="assignment-reference">
+      <summary>展开原有详细导读：组件表、前置清单、优化顺序、陷阱、profiling 与课程连接</summary>
+      <div class="assignment-reference-body">
 
     <!-- ============================================================ -->
     <h2 id="what">这个 Assignment 要你做什么？</h2>
@@ -215,6 +374,9 @@ print(prof.key_averages().table())</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
+      </div>
+    </details>
+
     <section id="spring-2026-delta">
       <p class="eyebrow">Spring 2026 官方源对齐 · 权威任务映射</p>
       <h2>Assignment 2：2026 problem map 与增量差异</h2>
@@ -1496,6 +1658,7 @@ def add_param_group(self, param_group: dict[str, Any]):
   <script src="../../assets/quiz.js"></script>
   <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../../assets/code-format.js?v=20260814a"></script>
+  <script defer src="../../assets/handout-format.js?v=20260814a"></script>
   <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
 </body>
 </html>

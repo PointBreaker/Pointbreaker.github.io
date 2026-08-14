@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
   <script defer src="../../../../assets/course/math-render.js?v=20260814f"></script>
   <link rel="stylesheet" href="../../assets/code-format.css?v=20260814a">
+  <link rel="stylesheet" href="../../assets/handout-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -34,6 +35,171 @@
       <p><strong>Spring 2026 官方资料（v26.0.1）：</strong><a href="https://github.com/stanford-cs336/assignment4-data">代码仓库</a> · <a href="https://github.com/stanford-cs336/assignment4-data/blob/main/cs336_assignment4_data.pdf">作业说明</a> · <a href="https://cs336.stanford.edu/#schedule">课程日程</a></p>
       <p><strong>版本说明：</strong>上方导读沿用 Spring 2026 课程结构；下方“完整 Handout”严格依据本地 Spring 2025 PDF 与 README 本土化，适配本地 2025 作业仓库。页面已收录任务、接口、约束、交付物与验收要求，但不提供参考实现。</p>
     </div>
+
+    <nav class="assignment-jump-links" aria-label="作业页快速导航">
+      <a href="#assignment-route">任务路线</a>
+      <a href="#knowledge-tree">知识树</a>
+      <a href="#assignment-cheatsheet">Cheatsheet</a>
+      <a href="#complete-problems">完整题面</a>
+    </nav>
+
+    <section aria-labelledby="assignment-overview-title">
+      <div class="assignment-mission-grid">
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">Mission</span>
+          <h2 id="assignment-overview-title">把不可控的网页抓取，变成可审计的训练语料</h2>
+          <p>这份作业真正训练的是数据决策能力：每个阶段都在改变最终模型能看到什么。你需要让 extraction、隐私/安全过滤、质量判断、去重和 tokenization 都有明确输入输出、统计记录与人工抽查，而不是只产出一个最终文件。</p>
+          <p><strong>阅读策略：</strong>沿文档生命周期前进，并在每一步保存“进入多少、保留多少、为什么丢弃、样本看起来怎样”的证据。</p>
+        </div>
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">You will build</span>
+          <h3>完成后的四层数据系统</h3>
+          <ul class="assignment-outcomes">
+            <li>WARC/HTML 到正文文档的流式抽取</li>
+            <li>语言、PII 与有害内容检测/掩码</li>
+            <li>规则/分类器质量过滤与近似去重</li>
+            <li>可统计、可抽查、可 tokenize 的训练语料</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assignment-route" aria-labelledby="assignment-route-title">
+      <p class="eyebrow">Dependency-first route</p>
+      <h2 id="assignment-route-title">七阶段数据路线</h2>
+      <ol class="assignment-route assignment-route-7">
+        <li><strong>Read WARC</strong><span>识别 HTTP record、payload、metadata 与编码边界。</span></li>
+        <li><strong>Extract text</strong><span>从 HTML 移除 boilerplate，同时保留正文顺序与文档边界。</span></li>
+        <li><strong>Safety & privacy</strong><span>识别语言、PII 和有害内容，明确 mask、filter 或保留策略。</span></li>
+        <li><strong>Quality</strong><span>组合启发式规则与分类器，记录 precision/recall 权衡。</span></li>
+        <li><strong>Deduplicate</strong><span>先处理 exact duplicates，再用 MinHash/LSH 找近似重复。</span></li>
+        <li><strong>Tokenize</strong><span>稳定文档分隔、流式编码和 dtype，产出 LM 可读 token stream。</span></li>
+        <li><strong>Validate</strong><span>逐阶段统计数量、抽查样本，并用下游训练结果比较数据版本。</span></li>
+      </ol>
+    </section>
+
+    <figure class="assignment-figure">
+      <img src="../../figures/assignment-04-data-pipeline.svg" alt="Assignment 4 从 WARC 抽取、过滤、去重、tokenize 到训练评估的数据流水线">
+      <figcaption>把每个方框当成一个可审计关卡：输入/输出 schema、保留率、拒绝原因和抽样检查都应独立记录。图依据 Assignment 4 任务关系重绘，不是 Stanford 官方原图。</figcaption>
+    </figure>
+
+    <section id="knowledge-tree" aria-labelledby="knowledge-tree-title">
+      <p class="eyebrow">Recursive prerequisite map</p>
+      <h2 id="knowledge-tree-title">递归知识树：一个网页为什么被保留或删除？</h2>
+      <div class="knowledge-tree">
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 01 · Raw web</span>
+          <h3>抓取文件里真正有哪些层？</h3>
+          <p>对应 WARC 浏览、HTML extraction 与编码处理。</p>
+          <ul>
+            <li>WARC record
+              <ul><li>request/response/metadata 类型</li><li>HTTP headers 与 payload</li></ul>
+            </li>
+            <li>HTML → visible text
+              <ul><li>DOM structure</li><li>navigation、广告、脚本与正文</li></ul>
+            </li>
+            <li>Bytes → Unicode
+              <ul><li>declared/guessed encoding</li><li>mojibake 与 replacement behavior</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 02 · Safety & privacy</span>
+          <h3>哪些风险必须在训练前处理？</h3>
+          <p>对应语言识别、PII mask 与 harmful-content filtering。</p>
+          <ul>
+            <li>Detection target
+              <ul><li>language / email / phone / IP</li><li>offensive or harmful categories</li></ul>
+            </li>
+            <li>Score → action
+              <ul><li>mask、drop、quarantine</li><li>threshold 改变 false positive/negative</li></ul>
+            </li>
+            <li>Classifier → policy
+              <ul><li>模型分数不是最终规范</li><li>抽查边界样本与群体偏差</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 03 · Quality</span>
+          <h3>“高质量”如何变成可测试规则？</h3>
+          <p>对应 Gopher filters 与质量分类器。</p>
+          <ul>
+            <li>Heuristic signal
+              <ul><li>长度、符号比例、重复模式</li><li>规则可解释但覆盖有限</li></ul>
+            </li>
+            <li>Reference distribution
+              <ul><li>Wikipedia 等正例来源</li><li>负例采样决定分类边界</li></ul>
+            </li>
+            <li>Metric → threshold
+              <ul><li>precision / recall</li><li>保留率与数据多样性</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 04 · Deduplication</span>
+          <h3>相似文档怎样被高效地找出来？</h3>
+          <p>对应 exact line dedup 与 MinHash + LSH。</p>
+          <ul>
+            <li>Document → shingles
+              <ul><li>规范化与 n-gram 集合</li><li>Jaccard similarity</li></ul>
+            </li>
+            <li>Set → signature
+              <ul><li>MinHash collision probability</li><li>多个 hash 降低估计方差</li></ul>
+            </li>
+            <li>Signature → candidates
+              <ul><li>banding / LSH</li><li>候选召回后再精确比较</li></ul>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="assignment-cheatsheet" aria-labelledby="assignment-cheatsheet-title">
+      <p class="eyebrow">Before processing</p>
+      <h2 id="assignment-cheatsheet-title">开工 Cheatsheet</h2>
+      <div class="cheatsheet-grid">
+        <article class="cheat-card">
+          <h3>WARC vs WET</h3>
+          <ul>
+            <li>WARC 保存原始抓取记录，可含 HTTP headers 与 HTML payload。</li>
+            <li>WET 是已抽取文本的派生格式，不再保留完整网页结构。</li>
+            <li>需要自行研究 extraction 时，从 WARC/HTML 层开始。</li>
+            <li>始终保留 document id 与来源元数据，便于追踪。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Classifier thresholds</h3>
+          <p class="formula-line">\(\mathrm{precision}=TP/(TP+FP)\)</p>
+          <p class="formula-line">\(\mathrm{recall}=TP/(TP+FN)\)</p>
+          <ul>
+            <li>阈值不是越高越好；它决定误删与漏放的交换。</li>
+            <li>同时抽查高分、低分和阈值附近样本。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Probabilistic filters</h3>
+          <ul>
+            <li>Bloom filter：可能 false positive，不会 false negative（在标准使用假设下）。</li>
+            <li>MinHash：单个 hash 相等概率等于集合 Jaccard 相似度。</li>
+            <li>LSH banding 调整候选 recall/precision，不直接证明重复。</li>
+            <li>最终 cluster 保留策略也会影响语料分布。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Pipeline invariants</h3>
+          <ul>
+            <li>每个阶段记录 documents in / kept / dropped / errored。</li>
+            <li>文档 ID 在阶段间稳定，拒绝原因可追踪。</li>
+            <li>流式处理不应跨文档错误拼接文本或 token。</li>
+            <li>输出 token 数、dtype、文件大小应能相互核对。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <details class="assignment-reference">
+      <summary>展开原有详细导读：组件表、前置清单、处理顺序、陷阱、评估与课程连接</summary>
+      <div class="assignment-reference-body">
 
     <!-- ============================================================ -->
     <h2 id="what">这个 Assignment 要你做什么？</h2>
@@ -219,6 +385,9 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
+      </div>
+    </details>
+
     <!-- COMPLETE_SOURCE_OUTLINE_START -->
 <section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 编程作业</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 14 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>cs336_spring2025_assignment4_data.pdf</code>、<code>assignment4-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>作业总览与环境准备</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>作业目标
 <p>本作业要求你亲手处理 Common Crawl 网页抓取数据，构建用于语言模型训练的数据集。你将实现：</p>
@@ -931,6 +1100,7 @@ ids_array.tofile(output_path)
   <script src="../../assets/quiz.js"></script>
   <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../../assets/code-format.js?v=20260814a"></script>
+  <script defer src="../../assets/handout-format.js?v=20260814a"></script>
   <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
 </body>
 </html>

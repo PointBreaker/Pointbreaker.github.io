@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
   <script defer src="../../../../assets/course/math-render.js?v=20260814f"></script>
   <link rel="stylesheet" href="../../assets/code-format.css?v=20260814a">
+  <link rel="stylesheet" href="../../assets/handout-format.css?v=20260814a">
 </head>
 <body>
   <div class="page">
@@ -34,6 +35,163 @@
       <p><strong>Spring 2026 官方资料（v26.0.0）：</strong><a href="https://github.com/stanford-cs336/assignment5-alignment">代码仓库</a> · <a href="https://github.com/stanford-cs336/assignment5-alignment/blob/main/cs336_spring2026_assignment5_alignment.pdf">作业说明</a> · <a href="https://github.com/stanford-cs336/assignment5-alignment/blob/main/cs336_spring2026_assignment5_supplement_safety_rlhf.pdf">可选安全对齐补充</a> · <a href="https://cs336.stanford.edu/#schedule">课程日程</a></p>
       <p><strong>版本说明：</strong>本页先给出 Spring 2026 主作业与安全补充的权威 problem map，再保留 Spring 2025 详细本土化作为 legacy supplement。2026 已重构 GRPO 接口、算法变体与实验题；遇到冲突时以官方 2026 PDF、仓库和下方权威映射为准。</p>
     </div>
+
+    <nav class="assignment-jump-links" aria-label="作业页快速导航">
+      <a href="#assignment-route">任务路线</a>
+      <a href="#knowledge-tree">知识树</a>
+      <a href="#assignment-cheatsheet">Cheatsheet</a>
+      <a href="#spring-2026-delta">2026 权威题图</a>
+    </nav>
+
+    <section aria-labelledby="assignment-overview-title">
+      <div class="assignment-mission-grid">
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">Mission</span>
+          <h2 id="assignment-overview-title">把“模型答得更好”拆成可检验的 RL 假设</h2>
+          <p>这份作业从 prompting baseline 开始，逐层拆出 rollout、reward、advantage、policy loss 和 aggregation，再比较 on-policy、off-policy 与不同归一化方法。核心不是背 GRPO 名词，而是理解每一个 estimator 怎样改变偏差、方差和样本权重。</p>
+          <p><strong>阅读策略：</strong>始终保留 baseline；每次只替换一个 estimator 或 normalization，并同时观察 reward、accuracy、entropy、response length 与训练方差。</p>
+        </div>
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">You will build</span>
+          <h3>完成后的四类实验能力</h3>
+          <ul class="assignment-outcomes">
+            <li>可解析、可复现的 prompting 与 rollout baseline</li>
+            <li>token log-prob、reward、mask 与 advantage 原语</li>
+            <li>标准 GRPO、Dr. GRPO、RFT、MaxRL 与 off-policy 变体</li>
+            <li>多随机种子消融，以及可选 SFT/DPO/安全评估</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assignment-route" aria-labelledby="assignment-route-title">
+      <p class="eyebrow">Dependency-first route</p>
+      <h2 id="assignment-route-title">六阶段任务路线</h2>
+      <ol class="assignment-route assignment-route-6">
+        <li><strong>Prompt baselines</strong><span>比较 zero/few-shot/CoT，确认 grader、格式与基线方差。</span></li>
+        <li><strong>Rollout primitives</strong><span>对齐 prompt/output token、mask、log-prob、entropy 与 reward。</span></li>
+        <li><strong>Standard GRPO</strong><span>group-normalized advantage、per-token policy loss 与 microbatch aggregation。</span></li>
+        <li><strong>On-policy variants</strong><span>比较 sequence/constant normalization、Dr. GRPO、RFT、MaxRL。</span></li>
+        <li><strong>Off-policy / GSPO</strong><span>区分 token ratio、sequence ratio、clipping 与旧/新 policy 数据。</span></li>
+        <li><strong>Safety & preferences</strong><span>在独立 supplement 中处理 SFT、DPO、能力评估与 red teaming。</span></li>
+      </ol>
+    </section>
+
+    <section id="knowledge-tree" aria-labelledby="knowledge-tree-title">
+      <p class="eyebrow">Recursive prerequisite map</p>
+      <h2 id="knowledge-tree-title">递归知识树：一次 RL update 在优化什么？</h2>
+      <div class="knowledge-tree">
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 01 · Prompting & evaluation</span>
+          <h3>训练前，任务和奖励是否已经定义清楚？</h3>
+          <p>对应 prompting baseline、grader 与 reward decomposition。</p>
+          <ul>
+            <li>Prompt → response distribution
+              <ul><li>zero-shot / few-shot / CoT</li><li>temperature、stop 与格式</li></ul>
+            </li>
+            <li>Response → parsed answer
+              <ul><li>格式解析失败和答案错误要区分</li><li>grader 必须先通过人工样本检查</li></ul>
+            </li>
+            <li>Score → baseline
+              <ul><li>accuracy / total reward</li><li>多次采样与随机种子方差</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 02 · Sequence probability</span>
+          <h3>一个回答的概率怎样分解到 token？</h3>
+          <p>对应 tokenization、response mask、log-prob 与 entropy。</p>
+          <ul>
+            <li>Prompt + output → aligned tensors
+              <ul><li>input/target shift</li><li>只在 response token 上计 loss</li></ul>
+            </li>
+            <li>Logits → token log-prob
+              <ul><li>log-softmax + gather</li><li>padding 与 EOS mask</li></ul>
+            </li>
+            <li>Token scores → sequence score
+              <ul><li>sum、mean 或 constant normalization</li><li>长度归一化改变样本权重</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 03 · Reward & advantage</span>
+          <h3>相对好坏怎样变成梯度权重？</h3>
+          <p>对应 group baseline、normalization、RFT 与 MaxRL。</p>
+          <ul>
+            <li>Reward signal
+              <ul><li>answer reward / format reward</li><li>sparse、verifiable feedback</li></ul>
+            </li>
+            <li>Group → baseline
+              <ul><li>减均值降低共同偏移</li><li>除标准差会改变困难题权重</li></ul>
+            </li>
+            <li>Advantage → estimator
+              <ul><li>正负样本推动方向</li><li>difficulty reweighting 与 variance</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 04 · Policy update</span>
+          <h3>on-policy 与 off-policy 差在哪里？</h3>
+          <p>对应 surrogate objective、importance ratio 与 clipping。</p>
+          <ul>
+            <li>Current samples → on-policy loss
+              <ul><li>直接使用当前 policy rollout</li><li>数据新鲜但生成成本高</li></ul>
+            </li>
+            <li>Old samples → importance weighting
+              <ul><li>(r=\exp(\log\pi_\theta-\log\pi_{old}))</li><li>ratio 方差与 clipping bias</li></ul>
+            </li>
+            <li>Token → sequence ratio
+              <ul><li>GRPO token-level weighting</li><li>GSPO sequence-level geometric mean</li></ul>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="assignment-cheatsheet" aria-labelledby="assignment-cheatsheet-title">
+      <p class="eyebrow">Before training</p>
+      <h2 id="assignment-cheatsheet-title">开工 Cheatsheet</h2>
+      <div class="cheatsheet-grid">
+        <article class="cheat-card">
+          <h3>Tensor contract</h3>
+          <ul>
+            <li>Prompt/output 拼接后，明确每个 token 的 source 与 target。</li>
+            <li><code>response_mask</code> 只覆盖需要优化的 response tokens。</li>
+            <li>log-prob、advantage、loss 与 mask 的 broadcast 维度必须一致。</li>
+            <li>padding、EOS 后 token 和空 response 必须有定义好的行为。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Core estimators</h3>
+          <p class="formula-line">\(A_i=(R_i-\bar R)/(\sigma_R+\epsilon)\)</p>
+          <p class="formula-line">\(r_t(\theta)=\exp(\log\pi_\theta(a_t|s_t)-\log\pi_{old}(a_t|s_t))\)</p>
+          <p>公式只是起点；题目会显式比较是否除标准差、怎样聚合 token、怎样做 importance reweighting。</p>
+        </article>
+        <article class="cheat-card">
+          <h3>Monitoring panel</h3>
+          <ul>
+            <li>Reward 与 accuracy：是否真的更会解题。</li>
+            <li>Format reward：是否只是更会迎合解析器。</li>
+            <li>Entropy / KL / ratio：policy 是否变化过快。</li>
+            <li>Response length：归一化是否诱发长度偏置。</li>
+            <li>Seed-to-seed variance：单次最好结果不能替代稳定性。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Ablation discipline</h3>
+          <ul>
+            <li>保留完全相同的 base model、data split 与 evaluation。</li>
+            <li>每次只改 baseline、normalizer、aggregation 或 reweighting 中一项。</li>
+            <li>同时报告训练曲线、最终指标、样本输出与失败模式。</li>
+            <li>安全 supplement 与主 GRPO 接口分开理解和验收。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <details class="assignment-reference">
+      <summary>展开原有详细导读：组件表、前置清单、GRPO 入门、陷阱、监控与课程连接</summary>
+      <div class="assignment-reference-body">
 
     <!-- ============================================================ -->
     <h2 id="what">这个 Assignment 要你做什么？</h2>
@@ -232,6 +390,9 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
+      </div>
+    </details>
+
     <section id="spring-2026-delta">
       <p class="eyebrow">Spring 2026 官方源对齐 · 权威任务映射</p>
       <h2>Assignment 5：2026 problem map 与接口迁移</h2>
@@ -260,7 +421,7 @@
 
     <!-- ============================================================ -->
     <!-- COMPLETE_SOURCE_OUTLINE_START -->
-<section class="source-outline" id="complete-source-outline"><p class="eyebrow">Spring 2025 详细本土化 · Legacy supplement</p><h2 id="complete-problems">旧版详细任务、约束与验收</h2><p class="source-outline-intro">本节保留 43 个旧版任务的详细中文实施说明。它们仍有学习价值，但不是 Spring 2026 官方 problem list；请先使用上方 2026 权威映射。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>旧版任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>与 2026 官方接口、测试、题号或实验要求冲突时，以 2026 官方 handout 为准。</li><li>legacy 来源：<code>cs336_spring2025_assignment5_alignment.pdf</code>、<code>cs336_spring2025_assignment5_supplement_safety_rlhf.pdf</code>、<code>assignment5-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>Assignment 5 环境准备</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span>Legacy supplement</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>任务目标
+<details class="deep-dive legacy-supplement"><summary>Spring 2025 Legacy Supplement · 展开旧版 43 个详细任务</summary><section class="source-outline" id="complete-source-outline"><p class="eyebrow">Spring 2025 详细本土化 · Legacy supplement</p><h2 id="complete-problems">旧版详细任务、约束与验收</h2><p class="source-outline-intro">本节保留 43 个旧版任务的详细中文实施说明。它们仍有学习价值，但不是 Spring 2026 官方 problem list；请先使用上方 2026 权威映射。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>旧版任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>与 2026 官方接口、测试、题号或实验要求冲突时，以 2026 官方 handout 为准。</li><li>legacy 来源：<code>cs336_spring2025_assignment5_alignment.pdf</code>、<code>cs336_spring2025_assignment5_supplement_safety_rlhf.pdf</code>、<code>assignment5-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>Assignment 5 环境准备</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span>Legacy supplement</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>任务目标
 <p>完成 Assignment 5 的环境准备与项目熟悉，包括环境搭建、仓库结构理解、数据与模型路径确认、运行与提交方式、评分与资源政策、全局约束，以及调试入口。</p>
 环境搭建
 <ol>
@@ -2172,7 +2333,7 @@ Answer:
 <li>
 <p><strong>自检方法</strong>：确认训练完成 1 个 epoch；验证准确率曲线合理；对比 DPO 模型与 SFT 模型的各项指标；分析对齐税现象。</p>
 </li>
-</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment5_supplement_safety_rlhf.pdf</code> · p.18-19 · confidence: high</p></div></details></div></section>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment5_supplement_safety_rlhf.pdf</code> · p.18-19 · confidence: high</p></div></details></div></section></details>
 <!-- COMPLETE_SOURCE_OUTLINE_END -->
 
     <hr class="rule">
@@ -2261,6 +2422,7 @@ Answer:
   <script src="../../assets/quiz.js"></script>
   <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../../assets/code-format.js?v=20260814a"></script>
+  <script defer src="../../assets/handout-format.js?v=20260814a"></script>
   <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
 </body>
 </html>
