@@ -19,7 +19,7 @@
   <div class="page">
     <p class="eyebrow">CS336 · 第 7 课</p>
     <h1>分布式训练并行</h1>
-    <p class="lede">现代大模型不可能在一张 GPU 上训练。这一课系统讲解分布式训练的四种并行策略——data、tensor、pipeline、sequence——以及它们如何组合。统一主题：<strong>通过复制/分片来编排计算，避免数据搬运瓶颈</strong>。</p>
+    <p class="lede">单张 GPU 会遇到两个上限：模型状态可能放不下，训练速度也可能不够。增加 GPU 之后，问题并不会自动消失——计算被拆开了，但不同设备必须交换参数、梯度或激活。本讲要建立的主线是：<strong>先看必须交换什么，再按通信频率和物理拓扑选择并行策略</strong>。</p>
 
     <div class="meta">
       <span>授课：Percy Liang</span>
@@ -35,90 +35,94 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="why">为什么需要分布式训练</h2>
+    <h2 id="why">这一讲到底解决什么问题？</h2>
 
-    <h3>规模的力量</h3>
-    <pre><code class="language-python"># 单卡是否能训练一个模型，不能只用参数量判断：
-# 还要计入梯度、优化器状态、激活、临时 buffer 和通信 workspace。
-#
-# 例如常见 mixed-precision AdamW 预算可接近 18 bytes/parameter，
-# 但具体值随 master weights、gradient dtype、optimizer 与 sharding 改变。
-# 70B、405B 等规模通常需要同时分片模型状态、计算和激活。
-#
-# 理想训练时间 = 总训练 FLOPs / (GPU 数 × 单卡峰值 FLOP/s × MFU)
-# 真实扩展还受通信、负载不均、batch size 与故障影响，不能假定线性加速。</code></pre>
+    <p class="bridge">上一讲解决的是单张 GPU 内部的数据搬运：怎样通过 fusion、tiling 和更好的 kernel 减少 HBM traffic。模型扩展到多张 GPU 后，同一个问题跨越了设备边界：本地 memory traffic 变成了 network communication。</p>
 
-    <h3>统一主题</h3>
-    <div class="card idea">
-      <p><strong>上一课（单 GPU）：</strong>通过 fusion/tiling 减少内存访问</p>
-      <p><strong>这一课（多 GPU）：</strong>通过复制/分片减少跨 GPU 通信</p>
-      <p><strong>核心权衡：</strong>计算 vs 内存 vs 通信——你可以选择重算、存内存、或存到另一张 GPU 然后通信。</p>
+    <p>单卡是否能训练一个模型，不能只看参数量。梯度、优化器状态、激活、临时 buffer 和通信 workspace 都会占用显存；即使模型勉强放得下，单卡完成全部 FLOPs 也可能太慢。因此我们增加 GPU，但随之得到一个新问题：</p>
+
+    <p><strong>多张 GPU 分别完成一部分计算后，需要交换哪些数据，交换多少次，又应该经过哪一类互联？</strong></p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>单卡容量或速度不足 → 多 GPU 引入通信 → collective 描述“交换什么” → cost model 核算“多少 bytes” → topology 决定“这些 bytes 走多快” → DP / FSDP / TP / PP 按通信模式映射到合适的硬件域。</p>
     </div>
+
+    <h3>先记住一个统一视角</h3>
+    <p>并行策略不是一组互不相关的名词。它们都在同一组资源之间做交换：可以复制计算、保留更多显存，或把数据放到另一张 GPU 后再通信。后文每介绍一种策略，都只问三件事：<strong>分片了什么、通信了什么、通信发生多频繁</strong>。</p>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
     <h2 id="collectives">通信原语</h2>
 
-    <h3>八种基本通信操作</h3>
+    <p>假设每张 GPU 都根据自己的 mini-batch 算出一份梯度。下一步不是“让 GPU 聊天”，而是一个具体的数据一致性问题：怎样让所有 GPU 获得聚合后的同一份梯度？分布式程序用 <strong>rank</strong> 标识一个参与者，用 <strong>world size</strong> 表示参与者总数，再用 collective 描述整组 rank 之间的数据变换。</p>
+
+    <h3>先掌握三种核心 collective</h3>
     <div class="pb-table-scroll"><table>
-      <tr><th>操作</th><th>输入</th><th>输出</th><th>描述</th></tr>
-      <tr><td>Broadcast</td><td>1 个 GPU 有数据</td><td>所有 GPU 有数据</td><td>一对多</td></tr>
-      <tr><td>Scatter</td><td>1 个 GPU 有大数据</td><td>所有 GPU 各有一片</td><td>分片分发</td></tr>
-      <tr><td>Gather</td><td>所有 GPU 各有一片</td><td>1 个 GPU 有大数据</td><td>收集</td></tr>
-      <tr><td>Reduce</td><td>所有 GPU 有数据</td><td>1 个 GPU 有结果</td><td>聚合（sum/max）</td></tr>
-      <tr><td>All-Gather</td><td>所有 GPU 各有一片</td><td>所有 GPU 有完整数据</td><td>Gather 到所有</td></tr>
-      <tr><td>Reduce-Scatter</td><td>所有 GPU 有完整数据</td><td>所有 GPU 各有一片结果</td><td>Reduce + Scatter</td></tr>
-      <tr><td>All-Reduce</td><td>所有 GPU 有数据</td><td>所有 GPU 有结果</td><td>Reduce + Broadcast</td></tr>
-      <tr><td>All-to-All</td><td>每个 GPU 有发往各 rank 的分片</td><td>每个 GPU 收到来自各 rank 的分片</td><td>MoE token routing / transpose-like exchange</td></tr>
+      <tr><th>操作</th><th>直觉</th><th>为什么现在需要它</th></tr>
+      <tr><td>All-Reduce</td><td>聚合每个 rank 的输入，并把完整结果交给所有 rank</td><td>DDP 需要所有副本得到一致梯度</td></tr>
+      <tr><td>All-Gather</td><td>收集每个 rank 持有的分片，让所有 rank 暂时看到完整张量</td><td>FSDP 在计算前需要恢复当前参数组</td></tr>
+      <tr><td>Reduce-Scatter</td><td>先聚合，再把最终结果按 rank 分片</td><td>FSDP 在反向后只保留各自负责的梯度分片</td></tr>
     </table></div>
 
-    <h3>关键等式</h3>
-    <pre><code class="language-python">All-Reduce = Reduce-Scatter + All-Gather
+    <p class="bridge">这三种操作并不是孤立 API。对带宽高效的 ring 实现，可以先让每个 rank 得到最终结果的一片，再交换这些分片：</p>
 
-# 直觉:
-# Reduce-Scatter: 每个 GPU 得到最终结果的 1/N
-# All-Gather: 把所有片拼起来，每个 GPU 都有完整结果</code></pre>
+    <p>\[\text{All-Reduce}=\text{Reduce-Scatter}+\text{All-Gather}\]</p>
 
-    <h3>带宽分析</h3>
-    <pre><code class="language-python"># All-Reduce 的每-rank 通信量（ring algorithm，忽略延迟）:
-# 每个 rank 发送并接收约: 2 × (N-1)/N × data_size
-# 近似: 2 × data_size（与 N 无关！）
+    <details class="deep-dive">
+      <summary>Reference · 完整 collective 对照表</summary>
+      <div class="pb-table-scroll"><table>
+        <tr><th>操作</th><th>输入</th><th>输出</th><th>典型用途</th></tr>
+        <tr><td>Broadcast</td><td>1 个 rank 有数据</td><td>所有 rank 有数据</td><td>一对多分发</td></tr>
+        <tr><td>Scatter</td><td>1 个 rank 有大张量</td><td>所有 rank 各有一片</td><td>分片分发</td></tr>
+        <tr><td>Gather</td><td>所有 rank 各有一片</td><td>1 个 rank 有完整张量</td><td>集中收集</td></tr>
+        <tr><td>Reduce</td><td>所有 rank 有数据</td><td>1 个 rank 有聚合结果</td><td>sum / max 等聚合</td></tr>
+        <tr><td>All-Gather</td><td>所有 rank 各有一片</td><td>所有 rank 有完整张量</td><td>参数或 activation 收集</td></tr>
+        <tr><td>Reduce-Scatter</td><td>所有 rank 有数据</td><td>所有 rank 各有一片聚合结果</td><td>梯度聚合并分片</td></tr>
+        <tr><td>All-Reduce</td><td>所有 rank 有数据</td><td>所有 rank 有聚合结果</td><td>梯度同步</td></tr>
+        <tr><td>All-to-All</td><td>每个 rank 有发往各 rank 的分片</td><td>每个 rank 收到来自各 rank 的分片</td><td>MoE token routing</td></tr>
+      </table></div>
+    </details>
 
-# Reduce-Scatter:
-# 每个 rank 发送并接收约: (N-1)/N × data_size
-# 近似: data_size
+    <h3>从直觉到 cost model</h3>
+    <p>如果每个 rank 都把完整梯度直接发送给所有其他 rank，链路会重复搬运大量数据。Ring 的直觉是让 rank 只和邻居交换分片：第一阶段边传边聚合，第二阶段再传播已经聚合好的分片。这样每个 rank 搬运的总字节数与张量大小同阶，而不是随 GPU 数线性增加。</p>
 
-# All-Gather:
-# 每个 rank 发送并接收约: (N-1)/N × data_size
-# 近似: data_size</code></pre>
+    <details class="deep-dive">
+      <summary>Deep Dive · Ring collective 的每-rank 通信量推导</summary>
+      <p>设 world size 为 \(N\)，输入张量大小为 \(S\) bytes。忽略启动延迟和协议开销：</p>
+      <ul>
+        <li>Reduce-Scatter：\((N-1)/N\times S\)</li>
+        <li>All-Gather：\((N-1)/N\times S\)</li>
+        <li>All-Reduce：\(2(N-1)/N\times S\)，当 \(N\) 较大时接近 \(2S\)</li>
+      </ul>
+      <p>这是逻辑字节成本，不是 wall-clock 时间；后者还取决于启动延迟、链路竞争、拓扑和 overlap。</p>
+    </details>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="network-substrate">网络 substrate：从 HBM 到跨节点 collective</h2>
+    <h2 id="network-substrate">网络 substrate：这些 bytes 经过什么硬件？</h2>
 
-    <pre><code class="language-python">GPU registers / shared memory / L2
-              ↓
-             HBM
-              ↓
-     NVLink / NVSwitch        # scale-up：节点内高带宽域
-              ↓
-        PCIe → HCA / NIC
-              ↓
- InfiniBand RDMA 或 Ethernet + RoCE
-              ↓
-       multi-node collective  # scale-out：跨节点扩展</code></pre>
+    <p class="bridge">到这里我们已经知道 collective 需要传输多少数据，但通信量只是逻辑成本。真正的 wall-clock 时间取决于这些 bytes 走的是节点内 scale-up fabric，还是经过 NIC 进入节点间 scale-out 网络。</p>
 
-    <div class="pb-table-scroll"><table>
-      <tr><th>层</th><th>职责</th><th>关键限制</th></tr>
-      <tr><td>NVLink / NVSwitch</td><td>节点内 GPU 直连与交换 fabric；B200 NVLink 5 的每 GPU 聚合带宽可达约 1.8 TB/s</td><td>只覆盖有限的 scale-up domain</td></tr>
-      <tr><td>PCIe</td><td>GPU 连接 CPU 与 HCA/NIC 的主机 I/O 总线</td><td>链路代际、lane 数与拓扑会形成 oversubscription</td></tr>
-      <tr><td>HCA / NIC</td><td>把 GPU/主机流量送入节点间网络</td><td>NIC 数量、rail 绑定和 NUMA/PCIe 亲和性</td></tr>
-      <tr><td>InfiniBand</td><td>面向数据中心的低延迟、高带宽 fabric，原生支持 RDMA</td><td>跨交换机跳数、拥塞与 rail 拓扑</td></tr>
-      <tr><td>Ethernet + RoCE</td><td>在融合以太网上承载 RDMA，绕开传统 TCP/CPU 数据路径</td><td>需要无损/拥塞控制工程，性能更依赖网络配置</td></tr>
-      <tr><td>GPUDirect RDMA</td><td>远端 NIC 直接读写 GPU memory，避免 CPU bounce buffer</td><td>需要 GPU、NIC、驱动与拓扑共同支持</td></tr>
-    </table></div>
+    <figure class="concept-figure">
+      <img src="../figures/lecture-07-topology.svg" alt="GPU compute 连接 HBM 后分成两条路径：通过 NVLink 或 NVSwitch 到节点内 peer GPU，或通过 PCIe、HCA/NIC 和 InfiniBand/RoCE 到其他节点">
+      <figcaption>PointBreaker 概念图：NVLink/NVSwitch 与 PCIe→HCA/NIC 是从 GPU/HBM 出发的两类路径，不应理解成跨节点流量必然先经过 NVLink。具体机器的 switch、rail 与 NUMA wiring 会更复杂。</figcaption>
+    </figure>
+
+    <details class="deep-dive">
+      <summary>Reference · 互联层次、职责与常见限制</summary>
+      <div class="pb-table-scroll"><table>
+        <tr><th>层</th><th>职责</th><th>关键限制</th></tr>
+        <tr><td>NVLink / NVSwitch</td><td>节点内 GPU 直连与交换 fabric；B200 NVLink 5 的每 GPU 聚合带宽可达约 1.8 TB/s</td><td>只覆盖有限的 scale-up domain</td></tr>
+        <tr><td>PCIe</td><td>GPU 连接 CPU 与 HCA/NIC 的主机 I/O 总线</td><td>链路代际、lane 数与拓扑会形成 oversubscription</td></tr>
+        <tr><td>HCA / NIC</td><td>把 GPU/主机流量送入节点间网络</td><td>NIC 数量、rail 绑定和 NUMA/PCIe 亲和性</td></tr>
+        <tr><td>InfiniBand</td><td>面向数据中心的低延迟、高带宽 fabric，原生支持 RDMA</td><td>跨交换机跳数、拥塞与 rail 拓扑</td></tr>
+        <tr><td>Ethernet + RoCE</td><td>在融合以太网上承载 RDMA，绕开传统 TCP/CPU 数据路径</td><td>需要无损/拥塞控制工程，性能更依赖网络配置</td></tr>
+        <tr><td>GPUDirect RDMA</td><td>远端 NIC 直接读写 GPU memory，避免 CPU bounce buffer</td><td>需要 GPU、NIC、驱动与拓扑共同支持</td></tr>
+      </table></div>
+    </details>
 
     <h3>Scale-up、scale-out 与并行策略放置</h3>
     <ul>
@@ -128,16 +132,17 @@
     </ul>
 
     <h3>NCCL 为什么必须感知 topology</h3>
-    <p>NCCL 会探测节点、PCIe switch、NVLink/NVSwitch 与网络接口，选择 ring/tree、分层 collective、channel 数和 GPU↔NIC 路径。逻辑通信量相同，不代表 wall-clock cost 相同：</p>
-    <pre><code class="language-python">time ≈ latency_steps × per_step_latency + bytes / effective_bandwidth
-
-# effective_bandwidth 受最慢链路、拓扑冲突、拥塞、协议效率和 overlap 影响。
-# 因此报告 collective 时必须同时给出消息大小、world size、拓扑和实测时间。</code></pre>
+    <p>NCCL 的作用是把逻辑 collective 映射到实际硬件。它会探测节点、PCIe switch、NVLink/NVSwitch 与网络接口，再选择 ring/tree、分层 collective、channel 数和 GPU↔NIC 路径。</p>
+    <p>一阶时间模型可以写成：</p>
+    <p>\[T\approx L\alpha+\frac{B}{\beta_{\mathrm{effective}}}\]</p>
+    <p>其中 \(L\) 是需要串行完成的通信步骤，\(\alpha\) 是每步启动延迟，\(B\) 是字节数，\(\beta_{\mathrm{effective}}\) 是实际有效带宽。最慢链路、拓扑冲突、拥塞、协议效率和计算重叠都会改变它，因此相同的逻辑通信量不保证相同的运行时间。</p>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
     <h2 id="data-parallel">Data Parallelism (DP)</h2>
+
+    <p class="bridge">现在把 collective 放回训练问题。最直接的扩展方式是让每张 GPU 保留同一个模型、处理不同样本；本地反向结束后，各 rank 的梯度必须重新一致，因此刚才的 All-Reduce 在这里第一次真正派上用场。</p>
 
     <h3>核心思想</h3>
     <p>每个 GPU 持有完整模型，处理不同的数据片。梯度通过 all-reduce 同步。</p>
@@ -160,17 +165,12 @@ for each GPU in parallel:
     optimizer.step()</code></pre>
 
     <h3>通信开销</h3>
-    <pre><code class="language-python"># 每步通信: 对梯度做 All-Reduce
-# 若梯度 payload 为 S bytes，N-rank ring 的每-rank 通信量约为:
-#   2 × (N-1)/N × S
-#
-# 理想带宽时间下界约为 通信字节数 / 有效 collective 带宽。
-# 不能直接用 900 GB/s NVLink 聚合峰值或单条 NIC line rate 相除：
-# 实际值取决于拓扑、NCCL 算法、并发、协议效率和计算/通信 overlap。</code></pre>
+    <p>若梯度 payload 为 \(S\) bytes，\(N\)-rank ring All-Reduce 的每-rank 通信量约为 \(2(N-1)S/N\)。这说明 DDP 的主要通信量与参数数量同阶；实际时间仍需用有效 collective 带宽和实测 overlap 判断，不能直接除以某条链路的峰值带宽。</p>
 
-    <h3>Gradient Accumulation</h3>
-    <p>当 batch size 太大，单 GPU 放不下时：</p>
-    <pre><code class="language-python"># DDP 示意：把一个大 batch 拆成多个 micro-batch
+    <details class="deep-dive">
+      <summary>Implementation · Gradient accumulation 怎样减少同步频率</summary>
+      <p>当目标 batch 无法一次放进单卡时，可以把它拆成多个 micro-batch，并只在最后一次 backward 触发梯度同步：</p>
+      <pre><code class="language-python"># DDP 示意：把一个大 batch 拆成多个 micro-batch
 optimizer.zero_grad()
 for micro_batch in micro_batches[:-1]:
     with model.no_sync():
@@ -179,17 +179,15 @@ for micro_batch in micro_batches[:-1]:
 # 最后一次 backward 不使用 no_sync()，触发 gradient bucket all-reduce
 (model(micro_batches[-1]) / len(micro_batches)).backward()
 optimizer.step()</code></pre>
-
-    <div class="card idea">
-      <p><strong>Gradient Accumulation 的好处：</strong></p>
       <ul>
         <li>模拟大 batch size（对训练稳定性重要）</li>
         <li>减少通信频率（每 N 个 micro-batch 通信一次）</li>
         <li>通信量不变（最终还是要同步所有梯度）</li>
       </ul>
-    </div>
+    </details>
 
     <h3>DDP vs FSDP</h3>
+    <p>DDP 解决了吞吐扩展，却没有解决模型状态冗余：每个 rank 仍保存完整参数、梯度和优化器状态。若这些状态本身放不下，就需要进一步分片，这正是下一讲 FSDP / ZeRO 的主题。</p>
     <table>
       <tr><th>策略</th><th>参数存储</th><th>通信</th><th>内存</th></tr>
       <tr><td>DDP</td><td>每个 GPU 完整副本</td><td>All-Reduce 梯度</td><td>高（冗余）</td></tr>
@@ -201,112 +199,105 @@ optimizer.step()</code></pre>
     <!-- ============================================================ -->
     <h2 id="tensor-parallel">Tensor Parallelism (TP)</h2>
 
+    <p class="bridge">DP 让不同 GPU 处理不同样本，但每张 GPU 仍要独立完成整层计算。如果单层权重或中间激活太大，就必须把一次矩阵计算本身拆开；这会把通信从“每步一次梯度同步”推进到“几乎每个 Transformer block 都要交换 activation”。</p>
+
     <h3>核心思想</h3>
     <p>把模型的<strong>宽度</strong>切分到多个 GPU——每个 GPU 只持有参数的一部分。</p>
+    <p>以 \(Y=XW\) 为例，按输出维切分 \(W\) 后，每个 rank 只计算一部分输出；按输入维切分时，每个 rank 得到部分和，随后需要 collective 合并。Megatron-LM 将两种切法配对，让部分中间结果尽量留在本地，只在 block 的关键边界通信。</p>
+    <p><strong>关键代价：</strong>TP 的 activation collective 通常每层发生并位于关键路径，因此倾向部署在 NVLink/NVSwitch 等高带宽、低延迟的 scale-up domain。跨节点 TP 并非不可能，但是否划算取决于拓扑、消息大小和实现。</p>
 
-    <pre><code class="language-python"># 标准 Linear 层: Y = X @ W
-# W: (D_in, D_out)
-
-# Tensor Parallel: 把 W 按列切分
-# GPU 0: W_0: (D_in, D_out/2)  → Y_0 = X @ W_0
-# GPU 1: W_1: (D_in, D_out/2)  → Y_1 = X @ W_1
-
-# 需要 All-Gather 把 Y_0 和 Y_1 拼起来: Y = [Y_0, Y_1]</code></pre>
-
-    <h3>Megatron-LM 的切分策略</h3>
+    <details class="deep-dive">
+      <summary>Deep Dive · Megatron-LM 切分、通信模式与 4-GPU shape</summary>
+      <h3>Megatron-LM 的切分策略</h3>
     <p>对于 Transformer 的 FFN 和 Attention，有特定的切分方式：</p>
 
-    <pre><code class="language-python"># FFN / SwiGLU:
+    <pre><code class="language-plaintext">FFN / SwiGLU:
 # W_gate 与 W_up 按输出维切分（column parallel）
 # 每个 rank 保留自己的中间分片，先在本地做 Swish(gate) * up
 # W_down 按输入维切分（row parallel），最后合并各 rank 的部分和
 
-# Attention 的切分:
+Attention 的切分:
 # W_q, W_k, W_v 按 head 切分（每个 GPU 负责部分 head）
 # W_o 按输入维切分，最后合并各 rank 的部分和
 #
 # 基础 Megatron TP 常用 All-Reduce 合并；配合 sequence parallel 时，
 # 相邻区域可改用 Reduce-Scatter / All-Gather 组合。</code></pre>
 
-    <h3>通信模式</h3>
-    <pre><code class="language-python"># Transformer block 的 TP 通信:
-# 1. Attention:
+      <h3>通信模式</h3>
+      <pre><code class="language-plaintext">Transformer block 的 TP 通信:
+1. Attention:
 #    - Q, K, V 计算: 无需通信（head 独立）
 #    - W_o: All-Reduce
 
-# 2. FFN:
+2. FFN:
 #    - W_gate, W_up 和逐元素门控: 本地分片计算
 #    - W_down 后: All-Reduce（或 sequence-parallel 变体中的 Reduce-Scatter）
 
-# 总计: 每个 block 2 次 All-Reduce</code></pre>
+总计: 每个 block 2 次 All-Reduce</code></pre>
 
-    <div class="card warning">
-      <p><strong>TP 的代价：</strong>每个 Transformer block 都有 activation collectives，通常位于关键路径；框架可以尝试 overlap，但其低延迟、高带宽需求仍然很强。</p>
-      <p><strong>TP 通常优先放在节点内高带宽域</strong>。跨节点 TP 并非不可能，但是否划算取决于网络拓扑、消息大小和实现。</p>
-    </div>
-
-    <h3>切分示例（4 GPU）</h3>
-    <pre><code class="language-python"># 假设 d_model = 4096, num_heads = 32
+      <h3>切分示例（4 GPU）</h3>
+      <pre><code class="language-plaintext">假设 d_model = 4096, num_heads = 32
 # 每 GPU: 8 个 head, d_model_per_gpu = 1024
 
 # W_q: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
 # W_k: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
 # W_v: (4096, 4096) → 切成 4 份: 每 GPU (4096, 1024)
 # W_o: (4096, 4096) → 切成 4 份: 每 GPU (1024, 4096)</code></pre>
+    </details>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
     <h2 id="pipeline-parallel">Pipeline Parallelism (PP)</h2>
 
+    <p class="bridge">TP 在每层切宽度，因此通信频繁。另一种办法是让每张 GPU 持有一段连续层，只在 stage 边界交接 activation；通信更粗粒度，但不同 stage 可能互相等待，形成 pipeline bubble。</p>
+
     <h3>核心思想</h3>
     <p>把模型的<strong>深度</strong>切分到多个 GPU——每个 GPU 持有连续的几层。</p>
 
-    <pre><code class="language-python"># Pipeline Parallel: 4 GPU, 16 层
-# GPU 0: layers 0-3
-# GPU 1: layers 4-7
-# GPU 2: layers 8-11
-# GPU 3: layers 12-15
+    <pre><code class="language-plaintext">Pipeline Parallel: 4 GPU, 16 层
+GPU 0: layers 0-3
+GPU 1: layers 4-7
+GPU 2: layers 8-11
+GPU 3: layers 12-15
 
-# 数据流:
-# Input → GPU 0 → activations → GPU 1 → ... → GPU 3 → Output</code></pre>
+Input → GPU 0 → activations → GPU 1 → ... → GPU 3 → Output</code></pre>
 
-    <h3>Pipeline Bubble</h3>
+    <p>把 batch 拆成多个 micro-batch 后，不同 stage 可以同时处理不同 micro-batch。micro-batch 越多，越容易填满流水线；但调度、activation memory 和 stage balance 也更复杂。</p>
+
+    <details class="deep-dive">
+      <summary>Deep Dive · Pipeline bubble、1F1B 与通信量</summary>
+      <h3>Pipeline Bubble</h3>
     <p>朴素的 pipeline 有大量空闲时间——"bubble"：</p>
 
-    <pre><code class="language-python"># 朴素 pipeline (4 stages, 1 batch):
-# Time →
-# GPU 0: [====L0-3====]  idle   idle   idle
-# GPU 1:  idle  [====L4-7====]  idle   idle
-# GPU 2:  idle   idle  [====L8-11===]  idle
-# GPU 3:  idle   idle   idle  [====L12-15==]
+      <pre><code class="language-plaintext">朴素 pipeline (4 stages, 1 batch):
+Time →
+GPU 0: [====L0-3====]  idle   idle   idle
+GPU 1:  idle  [====L4-7====]  idle   idle
+GPU 2:  idle   idle  [====L8-11===]  idle
+GPU 3:  idle   idle   idle  [====L12-15==]
 
 # 对理想化流水线，bubble time / useful compute ≈ (p-1) / m
 # 若写成总时间占比，则约为 (p-1) / (m+p-1)
 # p = pipeline stages, m = micro-batches
 # 当 m >> p 时，bubble 可以忽略</code></pre>
 
-    <h3>1F1B Schedule（One Forward One Backward）</h3>
+      <h3>1F1B Schedule（One Forward One Backward）</h3>
     <p>减少 bubble 的关键技术：</p>
 
-    <pre><code class="language-python"># 1F1B: 每个 stage 交替做 forward 和 backward
-# 而不是等所有 forward 做完再做 backward
+      <p>1F1B 在 warmup 后交替安排 forward 和 backward，而不是等所有 forward 结束后再统一 backward。它通常降低峰值 activation memory，但不会自动消除 warmup/drain bubble；效果仍取决于 stage 数、micro-batch 数、负载均衡和具体 schedule。</p>
 
-# 1F1B 在 warmup 后交替安排 forward/backward，
-# 相比先做完全部 forward 再 backward，通常降低峰值 activation memory。
-# 它仍有 warmup/drain bubble；bubble 大小取决于 stage 数、micro-batch 数、
-# stage 是否均衡以及采用 GPipe、1F1B、interleaved 或 zero-bubble 等 schedule。</code></pre>
-
-    <h3>通信量</h3>
-    <pre><code class="language-python"># Pipeline Parallel 的通信:
-# 每对相邻 GPU 之间只传 activations
-# 数据量: batch_size × seq_len × d_model × 2 (bf16)
+      <h3>通信量</h3>
+      <pre><code class="language-plaintext">Pipeline Parallel 的通信:
+每对相邻 GPU 之间传 activation；反向再传 activation gradient。
+bf16 activation bytes = batch_size × seq_len × d_model × 2
 
 # 例如: 一个 bf16 activation tensor，B=4, S=4096, D=8192
 # = 4 × 4096 × 8192 × 2 bytes = 256 MiB
 
 # 反向还要传 activation gradients；若叠加 TP/sequence sharding，张量大小会变化。
 # P2P 通信可以与其他 micro-batch 的计算 overlap，但受 schedule 和依赖约束。</code></pre>
+    </details>
 
     <div class="card idea">
       <p><strong>TP vs PP 的选择：</strong></p>
@@ -322,38 +313,29 @@ optimizer.step()</code></pre>
     <!-- ============================================================ -->
     <h2 id="sequence-parallel">Sequence Parallelism (SP)</h2>
 
+    <p class="bridge">TP 已经切分矩阵乘法，却不一定切分 LayerNorm、Dropout 等逐 token 区域的 activation。为了让这部分显存也随并行度下降，需要继续沿序列维分片。</p>
+
     <h3>动机</h3>
     <p>Tensor parallel 主要切分矩阵乘法的宽度维；LayerNorm、Dropout 等逐 token 区域仍可能复制 activation。Megatron 的 sequence parallel 用序列维分片这些区域，以继续降低 activation memory。</p>
 
     <h3>核心思想</h3>
-    <pre><code class="language-python"># 标准 TP 只切分宽度维度
-# Sequence Parallel 额外切分序列维度
-
-# 具体做法:
-# 1. LayerNorm / Dropout 是逐 token 独立的 → 自然在序列维度并行
-# 2. 在 row-parallel / column-parallel 区域之间用 Reduce-Scatter 与 All-Gather
-# 3. 让非 TP 区域的 activation 也随 TP degree 分片
-
-# 效果: 相关 activation 可近似减少到 1/N
-#
-# 注意：这不同于为超长上下文设计的 context parallel / ring attention；
-# 后者会分片 attention 所需的序列上下文，并引入不同通信模式。</code></pre>
+    <ol>
+      <li>LayerNorm / Dropout 是逐 token 独立的，可以自然地沿序列维并行。</li>
+      <li>在 row-parallel 与 column-parallel 区域之间，用 Reduce-Scatter 和 All-Gather 改变 activation 的分片布局。</li>
+      <li>相关 activation memory 因而可近似随 TP degree 降低。</li>
+    </ol>
+    <p>这不同于为超长上下文设计的 context parallel / ring attention；后者会分片 attention 所需的序列上下文，并引入另一组通信模式。</p>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
     <h2 id="combined">混合并行策略</h2>
 
+    <p class="bridge">没有一种并行策略同时满足“最省显存、最少通信、没有 bubble”。真实集群通常先根据拓扑选择高频通信的局部并行度，再用其他维度扩展容量和吞吐。</p>
+
     <h3>3D / 4D 并行</h3>
-    <p>实际训练大规模模型时，所有并行策略组合使用：</p>
-
-    <pre><code class="language-python"># 常见 3D 并行分解:
-# - 数据并行 (DP): 复制训练任务，处理不同数据
-# - 张量并行 (TP): 切分单层矩阵计算
-# - 流水线并行 (PP): 切分层
-# - 序列并行 (SP): 配合 TP 分片部分 activation
-
-# 总 GPU 数 = DP_degree × TP_degree × PP_degree</code></pre>
+    <p>常见分解同时使用 DP（不同数据）、TP（层内矩阵切分）、PP（层间切分），并让 SP 配合 TP 分片部分 activation：</p>
+    <p>\[N_{\mathrm{GPU}}=N_{\mathrm{DP}}\times N_{\mathrm{TP}}\times N_{\mathrm{PP}}\]</p>
 
     <h3>并行策略选择</h3>
     <table>
@@ -364,23 +346,25 @@ optimizer.step()</code></pre>
       <tr><td>超长上下文</td><td>SP + context parallel 等</td><td>分别解决非 TP activation 与 attention context 分片</td></tr>
     </table>
 
-    <h3>实际配置示例</h3>
-    <pre><code class="language-python"># 训练 70B 模型，16 节点 (128 GPU):
-# TP = 8 (节点内)
-# PP = 4 (4 个 stages)
-# DP = 128 / (8 × 4) = 4 (数据并行)
-# 总计: 8 × 4 × 4 = 128 GPU
+    <details class="deep-dive">
+      <summary>Deep Dive · 128-GPU 配置的容量核算示例</summary>
+      <pre><code class="language-plaintext">训练 70B 模型，16 节点 (128 GPU):
+TP = 8 (节点内)
+PP = 4 (4 个 stages)
+DP = 128 / (8 × 4) = 4 (数据并行)
+总计: 8 × 4 × 4 = 128 GPU
 
 # 仅参数 shard（未考虑 embedding tie、负载不均等）:
 # 70B / (TP 8 × PP 4) ≈ 2.19B 参数/GPU
 #
 # 但不能据此宣布“放得下”：梯度、master weights、Adam moments 是否再按 DP 分片，
 # 以及 activation、temporary buffers、pipeline schedule 都会改变峰值内存。</code></pre>
+    </details>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="bandwidth">通信量对比</h2>
+    <h2 id="bandwidth">本讲知识地图：每种策略在交换什么</h2>
 
     <table>
       <tr><th>并行策略</th><th>通信类型</th><th>每步通信量</th><th>频率</th></tr>
@@ -439,11 +423,11 @@ optimizer.step()</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！TP 每层都有关键路径 collective，因此通常优先映射到 NVLink/NVSwitch 等高带宽低延迟域；PP 只在 stage 边界传 P2P 张量，更常跨节点。" data-incorrect="这是拓扑感知的经验选择，不是 TP 或 PP 的功能限制。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！TP 每层都有关键路径 collective，因此通常优先映射到 NVLink/NVSwitch 等高带宽低延迟域；PP 只在 stage 边界传 P2P 张量，更容易跨较慢网络。" data-incorrect="这是拓扑感知的工程倾向，不是 TP 或 PP 的功能限制。">
       <p><strong>问题 4：</strong>为什么 TP 通常优先用于节点内，而 PP 更常跨节点？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">TP 计算更快</button>
-        <button data-choice="b" aria-pressed="false">TP 需要高带宽 NVLink，节点内才有</button>
+        <button data-choice="b" aria-pressed="false">TP 的高频 collective 更依赖低延迟、高带宽域</button>
         <button data-choice="c" aria-pressed="false">PP 只能在跨节点工作</button>
         <button data-choice="d" aria-pressed="false">没有特别原因</button>
       </div>
@@ -464,25 +448,14 @@ optimizer.step()</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
-    <div class="loop">
-      <article>
-        <h3>Data Parallel</h3>
-        <p>复制模型，All-Reduce 梯度</p>
-      </article>
-      <article>
-        <h3>Tensor Parallel</h3>
-        <p>切分宽度，All-Reduce 激活</p>
-      </article>
-      <article>
-        <h3>Pipeline Parallel</h3>
-        <p>切分深度，P2P 传激活</p>
-      </article>
-      <article>
-        <h3>混合并行</h3>
-        <p>按拓扑组合 TP / PP / DP / FSDP，并核算通信与 activation</p>
-      </article>
-    </div>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
+    <ol class="takeaways">
+      <li>多 GPU 的核心新成本是 communication；先问交换什么数据，再讨论并行名称。</li>
+      <li>Collective 是分布式训练的数据变换原语：DDP 主要使用 All-Reduce，FSDP 主要使用 All-Gather 与 Reduce-Scatter。</li>
+      <li>逻辑通信量不等于运行时间；bytes 必须结合 latency、effective bandwidth、topology 和 overlap 解读。</li>
+      <li>TP 的通信高频且常在关键路径，因此倾向放在高带宽、低延迟的 scale-up domain；PP 通信更粗粒度，但要管理 bubble。</li>
+      <li>真实系统通常组合 DP / FSDP / TP / PP / SP：没有固定最优配置，选择取决于模型 shape、显存、batch、网络和实现。</li>
+    </ol>
 
     <hr class="rule">
 

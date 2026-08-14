@@ -32,6 +32,13 @@
       <p>本页是中文学习导读；讲次主题、教师与材料版本以 Stanford 官方页面和讲义为准。</p>
     </div>
 
+    <p class="bridge"><strong>本讲问题：</strong>当任务答案可以被程序、测试或形式规则验证时，奖励不必依赖主观偏好模型；新的问题转为怎样采样、比较和更新，同时避免模型利用 verifier 漏洞。</p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>可验证任务 → rollout sampling → verifier reward → group-relative advantage → policy update → 分析 exploration、reward hacking 与泛化。</p>
+    </div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -116,42 +123,10 @@ for prompt in batch:
     </ul>
 
     <h3>核心思想</h3>
-    <pre><code class="language-python"># PPO 的 advantage 估计需要 value model:
-# A(s, a) = R(s, a) - V(s)
-# 其中 V(s) 需要额外训练一个 critic network
-
-# GRPO 的 insight:
-# 对同一个 prompt，生成 G 个 responses
-# 用这 G 个 responses 的平均 reward 作为 baseline
-
-# 例: prompt = "Solve x + 3 = 7"
-# response 1: "x = 4" → reward = 1 (正确)
-# response 2: "x = 5" → reward = 0 (错误)
-# response 3: "x = 4" → reward = 1 (正确)
-# response 4: "x = 3" → reward = 0 (错误)
-
-# baseline = mean(rewards) = (1 + 0 + 1 + 0) / 4 = 0.5
-# advantages = rewards - baseline = [0.5, -0.5, 0.5, -0.5]
-
-# 直觉: 比平均好的 response 被强化，比平均差的被抑制</code></pre>
+    <div class="prose-outline"><p><strong>PPO 的 advantage 估计需要 value model:</strong><br>A(s, a) = R(s, a) - V(s)<br>其中 V(s) 需要额外训练一个 critic network</p><p><strong>GRPO 的 insight:</strong><br>对同一个 prompt，生成 G 个 responses<br>用这 G 个 responses 的平均 reward 作为 baseline</p><p>例: prompt = "Solve x + 3 = 7"<br>response 1: "x = 4" → reward = 1 (正确)<br>response 2: "x = 5" → reward = 0 (错误)<br>response 3: "x = 4" → reward = 1 (正确)<br>response 4: "x = 3" → reward = 0 (错误)</p><p>baseline = mean(rewards) = (1 + 0 + 1 + 0) / 4 = 0.5<br>advantages = rewards - baseline = [0.5, -0.5, 0.5, -0.5]</p><p>直觉: 比平均好的 response 被强化，比平均差的被抑制</p></div>
 
     <h3>GRPO 的数学形式</h3>
-    <pre><code class="language-python"># GRPO 的 loss 函数:
-
-# 对每个 prompt q:
-# 1. 用旧 policy π_old 生成 G 个 responses: {o_1, o_2, ..., o_G}
-# 2. 计算每个 response 的 reward: {r_1, r_2, ..., r_G}
-# 3. 计算 baseline: b = mean(r_1, ..., r_G)
-# 4. 计算 advantage: A_i = (r_i - b) / std(r)
-# 5. 计算 policy ratio: ρ_i = π_θ(o_i|q) / π_old(o_i|q)
-# 6. 计算 clipped loss:
-
-# L = -1/G × Σ_i min(ρ_i × A_i, clip(ρ_i, 1-ε, 1+ε) × A_i)
-#     + β × KL(π_θ || π_ref)
-
-# 注意:
-# - 与 PPO 类似，但 baseline 来自组内均值而非 value model
-# - KL 惩罚仍然需要 reference model (π_ref)</code></pre>
+    <div class="prose-outline"><p>GRPO 的 loss 函数:</p><p><strong>对每个 prompt q:</strong><br>1. 用旧 policy π_old 生成 G 个 responses: {o_1, o_2, ..., o_G}<br>2. 计算每个 response 的 reward: {r_1, r_2, ..., r_G}<br>3. 计算 baseline: b = mean(r_1, ..., r_G)<br>4. 计算 advantage: A_i = (r_i - b) / std(r)<br>5. 计算 policy ratio: ρ_i = π_θ(o_i|q) / π_old(o_i|q)<br>6. 计算 clipped loss:</p><p>L = -1/G × Σ_i min(ρ_i × A_i, clip(ρ_i, 1-ε, 1+ε) × A_i)<br>    + β × KL(π_θ || π_ref)</p><p><strong>注意:</strong><br>- 与 PPO 类似，但 baseline 来自组内均值而非 value model<br>- KL 惩罚仍然需要 reference model (π_ref)</p></div>
 
     <h3>GRPO 的优势</h3>
     <table>
@@ -175,20 +150,7 @@ for prompt in batch:
     </ul>
 
     <h3>DeepSeek-R1-Zero：纯 RL</h3>
-    <pre><code class="language-python"># DeepSeek-R1-Zero 的训练流程:
-# 1. 从 DeepSeek-V3-Base 开始（纯预训练模型）
-# 2. 使用 GRPO 算法
-# 3. 奖励信号:
-#    - 数学: 检查最终答案是否正确
-#    - 代码: 运行测试用例
-#    - 推理: 格式正确性 + 答案正确性
-# 4. 模型自发学会了:
-#    - Chain-of-thought（链式推理）
-#    - Self-verification（自我验证）
-#    - Reflection（反思和纠错）
-
-# 关键发现:
-# 这些推理行为是 RL 自发涌现的，不是 SFT 教导的！</code></pre>
+    <div class="prose-outline"><p><strong>DeepSeek-R1-Zero 的训练流程:</strong><br>1. 从 DeepSeek-V3-Base 开始（纯预训练模型）<br>2. 使用 GRPO 算法<br>3. 奖励信号:<br>   - 数学: 检查最终答案是否正确<br>   - 代码: 运行测试用例<br>   - 推理: 格式正确性 + 答案正确性<br>4. RL 训练中观察到更明显的行为:<br>   - Chain-of-thought（链式推理）<br>   - Self-verification（自我验证）<br>   - Reflection（反思和纠错）</p><p><strong>关键发现:</strong><br>R1-Zero 没有先用针对这些行为的 cold-start SFT；论文报告它们在可验证奖励驱动的 RL 过程中得到强化。这个观察不等于证明预训练模型从未见过相似文本模式。</p></div>
 
     <h3>涌现的推理行为</h3>
     <p>在 RL 训练过程中，研究人员观察到模型自发发展出高级推理策略：</p>
@@ -201,33 +163,11 @@ for prompt in batch:
     </table>
 
     <div class="card idea">
-      <p><strong>"Aha Moment"</strong>：在 RL 训练到一定阶段时，模型开始出现"Wait, I made a let me recalculate..."这样的反思行为。这完全是自发涌现的——训练数据中没有教过模型这样做。</p>
+      <p><strong>"Aha Moment"</strong>：论文展示了一个中间 checkpoint 在 RL 训练中出现更长反思段落的案例，例如停下来重新检查推理。更稳妥的结论是：R1-Zero 没有用 cold-start SFT 直接示范这类行为，而 RL 过程强化了它们；这不是对全部预训练数据来源的排除性证明。</p>
     </div>
 
     <h3>DeepSeek-R1 的完整流程</h3>
-    <pre><code class="language-python"># DeepSeek-R1 (非 Zero) 的训练流程:
-
-# Stage 1: Cold Start
-# - 收集数千个高质量 CoT 样本
-# - SFT DeepSeek-V3-Base
-# - 目的: 给 RL 一个好的初始化
-
-# Stage 2: RL (推理导向)
-# - 用 GRPO 训练
-# - 奖励: 答案正确性 + 格式正确性
-# - 专注数学、代码、推理
-
-# Stage 3: Rejection Sampling + SFT
-# - 用 Stage 2 的模型生成大量样本
-# - 过滤（只保留正确的 + 格式好的）
-# - 混合通用数据做 SFT
-# - 目的: 恢复通用能力
-
-# Stage 4: RL (全场景)
-# - 再次 RL，但奖励包括:
-#   - 推理任务的正确性
-#   - 通用任务的有用性 (reward model)
-# - 目的: 同时提升推理和通用能力</code></pre>
+    <div class="prose-outline"><p>DeepSeek-R1 (非 Zero) 的训练流程:</p><p>Stage 1: Cold Start<br>- 收集数千个高质量 CoT 样本<br>- SFT DeepSeek-V3-Base<br>- 目的: 给 RL 一个好的初始化</p><p>Stage 2: RL (推理导向)<br>- 用 GRPO 训练<br>- 奖励: 答案正确性 + 格式正确性<br>- 专注数学、代码、推理</p><p>Stage 3: Rejection Sampling + SFT<br>- 用 Stage 2 的模型生成大量样本<br>- 过滤（只保留正确的 + 格式好的）<br>- 混合通用数据做 SFT<br>- 目的: 恢复通用能力</p><p>Stage 4: RL (全场景)<br>- 再次 RL，但奖励包括:<br>  - 推理任务的正确性<br>  - 通用任务的有用性 (reward model)<br>- 目的: 同时提升推理和通用能力</p></div>
 
     <h3>奖励设计</h3>
     <pre><code class="language-python"># DeepSeek-R1 的奖励函数:
@@ -258,21 +198,7 @@ def compute_reward(response, ground_truth, task_type):
 
     <h3>Chain-of-Thought 的涌现</h3>
     <p>最令人惊讶的发现之一是：<strong>CoT 不是 SFT 教的，而是 RL 涌现的</strong>：</p>
-    <pre><code class="language-python"># 训练初期:
-# Q: "Solve x + 3 = 7"
-# A: "4"  (直接回答，无推理)
-
-# 训练中期:
-# Q: "Solve x + 3 = 7"
-# A: "x + 3 = 7, so x = 7 - 3 = 4"  (开始出现推理)
-
-# 训练后期:
-# Q: "Solve x + 3 = 7"
-# A: "Let me solve this step by step.
-#     We have x + 3 = 7.
-#     Subtract 3 from both sides: x = 7 - 3 = 4.
-#     Let me verify: 4 + 3 = 7. Yes!
-#     Answer: 4"  (完整的 CoT + 验证)</code></pre>
+    <div class="prose-outline"><p><strong>训练初期:</strong><br>Q: "Solve x + 3 = 7"<br>A: "4"  (直接回答，无推理)</p><p><strong>训练中期:</strong><br>Q: "Solve x + 3 = 7"<br>A: "x + 3 = 7, so x = 7 - 3 = 4"  (开始出现推理)</p><p><strong>训练后期:</strong><br>Q: "Solve x + 3 = 7"<br>A: "Let me solve this step by step.<br>    We have x + 3 = 7.<br>    Subtract 3 from both sides: x = 7 - 3 = 4.<br>    Let me verify: 4 + 3 = 7. Yes!<br>    Answer: 4"  (完整的 CoT + 验证)</p></div>
 
     <h3>为什么 RL 能涌现出 CoT？</h3>
     <ul>
@@ -293,14 +219,7 @@ def compute_reward(response, ground_truth, task_type):
 
     <h3>1. 奖励稀疏</h3>
     <p>在很多任务中，只有最终答案是对/错，中间步骤没有奖励：</p>
-    <pre><code class="language-python"># 问题: 数学题只有最终答案有奖励
-# 模型可能通过"猜"得到正确答案
-# 或者推理过程全错但答案碰巧对
-
-# 缓解:
-# - 加入格式奖励（要求特定格式）
-# - 加入过程奖励（检查中间步骤）
-# - 多次采样取一致答案</code></pre>
+    <div class="prose-outline"><p>问题: 数学题只有最终答案有奖励<br>模型可能通过"猜"得到正确答案<br>或者推理过程全错但答案碰巧对</p><p><strong>缓解:</strong><br>- 加入格式奖励（要求特定格式）<br>- 加入过程奖励（检查中间步骤）<br>- 多次采样取一致答案</p></div>
 
     <h3>2. 奖励设计困难</h3>
     <p>设计一个好的奖励函数并不容易：</p>
@@ -357,7 +276,7 @@ def compute_reward(response, ground_truth, task_type):
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！RLVR 的核心优势是奖励客观、可自动验证，不需要人类标注。" data-incorrect="RLVR 的核心优势是客观可验证的奖励，无需人类标注。">
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！RLVR 的核心优势是奖励客观、可自动验证，不需要人类标注。" data-incorrect="RLVR 的核心优势是客观可验证的奖励，无需人类标注。">
       <p><strong>问题 1：</strong>RLVR 相比 RLHF 的主要优势是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">更容易实现</button>
@@ -368,7 +287,7 @@ def compute_reward(response, ground_truth, task_type):
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！GRPO 用组内均值作为 baseline，去掉了 PPO 需要的 value model。" data-incorrect="GRPO 用组内均值作为 baseline，无需单独的 value model。">
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！GRPO 用组内均值作为 baseline，去掉了 PPO 需要的 value model。" data-incorrect="GRPO 用组内均值作为 baseline，无需单独的 value model。">
       <p><strong>问题 2：</strong>GRPO 相比 PPO 的主要简化是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">去掉了 policy model</button>
@@ -379,18 +298,18 @@ def compute_reward(response, ground_truth, task_type):
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！DeepSeek-R1 中，CoT、self-verification、reflection 都是 RL 自发涌现的，不是 SFT 教导的。" data-incorrect="这些推理行为是 RL 自发涌现的，不是 SFT 教导的。">
-      <p><strong>问题 3：</strong>DeepSeek-R1-Zero 中，Chain-of-Thought 是如何产生的？</p>
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！R1-Zero 没有先做 cold-start SFT，论文报告 CoT、self-verification 与 reflection 在可验证奖励驱动的 RL 过程中得到强化。" data-incorrect="准确边界是：R1-Zero 未用 cold-start SFT 直接示范这些行为，论文观察到它们在 RL 中得到强化；不能据此断言预训练数据从未包含相似模式。">
+      <p><strong>问题 3：</strong>关于 DeepSeek-R1-Zero 中的推理行为，哪种表述最准确？</p>
       <div class="quiz-options">
-        <button data-choice="a" aria-pressed="false">SFT 数据教的</button>
-        <button data-choice="b" aria-pressed="false">RL 自发涌现的</button>
-        <button data-choice="c" aria-pressed="false">预训练就有的</button>
-        <button data-choice="d" aria-pressed="false">蒸馏来的</button>
+        <button data-choice="a" aria-pressed="false">论文证明预训练数据中从未出现过类似模式</button>
+        <button data-choice="b" aria-pressed="false">没有 cold-start SFT 直接示范，论文观察到这些行为在 RL 中得到强化</button>
+        <button data-choice="c" aria-pressed="false">这些行为完全由蒸馏模型提供</button>
+        <button data-choice="d" aria-pressed="false">这些行为只来自人工偏好标注</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！RLVR 只适用于有可验证奖励的任务，开放式任务仍需 RLHF。" data-incorrect="RLVR 只适用于封闭式任务，开放式任务仍需其他方法。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！RLVR 只适用于有可验证奖励的任务，开放式任务仍需 RLHF。" data-incorrect="RLVR 只适用于封闭式任务，开放式任务仍需其他方法。">
       <p><strong>问题 4：</strong>RLVR 能完全替代 RLHF 吗？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">能，RLVR 更好</button>
@@ -404,7 +323,7 @@ def compute_reward(response, ground_truth, task_type):
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>
         <h3>RLVR</h3>
@@ -427,13 +346,13 @@ def compute_reward(response, ground_truth, task_type):
     <hr class="rule">
 
     <h2 id="reading">延伸阅读</h2>
-    <ul>
+    <details class="deep-dive"><summary>Reference · 延伸阅读与一手资料</summary><ul>
       <li>DeepSeek-AI (2025): <a href="https://arxiv.org/abs/2501.12948">DeepSeek-R1</a> — RLVR 的里程碑</li>
       <li>Lambert et al. (2024): <a href="https://arxiv.org/abs/2407.21787">The Anatomy of a RLVR Pipeline</a> — RLVR 的系统分析</li>
       <li>Guo et al. (2025): <a href="https://arxiv.org/abs/2501.12948">DeepSeek-R1 Paper</a> — 完整方法</li>
       <li>OpenAI (2024): <a href="https://arxiv.org/abs/2408.03314">Let's Verify Step by Step</a> — 过程奖励模型</li>
       <li>Lightman et al. (2023): <a href="https://arxiv.org/abs/2305.20050">Let's Verify Step by Step</a> — PRM 开创性工作</li>
-    </ul>
+    </ul></details>
 
     <hr class="rule">
 

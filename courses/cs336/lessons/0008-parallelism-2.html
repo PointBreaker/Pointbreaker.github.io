@@ -19,7 +19,7 @@
   <div class="page">
     <p class="eyebrow">CS336 · 第 8 课</p>
     <h1>ZeRO 优化器与 FSDP</h1>
-    <p class="lede">上一课讲了四种基本并行策略。这一课深入 Data Parallelism 的内存优化——ZeRO 优化器如何通过分片消除冗余存储，以及 PyTorch 的 FSDP 如何实现这些思想。</p>
+    <p class="lede">上一讲说明了如何把计算分到多张 GPU；这一讲处理更现实的容量约束：即使计算可以并行，每个 data-parallel rank 仍可能保存一整份参数、梯度和优化器状态。ZeRO / FSDP 的目标是消除这些冗余，但代价是按需通信。</p>
 
     <div class="meta">
       <span>授课：Tatsu Hashimoto</span>
@@ -35,12 +35,19 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="dp-memory">Data Parallelism 的内存问题</h2>
+    <h2 id="dp-memory">这一讲到底解决什么问题？</h2>
+
+    <p class="bridge">DDP 通过复制模型来扩展吞吐，因此同步后每个 rank 拥有相同参数、梯度与 optimizer state。对大模型而言，问题不是集群总显存不够，而是这些相同状态被重复存了很多份。</p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>DDP 状态冗余 → ZeRO 分阶段分片 optimizer / gradient / parameter → FSDP 按 unit All-Gather 参数、Reduce-Scatter 梯度 → mixed precision 与 checkpointing 继续压缩峰值 → 与 TP / PP 组合成多维并行。</p>
+    </div>
 
     <h3>DDP 的冗余</h3>
     <p>在标准 Data Parallelism 中，每个 GPU 都存了完整副本：</p>
 
-    <pre><code class="language-python"># 每个 GPU 存储（70B 模型, fp32 + AdamW）:
+    <pre><code class="language-plaintext">每个 GPU 存储（70B 模型, fp32 + AdamW）:
 参数:     4 × 70B = 280 GB
 梯度:     4 × 70B = 280 GB
 优化器 m: 4 × 70B = 280 GB
@@ -70,8 +77,12 @@
       <tr><td>Stage 3</td><td>+ 参数</td><td>参数、梯度、optimizer states 近似 1/N</td><td>按需参数 All-Gather + 梯度 Reduce-Scatter</td></tr>
     </table></div>
 
-    <h3>ZeRO Stage 1：分片优化器状态</h3>
-    <pre><code class="language-python"># 标准 DDP:
+    <p class="bridge">分片越深入，持久显存越低，但计算前越需要重新取得当前参数。Stage 3 的关键代价是：每个 FSDP unit 通常在前向、反向分别 All-Gather 参数，并在反向 Reduce-Scatter 梯度；能否隐藏这些通信取决于 unit 粒度、计算量、网络和 prefetch。</p>
+
+    <details class="deep-dive">
+      <summary>Deep Dive · Stage 1 / 2 / 3 的逐项显存核算</summary>
+      <h3>ZeRO Stage 1：分片优化器状态</h3>
+      <pre><code class="language-plaintext">标准 DDP:
 # 每个 GPU 存完整的 m 和 v（各 4P bytes）
 
 # ZeRO Stage 1:
@@ -86,8 +97,8 @@
 
 # 8 GPU: 8P + P = 9P（vs 标准 16P）→ 节省 44%</code></pre>
 
-    <h3>ZeRO Stage 2：+ 分片梯度</h3>
-    <pre><code class="language-python"># ZeRO Stage 2:
+      <h3>ZeRO Stage 2：+ 分片梯度</h3>
+      <pre><code class="language-plaintext">ZeRO Stage 2:
 # 梯度也分片——每个 GPU 只存自己负责的那部分参数的梯度
 
 # 关键: All-Reduce → Reduce-Scatter
@@ -101,8 +112,8 @@
 
 # 8 GPU: 4P + 1.5P = 5.5P → 节省 66%</code></pre>
 
-    <h3>ZeRO Stage 3：+ 分片参数</h3>
-    <pre><code class="language-python"># ZeRO Stage 3:
+      <h3>ZeRO Stage 3：+ 分片参数</h3>
+      <pre><code class="language-plaintext">ZeRO Stage 3:
 # 参数也分片——每个 GPU 只存 1/N 的参数
 
 # 前向/反向计算时:
@@ -118,13 +129,8 @@
 
 # 8 GPU: 2P → 节省 87.5%！</code></pre>
 
-    <div class="card warning">
-      <p><strong>ZeRO Stage 3 的代价：</strong>每个被包装单元通常在前向和反向各 All-Gather 一次参数，并在反向 Reduce-Scatter 梯度。若该单元参数/梯度 payload 为 S bytes，大 N 时每 rank 约通信 3S，而不是只算一次 All-Gather。</p>
-      <p>实现可以预取后续单元并与计算 overlap，但能否隐藏通信取决于单元粒度、计算量、网络、限流与内存峰值。</p>
-    </div>
-
-    <h3>ZeRO 内存总结</h3>
-    <pre><code class="language-python"># 70B 模型, 8 GPU, fp32 + AdamW
+      <h3>ZeRO 内存总结</h3>
+      <pre><code class="language-plaintext">70B 模型, 8 GPU, fp32 + AdamW
 
 标准 DDP:     16P = 1120 GB/GPU  ← 放不下
 ZeRO Stage 1: 9P  = 630 GB/GPU   ← 还是放不下
@@ -142,6 +148,7 @@ ZeRO Stage 3: 2P  = 140 GB/GPU   ← 还是放不下（但接近了！）
 # 16 GPU: 持久模型状态约 70 GB/GPU
 # 这仍未计入完整参数 All-Gather buffer、activation、allocator 碎片和通信 workspace，
 # 因此不能仅凭 70 &lt; 80 GB 断言一定放得下。</code></pre>
+    </details>
 
     <hr class="rule">
 
@@ -151,7 +158,9 @@ ZeRO Stage 3: 2P  = 140 GB/GPU   ← 还是放不下（但接近了！）
     <h3>什么是 FSDP？</h3>
     <p>FSDP (Fully Sharded Data Parallel) 是 PyTorch 1.11+ 内置的 ZeRO Stage 3 实现。</p>
 
-    <pre><code class="language-python">from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+    <details class="deep-dive">
+      <summary>Implementation · PyTorch FSDP 包装示例</summary>
+      <pre><code class="language-python">from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 # 包装模型
 model = FSDP(
@@ -160,29 +169,21 @@ model = FSDP(
     cpu_offload=CPUOffload(offload_params=False),
     auto_wrap_policy=transformer_auto_wrap_policy,
 )</code></pre>
+    </details>
 
     <h3>FSDP 的工作流程</h3>
-    <pre><code class="language-python"># FSDP 的前向传播（以一层为例）:
+    <ol>
+      <li><strong>All-Gather 参数：</strong>计算当前 FSDP unit 前，各 rank 临时恢复该 unit 的完整参数。</li>
+      <li><strong>本地计算：</strong>每个 rank 仍处理不同的数据片，完成 forward 或 backward。</li>
+      <li><strong>释放非本地参数：</strong>计算结束后重新只保留本 rank 的 shard，以降低持久显存。</li>
+      <li><strong>Reduce-Scatter 梯度：</strong>反向结束后聚合梯度，并让每个 rank 只保留自己负责的部分。</li>
+    </ol>
+    <p>这解释了 FSDP 的核心权衡：它用短暂的完整参数 buffer 和更多 collective，换取大部分时间只保存 \(1/N\) 的模型状态。</p>
 
-# 1. All-Gather: 从所有 GPU 收集完整参数
-#    若参数有 P 个元素、world_size=4：
-#    GPU 0 有 W[0:P/4], GPU 1 有 W[P/4:P/2], ...
-#    → 所有 GPU 得到完整 W
-
-# 2. 前向计算: Y = X @ W
-#    每个 GPU 用不同的数据片（data parallel）
-
-# 3. 释放: 丢弃非本地的参数分片
-#    只保留本地的 W[rank*P/world_size : (rank+1)*P/world_size]
-
-# 4. 反向传播时:
-#    - All-Gather 参数（再次）
-#    - 计算梯度
-#    - Reduce-Scatter 梯度（每个 GPU 得到自己那部分的聚合梯度）
-#    - 更新本地参数分片</code></pre>
-
-    <h3>FSDP 的通信量</h3>
-    <pre><code class="language-python"># 令某个 FSDP unit 的参数/梯度 payload 为 S bytes、world_size=N：
+    <details class="deep-dive">
+      <summary>Deep Dive · FSDP 通信量与 sharding strategy</summary>
+      <h3>FSDP 的通信量</h3>
+      <pre><code class="language-plaintext">令某个 FSDP unit 的参数/梯度 payload 为 S bytes、world_size=N：
 # 前向 All-Gather:              (N-1)/N × S per rank
 # 反向参数 All-Gather:          (N-1)/N × S per rank
 # 反向梯度 Reduce-Scatter:      (N-1)/N × S per rank
@@ -193,14 +194,14 @@ model = FSDP(
 # FSDP 通信更多，但内存更少
 # 适合: 模型太大，DDP 放不下时</code></pre>
 
-    <h3>FSDP 策略对比</h3>
-    <table>
+      <h3>FSDP 策略对比</h3>
+      <table>
       <tr><th>策略</th><th>描述</th><th>内存</th><th>通信</th></tr>
       <tr><td>FULL_SHARD</td><td>ZeRO Stage 3，全分片</td><td>持久模型状态最低</td><td>参数 gather 最频繁</td></tr>
       <tr><td>SHARD_GRAD_OP</td><td>反向后分片梯度与 optimizer states；前向参数保持未分片</td><td>介于 DDP 与 FULL_SHARD</td><td>依 PyTorch 版本和 reshard 行为而定</td></tr>
       <tr><td>NO_SHARD</td><td>不分片；新代码通常直接使用 DDP</td><td>模型状态复制</td><td>梯度 All-Reduce</td></tr>
       <tr><td>HYBRID_SHARD</td><td>组内 FULL_SHARD，组间复制</td><td>按 shard group 缩小</td><td>组内 gather/scatter + 组间同步</td></tr>
-    </table>
+      </table>
 
     <div class="card idea">
       <p><strong>HYBRID_SHARD（拓扑相关选项）：</strong></p>
@@ -210,6 +211,7 @@ model = FSDP(
         <li>可在内存节省与跨节点通信之间折中，但不是所有集群的默认最优</li>
       </ul>
     </div>
+    </details>
 
     <hr class="rule">
 
@@ -217,30 +219,10 @@ model = FSDP(
     <h2 id="mixed-precision-dp">混合精度 + 并行</h2>
 
     <h3>混合精度下的内存</h3>
-    <pre><code class="language-python"># 混合精度训练 (bf16 前向 + fp32 主参数):
-
-# 参数:
-#   bf16 参数: 2P（用于前向/反向计算）
-#   fp32 主参数: 4P（用于优化器更新）
-# 梯度:
-#   fp32 梯度: 4P（用于优化器）
-# 优化器:
-#   fp32 m: 4P
-#   fp32 v: 4P
-
-# 总计: 18P bytes（vs fp32 的 16P，稍多但激活值省一半）</code></pre>
+    <div class="prose-outline"><p>混合精度训练 (bf16 前向 + fp32 主参数):</p><p><strong>参数:</strong><br>  bf16 参数: 2P（用于前向/反向计算）<br>  fp32 主参数: 4P（用于优化器更新）<br>梯度:<br>  fp32 梯度: 4P（用于优化器）<br>优化器:<br>  fp32 m: 4P<br>  fp32 v: 4P</p><p>总计: 18P bytes（vs fp32 的 16P，稍多但激活值省一半）</p></div>
 
     <h3>混合精度 + FSDP</h3>
-    <pre><code class="language-python"># FSDP + 混合精度:
-# 参数、梯度和 optimizer states 的持久 shard 可近似为上述预算的 1/N
-
-# 8 GPU, 70B 模型:
-# 每 GPU: 18P / 8 = 2.25P = ~157 GB → 还是超
-# 16 GPU: 18P / 16 = ~79 GB 的持久状态下界
-
-# 实际峰值还包括 All-Gather 后的完整 FSDP unit、activations、临时 buffer 与碎片；
-# 79 GB 持久状态不可能安全装入 80 GB GPU，需要更细 sharding、offload、
-# 更低状态精度或更多设备，并常配合 activation checkpointing。</code></pre>
+    <div class="prose-outline"><p><strong>FSDP + 混合精度:</strong><br>参数、梯度和 optimizer states 的持久 shard 可近似为上述预算的 1/N</p><p><strong>8 GPU, 70B 模型:</strong><br>每 GPU: 18P / 8 = 2.25P = ~157 GB → 还是超<br>16 GPU: 18P / 16 = ~79 GB 的持久状态下界</p><p>实际峰值还包括 All-Gather 后的完整 FSDP unit、activations、临时 buffer 与碎片；<br>79 GB 持久状态不可能安全装入 80 GB GPU，需要更细 sharding、offload、<br>更低状态精度或更多设备，并常配合 activation checkpointing。</p></div>
 
     <h3>Gradient Checkpointing</h3>
     <p>用计算换内存——不保存中间激活，反向时重算：</p>
@@ -257,23 +239,12 @@ model = FSDP(
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="communication">通信原语实现</h2>
+    <details class="deep-dive">
+      <summary>Deep Dive · Ring、NCCL、带宽测量与多维并行</summary>
+      <h2 id="communication">通信原语实现</h2>
 
     <h3>Ring All-Reduce</h3>
-    <pre><code class="language-python"># Ring All-Reduce 的两个阶段:
-
-# Phase 1: Reduce-Scatter
-# 每个 GPU 把数据分成 N 份
-# 在 ring 中传递并累加
-# 经过 N-1 步，每个 GPU 有 1/N 的完整结果
-
-# Phase 2: All-Gather
-# 每个 GPU 把自己的 1/N 结果在 ring 中传递
-# 经过 N-1 步，每个 GPU 有完整结果
-
-# 总通信量: 2 × (N-1)/N × data_size ≈ 2 × data_size
-# 固定 payload 时，每-rank 字节量是 O(1) 并趋近 2 × data_size；
-# 但需要 2(N-1) 个 ring steps，因此 latency 项仍随 N 增长。</code></pre>
+    <div class="prose-outline"><p>Ring All-Reduce 的两个阶段:</p><p>Phase 1: Reduce-Scatter<br>每个 GPU 把数据分成 N 份<br>在 ring 中传递并累加<br>经过 N-1 步，每个 GPU 有 1/N 的完整结果</p><p>Phase 2: All-Gather<br>每个 GPU 把自己的 1/N 结果在 ring 中传递<br>经过 N-1 步，每个 GPU 有完整结果</p><p>总通信量: 2 × (N-1)/N × data_size ≈ 2 × data_size<br>固定 payload 时，每-rank 字节量是 O(1) 并趋近 2 × data_size；<br>但需要 2(N-1) 个 ring steps，因此 latency 项仍随 N 增长。</p></div>
 
     <h3>NCCL：NVIDIA 的通信库</h3>
     <pre><code class="language-python"># NCCL 会按 collective、消息大小、拓扑和协议选择/组合算法:
@@ -339,7 +310,11 @@ step_time ≈ compute + fsdp_collective + tp_collective</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="practical">实际训练配置</h2>
+    </details>
+
+    <details class="deep-dive">
+      <summary>Reference · 70B 配置与 scaling-efficiency 核算</summary>
+      <h2 id="practical">实际训练配置</h2>
 
     <h3>70B 模型训练配置</h3>
     <pre><code class="language-python"># 硬件: 16 节点 × 8 H100 = 128 GPU
@@ -369,22 +344,13 @@ MFU ≈ 0.5
 # 原先“99 小时”低估了约 280 倍。真实规划还要加入非训练 FLOPs 与停机。</code></pre>
 
     <h3>Scaling Efficiency</h3>
-    <pre><code class="language-python"># 理想: N 个 GPU → N× 加速
-# 实际: 通信开销导致亚线性加速
-
-# 弱 scaling 固定每 GPU 工作量，强 scaling 固定总工作量。
-# 效率没有跨模型/集群通用的 80-95% 或 60-80% 区间，必须报告
-# GPU 数、网络、global batch、并行分解、序列长度和测量口径。
-
-# 影响 scaling 的因素:
-# 1. 模型大小（越大，计算占比越高，scaling 越好）
-# 2. Batch size（越大，通信占比越低）
-# 3. 网络带宽（NVLink vs InfiniBand）
-# 4. 并行策略选择</code></pre>
+    <div class="prose-outline"><p>理想: N 个 GPU → N× 加速<br>实际: 通信开销导致亚线性加速</p><p>弱 scaling 固定每 GPU 工作量，强 scaling 固定总工作量。<br>效率没有跨模型/集群通用的 80-95% 或 60-80% 区间，必须报告<br>GPU 数、网络、global batch、并行分解、序列长度和测量口径。</p><p><strong>影响 scaling 的因素:</strong><br>1. 模型大小（越大，计算占比越高，scaling 越好）<br>2. Batch size（越大，通信占比越低）<br>3. 网络带宽（NVLink vs InfiniBand）<br>4. 并行策略选择</p></div>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
+    </details>
+
     <h2 id="quiz">知识检查</h2>
 
     <div class="quiz" data-quiz="1" data-answer="c" data-correct="正确！ZeRO Stage 3 让参数、梯度和优化器状态的持久存储近似降为 1/N；峰值还包括 gather buffer 和 activation。" data-incorrect="1/N 只适用于可分片模型状态的理想持久存储，不代表整张 GPU 的峰值内存都严格除以 N。">
@@ -445,36 +411,28 @@ MFU ≈ 0.5
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
-    <div class="loop">
-      <article>
-        <h3>ZeRO</h3>
-        <p>分片消除冗余，Stage 1/2/3 渐进</p>
-      </article>
-      <article>
-        <h3>FSDP</h3>
-        <p>PyTorch 的 ZeRO 3 实现</p>
-      </article>
-      <article>
-        <h3>Ring All-Reduce</h3>
-        <p>每-rank 带宽量趋近 2× payload；latency 仍随 ring steps 增长</p>
-      </article>
-      <article>
-        <h3>混合并行</h3>
-        <p>TP + PP + FSDP + checkpointing</p>
-      </article>
-    </div>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
+    <ol class="takeaways">
+      <li>DDP 的容量问题来自模型状态复制；集群总显存很多，不代表单个 rank 能容纳完整副本。</li>
+      <li>ZeRO Stage 1 / 2 / 3 依次分片 optimizer state、gradient 和 parameter，显存越低，按需通信越多。</li>
+      <li>FSDP 在计算前 All-Gather 当前 unit 参数，反向后 Reduce-Scatter 梯度，再恢复只保存本地 shard。</li>
+      <li>FSDP unit 粒度同时影响峰值 buffer、collective 次数和可重叠计算量，因此不是越细或越粗越好。</li>
+      <li>Mixed precision、activation checkpointing、FSDP、TP 与 PP 解决不同资源约束，真实配置需要联合核算。</li>
+    </ol>
 
     <hr class="rule">
 
     <h2 id="reading">延伸阅读</h2>
-    <ul>
+    <details class="deep-dive">
+      <summary>Reference · ZeRO、FSDP 与 NCCL 一手资料</summary>
+      <ul>
       <li>Rajbhandari et al. (2020): <a href="https://arxiv.org/abs/1910.02054">ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</a></li>
       <li>Zhao et al. (2023): <a href="https://arxiv.org/abs/2304.11277">PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel</a></li>
       <li><a href="https://pytorch.org/docs/stable/fsdp.html">PyTorch FSDP 文档</a></li>
       <li>NVIDIA <a href="https://github.com/NVIDIA/nccl">NCCL</a> — 通信库</li>
       <li>Stanford CS336 Spring 2025: <a href="https://github.com/stanford-cs336/spring2025-lectures/blob/main/lecture_08.py">Lecture 8 executable notes</a></li>
-    </ul>
+      </ul>
+    </details>
 
     <hr class="rule">
 

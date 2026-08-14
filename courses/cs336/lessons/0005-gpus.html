@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 5 课：GPU 架构与性能 — CS336</title>
+  <title>第 5 课：GPU、TPU 架构与性能 — CS336</title>
   <link rel="stylesheet" href="../assets/course.css">
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
@@ -18,8 +18,8 @@
 <body>
   <div class="page">
     <p class="eyebrow">CS336 · 第 5 课</p>
-    <h1>GPU 架构与性能</h1>
-    <p class="lede">理解 GPU 硬件是理解为什么深度学习代码这样写的关键。为什么 matmul 那么快？为什么 memory-bound 操作这么慢？为什么 kernel fusion 能加速？这一课从硬件层面回答这些问题。</p>
+    <h1>GPU、TPU 架构与性能</h1>
+    <p class="lede">同样数量的 FLOPs，为什么有的算子接近硬件峰值，有的却大部分时间都在等待数据？本讲从计算单元、memory hierarchy 和执行模型出发，建立判断 kernel 瓶颈的硬件视角，并比较 GPU 与 TPU 的共同目标和不同取舍。</p>
 
     <div class="meta">
       <span>授课：Tatsu Hashimoto</span>
@@ -35,7 +35,16 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="gpu-basics">GPU 架构概览</h2>
+    <h2 id="gpu-basics">这一讲到底解决什么问题？</h2>
+
+    <p class="bridge">Lecture 2 已经教会我们核算 FLOPs 和 bytes，但公式还没有解释：为什么相同 FLOPs 在不同算子上会得到完全不同的实际时间？答案取决于数据在硬件中的位置，以及程序能否让足够多的计算同时进行。</p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>并行 workload → SM / tensor core 执行 → registers / shared memory / HBM 数据移动 → arithmetic intensity 与 roofline → coalescing / tiling / occupancy → CUDA、Triton 和 TPU 如何映射同一组约束。</p>
+    </div>
+
+    <h3>先看 GPU 为什么适合这类 workload</h3>
 
     <h3>CPU vs GPU</h3>
     <div class="pb-table-scroll"><table>
@@ -46,7 +55,9 @@
       <tr><td>内存</td><td>低延迟，大容量</td><td>高带宽，较大容量</td></tr>
     </table></div>
 
-    <h3>A100 GPU 架构</h3>
+    <details class="deep-dive">
+      <summary>Reference · A100、H100 与 B200 硬件数字</summary>
+      <h3>A100 GPU 架构</h3>
     <pre><code class="language-python">A100 SM (Streaming Multiprocessor) 结构:
 ├── 108 个 SM
 ├── 每个 SM 包含:
@@ -78,6 +89,7 @@
     <div class="card idea">
       <p><strong>新鲜度边界：</strong>MXFP4/NVFP4 的支持不代表任意 PyTorch kernel 会自动得到 Blackwell 峰值。布局、scale recipe、累加精度、Tensor Core 指令与库版本必须同时匹配。</p>
     </div>
+    </details>
 
     <hr class="rule">
 
@@ -129,15 +141,7 @@ Grid
 
     <h3>SIMT 执行模型</h3>
     <p><strong>SIMT = Single Instruction, Multiple Thread</strong></p>
-    <pre><code class="language-python"># Warp 中的 32 个线程同时执行同一条指令
-# 但操作不同的数据
-
-# 例如: 向量加法
-# Thread 0: a[0] + b[0] → c[0]
-# Thread 1: a[1] + b[1] → c[1]
-# ...
-# Thread 31: a[31] + b[31] → c[31]
-# 从编程模型看是一条 warp 指令；实际完成周期取决于指令、流水线和硬件吞吐。</code></pre>
+    <div class="prose-outline"><p>Warp 中的 32 个线程同时执行同一条指令<br>但操作不同的数据</p><p>例如: 向量加法<br>Thread 0: a[0] + b[0] → c[0]<br>Thread 1: a[1] + b[1] → c[1]<br>...<br>Thread 31: a[31] + b[31] → c[31]<br>从编程模型看是一条 warp 指令；实际完成周期取决于指令、流水线和硬件吞吐。</p></div>
 
     <div class="card warning">
       <p><strong>分支发散（Branch Divergence）：</strong>如果 warp 中的线程走不同控制流路径，硬件通常需要用不同 active mask 分阶段执行这些路径，因此有效吞吐可能下降；具体代价取决于分支长度、编译结果和架构。</p>
@@ -156,16 +160,7 @@ else:
     <p><strong>Occupancy = 活跃 warp 数 / 最大支持 warp 数</strong></p>
     <p>高 occupancy 意味着 SM 有更多的 warp 可以调度——当一个 warp 等待内存时，SM 可以切换到另一个 warp。</p>
 
-    <pre><code class="language-python"># 影响 occupancy 的因素:
-# 1. 每个 thread 使用的寄存器数
-# 2. 每个 block 使用的 shared memory
-# 3. block 大小
-
-# 实践原则:
-# - block size 通常取 warp size (32) 的倍数
-# - 128 或 256 threads/block 是常见起点，不是固定最优值
-# - 更高 occupancy 有助于隐藏等待，但最高 occupancy 不保证最高性能；
-#   还要平衡寄存器、shared memory、指令级并行和数据复用</code></pre>
+    <div class="prose-outline"><p><strong>影响 occupancy 的因素:</strong><br>1. 每个 thread 使用的寄存器数<br>2. 每个 block 使用的 shared memory<br>3. block 大小</p><p><strong>实践原则:</strong><br>- block size 通常取 warp size (32) 的倍数<br>- 128 或 256 threads/block 是常见起点，不是固定最优值<br>- 更高 occupancy 有助于隐藏等待，但最高 occupancy 不保证最高性能；<br>  还要平衡寄存器、shared memory、指令级并行和数据复用</p></div>
 
     <hr class="rule">
 
@@ -223,14 +218,7 @@ else:
 
     <h3>什么是 Tensor Core？</h3>
     <p>Tensor Core 是 GPU 上的专用硬件单元，专门做矩阵乘法：</p>
-    <pre><code class="language-python"># Tensor Core 执行小矩阵分块的 multiply-accumulate:
-# D = A × B + C
-# 支持的指令形状与输入/累加精度取决于 GPU 架构
-
-# H100 第四代 Tensor Core:
-# - 支持 FP8, FP16, BF16, TF32, FP64
-# - 每个 SM 有 4 个 Tensor Core
-# - 峰值吞吐还取决于数据类型、稠密/2:4 稀疏模式和时钟</code></pre>
+    <div class="prose-outline"><p><strong>Tensor Core 执行小矩阵分块的 multiply-accumulate:</strong><br>D = A × B + C<br>支持的指令形状与输入/累加精度取决于 GPU 架构</p><p><strong>H100 第四代 Tensor Core:</strong><br>- 支持 FP8, FP16, BF16, TF32, FP64<br>- 每个 SM 有 4 个 Tensor Core<br>- 峰值吞吐还取决于数据类型、稠密/2:4 稀疏模式和时钟</p></div>
 
     <h3>使用 Tensor Core 的条件</h3>
     <ul>
@@ -240,15 +228,7 @@ else:
     </ul>
 
     <h3>TF32：两全其美</h3>
-    <pre><code class="language-python"># TF32 (TensorFloat-32): A100 引入
-# 1 位符号 + 8 位指数 + 10 位尾数 = 19 bits
-# 范围和 FP32 一样（8 位指数），精度稍低（10 vs 23 尾数）
-# 但用 Tensor Core 加速！
-
-# PyTorch 中应显式选择期望的 float32 matmul 精度策略:
-# torch.set_float32_matmul_precision("high")
-# 旧接口也可控制 CUDA matmul 的 TF32 行为；默认值会随版本变化，
-# 不应假定所有环境都自动开启。</code></pre>
+    <div class="prose-outline"><p>TF32 (TensorFloat-32): A100 引入<br>1 位符号 + 8 位指数 + 10 位尾数 = 19 bits<br>范围和 FP32 一样（8 位指数），精度稍低（10 vs 23 尾数）<br>但用 Tensor Core 加速！</p><p><strong>PyTorch 中应显式选择期望的 float32 matmul 精度策略:</strong><br>torch.set_float32_matmul_precision("high")<br>旧接口也可控制 CUDA matmul 的 TF32 行为；默认值会随版本变化，<br>不应假定所有环境都自动开启。</p></div>
 
     <hr class="rule">
 
@@ -257,39 +237,20 @@ else:
 
     <h3>Coalesced Access（合并访问）</h3>
     <p>Global memory 请求会被合并为尽可能少的内存事务；现代 NVIDIA GPU 的缓存行由 32-byte sectors 组成。warp 访问连续且对齐的地址时，所需 sector 更少：</p>
-    <pre><code class="language-python"># Good: Coalesced (连续访问)
-# Thread 0 → address 0
-# Thread 1 → address 4
-# Thread 2 → address 8
-# ... → 通常只需覆盖一个连续的 128B 区域
-
-# Bad: Strided (跨步访问)
-# Thread 0 → address 0
-# Thread 1 → address 1024
-# Thread 2 → address 2048
-# ... → 可能触及大量分散的 sectors，浪费带宽</code></pre>
+    <div class="prose-outline"><p>Good: Coalesced (连续访问)<br>Thread 0 → address 0<br>Thread 1 → address 4<br>Thread 2 → address 8<br>... → 通常只需覆盖一个连续的 128B 区域</p><p>Bad: Strided (跨步访问)<br>Thread 0 → address 0<br>Thread 1 → address 1024<br>Thread 2 → address 2048<br>... → 可能触及大量分散的 sectors，浪费带宽</p></div>
 
     <h3>Shared Memory Bank Conflicts</h3>
     <p>Shared memory 被分为 32 个 bank，每个 bank 宽 4 字节：</p>
-    <pre><code class="language-python"># 如果 warp 中多个线程访问同一 bank 的不同地址
-# 会发生 bank conflict，串行化访问
-
-# Good: 无 conflict
-# Thread 0 → bank 0
-# Thread 1 → bank 1
-# ...
-
-# Bad: 2-way bank conflict
-# Thread 0 → bank 0, address 0
-# Thread 16 → bank 0, address 1024
-# 这两个访问会被串行化</code></pre>
+    <div class="prose-outline"><p>如果 warp 中多个线程访问同一 bank 的不同地址<br>会发生 bank conflict，串行化访问</p><p>Good: 无 conflict<br>Thread 0 → bank 0<br>Thread 1 → bank 1<br>...</p><p>Bad: 2-way bank conflict<br>Thread 0 → bank 0, address 0<br>Thread 16 → bank 0, address 1024<br>这两个访问会被串行化</p></div>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="practical">实际 GPU 规格对比</h2>
+    <h2 id="practical">GPU 与 TPU：相同约束，不同执行抽象</h2>
 
-    <table>
+    <details class="deep-dive">
+      <summary>Reference · A100 / H100 完整规格对比</summary>
+      <table>
       <tr><th>规格</th><th>A100 80GB（dense）</th><th>H100 SXM 80GB（dense）</th><th>H100 SXM（2:4 sparse）</th></tr>
       <tr><td>FP64 CUDA cores</td><td>9.7 TFLOP/s</td><td>34 TFLOP/s</td><td>—</td></tr>
       <tr><td>FP64 Tensor Core</td><td>19.5 TFLOP/s</td><td>67 TFLOP/s</td><td>—</td></tr>
@@ -302,8 +263,9 @@ else:
       <tr><td>L2 Cache</td><td>40 MB</td><td>50 MB</td><td>50 MB</td></tr>
       <tr><td>SM 数</td><td>108</td><td>132</td><td>132</td></tr>
       <tr><td>TDP</td><td>400W</td><td>700W</td><td>700W</td></tr>
-    </table>
-    <p><small>表中 Tensor Core 稀疏列要求满足 NVIDIA 的 2:4 structured sparsity；不能把该峰值当作任意稀疏模型都能获得的吞吐。</small></p>
+      </table>
+      <p><small>表中 Tensor Core 稀疏列要求满足 NVIDIA 的 2:4 structured sparsity；不能把该峰值当作任意稀疏模型都能获得的吞吐。</small></p>
+    </details>
 
     <h3>TPU：相似目标，不同执行模型</h3>
     <p>Spring 2026 官方 Lecture 5 明确把 TPU 放进 GPU 旁边比较。两者都把<strong>轻量控制、大型矩阵单元、片上快速存储与 HBM</strong>组合在一起，但 TPU 的核心抽象更偏向编译器调度的大块矩阵程序，而不是 GPU 的 warp/SIMT 线程层次。</p>
@@ -317,8 +279,9 @@ else:
     </table></div>
     <p><strong>PointBreaker 补充解释：</strong>systolic array 与 JAX/XLA 是理解 TPU 的常用工程视角；官方讲义的核心结论是 GPU 与 TPU 都受矩阵单元、HBM 带宽和互联约束，但编程抽象与网络组织不同。具体 sharding 选择在第 7–8 课继续展开。</p>
 
-    <h3>训练时间的理想化估算</h3>
-    <pre><code class="language-python"># 仅用于展示 units：GPT-3 175B 报告的训练计算量约 3.14e23 FLOPs，
+    <details class="deep-dive">
+      <summary>Deep Dive · 用峰值和 MFU 估算训练时间</summary>
+      <pre><code class="language-plaintext">仅用于展示 units：GPT-3 175B 报告的训练计算量约 3.14e23 FLOPs，
 # 1024 张 GPU 全程保持 MFU=0.5，且忽略停机、评估和 I/O。
 
 # A100 (312 TFLOP/s dense bf16, MFU=0.5):
@@ -332,6 +295,7 @@ else:
 #   时间: ~7.2 天
 
 # 峰值 dense bf16 比值约 3.17×；真实端到端加速不会只由峰值算力决定。</code></pre>
+    </details>
 
     <hr class="rule">
 
@@ -339,23 +303,10 @@ else:
     <h2 id="multi-gpu">多 GPU 互联</h2>
 
     <h3>节点内互联</h3>
-    <pre><code class="language-python"># NVLink (节点内 GPU 间)
-# H100: 18 条 NVLink 4.0, 每条 50 GB/s
-# 总带宽: 900 GB/s (双向)
-
-# NVSwitch fabric
-# 在 HGX/DGX H100 中连接多张 SXM GPU，支持 GPU 间高带宽通信
-# 900 GB/s 是每张 H100 的聚合双向 NVLink 带宽，
-# 不能直接解释为任意一对 GPU 的单向 payload 带宽。</code></pre>
+    <div class="prose-outline"><p>NVLink (节点内 GPU 间)<br>H100: 18 条 NVLink 4.0, 每条 50 GB/s<br>总带宽: 900 GB/s (双向)</p><p>NVSwitch fabric<br>在 HGX/DGX H100 中连接多张 SXM GPU，支持 GPU 间高带宽通信<br>900 GB/s 是每张 H100 的聚合双向 NVLink 带宽，<br>不能直接解释为任意一对 GPU 的单向 payload 带宽。</p></div>
 
     <h3>节点间互联</h3>
-    <pre><code class="language-python"># InfiniBand / RoCE (节点间)
-# 一条 400 Gb/s 链路的理论 line rate = 50 GB/s；
-# 实际节点可有多张 NIC，应用带宽还会受协议与拓扑影响。
-
-# 这意味着:
-# 通信密集的 tensor/expert parallel 通常优先放在高带宽域内；
-# data parallel 是否跨节点仍取决于通信量、网络和并行分组。</code></pre>
+    <div class="prose-outline"><p>InfiniBand / RoCE (节点间)<br>一条 400 Gb/s 链路的理论 line rate = 50 GB/s；<br>实际节点可有多张 NIC，应用带宽还会受协议与拓扑影响。</p><p><strong>这意味着:</strong><br>通信密集的 tensor/expert parallel 通常优先放在高带宽域内；<br>data parallel 是否跨节点仍取决于通信量、网络和并行分组。</p></div>
 
     <h3>通信层次</h3>
     <table>
@@ -368,7 +319,9 @@ else:
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="gpu-programming">GPU 编程范式</h2>
+    <details class="deep-dive">
+      <summary>Implementation · CUDA、Triton 与 torch.compile 编程层次</summary>
+      <h2 id="gpu-programming">GPU 编程范式</h2>
 
     <h3>CUDA C++</h3>
     <pre><code class="language-python">// 最底层，最灵活，最复杂
@@ -406,6 +359,8 @@ def fused_operation(x, w):
       <tr><td>torch.compile</td><td>高</td><td>计算图与编译后端</td><td>低改造成本，收益依赖图、形状和后端</td></tr>
       <tr><td>PyTorch eager</td><td>高</td><td>算子组合</td><td>开发直观；算子边界可能产生额外 launch 与中间流量</td></tr>
     </table>
+
+    </details>
 
     <hr class="rule">
 
@@ -470,30 +425,21 @@ def fused_operation(x, w):
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
-    <div class="loop">
-      <article>
-        <h3>内存层次</h3>
-        <p>HBM → L2 → L1/SRAM → Registers</p>
-      </article>
-      <article>
-        <h3>Ridge Point</h3>
-        <p>H100 dense BF16 理想值 ≈ 295 FLOP/byte；实际还受 kernel 效率影响</p>
-      </article>
-      <article>
-        <h3>Tensor Cores</h3>
-        <p>专用矩阵乘法硬件，bf16/fp8 加速</p>
-      </article>
-      <article>
-        <h3>Roofline</h3>
-        <p>算术强度决定优化方向</p>
-      </article>
-    </div>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
+    <ol class="takeaways">
+      <li>GPU 通过大量并行执行单元追求 throughput；性能来自并行度，不是单个 thread 更快。</li>
+      <li>Registers、shared memory/L1、L2 与 HBM 构成容量和速度不同的数据层次，优化往往是在减少更慢层级的流量。</li>
+      <li>Roofline 用 arithmetic intensity 连接 FLOPs 与 bytes：瓶颈位置决定应该优化计算还是数据移动。</li>
+      <li>Tensor Core 峰值只有在 dtype、shape、layout 和软件实现匹配时才有意义；硬件规格不是应用性能保证。</li>
+      <li>GPU 与 TPU 都围绕矩阵单元、片上存储、HBM 和互联设计，但执行抽象与编译器分工不同。</li>
+    </ol>
 
     <hr class="rule">
 
     <h2 id="reading">延伸阅读</h2>
-    <ul>
+    <details class="deep-dive">
+      <summary>Reference · 硬件规格、调优指南与补充材料</summary>
+      <ul>
       <li>Horace He: <a href="https://horace.io/brrr_intro.html">Making Deep Learning Go Brrr</a> — 仓库/工厂类比</li>
       <li>NVIDIA <a href="https://www.nvidia.com/en-us/data-center/h100/">H100 Product Specifications</a></li>
       <li>NVIDIA <a href="https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html">Hopper Tuning Guide</a> — SM、memory hierarchy 与 NVLink</li>
@@ -503,7 +449,8 @@ def fused_operation(x, w):
       <li><a href="https://docs.nvidia.com/cuda/parallel-thread-execution/">PTX ISA</a> — GPU 汇编语言</li>
       <li>CUDA MODE: <a href="https://www.youtube.com/watch?v=lTmYrKwjSOU">Compute and Memory Basics</a></li>
       <li><a href="https://github.com/srush/gpu-puzzles">GPU Puzzles</a> — 通过谜题学 GPU 编程</li>
-    </ul>
+      </ul>
+    </details>
 
     <hr class="rule">
 
