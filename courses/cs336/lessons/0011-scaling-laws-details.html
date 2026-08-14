@@ -32,6 +32,13 @@
       <p>本页是中文学习导读；讲次主题、教师与材料版本以 Stanford 官方页面和讲义为准。</p>
     </div>
 
+    <p class="bridge"><strong>本讲问题：</strong>第 9 课给出了 scaling law 的结论；本讲进一步处理真正困难的部分：有限、带噪声的实验怎样支持对更大训练规模的外推和决策。</p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>选择函数形式 → 设计小规模 runs → 拟合参数与置信区间 → 检查 residual / regime shift → 外推候选规模 → 用敏感性分析做决策。</p>
+    </div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -127,16 +134,7 @@ print(f"L_∞ = {L_inf:.3f}")</code></pre>
       <li>拟合 N_opt(C) 和 D_opt(C) 与 C 的关系</li>
     </ol>
 
-    <pre><code class="language-python"># Chinchilla 论文的三种拟合策略对比：
-
-# 策略 1: 固定 D，变化 N → L(N)
-# 策略 2: 固定 N，变化 D → L(D)
-# 策略 3: Isoflop 曲线 → 找最优 (N, D)
-
-# 策略 3 最可靠，因为：
-# - 直接在目标算力约束下优化
-# - 避免了外推到未探索区域
-# - N_opt(C) 和 D_opt(C) 可以直接读出</code></pre>
+    <div class="prose-outline"><p>Chinchilla 论文的三种拟合策略对比：</p><p>策略 1: 固定 D，变化 N → L(N)<br>策略 2: 固定 N，变化 D → L(D)<br>策略 3: Isoflop 曲线 → 找最优 (N, D)</p><p>策略 3 最可靠，因为：<br>- 直接在目标算力约束下优化<br>- 避免了外推到未探索区域<br>- N_opt(C) 和 D_opt(C) 可以直接读出</p></div>
 
     <h3>超参数的影响</h3>
     <p>Scaling law 的拟合结果依赖于训练超参数：</p>
@@ -267,35 +265,15 @@ residuals = losses - predicted
     <h3>降低外推风险的策略</h3>
 
     <h4>策略 1：覆盖足够宽的尺度范围</h4>
-    <pre><code class="language-python"># 好的实验设计：
-# - 训练 10+ 个模型
-# - 覆盖至少 2 个数量级的 N（如 1M 到 1B）
-# - 每个 N 尝试多个 D
-# - 外推距离控制在 10 倍以内
-
-# 不好的实验设计：
-# - 只训练 3-4 个模型
-# - 只覆盖 1 个数量级
-# - 外推到 100 倍</code></pre>
+    <div class="prose-outline"><p>好的实验设计：<br>- 训练 10+ 个模型<br>- 覆盖至少 2 个数量级的 N（如 1M 到 1B）<br>- 每个 N 尝试多个 D<br>- 外推距离控制在 10 倍以内</p><p>不好的实验设计：<br>- 只训练 3-4 个模型<br>- 只覆盖 1 个数量级<br>- 外推到 100 倍</p></div>
 
     <h4>策略 2：保守预测 + 区间估计</h4>
     <p>不要只给一个点估计，给出置信区间：</p>
-    <pre><code class="language-python"># 例：预测 70B 模型的最优 D
-# 点估计: D_opt = 1.4T tokens
-# 95% 置信区间: [1.0T, 2.0T]
-
-# 实际决策：选择区间的保守端
-# 因为 undertraining 比 overtraining 代价更高
-# （overtraining 只是多花训练钱，undertraining 是模型能力不足）</code></pre>
+    <div class="prose-outline"><p>例：预测 70B 模型的最优 D<br>点估计: D_opt = 1.4T tokens<br>95% 置信区间: [1.0T, 2.0T]</p><p>实际决策：选择区间的保守端<br>因为 undertraining 比 overtraining 代价更高<br>（overtraining 只是多花训练钱，undertraining 是模型能力不足）</p></div>
 
     <h4>策略 3：中间验证</h4>
     <p>在拟合范围和外推目标之间，训练一个中等规模模型验证：</p>
-    <pre><code class="language-python"># 拟合范围: 1M - 1B 参数
-# 外推目标: 70B 参数
-# 中间验证: 训练一个 7B 模型，检查预测是否准确
-
-# 如果 7B 的预测准确 → 外推到 70B 更可信
-# 如果 7B 有偏差 → 修正模型后再外推</code></pre>
+    <div class="prose-outline"><p>拟合范围: 1M - 1B 参数<br>外推目标: 70B 参数<br>中间验证: 训练一个 7B 模型，检查预测是否准确</p><p>如果 7B 的预测准确 → 外推到 70B 更可信<br>如果 7B 有偏差 → 修正模型后再外推</p></div>
 
     <hr class="rule">
 
@@ -304,42 +282,11 @@ residuals = losses - predicted
 
     <h3>场景 1：固定算力预算，最大化模型性能</h3>
     <p>这是 Chinchilla 论文解决的问题：</p>
-    <pre><code class="language-python"># 已知: 总 FLOPs = C = 6ND
-# 目标: 最小化 L(N, D)
-# 方法: 用拟合的 L(N, D) 代入约束，求最优
-
-# 如果 L(N) = (N_c/N)^α_N, L(D) = (D_c/D)^α_D
-# 且 C = 6ND → D = C/(6N)
-# 代入: L(N) = (N_c/N)^α_N + (6N D_c/C)^α_D
-
-# 对 N 求导 = 0，得最优条件:
-# α_N × N_c^α_N × N^(-α_N-1) = α_D × (D_c × 6 / C)^α_D × α_D × N
-
-# 化简: N_opt ∝ C^(α_N / (α_N + α_D))
-#       D_opt ∝ C^(α_D / (α_N + α_D))
-
-# Chinchilla 的拟合结果:
-# α_N ≈ 0.46, α_D ≈ 0.54 (近似)
-# 所以 N_opt ∝ C^0.46, D_opt ∝ C^0.54
-# 比例: D_opt / N_opt ≈ 20</code></pre>
+    <div class="prose-outline"><p>已知: 总 FLOPs = C = 6ND<br>目标: 最小化 L(N, D)<br>方法: 用拟合的 L(N, D) 代入约束，求最优</p><p>如果 L(N) = (N_c/N)^α_N, L(D) = (D_c/D)^α_D<br>且 C = 6ND → D = C/(6N)<br>代入: L(N) = (N_c/N)^α_N + (6N D_c/C)^α_D</p><p><strong>对 N 求导 = 0，得最优条件:</strong><br>α_N × N_c^α_N × N^(-α_N-1) = α_D × (D_c × 6 / C)^α_D × α_D × N</p><p>化简: N_opt ∝ C^(α_N / (α_N + α_D))<br>      D_opt ∝ C^(α_D / (α_N + α_D))</p><p><strong>Chinchilla 的拟合结果:</strong><br>α_N ≈ 0.46, α_D ≈ 0.54 (近似)<br>所以 N_opt ∝ C^0.46, D_opt ∝ C^0.54<br>比例: D_opt / N_opt ≈ 20</p></div>
 
     <h3>场景 2：考虑推理成本</h3>
     <p>Chinchilla 只优化了训练 loss，但实际部署时推理成本也很重要：</p>
-    <pre><code class="language-python"># 推理成本 ∝ N（每个 token 的计算量）
-# 总成本 = 训练成本 + 推理成本 × 推理次数
-
-# 训练成本 ∝ 6ND
-# 推理成本 ∝ N × num_inferences
-
-# 关键洞察:
-# 如果推理次数 >> 训练次数 → 推理成本主导
-# → 应该用更小的 N（推理更便宜），用更多的 D 补偿
-
-# Llama 2 的实际选择:
-# - 训练成本 ≈ 数百万美元
-# - 推理次数 ≈ 数十亿次
-# → 推理成本 >> 训练成本
-# → 选择 D ≈ 27.5N（而非 Chinchilla 的 20N）</code></pre>
+    <div class="prose-outline"><p>推理成本 ∝ N（每个 token 的计算量）<br>总成本 = 训练成本 + 推理成本 × 推理次数</p><p>训练成本 ∝ 6ND<br>推理成本 ∝ N × num_inferences</p><p><strong>关键洞察:</strong><br>如果推理次数 >> 训练次数 → 推理成本主导<br>→ 应该用更小的 N（推理更便宜），用更多的 D 补偿</p><p><strong>Llama 2 的实际选择:</strong><br>- 训练成本 ≈ 数百万美元<br>- 推理次数 ≈ 数十亿次<br>→ 推理成本 >> 训练成本<br>→ 选择 D ≈ 27.5N（而非 Chinchilla 的 20N）</p></div>
 
     <table>
       <tr><th>场景</th><th>最优 D/N</th><th>原因</th></tr>
@@ -350,40 +297,11 @@ residuals = losses - predicted
 
     <h3>场景 3：固定时间，选择模型大小</h3>
     <p>实际约束往往是时间 + 硬件，而非 FLOPs：</p>
-    <pre><code class="language-python"># 已知约束:
-# - T 天时间
-# - K 张 GPU（每张峰值算力 P FLOP/s）
-# - MFU（模型算力利用率，通常 0.3-0.5）
-# - 每张 GPU 内存 M GB
-
-# 总 FLOPs = K × P × MFU × T × 86400
-# 所以: 6ND = K × P × MFU × T × 86400
-
-# 内存约束: 模型大小 + optimizer states ≤ K × M
-# 对于 AdamW: 内存 ≈ 12N bytes (fp32 param + m + v)
-# 所以: N ≤ K × M / 12
-
-# 求解满足两个约束的 (N, D):
-# 先由内存约束确定 N_max
-# 然后 D = C / (6 × N_max)</code></pre>
+    <div class="prose-outline"><p><strong>已知约束:</strong><br>- T 天时间<br>- K 张 GPU（每张峰值算力 P FLOP/s）<br>- MFU（模型算力利用率，通常 0.3-0.5）<br>- 每张 GPU 内存 M GB</p><p>总 FLOPs = K × P × MFU × T × 86400<br>所以: 6ND = K × P × MFU × T × 86400</p><p>内存约束: 模型大小 + optimizer states ≤ K × M<br>对于 AdamW: 内存 ≈ 12N bytes (fp32 param + m + v)<br>所以: N ≤ K × M / 12</p><p><strong>求解满足两个约束的 (N, D):</strong><br>先由内存约束确定 N_max<br>然后 D = C / (6 × N_max)</p></div>
 
     <h3>场景 4：多目标权衡</h3>
     <p>实际决策需要同时考虑多个目标：</p>
-    <pre><code class="language-python"># 目标函数可以扩展为:
-# min L(N, D) + λ × inference_cost(N)
-
-# 或者更复杂的形式:
-# min α × training_cost(N, D) + β × inference_cost(N) + γ × L(N, D)
-
-# 其中 α, β, γ 是根据业务需求设定的权重
-
-# 例：一个 API 服务
-# - 训练成本: $1M（一次性）
-# - 推理成本: $0.002/1K tokens
-# - 日活: 10M 用户 × 1000 tokens = 10B tokens/天
-# - 推理日成本: $20,000/天
-# → 推理成本在 ~50 天内超过训练成本
-# → 应该选择更小 N + 更多 D</code></pre>
+    <div class="prose-outline"><p><strong>目标函数可以扩展为:</strong><br>min L(N, D) + λ × inference_cost(N)</p><p><strong>或者更复杂的形式:</strong><br>min α × training_cost(N, D) + β × inference_cost(N) + γ × L(N, D)</p><p>其中 α, β, γ 是根据业务需求设定的权重</p><p>例：一个 API 服务<br>- 训练成本: 100 万美元（一次性）<br>- 推理成本: 0.002 美元/1K tokens<br>- 日活: 10M 用户 × 1000 tokens = 10B tokens/天<br>- 推理日成本: 20,000 美元/天<br>→ 推理成本在 ~50 天内超过训练成本<br>→ 应该选择更小 N + 更多 D</p></div>
 
     <hr class="rule">
 
@@ -402,14 +320,7 @@ residuals = losses - predicted
 
     <h3>数据质量的影响</h3>
     <p>DCLM (DataComp-LM) 等研究表明，经过严格质量过滤的数据上训练，可以<strong>用更少的 token 达到相同 loss</strong>：</p>
-    <pre><code class="language-python"># 例：在原始 Common Crawl 上
-# 7B 模型 + 140B tokens → loss = 2.5
-
-# 在 DCLM（高质量过滤）上
-# 7B 模型 + 50B tokens → loss = 2.5
-
-# 结论: 高质量数据打破了 D=20N 的比例
-# 实际最优 D/N 取决于数据质量</code></pre>
+    <div class="prose-outline"><p>例：在原始 Common Crawl 上<br>7B 模型 + 140B tokens → loss = 2.5</p><p>在 DCLM（高质量过滤）上<br>7B 模型 + 50B tokens → loss = 2.5</p><p>结论: 高质量数据打破了 D=20N 的比例<br>实际最优 D/N 取决于数据质量</p></div>
 
     <h3>Overtraining 的合理性</h3>
     <p>有时故意 overtrain（D > 20N）也有好处：</p>
@@ -434,21 +345,7 @@ residuals = losses - predicted
     </ul>
 
     <h3>实际的数据策略</h3>
-    <pre><code class="language-python"># 现代 LLM 训练的数据策略（综合 Chinchilla 和后续研究）:
-
-# 1. 预训练阶段
-#    - 使用 D ≈ 20-30N tokens
-#    - 优先使用高质量数据
-#    - 后期混入更多低质量数据（课程学习）
-
-# 2. Mid-training（可选）
-#    - 切换到更高质量/更相关的数据
-#    - 训练额外的 5-10% tokens
-#    - 用于增强特定能力（长上下文、推理）
-
-# 3. Post-training
-#    - SFT: 数万到数十万个高质量样本
-#    - RLHF/DPO: 数千到数万个偏好对</code></pre>
+    <div class="prose-outline"><p>现代 LLM 训练的数据策略（综合 Chinchilla 和后续研究）:</p><p>1. 预训练阶段<br>   - 使用 D ≈ 20-30N tokens<br>   - 优先使用高质量数据<br>   - 后期混入更多低质量数据（课程学习）</p><p>2. Mid-training（可选）<br>   - 切换到更高质量/更相关的数据<br>   - 训练额外的 5-10% tokens<br>   - 用于增强特定能力（长上下文、推理）</p><p>3. Post-training<br>   - SFT: 数万到数十万个高质量样本<br>   - RLHF/DPO: 数千到数万个偏好对</p></div>
 
     <hr class="rule">
 
@@ -469,7 +366,7 @@ tokens_per_size = {
 }
 
 # 总实验数: 8 × 3 = 24 个模型
-# 如果每个模型训练成本 $100 → 总成本 $2400
+# 如果每个模型训练成本 100 美元 → 总成本 2400 美元
 # 这比训练一个 70B 模型便宜得多</code></pre>
 
     <h3>Step 2：训练与记录</h3>
@@ -560,7 +457,7 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！幂律取对数后变成线性关系 log L = a − α × log N，可以用线性回归拟合。这是最简单的方法，但在 log-log 空间对小 loss 区域的噪声敏感。" data-incorrect="幂律取对数后变为线性关系，这是对数线性回归的基础。">
+    <div class="quiz" data-quiz="1" data-answer="a" data-correct="正确！幂律取对数后变成线性关系 log L = a − α × log N，可以用线性回归拟合。这是最简单的方法，但在 log-log 空间对小 loss 区域的噪声敏感。" data-incorrect="幂律取对数后变为线性关系，这是对数线性回归的基础。">
       <p><strong>问题 1：</strong>对幂律 L = (N_c / N)^α 取对数后得到什么形式？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">log L = a − α × log N（线性）</button>
@@ -571,7 +468,7 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！外推不确定性随距离指数增长。100 倍外推（如从 1M 预测 1T）几乎不可靠。" data-incorrect="外推距离越大，不确定性越高。100 倍外推极不可靠。">
+    <div class="quiz" data-quiz="2" data-answer="c" data-correct="正确！从拟合上限 1B 到目标 1T 是 1000 倍外推，风险极高。" data-incorrect="应从观测范围的上限计算外推距离：1T / 1B = 1000。">
       <p><strong>问题 2：</strong>如果你用 1M-1B 参数范围的数据拟合 scaling law，预测 1T 参数模型，外推距离是多少？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">10 倍，很安全</button>
@@ -582,7 +479,7 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！推理次数多时，推理成本主导总成本，应该选择更小的 N（推理更便宜）并用更多数据 D 补偿。" data-incorrect="推理次数多时，推理成本主导，应该用更小的 N。">
+    <div class="quiz" data-quiz="3" data-answer="c" data-correct="正确！推理次数多时，推理成本主导总成本，应该选择更小的 N（推理更便宜）并用更多数据 D 补偿。" data-incorrect="推理次数多时，推理成本主导，应该用更小的 N。">
       <p><strong>问题 3：</strong>如果一个模型会被调用数十亿次做推理，应该如何调整 D/N 比例？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">保持 D=20N（Chinchilla 最优）</button>
@@ -593,7 +490,7 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！Scaling law 假设所有 token 等价，但现实中高质量 token 价值更高，所以实际最优 D/N 可能低于 20。" data-incorrect="数据质量越高，每个 token 价值越高，达到相同 loss 需要的 token 更少，所以 D/N 应该更低。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！Scaling law 假设所有 token 等价，但现实中高质量 token 价值更高，所以实际最优 D/N 可能低于 20。" data-incorrect="数据质量越高，每个 token 价值越高，达到相同 loss 需要的 token 更少，所以 D/N 应该更低。">
       <p><strong>问题 4：</strong>如果数据质量极高（如全部是教科书级别的数据），Chinchilla 的 D=20N 比例会如何变化？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">不变，D/N 是普适的</button>
@@ -604,7 +501,7 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="5" data-correct="正确！Bootstrap 通过对数据有放回抽样来估计拟合参数的分布，从而得到置信区间。" data-incorrect="Bootstrap 通过有放回抽样生成多个数据集，对每个数据集拟合，从而估计参数的不确定性。">
+    <div class="quiz" data-quiz="5" data-answer="a" data-correct="正确！Bootstrap 通过对数据有放回抽样来估计拟合参数的分布，从而得到置信区间。" data-incorrect="Bootstrap 通过有放回抽样生成多个数据集，对每个数据集拟合，从而估计参数的不确定性。">
       <p><strong>问题 5：</strong>如何用 Bootstrap 方法估计 scaling law 拟合的不确定性？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">对数据有放回抽样，多次拟合，计算参数分布</button>
@@ -618,7 +515,7 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>
         <h3>拟合方法</h3>
@@ -641,13 +538,13 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
     <hr class="rule">
 
     <h2 id="reading">延伸阅读</h2>
-    <ul>
+    <details class="deep-dive"><summary>Reference · 延伸阅读与一手资料</summary><ul>
       <li>Kaplan et al. (2020): <a href="https://arxiv.org/abs/2001.08361">Scaling Laws for Neural Language Models</a> — 奠基性工作</li>
       <li>Hoffmann et al. (2022): <a href="https://arxiv.org/abs/2203.15556">Training Compute-Optimal Large Language Models (Chinchilla)</a> — D=20N 的来源</li>
       <li>Villalobos et al. (2024): <a href="https://arxiv.org/abs/2404.01990">Will we run out of data?</a> — 数据稀缺对 scaling law 的影响</li>
       <li>Muennighoff et al. (2024): <a href="https://arxiv.org/abs/2406.11794">DataComp-LM</a> — 数据质量的重要性</li>
       <li>Scaling Book: <a href="https://jax-ml.github.io/scaling-book/">jax-ml.github.io/scaling-book</a> — 开放教程</li>
-    </ul>
+    </ul></details>
 
     <hr class="rule">
 

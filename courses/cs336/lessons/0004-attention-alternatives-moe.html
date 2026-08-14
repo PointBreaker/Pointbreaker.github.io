@@ -32,6 +32,13 @@
       <p>本页是中文学习导读；讲次主题、教师与材料版本以 Stanford 官方页面和讲义为准。</p>
     </div>
 
+    <p class="bridge"><strong>本讲问题：</strong>标准 attention 在上下文、KV cache 和计算量上形成瓶颈，因此需要先明确想减少的是 KV heads、序列交互还是每 token 激活的参数量，再选择替代机制。</p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>标准 attention 成本 → GQA / local 等减少 attention 开销 → MoE 让每 token 只激活部分参数 → routing / load balance / communication 成为新约束。</p>
+    </div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -91,12 +98,7 @@ for i in range(n):
     <p><strong>直觉：</strong>大多数语言建模任务中，附近的 token 比远处的更重要。</p>
 
     <h3>3. Sparse Attention（全局 + 局部混合）</h3>
-    <pre><code class="language-python"># 大多数层用 sliding window
-# 少数层用 full attention（"全局层"）
-# 例如: 每 6 层有 1 层全局 attention
-
-# 有效上下文 = window_size × num_layers
-# 例如: w=4096, L=32 → 有效上下文 ~128K</code></pre>
+    <div class="prose-outline"><p>大多数层用 sliding window<br>少数层用 full attention（"全局层"）<br>例如: 每 6 层有 1 层全局 attention</p><p>有效上下文 = window_size × num_layers<br>例如: w=4096, L=32 → 有效上下文 ~128K</p></div>
 
     <h3>4. State Space Models（Mamba）</h3>
     <p>完全抛弃 attention，用经典控制论的状态空间模型：</p>
@@ -130,19 +132,7 @@ y(t) = C × h(t)
     <h2 id="gqa">Grouped-Query Attention (GQA)</h2>
 
     <h3>从 MHA 到 MQA 到 GQA</h3>
-    <pre><code class="language-python"># Multi-Head Attention (MHA)
-# N 个 Q 头, N 个 K 头, N 个 V 头
-# KV cache: N × d_head × 2 (K+V) per token per layer
-
-# Multi-Query Attention (MQA)
-# N 个 Q 头, 1 个 K 头, 1 个 V 头
-# KV cache: 1 × d_head × 2 per token per layer
-# 权衡: KV cache 最小，但共享 K/V 可能带来质量损失
-
-# Grouped-Query Attention (GQA)
-# N 个 Q 头, K 个 KV 头 (1 < K < N)
-# 每 N/K 个 Q 头共享 1 个 KV 头
-# KV cache: K × d_head × 2 per token per layer</code></pre>
+    <div class="prose-outline"><p>Multi-Head Attention (MHA)<br>N 个 Q 头, N 个 K 头, N 个 V 头<br>KV cache: N × d_head × 2 (K+V) per token per layer</p><p>Multi-Query Attention (MQA)<br>N 个 Q 头, 1 个 K 头, 1 个 V 头<br>KV cache: 1 × d_head × 2 per token per layer<br>权衡: KV cache 最小，但共享 K/V 可能带来质量损失</p><p>Grouped-Query Attention (GQA)<br>N 个 Q 头, K 个 KV 头 (1 < K < N)<br>每 N/K 个 Q 头共享 1 个 KV 头<br>KV cache: K × d_head × 2 per token per layer</p></div>
 
     <h3>为什么 GQA 有效？</h3>
     <div class="card idea">
@@ -151,27 +141,11 @@ y(t) = C × h(t)
     </div>
 
     <h3>实际效果</h3>
-    <pre><code class="language-python"># Llama 2 70B 配置:
-# n_heads = 64, n_kv_heads = 8
-# GQA ratio = 8:1
-# KV cache 缩小 8 倍！
-
-# Ainslie et al. (2023) 的 uptraining 实验中：
-# GQA 可以接近 MHA 质量并获得接近 MQA 的 KV-cache 优势；
-# 这不是对所有模型、数据与训练方式的“无损”保证。</code></pre>
+    <div class="prose-outline"><p><strong>Llama 2 70B 配置:</strong><br>n_heads = 64, n_kv_heads = 8<br>GQA ratio = 8:1<br>KV cache 缩小 8 倍！</p><p>Ainslie et al. (2023) 的 uptraining 实验中：<br>GQA 可以接近 MHA 质量并获得接近 MQA 的 KV-cache 优势；<br>这不是对所有模型、数据与训练方式的“无损”保证。</p></div>
 
     <h3>Multi-head Latent Attention (MLA)</h3>
     <p>DeepSeek-V2 的进一步创新：</p>
-    <pre><code class="language-python"># 不存储完整的 K, V 向量
-# 存储一个低秩压缩的 "latent" 向量 c (C 维)
-# 需要时通过上投影恢复 K, V
-
-# KV cache 存储: C 维 (而不是 N × d_head = 16384 维)
-# DeepSeek-V2: C = 512 (压缩 32 倍！)
-
-# 直接把全部 K/V 投影吸收到 latent 计算时会与位置相关的 RoPE 冲突
-# DeepSeek 用 decoupled RoPE：保留额外的 RoPE key/query 维度
-# 总: 512 + 64 = 576 维 per layer per token</code></pre>
+    <div class="prose-outline"><p>不存储完整的 K, V 向量<br>存储一个低秩压缩的 "latent" 向量 c (C 维)<br>需要时通过上投影恢复 K, V</p><p>KV cache 存储: C 维 (而不是 N × d_head = 16384 维)<br>DeepSeek-V2: C = 512 (压缩 32 倍！)</p><p>直接把全部 K/V 投影吸收到 latent 计算时会与位置相关的 RoPE 冲突<br>DeepSeek 用 decoupled RoPE：保留额外的 RoPE key/query 维度<br>总: 512 + 64 = 576 维 per layer per token</p></div>
 
     <table>
       <tr><th>方法</th><th>KV cache / token / layer</th><th>相对大小</th></tr>
@@ -274,16 +248,7 @@ def load_balancing_loss(router_logits, top_k, num_experts):
 
     <h3>MoE 的通信挑战</h3>
     <p>在多 GPU 上，不同专家分布在不同 GPU 上：</p>
-    <pre><code class="language-python"># Token 需要"旅行"到专家所在的 GPU
-# 这需要 all-to-all 通信
-
-# 一次 MoE 前向通常包含两阶段通信：
-# 1. dispatch all-to-all：把 token hidden states 发到专家所在设备
-# 2. combine all-to-all：把专家输出发回原设备
-#
-# 忽略本地命中、padding 与元数据时，理想化数据量与
-# 2 × top_k × num_tokens × d_model × bytes_per_element 同阶；
-# 实际网络流量取决于 expert-parallel group、专家放置、容量限制和负载均衡。</code></pre>
+    <div class="prose-outline"><p>Token 需要"旅行"到专家所在的 GPU<br>这需要 all-to-all 通信</p><p>一次 MoE 前向通常包含两阶段通信：<br>1. dispatch all-to-all：把 token hidden states 发到专家所在设备<br>2. combine all-to-all：把专家输出发回原设备<br><br>忽略本地命中、padding 与元数据时，理想化数据量与<br>2 × top_k × num_tokens × d_model × bytes_per_element 同阶；<br>实际网络流量取决于 expert-parallel group、专家放置、容量限制和负载均衡。</p></div>
 
     <h3>并行策略</h3>
     <table>
@@ -356,22 +321,13 @@ def load_balancing_loss(router_logits, top_k, num_experts):
     <p>最新的模型开始混合不同架构：</p>
 
     <h3>Jamba（AI21 Labs）</h3>
-    <pre><code class="language-python"># Transformer + Mamba 混合
-# 比例: 1 层 Transformer : 7 层 Mamba
-# 52B MoE (16 experts, 2 active)
-# 兼顾 Transformer 的质量和 Mamba 的效率</code></pre>
+    <div class="prose-outline"><p>Transformer + Mamba 混合<br>比例: 1 层 Transformer : 7 层 Mamba<br>52B MoE (16 experts, 2 active)<br>兼顾 Transformer 的质量和 Mamba 的效率</p></div>
 
     <h3>MiniMax-01</h3>
-    <pre><code class="language-python"># Linear Attention + Full Attention 混合
-# 456B MoE
-# 大多数层用 linear attention（高效）
-# 少数层用 full attention（保证质量）</code></pre>
+    <div class="prose-outline"><p>Linear Attention + Full Attention 混合<br>456B MoE<br>大多数层用 linear attention（高效）<br>少数层用 full attention（保证质量）</p></div>
 
     <h3>DeepSeek-V3</h3>
-    <pre><code class="language-python"># Multi-head Latent Attention (MLA) + MoE
-# 671B 总参数, 37B 激活参数
-# 256 个路由专家 + 1 个共享专家
-# 每个 token 激活 8 个路由专家 + 共享专家</code></pre>
+    <div class="prose-outline"><p>Multi-head Latent Attention (MLA) + MoE<br>671B 总参数, 37B 激活参数<br>256 个路由专家 + 1 个共享专家<br>每个 token 激活 8 个路由专家 + 共享专家</p></div>
 
     <hr class="rule">
 
@@ -436,7 +392,7 @@ def load_balancing_loss(router_logits, top_k, num_experts):
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>
         <h3>GQA</h3>
@@ -459,14 +415,14 @@ def load_balancing_loss(router_logits, top_k, num_experts):
     <hr class="rule">
 
     <h2 id="reading">延伸阅读</h2>
-    <ul>
+    <details class="deep-dive"><summary>Reference · 延伸阅读与一手资料</summary><ul>
       <li>Ainslie et al. (2023): <a href="https://arxiv.org/abs/2305.13245">GQA: Training Generalized Multi-Query Transformer Models</a></li>
       <li>Shazeer et al. (2017): <a href="https://arxiv.org/abs/1701.06538">Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer</a></li>
       <li>Gu & Dao (2023): <a href="https://arxiv.org/abs/2312.00752">Mamba: Linear-Time Sequence Modeling with Selective State Spaces</a></li>
       <li>Dao (2023): <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a></li>
       <li>DeepSeek-V2 (2024): <a href="https://arxiv.org/abs/2405.04434">A Strong, Economical, and Efficient Mixture-of-Experts Language Model</a></li>
       <li>Stanford CS336 Spring 2025: <a href="https://github.com/stanford-cs336/spring2025-lectures/blob/main/nonexecutable/2025%20Lecture%204%20-%20MoEs.pdf">Lecture 4 - Mixture of Experts</a></li>
-    </ul>
+    </ul></details>
 
     <hr class="rule">
 

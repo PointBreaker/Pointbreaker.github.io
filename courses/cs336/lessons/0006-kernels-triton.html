@@ -19,7 +19,7 @@
   <div class="page">
     <p class="eyebrow">CS336 · 第 6 课</p>
     <h1>Kernels 与 Triton 编程</h1>
-    <p class="lede">上一课理解了 GPU 硬件，这一课进入实战——如何写出让 GPU 全速运行的 kernel？核心原则只有一条：<strong>组织计算以最小化读写</strong>。这一课从 benchmarking/profiling 开始，逐步深入到 Triton kernel 编程。</p>
+    <p class="lede">上一讲说明了 FLOPs 和 HBM bytes 为什么共同决定性能；这一讲进一步回答程序员能做什么：怎样测出真实瓶颈，并通过 fusion、tiling 和更合适的 kernel 编程层次减少数据搬运。</p>
 
     <div class="meta">
       <span>授课：Percy Liang</span>
@@ -35,13 +35,21 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="benchmarking">Benchmarking 与 Profiling</h2>
+    <h2 id="benchmarking">这一讲到底解决什么问题？</h2>
+
+    <p class="bridge">硬件规格只能给出上限，无法告诉我们当前 workload 卡在 launch overhead、HBM traffic、occupancy 还是计算单元。优化必须从可重复测量开始，否则 fusion 或更复杂的 kernel 可能只是增加代码量。</p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>可靠 benchmark → profiler 定位瓶颈 → fusion 消除中间 HBM 往返 → tiling 建立片上复用 → Triton 表达 block-level 数据流 → PTX / hardware detail 用于解释剩余差距。</p>
+    </div>
+
+    <h3>Benchmarking 与 Profiling</h3>
 
     <h3>为什么要 benchmark？</h3>
     <div class="card idea">
-      <p><strong>没有替代 benchmark。</strong></p>
-      <p>Spec sheet 是营销材料，论文是理想情况。真正的性能取决于你的库版本、硬件、工作负载。</p>
-      <p><strong>每次改动后都要 benchmark！</strong></p>
+      <p><strong>Spec sheet 给上限，benchmark 给当前实现。</strong></p>
+      <p>实际性能取决于 shape、dtype、库版本、硬件和系统负载。每次优化都应先定义基线，再在控制变量的条件下比较。</p>
     </div>
 
     <h3>Benchmark 的正确姿势</h3>
@@ -110,12 +118,7 @@ output = gelu(tmp)   # 读 tmp from HBM; 写 output to HBM
 # 问题: tmp 被写入 HBM，然后立即读回——浪费！</code></pre>
 
     <h3>解决：融合成一个 kernel</h3>
-    <pre><code class="language-python"># Fused 版本: 一个 kernel 完成
-# 读 A, B from HBM
-# 计算 A @ B，直接在寄存器中做 GeLU
-# 写 output to HBM
-
-# 省掉了 tmp 的 HBM 读写！</code></pre>
+    <div class="prose-outline"><p>Fused 版本: 一个 kernel 完成<br>读 A, B from HBM<br>计算 A @ B，直接在寄存器中做 GeLU<br>写 output to HBM</p><p>省掉了 tmp 的 HBM 读写！</p></div>
 
     <div class="card idea">
       <p><strong>仓库 vs 工厂类比：</strong></p>
@@ -124,11 +127,7 @@ output = gelu(tmp)   # 读 tmp from HBM; 写 output to HBM
     </div>
 
     <h3>Benchmark 对比</h3>
-    <pre><code class="language-python"># GeLU 的 benchmark 结果（dim=16384, bf16）:
-# manual_gelu (不 fused):  ~2.5 ms  ← 多次 HBM 读写
-# pytorch_gelu (fused):    ~0.8 ms  ← 一次 HBM 读写
-
-# Fused 版本快 3×！</code></pre>
+    <div class="prose-outline"><p><strong>GeLU 的 benchmark 结果（dim=16384, bf16）:</strong><br>manual_gelu (不 fused):  ~2.5 ms  ← 多次 HBM 读写<br>pytorch_gelu (fused):    ~0.8 ms  ← 一次 HBM 读写</p><p>Fused 版本快 3×！</p></div>
 
     <h3>PyTorch 自动 fusion</h3>
     <pre><code class="language-python"># torch.compile 可以自动融合
@@ -144,7 +143,9 @@ def fused_operation(x, w):
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="cuda-basics">CUDA Kernel 入门</h2>
+    <details class="deep-dive">
+      <summary>Implementation · CUDA kernel 与 Python extension</summary>
+      <h2 id="cuda-basics">CUDA Kernel 入门</h2>
 
     <h3>CUDA 执行模型</h3>
     <pre><code class="language-python"># Grid: 所有 thread blocks 的集合
@@ -206,6 +207,8 @@ y = module.gelu(x)</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
+    </details>
+
     <h2 id="triton-intro">Triton 入门</h2>
 
     <h3>Triton 是什么？</h3>
@@ -319,11 +322,7 @@ def softmax_kernel(
     </div>
 
     <h3>性能对比</h3>
-    <pre><code class="language-python"># dim=16384, bf16, H100
-# manual_softmax:  ~2.5 ms
-# pytorch_softmax: ~0.7 ms  ← PyTorch 已实现 fused
-# triton_softmax:  ~0.7 ms  ← 接近 PyTorch
-# compiled_softmax: ~0.7 ms  ← torch.compile 也能 fused</code></pre>
+    <div class="prose-outline"><p>dim=16384, bf16, H100<br>manual_softmax:  ~2.5 ms<br>pytorch_softmax: ~0.7 ms  ← PyTorch 已实现 fused<br>triton_softmax:  ~0.7 ms  ← 接近 PyTorch<br>compiled_softmax: ~0.7 ms  ← torch.compile 也能 fused</p></div>
 
     <hr class="rule">
 
@@ -332,24 +331,10 @@ def softmax_kernel(
 
     <h3>为什么需要 Tiling？</h3>
     <p>矩阵乘法 <code>C = A × B</code>，朴素实现每个元素独立计算：</p>
-    <pre><code class="language-python"># 朴素 matmul: 每个 C[i,j] 独立读 A 的一行和 B 的一列
-# C 有 MN 个元素，每个需要读 K 个元素
-# 总读取: 2 × M × N × K 次 HBM 访问
-
-# 问题: A 的同一行被读了 N 次（每列一次）
-#       B 的同一列被读了 M 次（每行一次）</code></pre>
+    <div class="prose-outline"><p>朴素 matmul: 每个 C[i,j] 独立读 A 的一行和 B 的一列<br>C 有 MN 个元素，每个需要读 K 个元素<br>总读取: 2 × M × N × K 次 HBM 访问</p><p>问题: A 的同一行被读了 N 次（每列一次）<br>      B 的同一列被读了 M 次（每行一次）</p></div>
 
     <h3>Tiled Matmul</h3>
-    <pre><code class="language-python"># 关键思想: 分块加载到 shared memory
-# 每个 block 计算 C 的一个 TILE_SIZE × TILE_SIZE 子矩阵
-
-# 步骤:
-# 1. 把 A 的一个 TILE × TILE 块加载到 shared memory
-# 2. 把 B 的一个 TILE × TILE 块加载到 shared memory
-# 3. 用这两个 shared memory 块计算部分结果
-# 4. 重复直到覆盖整个 K 维度
-
-# 效果: A 的每个元素只从 HBM 读一次（被多个 C 元素复用）</code></pre>
+    <div class="prose-outline"><p>关键思想: 分块加载到 shared memory<br>每个 block 计算 C 的一个 TILE_SIZE × TILE_SIZE 子矩阵</p><p><strong>步骤:</strong><br>1. 把 A 的一个 TILE × TILE 块加载到 shared memory<br>2. 把 B 的一个 TILE × TILE 块加载到 shared memory<br>3. 用这两个 shared memory 块计算部分结果<br>4. 重复直到覆盖整个 K 维度</p><p>效果: A 的每个元素只从 HBM 读一次（被多个 C 元素复用）</p></div>
 
     <h3>Triton 的自动 Tiling</h3>
     <pre><code class="language-python"># Triton 的 matmul kernel 自动处理 tiling:
@@ -365,15 +350,11 @@ def matmul_kernel(A, B, C, M, N, K, BLOCK_M: tl.constexpr, ...):
 
     <h3>L2 Cache 优化</h3>
     <p>不同 tile 处理顺序对 L2 cache 命中率影响巨大：</p>
-    <pre><code class="language-python"># 行优先处理: 每个 tile 需要加载新的 A 和 B 块
-# → 9 个 A 块 + 81 个 B 块 = 90 次加载
+    <div class="prose-outline"><p>行优先处理: 每个 tile 需要加载新的 A 和 B 块<br>→ 9 个 A 块 + 81 个 B 块 = 90 次加载</p><p>分组处理（swizzled）: 多个 tile 复用同一 A 块<br>→ 27 个 A 块 + 27 个 B 块 = 54 次加载</p><p>Triton 的 L2 swizzle 自动优化这个</p></div>
 
-# 分组处理（swizzled）: 多个 tile 复用同一 A 块
-# → 27 个 A 块 + 27 个 B 块 = 54 次加载
-
-# Triton 的 L2 swizzle 自动优化这个</code></pre>
-
-    <h3>Spring 2026：Blackwell、TMEM 与 thread block clusters</h3>
+    <details class="deep-dive">
+      <summary>Deep Dive · Blackwell、TMEM、clusters 与 occupancy</summary>
+      <h3>Spring 2026：Blackwell、TMEM 与 thread block clusters</h3>
     <p>官方 Lecture 6 将 A100、H100 与 B200 放在同一张硬件表里，并强调 kernel 优化需要跟随硬件数据路径变化，而不能只复用 2025 年的 Hopper 直觉。</p>
     <div class="pb-table-scroll"><table>
       <tr><th>变化</th><th>它解决什么</th><th>写 kernel 时的含义</th></tr>
@@ -392,11 +373,14 @@ def matmul_kernel(A, B, C, M, N, K, BLOCK_M: tl.constexpr, ...):
     <div class="card idea">
       <p><strong>测量闭环：</strong><code>torch.cuda.synchronize()</code> 保证计时边界正确；PyTorch Profiler 用于高层算子归因；Nsight Systems/Compute 用于观察 kernel 时间线、通信重叠、访存与 occupancy。优化前后必须在目标 GPU（尤其 B200）重测。</p>
     </div>
+    </details>
 
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="ptx">PTX：GPU 的汇编语言</h2>
+    <details class="deep-dive">
+      <summary>Reference · 从 PTX 检查编译器生成的访存与计算指令</summary>
+      <h2 id="ptx">PTX：GPU 的汇编语言</h2>
 
     <h3>什么是 PTX？</h3>
     <p>PTX (Parallel Thread Execution) 是 NVIDIA GPU 的底层指令集——类似于 CPU 的汇编。</p>
@@ -418,7 +402,9 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="summary">总结：5 种实现方式</h2>
+    </details>
+
+    <h2 id="summary">本讲知识地图：5 种实现层次</h2>
 
     <table>
       <tr><th>方式</th><th>示例</th><th>性能</th><th>易用性</th></tr>
@@ -446,7 +432,7 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！torch.cuda.synchronize() 等待 GPU 完成所有未完成的 kernel，确保计时准确。" data-incorrect="GPU kernel launch 是异步的，必须 synchronize 才能获得准确时间。">
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！torch.cuda.synchronize() 等待 GPU 完成所有未完成的 kernel，确保计时准确。" data-incorrect="GPU kernel launch 是异步的，必须 synchronize 才能获得准确时间。">
       <p><strong>问题 1：</strong>benchmark GPU 代码时为什么需要 <code>torch.cuda.synchronize()</code>？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它加速 GPU 执行</button>
@@ -457,7 +443,7 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！Kernel fusion 通过合并操作减少 HBM 读写次数，对 memory-bound 操作效果显著。" data-incorrect="Kernel fusion 的核心好处是减少 HBM 读写——中间结果直接在寄存器/SRAM 中流转。">
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！Kernel fusion 通过合并操作减少 HBM 读写次数，对 memory-bound 操作效果显著。" data-incorrect="Kernel fusion 的核心好处是减少 HBM 读写——中间结果直接在寄存器/SRAM 中流转。">
       <p><strong>问题 2：</strong>Kernel fusion 为什么能加速 memory-bound 操作？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它减少了计算量</button>
@@ -468,7 +454,7 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！Triton 的 softmax kernel 把整行加载到 SRAM，在 SRAM 中完成所有计算，只读一次写一次 HBM。" data-incorrect="Fused softmax 把数据加载到 SRAM 后，所有中间计算在 SRAM 中完成，避免多次 HBM 读写。">
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！Triton 的 softmax kernel 把整行加载到 SRAM，在 SRAM 中完成所有计算，只读一次写一次 HBM。" data-incorrect="Fused softmax 把数据加载到 SRAM 后，所有中间计算在 SRAM 中完成，避免多次 HBM 读写。">
       <p><strong>问题 3：</strong>Triton 的 fused softmax 为什么比 naive softmax 快？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它跳过了 softmax</button>
@@ -479,7 +465,7 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！Triton 自动处理 memory coalescing、shared memory 管理和 SM 内调度，但跨 SM 调度需要手动。" data-incorrect="Triton 自动处理 memory coalescing、shared memory 和 SM 内调度，但跨 SM 调度仍需手动。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！Triton 自动处理 memory coalescing、shared memory 管理和 SM 内调度，但跨 SM 调度需要手动。" data-incorrect="Triton 自动处理 memory coalescing、shared memory 和 SM 内调度，但跨 SM 调度仍需手动。">
       <p><strong>问题 4：</strong>Triton 相比 CUDA 的主要优势是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">它更快</button>
@@ -490,7 +476,7 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="5" data-correct="正确！Tiling 让同一个 A 块/B 块被多个输出元素复用，减少 HBM 读取次数。" data-incorrect="Tiling 的核心是数据复用——同一块数据加载到 shared memory 后被多个计算复用。">
+    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！Tiling 让同一个 A 块/B 块被多个输出元素复用，减少 HBM 读取次数。" data-incorrect="Tiling 的核心是数据复用——同一块数据加载到 shared memory 后被多个计算复用。">
       <p><strong>问题 5：</strong>矩阵乘法 tiling 的主要目的是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">减少计算量</button>
@@ -504,36 +490,28 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
-    <div class="loop">
-      <article>
-        <h3>Benchmark</h3>
-        <p>每次改动后必须测量，不要猜测</p>
-      </article>
-      <article>
-        <h3>Kernel Fusion</h3>
-        <p>合并操作，减少 HBM 读写</p>
-      </article>
-      <article>
-        <h3>Triton</h3>
-        <p>Python 语法，自动优化，接近 CUDA 性能</p>
-      </article>
-      <article>
-        <h3>Tiling</h3>
-        <p>分块 + shared memory + 数据复用</p>
-      </article>
-    </div>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
+    <ol class="takeaways">
+      <li>优化从同步正确的 benchmark 和 profiler 时间线开始；没有基线就无法判断改动是否有效。</li>
+      <li>Kernel fusion 的主要收益是消除中间张量的 HBM 写回与再次读取，而不是减少数学 FLOPs。</li>
+      <li>Tiling 把可复用数据搬到 registers / shared memory，让一次 HBM load 服务更多计算。</li>
+      <li>Triton 提供 block-level 编程模型，但 tile、layout、num warps 等选择仍需针对目标 shape 和 GPU 测量。</li>
+      <li>Occupancy、coalescing、bank conflict 与 wave quantization 是解释结果的机制，不应脱离实际 kernel 单独追求某个数字。</li>
+    </ol>
 
     <hr class="rule">
 
     <h2 id="reading">延伸阅读</h2>
-    <ul>
+    <details class="deep-dive">
+      <summary>Reference · Triton、FlashAttention 与 profiling 材料</summary>
+      <ul>
       <li>Tillet et al. (2019): <a href="https://www.eecs.harvard.edu/~htk/publication/2019-mapl-tillet-kung-cox.pdf">Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations</a></li>
       <li>Dao et al. (2022): <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a> — fused attention kernel</li>
       <li>CUDA MODE: <a href="https://www.youtube.com/watch?v=LuhJEEJQgUM">How to profile CUDA kernels</a></li>
       <li><a href="https://triton-lang.org/main/getting-started/tutorials/">Triton Tutorials</a> — 官方教程</li>
       <li><a href="https://github.com/srush/gpu-puzzles">GPU Puzzles</a> — 通过谜题学 Triton</li>
-    </ul>
+      </ul>
+    </details>
 
     <hr class="rule">
 
@@ -543,7 +521,7 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
     </div>
 
     <footer>
-      <p>CS336: Language Modeling from Scratch · Stanford University · 本课完全覆盖 Lecture 6 内容</p>
+      <p>CS336: Language Modeling from Scratch · Stanford University · 基于 Spring 2026 Lecture 6 官方材料整理</p>
     </footer>
   </div>
   <script src="../assets/prism.js"></script>

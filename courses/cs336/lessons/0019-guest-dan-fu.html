@@ -32,6 +32,13 @@
       <p>以下内容仅作为主题背景导读，不视为官方客座讲义的逐段重建。</p>
     </div>
 
+    <p class="bridge"><strong>本讲问题：</strong>课程最后用 FlashAttention 和 GPU kernel 工程回看一条共同主线：系统优化不是记住技巧，而是先找到数据移动瓶颈，再共同设计算法、实现和测量。</p>
+
+    <div class="learning-map" aria-label="本讲 30 秒知识地图">
+      <strong>30 秒知识地图</strong>
+      <p>workload 与 bottleneck → IO-aware algorithm → kernel mapping → benchmark / profiler → 规模化系统约束 → 把同一分析方法迁移到新硬件与新模型。</p>
+    </div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -67,35 +74,11 @@
 
     <h3>问题</h3>
     <p>标准 Attention 的 O(n²) 内存是长序列的瓶颈：</p>
-    <pre><code class="language-python"># 标准 Attention:
-# 1. 计算 S = Q @ K^T        [n × n]
-# 2. 计算 P = softmax(S)     [n × n]
-# 3. 计算 O = P @ V          [n × d]
-
-# 问题: 需要存储 n × n 的中间矩阵 S 和 P
-# n = 100K 时, n² = 10^10 个元素 → 几十 GB 内存</code></pre>
+    <div class="prose-outline"><p><strong>标准 Attention:</strong><br>1. 计算 S = Q @ K^T        [n × n]<br>2. 计算 P = softmax(S)     [n × n]<br>3. 计算 O = P @ V          [n × d]</p><p>问题: 需要存储 n × n 的中间矩阵 S 和 P<br>n = 100K 时, n² = 10^10 个元素 → 几十 GB 内存</p></div>
 
     <h3>FlashAttention 的核心思想</h3>
     <p>不存储完整的 attention matrix，而是分块计算：</p>
-    <pre><code class="language-python"># FlashAttention 的关键洞察:
-# 1. softmax 可以分块计算 (online softmax)
-# 2. 不需要存储完整的 n × n attention matrix
-# 3. 只需要 O(n) 的额外内存
-
-# 算法:
-# 1. 将 Q, K, V 分成小块 (blocks)
-# 2. 对每个 Q 块:
-#    a. 加载 Q 块到 SRAM
-#    b. 遍历所有 K, V 块:
-#       - 加载 K, V 块到 SRAM
-#       - 计算局部 attention
-#       - 用 online softmax 合并结果
-#    c. 写回最终输出
-
-# 结果:
-# - 内存: O(n²) → O(n)
-# - 速度: 2-4× 加速（减少 HBM 访问）
-# - 精确: 与标准 attention 完全一致（无近似）</code></pre>
+    <div class="prose-outline"><p><strong>FlashAttention 的关键洞察:</strong><br>1. softmax 可以分块计算 (online softmax)<br>2. 不需要存储完整的 n × n attention matrix<br>3. 只需要 O(n) 的额外内存</p><p><strong>算法:</strong><br>1. 将 Q, K, V 分成小块 (blocks)<br>2. 对每个 Q 块:<br>   a. 加载 Q 块到 SRAM<br>   b. 遍历所有 K, V 块:<br>      - 加载 K, V 块到 SRAM<br>      - 计算局部 attention<br>      - 用 online softmax 合并结果<br>   c. 写回最终输出</p><p><strong>结果:</strong><br>- 内存: O(n²) → O(n)<br>- 速度: 2-4× 加速（减少 HBM 访问）<br>- 精确: 与标准 attention 完全一致（无近似）</p></div>
 
     <h3>为什么 FlashAttention 有效？</h3>
     <p>关键在于利用 GPU 的内存层次结构：</p>
@@ -119,39 +102,11 @@
 
     <h3>算法-硬件协同设计</h3>
     <p>Dan Fu 的研究强调算法和硬件不应分开考虑：</p>
-    <pre><code class="language-python"># 传统方式:
-# 1. 设计算法（不考虑硬件）
-# 2. 实现算法
-# 3. 优化实现（如果时间允许）
-
-# 硬件感知方式:
-# 1. 理解硬件特性（内存层次、并行度、带宽）
-# 2. 从硬件出发设计算法
-# 3. 算法和实现同时优化
-
-# 例: FlashAttention
-# - 从 GPU 内存层次出发
-# - 设计分块策略匹配 SRAM 大小
-# - 算法天然高效</code></pre>
+    <div class="prose-outline"><p><strong>传统方式:</strong><br>1. 设计算法（不考虑硬件）<br>2. 实现算法<br>3. 优化实现（如果时间允许）</p><p><strong>硬件感知方式:</strong><br>1. 理解硬件特性（内存层次、并行度、带宽）<br>2. 从硬件出发设计算法<br>3. 算法和实现同时优化</p><p>例: FlashAttention<br>- 从 GPU 内存层次出发<br>- 设计分块策略匹配 SRAM 大小<br>- 算法天然高效</p></div>
 
     <h3>Roofline 模型</h3>
     <p>理解 kernel 性能的基本工具：</p>
-    <pre><code class="language-python"># Roofline 模型:
-# 性能 = min(峰值算力, 带宽 × 算术强度)
-
-# 算术强度 = FLOPs / bytes transferred
-
-# 例: H100
-# - 峰值 FP16 算力: 989 TFLOPS
-# - HBM 带宽: 3.35 TB/s
-# - Ridge point: 989e12 / 3.35e12 = 295 FLOPs/byte
-
-# 如果算术强度 < 295 → memory-bound
-# 如果算术强度 > 295 → compute-bound
-
-# FlashAttention 的目标:
-# 减少 bytes transferred（不改变 FLOPs）
-# 让 kernel 更接近 compute-bound</code></pre>
+    <div class="prose-outline"><p><strong>Roofline 模型:</strong><br>性能 = min(峰值算力, 带宽 × 算术强度)</p><p>算术强度 = FLOPs / bytes transferred</p><p>例: H100<br>- 峰值 FP16 算力: 989 TFLOPS<br>- HBM 带宽: 3.35 TB/s<br>- Ridge point: 989e12 / 3.35e12 = 295 FLOPs/byte</p><p>如果算术强度 < 295 → memory-bound<br>如果算术强度 > 295 → compute-bound</p><p><strong>FlashAttention 的目标:</strong><br>减少 bytes transferred（不改变 FLOPs）<br>让 kernel 更接近 compute-bound</p></div>
 
     <h3>分布式训练</h3>
     <p>大规模模型训练需要多 GPU 协作：</p>
@@ -171,17 +126,7 @@
 
     <h3>为什么 Kernel 工程重要？</h3>
     <p>同样的算法，不同的 kernel 实现可以有数倍的性能差异：</p>
-    <pre><code class="language-python"># 例: 矩阵乘法
-# 朴素实现: 10 GFLOPS
-# 优化实现: 800+ GFLOPS (接近峰值)
-
-# 优化技术:
-# 1. Tiling: 分块匹配内存层次
-# 2. Vectorization: 使用 SIMD 指令
-# 3. Shared memory: 减少 global memory 访问
-# 4. Register blocking: 最大化寄存器使用
-# 5. Software pipelining: 隐藏延迟
-# 6. Warp-level primitives: 利用 warp 内通信</code></pre>
+    <div class="prose-outline"><p>例: 矩阵乘法<br>朴素实现: 10 GFLOPS<br>优化实现: 800+ GFLOPS (接近峰值)</p><p><strong>优化技术:</strong><br>1. Tiling: 分块匹配内存层次<br>2. Vectorization: 使用 SIMD 指令<br>3. Shared memory: 减少 global memory 访问<br>4. Register blocking: 最大化寄存器使用<br>5. Software pipelining: 隐藏延迟<br>6. Warp-level primitives: 利用 warp 内通信</p></div>
 
     <h3>ThunderKittens：Kernel DSL</h3>
     <p>Dan Fu 参与开发的 GPU kernel DSL：</p>
@@ -191,15 +136,7 @@
       <li>降低 kernel 开发门槛</li>
     </ul>
 
-    <pre><code class="language-python"># ThunderKittens 风格 (伪代码):
-# 用数据流图描述 kernel
-# 编译器自动处理:
-# - 内存分配
-# - 数据搬运
-# - 同步
-
-# 开发者关注: 计算逻辑
-# 编译器关注: 性能优化</code></pre>
+    <div class="prose-outline"><p><strong>ThunderKittens 风格 (伪代码):</strong><br>用数据流图描述 kernel<br>编译器自动处理:<br>- 内存分配<br>- 数据搬运<br>- 同步</p><p>开发者关注: 计算逻辑<br>编译器关注: 性能优化</p></div>
 
     <hr class="rule">
 
@@ -307,7 +244,7 @@
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-correct="正确！FlashAttention 通过分块计算和 online softmax 将内存从 O(n²) 降到 O(n)，同时保持精确。" data-incorrect="FlashAttention 通过分块和 online softmax 减少内存，同时保持精确。">
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！FlashAttention 通过分块计算和 online softmax 将内存从 O(n²) 降到 O(n)，同时保持精确。" data-incorrect="FlashAttention 通过分块和 online softmax 减少内存，同时保持精确。">
       <p><strong>问题 1：</strong>FlashAttention 的核心贡献是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">近似 attention 计算</button>
@@ -318,7 +255,7 @@
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="2" data-correct="正确！Roofline 模型中，性能 = min(峰值算力, 带宽 × 算术强度)。Ridge point 是两者相等的点。" data-incorrect="Roofline 模型: 性能 = min(峰值算力, 带宽 × 算术强度)。">
+    <div class="quiz" data-quiz="2" data-answer="b" data-correct="正确！Roofline 模型中，性能 = min(峰值算力, 带宽 × 算术强度)。Ridge point 是两者相等的点。" data-incorrect="Roofline 模型: 性能 = min(峰值算力, 带宽 × 算术强度)。">
       <p><strong>问题 2：</strong>Roofline 模型的含义是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">性能 = 峰值算力</button>
@@ -329,7 +266,7 @@
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="3" data-correct="正确！算法-硬件协同设计强调从硬件特性出发设计算法，而非分开考虑。" data-incorrect="算法-硬件协同设计强调从硬件出发设计算法。">
+    <div class="quiz" data-quiz="3" data-answer="b" data-correct="正确！算法-硬件协同设计强调从硬件特性出发设计算法，而非分开考虑。" data-incorrect="算法-硬件协同设计强调从硬件出发设计算法。">
       <p><strong>问题 3：</strong>硬件感知算法的核心思想是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">先设计算法，再适配硬件</button>
@@ -340,7 +277,7 @@
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="4" data-correct="正确！The Bitter Lesson 的核心是：能随规模扩展的算法才是关键，效率在大规模时更加重要。" data-incorrect="The Bitter Lesson 强调能随规模扩展的算法和效率。">
+    <div class="quiz" data-quiz="4" data-answer="b" data-correct="正确！The Bitter Lesson 的核心是：能随规模扩展的算法才是关键，效率在大规模时更加重要。" data-incorrect="The Bitter Lesson 强调能随规模扩展的算法和效率。">
       <p><strong>问题 4：</strong>CS336 的核心公式 accuracy = efficiency × resources 的含义是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">资源越多越好</button>
@@ -354,7 +291,7 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="takeaways">本课要点</h2>
+    <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>
         <h3>FlashAttention</h3>
@@ -377,13 +314,13 @@
     <hr class="rule">
 
     <h2 id="reading">延伸阅读</h2>
-    <ul>
+    <details class="deep-dive"><summary>Reference · 延伸阅读与一手资料</summary><ul>
       <li>Dao et al. (2022): <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a> — IO-aware exact attention</li>
       <li>Dao (2023): <a href="https://arxiv.org/abs/2307.08691">FlashAttention-2</a> — 更高效实现</li>
       <li>Fu et al. (2024): <a href="https://arxiv.org/abs/2407.00079">Monarch Mixer</a> — 硬件高效架构</li>
       <li>Williams et al. (2009): <a href="https://arxiv.org/abs/0912.0535">Roofline Model</a> — 性能分析工具</li>
       <li>Sutton (2019): <a href="https://www.incompleteideas.net/IncIdeas/BitterLesson.html">The Bitter Lesson</a> — 规模 vs 算法</li>
-    </ul>
+    </ul></details>
 
     <hr class="rule">
 

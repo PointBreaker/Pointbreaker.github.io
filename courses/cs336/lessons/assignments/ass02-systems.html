@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="../../assets/course.css">
   <link rel="stylesheet" href="../../assets/guide.css?v=20260814d">
   <link rel="stylesheet" href="../../assets/katex.min.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
   <script defer src="../../assets/katex.min.js"></script>
   <script defer src="../../assets/katex-auto-render.min.js"></script>
   <script defer src="../../assets/math-render.js"></script>
@@ -25,7 +26,7 @@
       <div class="guide-meta">
         <span><span class="meta-icon">📅</span> 发布：2026-04-15</span>
         <span><span class="meta-icon">⏰</span> 截止：2026-04-29</span>
-        <span><span class="meta-icon">📖</span> 前置：第 5-9 课</span>
+        <span><span class="meta-icon">📖</span> 前置：第 5-8 课</span>
       </div>
     </div>
 
@@ -42,6 +43,11 @@
     </div>
 
     <p>Assignment 2 是一个<strong>自底向上的性能工程</strong>：从理解 GPU 架构开始，到编写自定义 kernel，再到多 GPU 并行。每个部分都建立在前一部分的基础上。</p>
+
+    <div class="learning-map" aria-label="Assignment 2 学习路径">
+      <strong>作业学习路径</strong>
+      <p>建立可信 benchmark → 用 profiler 找到瓶颈 → checkpointing 交换计算与显存 → Triton / FlashAttention 控制数据移动 → DDP 同步梯度 → optimizer-state sharding / FSDP 消除模型状态冗余 → 用统一实验比较正确性、显存与吞吐。</p>
+    </div>
 
     <h3>主要组件</h3>
     <table class="component-table">
@@ -185,21 +191,16 @@ print(prof.key_averages().table())</code></pre>
       <div class="connection-item">
         <div class="conn-lec">第 7 课</div>
         <div class="conn-arrow">↓</div>
-        <div class="conn-apply">FlashAttention → 高效注意力</div>
+        <div class="conn-apply">Collectives / DDP → 梯度同步与 overlap</div>
       </div>
       <div class="connection-item">
         <div class="conn-lec">第 8 课</div>
         <div class="conn-arrow">↓</div>
-        <div class="conn-apply">分布式 → DDP 实现</div>
-      </div>
-      <div class="connection-item">
-        <div class="conn-lec">第 9 课</div>
-        <div class="conn-arrow">↓</div>
-        <div class="conn-apply">分片策略 → optimizer state sharding / FSDP</div>
+        <div class="conn-apply">ZeRO / FSDP → optimizer state 与完整模型状态分片</div>
       </div>
     </div>
 
-    <p>完成 Assignment 2 后，你就拥有了<strong>工业级的高效训练栈</strong>。你会理解为什么现代 LLM 训练框架是这样设计的。</p>
+    <p>完成 Assignment 2 后，你将掌握现代高效训练栈中的核心机制，并能够用 benchmark、profiling 与 communication accounting 分析真实实现；这不等同于任何 workload 上都已得到最优系统。</p>
 
     <hr class="rule">
 
@@ -241,7 +242,7 @@ print(prof.key_averages().table())</code></pre>
 
     <!-- ============================================================ -->
     <!-- COMPLETE_SOURCE_OUTLINE_START -->
-<section class="source-outline" id="complete-source-outline"><p class="eyebrow">Spring 2025 详细本土化 · Legacy supplement</p><h2 id="complete-problems">旧版详细任务、约束与验收</h2><p class="source-outline-intro">本节保留 22 个旧版任务的详细中文实施说明。它们仍有学习价值，但不是 Spring 2026 官方题目清单；请先阅读上方 2026 problem map。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>旧版任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>与 2026 官方接口、测试、题号或硬件要求冲突时，以 2026 官方 handout 为准。</li><li>legacy 来源：<code>cs336_spring2025_assignment2_systems.pdf</code>、<code>assignment2-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>环境准备与作业总览</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span>Legacy supplement</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>1. 环境与依赖
+<details class="deep-dive legacy-supplement"><summary>Spring 2025 Legacy Supplement · 展开旧版 22 个详细任务</summary><section class="source-outline" id="complete-source-outline"><p class="eyebrow">Spring 2025 详细本土化 · Legacy supplement</p><h2 id="complete-problems">旧版详细任务、约束与验收</h2><p class="source-outline-intro"><strong>以下内容用于补充旧版作业的实现直觉和历史版本差异，不代表 Spring 2026 当前任务列表。</strong>题号、API、测试、硬件要求和验收标准发生冲突时，以页面上方 Spring 2026 authoritative problem map 和 Stanford 官方 handout 为准。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>旧版任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>与 2026 官方接口、测试、题号或硬件要求冲突时，以 2026 官方 handout 为准。</li><li>legacy 来源：<code>cs336_spring2025_assignment2_systems.pdf</code>、<code>assignment2-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>环境准备与作业总览</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span>Legacy supplement</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>1. 环境与依赖
 <p>本作业使用 <code>uv</code> 管理 Python 依赖。请确保已安装 <code>uv</code>，然后在仓库根目录执行 <code>uv run &lt;command&gt;</code>，<code>uv</code> 会根据 <code>pyproject.toml</code> 自动安装依赖。</p>
 <p>预期 Python 版本为 CPython 3.12.10。可通过以下方式验证环境是否就绪：</p>
 <pre><code class="language-sh">$ uv run python
@@ -1405,7 +1406,7 @@ def add_param_group(self, param_group: dict[str, Any]):
 </li>
 </ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>(a) 用 <code>torch.cuda.max_memory_allocated()</code> / <code>memory_stats()</code> 或 PyTorch memory snapshot 在三个 checkpoint 抓显存。XL 模型参数规模已知（d_model=16000, d_ff=64000, num_layers=48, num_heads=25），AdamW 每参数两份 FP32 状态；分片后每 rank 优化器状态约减半，但需考虑通信 buffer 与未分片项（参数、梯度、activations）。对比理论估算与实测。
 (b) 多次迭代取平均，注意 warm-up 与 <code>torch.cuda.synchronize()</code>；关注 optimizer step + 参数同步的额外开销。
-(c) ZeRO stage 1（ZeRO-DP Pos）通常仅分片 optimizer states，也可能进一步分片梯度（stage 2）或参数（stage 3）；对比本实现「仅分片 optimizer state + 参数广播」在显存节省量级与每步通信体积（本实现每步 broadcast 全部参数 vs ZeRO 的 reduce-scatter/all-gather）上的差异。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment2_systems.pdf</code> · 第 34–35 页 §3 · confidence: high</p></div></details></div></section>
+(c) ZeRO stage 1（ZeRO-DP Pos）通常仅分片 optimizer states，也可能进一步分片梯度（stage 2）或参数（stage 3）；对比本实现「仅分片 optimizer state + 参数广播」在显存节省量级与每步通信体积（本实现每步 broadcast 全部参数 vs ZeRO 的 reduce-scatter/all-gather）上的差异。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment2_systems.pdf</code> · 第 34–35 页 §3 · confidence: high</p></div></details></div></section></details>
 <!-- COMPLETE_SOURCE_OUTLINE_END -->
 
     <hr class="rule">
@@ -1466,7 +1467,7 @@ def add_param_group(self, param_group: dict[str, Any]):
       </article>
       <article>
         <h3>前置</h3>
-        <p>第 5-9 课 + GPU 编程基础</p>
+        <p>第 5-8 课 + GPU 编程基础</p>
       </article>
       <article>
         <h3>策略</h3>
@@ -1489,6 +1490,9 @@ def add_param_group(self, param_group: dict[str, Any]):
       <p>CS336: Language Modeling from Scratch · Assignment 2 导读 · 不含任何实现答案</p>
     </footer>
   </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
   <script src="../../assets/quiz.js"></script>
   <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../../assets/code-format.js?v=20260814a"></script>
