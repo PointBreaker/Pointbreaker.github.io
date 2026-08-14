@@ -35,6 +35,164 @@
       <p><strong>版本说明：</strong>上方导读沿用 Spring 2026 课程结构；下方“完整 Handout”严格依据本地 Spring 2025 PDF 与 README 本土化，适配本地 2025 作业仓库。页面已收录任务、接口、约束、交付物与验收要求，但不提供参考实现。</p>
     </div>
 
+    <nav class="assignment-jump-links" aria-label="作业页快速导航">
+      <a href="#assignment-route">任务路线</a>
+      <a href="#knowledge-tree">知识树</a>
+      <a href="#assignment-cheatsheet">Cheatsheet</a>
+      <a href="#complete-problems">完整题面</a>
+    </nav>
+
+    <section aria-labelledby="assignment-overview-title">
+      <div class="assignment-mission-grid">
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">Mission</span>
+          <h2 id="assignment-overview-title">用有限实验预算，推断更大训练的最优配置</h2>
+          <p>这份作业不是“把一条曲线拟合得好看”，而是建立一条可复现的推断链：选择信息量高的实验点，统一计算口径，拟合参数量与数据量对 loss 的贡献，再检查外推对采样范围和拟合假设有多敏感。</p>
+          <p><strong>阅读策略：</strong>把每个预测都拆成“数据从哪里来、预算怎么算、模型为何这样写、残差说明什么、外推有多远”五个问题。</p>
+        </div>
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">You will produce</span>
+          <h3>最终要交付的研究证据</h3>
+          <ul class="assignment-outcomes">
+            <li>覆盖多个模型规模与 token 预算的实验表</li>
+            <li>固定 compute 下的 IsoFLOPs 比较</li>
+            <li>参数量/数据量联合 scaling law</li>
+            <li>带边界说明与不确定性的外推预测</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assignment-route" aria-labelledby="assignment-route-title">
+      <p class="eyebrow">Dependency-first route</p>
+      <h2 id="assignment-route-title">五阶段研究路线</h2>
+      <ol class="assignment-route assignment-route-5">
+        <li><strong>Small experiments</strong><span>先用低成本配置验证训练 API、日志、预算核算与结果收集链路。</span></li>
+        <li><strong>IsoFLOPs</strong><span>固定 compute，改变 (N) 与 (D)，寻找每个预算下的低 loss 区域。</span></li>
+        <li><strong>Fit</strong><span>拟合联合幂律，检查参数可辨识性、残差与异常点。</span></li>
+        <li><strong>Extrapolate</strong><span>在目标 FLOPs 预算下求 compute-optimal (N,D) 与预测 loss。</span></li>
+        <li><strong>Stress-test</strong><span>改变点集、初值或拟合形式，量化预测对实验选择的敏感性。</span></li>
+      </ol>
+    </section>
+
+    <section id="knowledge-tree" aria-labelledby="knowledge-tree-title">
+      <p class="eyebrow">Recursive prerequisite map</p>
+      <h2 id="knowledge-tree-title">递归知识树：一个 scaling 结论依赖什么？</h2>
+      <div class="knowledge-tree">
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 01 · Experimental design</span>
+          <h3>采哪些点才真正有信息量？</h3>
+          <p>对应查询预算分配与 IsoFLOPs 实验。</p>
+          <ul>
+            <li>Question → controlled variables
+              <ul><li>固定训练 recipe 与评估口径</li><li>只改变 (N,D,C) 中计划改变的量</li></ul>
+            </li>
+            <li>Range → identifiability
+              <ul><li>参数量和 token 数都要有跨度</li><li>避免所有点落在同一窄区间</li></ul>
+            </li>
+            <li>Budget → sequential design
+              <ul><li>先探索，再在拐点附近加密</li><li>保留预算用于复查异常点</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 02 · Compute accounting</span>
+          <h3>一次实验到底花了多少 compute？</h3>
+          <p>对应 FLOPs 预算和模型/数据分配。</p>
+          <ul>
+            <li>Parameters (N) → per-token work
+              <ul><li>训练含 forward 与 backward</li><li>常用近似 (C\approx6ND)</li></ul>
+            </li>
+            <li>Tokens (D) → training horizon
+              <ul><li>batch size × sequence length × steps</li><li>预算按实际查询口径累计</li></ul>
+            </li>
+            <li>Nominal → effective experiment
+              <ul><li>失败运行与重复运行是否计费</li><li>保持单位与数量级一致</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 03 · Statistical model</span>
+          <h3>幂律参数在表达什么？</h3>
+          <p>对应 loss surface 拟合与 compute-optimal 推导。</p>
+          <ul>
+            <li>Irreducible term
+              <ul><li>(E) 是模型形式中的渐近项</li><li>有限数据不保证能稳定识别它</li></ul>
+            </li>
+            <li>Model-limited term
+              <ul><li>(A/N^\alpha)</li><li>(\alpha) 描述增加参数的边际收益</li></ul>
+            </li>
+            <li>Data-limited term
+              <ul><li>(B/D^\beta)</li><li>(\beta) 描述增加 token 的边际收益</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 04 · Extrapolation</span>
+          <h3>预测什么时候值得相信？</h3>
+          <p>对应最终模型大小、超参数与 loss 预测。</p>
+          <ul>
+            <li>Interpolation → extrapolation
+              <ul><li>目标点离观测凸包有多远</li><li>是否跨越训练 regime</li></ul>
+            </li>
+            <li>Fit → uncertainty
+              <ul><li>重采样或改变拟合点集</li><li>比较多个合理初值/形式</li></ul>
+            </li>
+            <li>Prediction → decision
+              <ul><li>给出范围而非伪精确小数</li><li>说明最敏感的假设</li></ul>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="assignment-cheatsheet" aria-labelledby="assignment-cheatsheet-title">
+      <p class="eyebrow">Before querying</p>
+      <h2 id="assignment-cheatsheet-title">开工 Cheatsheet</h2>
+      <div class="cheatsheet-grid">
+        <article class="cheat-card">
+          <h3>Core model</h3>
+          <p class="formula-line">\(C\approx6ND\)</p>
+          <p class="formula-line">\(L(N,D)=E+A/N^\alpha+B/D^\beta\)</p>
+          <ul>
+            <li>(N)：参数量；(D)：训练 token；(C)：训练 compute。</li>
+            <li>固定 (C) 时，增大 (N) 必然减少可用的 (D)。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>IsoFLOPs workflow</h3>
+          <ol>
+            <li>选一组 compute budgets。</li>
+            <li>每个 budget 下扫多个模型大小。</li>
+            <li>找到最低 loss 附近的配置。</li>
+            <li>拟合 optimal (N(C))、(D(C)) 或联合 loss surface。</li>
+          </ol>
+        </article>
+        <article class="cheat-card">
+          <h3>Fit diagnostics</h3>
+          <ul>
+            <li>画观测值与预测值，不只报告 objective。</li>
+            <li>检查 residual 是否随 (N,D,C) 呈系统偏差。</li>
+            <li>确认参数为合理范围，并测试不同初值。</li>
+            <li>异常点先核对训练日志，不立即删除。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Experiment ledger</h3>
+          <ul>
+            <li>每次记录 (N,D,C)、batch、steps、learning rate、seed、loss。</li>
+            <li>区分 planned、started、completed、failed 查询。</li>
+            <li>保存拟合脚本、原始数据与生成图表的版本。</li>
+            <li>最终报告必须让别人能够复现采点与拟合。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <details class="assignment-reference">
+      <summary>展开原有详细导读：任务表、实验设计建议、陷阱、记录模板与课程连接</summary>
+      <div class="assignment-reference-body">
+
     <!-- ============================================================ -->
     <h2 id="what">这个 Assignment 要你做什么？</h2>
 
@@ -207,6 +365,9 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
+      </div>
+    </details>
+
     <!-- COMPLETE_SOURCE_OUTLINE_START -->
 <section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 编程作业</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>cs336_spring2025_assignment3_scaling.pdf</code>、<code>assignment3-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>环境准备与作业全局说明</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>仓库与代码
 <p>本作业代码仓库位于 <code>github.com/stanford-cs336/assignment3-scaling</code>，请执行 <code>git clone</code> 克隆。如有更新，课程组会通知，届时可通过 <code>git pull</code> 获取最新版本。模型参考实现位于 <code>cs336_scaling/model.py</code>。</p>

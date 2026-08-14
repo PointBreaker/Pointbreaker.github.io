@@ -35,6 +35,174 @@
       <p><strong>版本说明：</strong>上方导读沿用 Spring 2026 课程结构；下方“完整 Handout”严格依据本地 Spring 2025 PDF 与 README 本土化，适配本地 2025 作业仓库。页面已收录任务、接口、约束、交付物与验收要求，但不提供参考实现。</p>
     </div>
 
+    <nav class="assignment-jump-links" aria-label="作业页快速导航">
+      <a href="#assignment-route">任务路线</a>
+      <a href="#knowledge-tree">知识树</a>
+      <a href="#assignment-cheatsheet">Cheatsheet</a>
+      <a href="#complete-problems">完整题面</a>
+    </nav>
+
+    <section aria-labelledby="assignment-overview-title">
+      <div class="assignment-mission-grid">
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">Mission</span>
+          <h2 id="assignment-overview-title">把语言模型拆开，再亲手装回去</h2>
+          <p>这份作业不是 39 个互不相关的小函数。它实际在构建一条完整链路：文本先变成 token，token 经过 Transformer 产生 next-token logits，loss 驱动优化器更新参数，训练系统再负责数据、checkpoint、生成与评估。</p>
+          <p><strong>阅读策略：</strong>先沿四阶段主线建立依赖图，再进入具体 problem。当前任务卡住时，向上回溯它依赖的知识节点，而不是直接搜索实现。</p>
+        </div>
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">You will build</span>
+          <h3>完成后的四个可运行产物</h3>
+          <ul class="assignment-outcomes">
+            <li>可训练、可序列化的 byte-level BPE tokenizer</li>
+            <li>只用基础 Tensor 运算组合出的 Transformer LM</li>
+            <li>Cross-entropy、AdamW、schedule 与 gradient clipping</li>
+            <li>支持 checkpoint、生成、评估和消融的训练脚本</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assignment-route" aria-labelledby="assignment-route-title">
+      <p class="eyebrow">Dependency-first route</p>
+      <h2 id="assignment-route-title">四阶段任务路线</h2>
+      <ol class="assignment-route">
+        <li><strong>Text → token IDs</strong><span>Unicode、UTF-8 bytes、BPE merge、encode/decode 与数据序列化。</span></li>
+        <li><strong>token IDs → logits</strong><span>Embedding、RMSNorm、RoPE、attention、SwiGLU、Transformer block 与 LM head。</span></li>
+        <li><strong>logits → parameter update</strong><span>稳定 cross-entropy、AdamW、warmup/cosine schedule 与 gradient clipping。</span></li>
+        <li><strong>components → training system</strong><span>Data loader、训练循环、checkpoint、generation、perplexity、消融与 leaderboard。</span></li>
+      </ol>
+    </section>
+
+    <figure class="assignment-figure">
+      <img src="../../figures/assignment-01-transformer-stack.svg" alt="Assignment 1 中 tokenizer、Transformer block、loss、AdamW 与训练系统的完整数据流">
+      <figcaption>先看箭头，而不是先背 API：每个 problem 都在补齐这条链路中的一个节点。图是依据 Assignment 1 任务关系重绘的概念图，不是 Stanford 官方原图。</figcaption>
+    </figure>
+
+    <section id="knowledge-tree" aria-labelledby="knowledge-tree-title">
+      <p class="eyebrow">Recursive prerequisite map</p>
+      <h2 id="knowledge-tree-title">递归知识树：卡住时应该往哪里回溯？</h2>
+      <div class="knowledge-tree">
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 01 · Representation</span>
+          <h3>文本为什么能进入神经网络？</h3>
+          <p>对应 tokenizer、数据编码与压缩率实验。</p>
+          <ul>
+            <li>Unicode 字符串 → UTF-8 bytes
+              <ul><li>字符与字节不是一一对应</li><li>无效字节需要 replacement character</li></ul>
+            </li>
+            <li>Bytes → BPE token
+              <ul><li>预分词边界</li><li>pair frequency、tie-breaking、merge order</li></ul>
+            </li>
+            <li>Token → integer ID
+              <ul><li>special token 原子性</li><li>encode/decode 可逆边界</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 02 · Model</span>
+          <h3>一个 token 如何变成 next-token distribution？</h3>
+          <p>对应所有 neural-network primitive 与 Transformer 组合任务。</p>
+          <ul>
+            <li>Shape algebra
+              <ul><li>[B,T] → [B,T,D]</li><li>[B,T,D] → [B,H,T,D<sub>h</sub>]</li></ul>
+            </li>
+            <li>Representation transforms
+              <ul><li>Linear / Embedding</li><li>RMSNorm / RoPE</li></ul>
+            </li>
+            <li>Context mixing
+              <ul><li>causal mask</li><li>scaled dot-product attention</li><li>multi-head reshape</li></ul>
+            </li>
+            <li>Block composition
+              <ul><li>pre-norm residual</li><li>SwiGLU</li><li>stack + final norm + LM head</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 03 · Optimization</span>
+          <h3>为什么模型参数会朝正确方向移动？</h3>
+          <p>对应 loss、optimizer、schedule 与稳定性任务。</p>
+          <ul>
+            <li>Logits → probability
+              <ul><li>stable softmax / log-sum-exp</li><li>cross-entropy 与 target shift</li></ul>
+            </li>
+            <li>Gradient → update
+              <ul><li>Adam 一阶/二阶矩</li><li>decoupled weight decay</li></ul>
+            </li>
+            <li>Update stability
+              <ul><li>warmup + cosine decay</li><li>global gradient norm clipping</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 04 · Training system</span>
+          <h3>正确组件怎样变成可复现实验？</h3>
+          <p>对应训练整合、checkpoint、生成、评估与消融。</p>
+          <ul>
+            <li>Token stream → batches
+              <ul><li>context window</li><li>input/target offset</li></ul>
+            </li>
+            <li>Train step → experiment
+              <ul><li>zero grad / forward / backward / step</li><li>logging 与 validation</li></ul>
+            </li>
+            <li>State → reproducibility
+              <ul><li>model + optimizer + iteration checkpoint</li><li>resume 后结果连续</li></ul>
+            </li>
+            <li>Model → evidence
+              <ul><li>generation / perplexity</li><li>controlled ablation / leaderboard</li></ul>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="assignment-cheatsheet" aria-labelledby="assignment-cheatsheet-title">
+      <p class="eyebrow">Before coding</p>
+      <h2 id="assignment-cheatsheet-title">开工 Cheatsheet</h2>
+      <div class="cheatsheet-grid">
+        <article class="cheat-card">
+          <h3>Shape invariants</h3>
+          <ul>
+            <li>Token IDs：<code>[B, T]</code></li>
+            <li>Residual stream：<code>[B, T, D]</code></li>
+            <li>Per-head Q/K/V：<code>[B, H, T, D_h]</code>，且 <code>D = H × D_h</code></li>
+            <li>Attention scores：<code>[B, H, T, T]</code></li>
+            <li>LM logits：<code>[B, T, V]</code></li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Core equations</h3>
+          <p class="formula-line">\(\operatorname{Attention}(Q,K,V)=\operatorname{softmax}(QK^\top/\sqrt{d_h}+M)V\)</p>
+          <p class="formula-line">\(\operatorname{RMSNorm}(x)=g\odot x/\sqrt{\operatorname{mean}(x^2)+\epsilon}\)</p>
+          <p class="formula-line">\(\operatorname{CE}(z,y)=-z_y+\log\sum_j e^{z_j}\)</p>
+          <p>实现 softmax / cross-entropy 时先减去最大 logit，避免指数溢出。</p>
+        </article>
+        <article class="cheat-card">
+          <h3>Repository contract</h3>
+          <ul>
+            <li><code>tests/adapters.py</code> 只做 glue，不放实质算法。</li>
+            <li>不要修改测试；先把一个 primitive 接到一个最小测试。</li>
+            <li>遵守 handout 对 <code>torch.nn</code>、<code>torch.nn.functional</code>、<code>torch.optim</code> 的限制。</li>
+            <li>Weight orientation 以题面和测试 shape 为准，不凭 PyTorch 默认习惯猜。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Debug ladder</h3>
+          <ol>
+            <li>先验证 shape 与 dtype。</li>
+            <li>用 <code>B=1,T=1,D=2</code> 的手算例子验证数值。</li>
+            <li>与允许使用的参考 Tensor 运算比较。</li>
+            <li>单测通过后再组合 block，最后才跑训练。</li>
+            <li>训练异常先查 loss、gradient norm、learning rate 和 checkpoint continuity。</li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <details class="assignment-reference">
+      <summary>展开原有详细导读：组件表、前置清单、实现顺序、陷阱、测试与课程连接</summary>
+      <div class="assignment-reference-body">
+
     <!-- ============================================================ -->
     <h2 id="what">这个 Assignment 要你做什么？</h2>
 
@@ -230,6 +398,9 @@ uv run pytest -v</code></pre>
     <p><strong>卡住时的正确顺序：</strong> 复习课程 → 读 handout → 读测试 → 从最小例子开始 → 如果仍然卡住，带着具体问题去问。</p>
 
     <hr class="rule">
+
+      </div>
+    </details>
 
     <!-- ============================================================ -->
     <!-- COMPLETE_SOURCE_OUTLINE_START -->

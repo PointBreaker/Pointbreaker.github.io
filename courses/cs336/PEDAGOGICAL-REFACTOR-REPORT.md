@@ -18,6 +18,10 @@ Formulas, cost models, system mechanisms, hardware details, implementation notes
 - Added shared styles for `.bridge`, `.learning-map`, `.concept-figure`, `.deep-dive`, `.takeaways`, and `.prose-outline`.
 - Added valid answer keys to previously non-functional lecture quizzes and corrected the L11 extrapolation question: 1B to 1T is a 1000× extrapolation.
 - Loaded the existing Prism resources on all five assignment pages so Python and shell examples retain indentation and receive syntax highlighting.
+- Reworked all five assignment pages into a learning cockpit: mission and deliverables, dependency-first task route, recursive prerequisite tree, compact pre-coding cheatsheet, then the preserved detailed guide and full task outline.
+- Moved the original component tables, prerequisite lists, implementation sequences, pitfalls, testing notes, and course mappings into closed reference disclosures so they remain available without dominating first read.
+- Changed complete task indexes into compact two-column desktop cards and single-column mobile cards; opened tasks span the full desktop content width.
+- Added source-labeled conceptual SVGs for Assignment 1's Transformer/training stack and Assignment 4's auditable web-data pipeline.
 
 ## Gold sample: Lecture 7
 
@@ -52,6 +56,20 @@ The diagram is explicitly labeled as a conceptual model rather than a universal 
 
 The ratio is a first-pass density estimate: text outside `<details>` divided by all page text. It is not a readability score.
 
+## Assignment learning cockpit
+
+The five assignment pages now use the same dependency-first reading model while preserving their different source boundaries:
+
+| Assignment | Default-visible route | Recursive knowledge roots | Source boundary |
+| --- | --- | --- | --- |
+| A1 Basics | text → token IDs → logits → parameter update → training system | representation, model, optimization, training system | Spring 2025 complete handout remains visible after the folded original guide |
+| A2 Systems | benchmark/profile → checkpointing → FlashAttention-2 → DDP overlap → state sharding | measurement, kernel, communication, state sharding | Spring 2026 authoritative map remains visible; both the old generic guide and Spring 2025 detailed supplement default closed |
+| A3 Scaling | small experiments → IsoFLOPs → fit → extrapolate → stress-test | experimental design, compute accounting, statistical model, extrapolation | Spring 2025 complete handout remains visible after the folded original guide |
+| A4 Data | WARC → extraction → safety/privacy → quality → dedup → tokenize → validate | raw web, safety/privacy, quality, deduplication | Spring 2025 complete handout remains visible after the folded original guide |
+| A5 Alignment | prompting → rollout primitives → standard GRPO → on-policy variants → off-policy/GSPO → safety/preferences | evaluation, sequence probability, reward/advantage, policy update | Spring 2026 authoritative map remains visible; both the old generic guide and Spring 2025 detailed supplement default closed |
+
+The cheatsheets intentionally stop at formulas, tensor/data invariants, experiment contracts, and debugging order. They do not contain submit-ready implementations or solution keys.
+
 ## Technical and source-boundary corrections
 
 - Replaced the absolute `Prefill = compute-bound / Decode = memory-bound` model with shape- and workload-dependent language.
@@ -75,7 +93,7 @@ The ratio is a first-pass density estimate: text outside `<details>` divided by 
 
 ## Browser QA
 
-Checked the Dashboard, L2, L5, L6, L7, L8, L10, L14, L17, and Assignment 2 at desktop width, plus L7, L10, and Assignment 2 at 390 px.
+Checked the Dashboard, L2, L5, L6, L7, L8, L10, L14, L17, and all five assignments at desktop width. Rechecked all five assignments at 390 px; captured representative full-page mobile screenshots for A1, A4, and A5.
 
 - No page-level horizontal overflow.
 - No KaTeX render errors.
@@ -86,6 +104,10 @@ Checked the Dashboard, L2, L5, L6, L7, L8, L10, L14, L17, and Assignment 2 at de
 - L7 topology SVG loads successfully.
 - L10 quiz answer feedback reaches the `correct` state with the revised decode-attention explanation.
 - Assignment 2 Spring 2026 problem map is visible; Spring 2025 legacy content defaults closed.
+- Assignment 5 Spring 2026 problem map is visible; Spring 2025 legacy content defaults closed.
+- Every assignment cockpit defaults to the compact route/tree/cheatsheet view; all five original detailed guides default closed.
+- A1 and A4 conceptual SVGs load successfully; their captions explicitly identify them as task-relationship redraws rather than Stanford official figures.
+- Assignment task indexes use two columns on desktop and one column at 390 px without title/problem-id collisions.
 - Opening the Discussion drawer reserves desktop reading width instead of covering the lesson.
 
 The only console messages observed after opening Discussion were expected giscus 404/warnings stating that the page-specific GitHub Discussion does not yet exist and will be created on first submission.
