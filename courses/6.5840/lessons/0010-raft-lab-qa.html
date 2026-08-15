@@ -1,27 +1,205 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="这不是新算法，而是一次实现校准：把 Raft Figure 2 翻译成锁纪律、计时器、持久化点和可复现调试证据。"><title>Raft 实验问答与调试 — MIT 6.5840 Field Notes</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../field-notes.css?v=20260816b">
+<script defer src="../field-notes.js?v=20260816b"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>5840<br><small>FIELD NOTES</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#labs">实验</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://pdos.csail.mit.edu/6.824/notes/l-raft-QA.txt" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 10 · 2026-03-12 · 复制与一致性</p><h1>Raft 实验问答与调试</h1><p class="lesson-title-en">Raft Lab Q&amp;A</p><p class="hero-lede">这不是新算法，而是一次实现校准：把 Raft Figure 2 翻译成锁纪律、计时器、持久化点和可复现调试证据。</p><div class="lesson-meta"><span>48 MIN</span><span>进阶</span><span>03 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#section-1"><span>01</span>从不变量倒推代码</a><a href="#section-2"><span>02</span>锁与 RPC 的标准形状</a><a href="#section-3"><span>03</span>计时器与陈旧事件</a><a href="#section-4"><span>04</span>可复现调试</a><a href="#check"><span>05</span>纠错与检查</a><a href="#source-vault"><span>06</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><ol><li>解释从不变量倒推代码的核心问题</li><li>按协议顺序推演锁与 RPC 的标准形状</li><li>评估工程取舍：更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</li></ol><div class="source-ribbon"><a href="https://pdos.csail.mit.edu/6.824/notes/l-raft-QA.txt" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>notes/l-raft-QA.txt</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/labs/guidance.html" target="_blank" rel="noreferrer"><span>网页讲义</span><strong>labs/guidance.html</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/labs/vis.html" target="_blank" rel="noreferrer"><span>网页讲义</span><strong>labs/vis.html</strong><b>↗</b></a></div></section><section class="reading-section" id="section-1"><div class="section-label">01 / DEEP READING</div><h2>从不变量倒推代码</h2><p>先写下关键不变量：term 单调增加、每 term 最多投一票、日志匹配、已提交索引单调、apply 顺序不回退。每个 handler 和回复处理都要说明自己保持了哪些不变量。若修复只是在某个测试上加 sleep 或特殊分支，却无法解释不变量，通常会在另一种调度下失败。</p></section><section class="reading-section" id="section-2"><div class="section-label">02 / DEEP READING</div><h2>锁与 RPC 的标准形状</h2><p>在锁内读取状态并构造不可变 RPC 参数，释放锁后发送，重新加锁后检查回复是否仍属于当前 term/角色。不要持锁等待网络；不要让两个 goroutine 无纪律地修改 nextIndex；不要把 applyCh 发送放在锁内。使用短临界区并集中状态转换，降低竞态组合。</p><aside class="field-callout"><span>FIELD TRACE</span><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。”在每一步如何体现。</p></aside></section><section class="reading-section" id="section-3"><div class="section-label">03 / DEEP READING</div><h2>计时器与陈旧事件</h2><p>选举计时器应由有效 leader 通信或投票行为重置，并使用随机超时。旧 term 回复、旧 timer firing 和旧 leader goroutine 都可能在角色变化后到达；处理前必须再次检查 term 与状态。逻辑时钟条件比墙钟睡眠更可靠。</p></section><section class="reading-section" id="section-4"><div class="section-label">04 / DEEP READING</div><h2>可复现调试</h2><p>运行单个测试很多次并启用 race detector；记录 term、角色、日志边界、RPC 方向和 commit/apply 变化。官方 tester 的时间线可标注自定义事件，适合定位分区与崩溃交界。保留失败 seed 和短日志，先找到最早违反不变量的位置，而不是追最后一个报错。</p></section>
+<section class="reading-section" id="check"><div class="section-label">05 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>增加 sleep 能从根本上修复 Raft 偶发失败。</h3><p>sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</p></article><article><span>误区</span><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m10-q1"><p><strong>处理 RPC 回复前最重要的重新检查是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>当前 term 和角色是否仍与发送时匹配</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>日志文件是否超过 1 MB</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>客户端是否仍在线</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m10-q2"><p><strong>下列哪项最准确概括本讲的主要工程取舍？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>增加节点总能同时降低延迟并消除故障</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只要使用 RPC 就不再需要一致性协议</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m10-q3"><p><strong>为什么“增加 sleep 能从根本上修复 Raft 偶发失败。”是错误的？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>因为所有网络都保证严格同步</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>因为客户端从不会重试</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div></section>
+<section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节、例子、问答与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="notes/l-raft-qa.txt"><summary><span><b>课堂讲义</b>notes/l-raft-QA.txt</span><small>75 行 · 310 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/l-raft-QA.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.5840 Lecture 10: lab 3 A+B Q&amp;A
 
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Raft 实验问答与调试 — MIT 6.5840</title>
-<link href="../../../assets/course/base.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
-<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
-<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
-<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
-<script defer="" src="../../../assets/vendor/katex.min.js"></script>
-<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
-<script defer="" src="../../../assets/course/math-render.js"></script>
-</head>
-<body>
-<div class="page"><p class="eyebrow">MIT 6.5840 · 第 10 讲</p><h1>Raft 实验问答与调试</h1><p class="lede">这不是新算法，而是一次实现校准：把 Raft Figure 2 翻译成锁纪律、计时器、持久化点和可复现调试证据。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释从不变量倒推代码的核心问题</li><li>按协议顺序推演锁与 RPC 的标准形状</li><li>评估工程取舍：更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">从不变量倒推代码</h2><p>先写下关键不变量：term 单调增加、每 term 最多投一票、日志匹配、已提交索引单调、apply 顺序不回退。每个 handler 和回复处理都要说明自己保持了哪些不变量。若修复只是在某个测试上加 sleep 或特殊分支，却无法解释不变量，通常会在另一种调度下失败。</p><h2 id="section-2">锁与 RPC 的标准形状</h2><p>在锁内读取状态并构造不可变 RPC 参数，释放锁后发送，重新加锁后检查回复是否仍属于当前 term/角色。不要持锁等待网络；不要让两个 goroutine 无纪律地修改 nextIndex；不要把 applyCh 发送放在锁内。使用短临界区并集中状态转换，降低竞态组合。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。”在每一步如何体现。</p></div></div><h2 id="section-3">计时器与陈旧事件</h2><p>选举计时器应由有效 leader 通信或投票行为重置，并使用随机超时。旧 term 回复、旧 timer firing 和旧 leader goroutine 都可能在角色变化后到达；处理前必须再次检查 term 与状态。逻辑时钟条件比墙钟睡眠更可靠。</p><h2 id="section-4">可复现调试</h2><p>运行单个测试很多次并启用 race detector；记录 term、角色、日志边界、RPC 方向和 commit/apply 变化。官方 tester 的时间线可标注自定义事件，适合定位分区与崩溃交界。保留失败 seed 和短日志，先找到最早违反不变量的位置，而不是追最后一个报错。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>增加 sleep 能从根本上修复 Raft 偶发失败。</h3><p>sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m10-q1"><p><strong>问题：</strong>处理 RPC 回复前最重要的重新检查是什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">当前 term 和角色是否仍与发送时匹配</button><button aria-pressed="false" data-choice="b">日志文件是否超过 1 MB</button><button aria-pressed="false" data-choice="c">客户端是否仍在线</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m10-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m10-q3"><p><strong>问题：</strong>为什么“增加 sleep 能从根本上修复 Raft 偶发失败。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>先写下关键不变量：term 单调增加、每 term 最多投一票、日志匹配、已提交索引单调、apply 顺序不回退。</li><li>更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</li><li>sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-raft-QA.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>labs/guidance.html</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>labs/vis.html</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
-<script src="../../../assets/vendor/prism.js"></script>
-<script src="../../../assets/vendor/prism-python.js"></script>
-<script src="../../../assets/vendor/prism-bash.js"></script>
-<script src="../../../assets/course/quiz.js"></script>
-<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
-<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
-</body>
-</html>
+Two different structures of Raft library
+  multi-threaded with locks
+  single-threaded state-machine
+  neither one is strictly better than the other
+  other plans are possible
+
+Correctness in distributed systems:
+ safety: never returning an incorrect result
+ liveness: eventually returning a result
+ Q: give an example of a safety and liveness bug in your solution
+
+Getting started on a lab
+  make first test case work
+   fill out VoteRequest structs
+   do an RPC
+  then much easier to get the lay of the land
+  other strategy: read all guides, read test code, etc.
+
+Debugging
+  Run with race detector
+  Log all action/messages in easy searchable way
+   standard format: src, dst, opcode, raft state,..
+  Run test case
+    if ok:
+      next test case
+    if fail:
+      repeat:
+        study test case
+        formulate hypothesis about what might be wrong
+        study log and figure 2, run with race detector
+        modify code and try test again
+
+Multi-threaded Raft library
+  many threads (Start() thread, thread reading from applych)
+  many RPC threads to talk to peers in parallel
+  many RPC handler threads (started by RPC package)
+  raft state with lock
+  one thread writing to applych
+    use condvar to signal it
+
+Locking
+  Raft lock serializes operations
+  RPC handlers hold Raft lock so are atomic
+    little parallelism
+  Threads don&#x27;t hold lock during RPC
+    risk: deadlock if locks are held during RPC
+
+Single-threaded state-machine
+  observation: little parallelism anyway
+    main use: sending RPCs in parallel
+  one thread runs Raft protocol
+    receives input events (e.g., tick, RPC request, reply)
+    process event, updating raft structure, without locks
+      collecting output events (persist, send RPCs)
+    performs output events
+      first persist, then RPC requests
+  one thread for the applier
+    need to separate state between applier and state-machine
+    protect shared state with lock (e.g., the log)
+
+Code tour
+  Raft struct
+  Ticker
+  Election timeout
+  Start election
+  VoteRequest handling
+  becomeLeader
+  send appends
+  AppendEntries request handling
+  AppendEntries reply handling
+  commit
+  applier
+  Start()</code></pre></details><details class="archive" data-source-record data-source="labs/guidance.html"><summary><span><b>网页讲义</b>labs/guidance.html</span><small>103 行 · 597 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/labs/guidance.html" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">Lab guidance
+
+
+Lab guidance
+
+Hardness of assignments
+
+
+Each lab task is tagged to indicate
+roughly how long we expect the task to take:
+
+    Easy: A few hours.
+
+    Moderate: ~ 6 hours (per week).
+
+    Hard: More than 6 hours (per week). If
+    you start late, your solution is unlikely to pass all tests.
+
+
+
+Most of the labs require only a modest amount of code
+(perhaps a
+few hundred lines per lab part), but can be conceptually difficult
+and may require a good deal of thought and debugging.
+Some of the tests are difficult to pass.
+
+Don&#x27;t start a lab the night before it is due; it&#x27;s more
+efficient to do the labs in several sessions spread over multiple
+days. Tracking down bugs in distributed systems is difficult,
+because of concurrency, crashes, and an unreliable network.
+
+Tips
+
+
+Do the Online Go tutorial and
+  consult
+  Effective Go.
+    See Editors to
+    set up your editor for Go.
+
+The lab Makefiles are set up to use
+Go&#x27;s race detector.
+Fix any races it reports.
+
+Advice on locking in labs.
+
+Advice on structuring your Raft lab.
+
+This Diagram of Raft interactions may
+help you understand code flow
+between different parts of the system.
+
+Learn about Go&#x27;s Printfformat strings:
+Go format strings.
+
+ To learn more about git, look at the
+Pro Git book or the
+git user&#x27;s manual.
+
+Debugging
+
+Efficient debugging takes experience. It
+helps to be systematic: form a hypothesis about a possible cause of the
+problem; collect evidence that might be relevant; think about the
+information you&#x27;ve gathered; repeat as needed. For extended debugging
+sessions it helps to keep notes, both to accumulate evidence and to
+remind yourself why you&#x27;ve discarded specific earlier hypotheses.
+
+The most effective debugging technique is often to add print
+statements to your code, run the test that is failing and collect the
+print output in a file, and then look through the output file to
+identify the point at which things start to go wrong. You may need to
+iterate, adding more print statements as you learn more about what is
+going wrong.
+
+Concurrency among different peers and among the threads in a single
+peer can cause actions to be interleaved in unexpected ways. For
+example, it&#x27;s quite possible for a Raft peer to be elected leader
+while the previous leader still thinks it is the leader, or for a
+leader to send an RPC but receive the reply after it has lost
+leadership. Adding print statements may help you spot such situations.
+
+Feel free to examine the test code (mr/mt_test.go,
+raft1/raft_test.go, &amp;c) to understand what the tests are
+exploring. You can add print statements to the tests to help you
+understand what they are doing and why they are failing, but be sure
+you code passes with the original test code before submitting.
+
+The Raft paper&#x27;s Figure 2 must be followed fairly exactly. It is easy
+to miss a condition that Figure 2 says must be checked, or a state
+change that it says must be made. If you have a bug, re-check that all
+of your code adheres closely to Figure 2.
+
+As you&#x27;re writing code (i.e., before you have a bug), it may be worth
+adding explicit checks for conditions that the code assumes to be
+true, perhaps using Go&#x27;s
+panic. Such checks may
+help detect situations where later code unwittingly violates the
+assumptions.
+
+The TAs are happy to help you think about your code during office
+hours, but you&#x27;re likely to get the most mileage out of limited office
+hour time if you&#x27;ve already dug as deep as you can into the situation.</code></pre></details><details class="archive" data-source-record data-source="labs/vis.html"><summary><span><b>网页讲义</b>labs/vis.html</span><small>16 行 · 13 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/labs/vis.html" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">Porcupine
+
+
+
+
+
+        Clients
+
+        Time
+
+
+
+        Valid LP
+
+        Invalid LP
+        [ jump to first error ]</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0009-zookeeper.html"><span>← 上一讲</span><strong>ZooKeeper 协调服务</strong></a><a href="0011-distributed-transactions.html"><span>下一讲 →</span><strong>分布式事务与两阶段提交</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>10 / 21</strong><p>先读中文精读，画出消息、状态与失败边界；再展开资料附录逐条核对官方讲义和论文。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.5840</strong><p>Distributed Systems Engineering · Spring 2026</p></div><a href="../index.html">FIELD NOTES / COURSE MAP →</a></footer></body></html>

@@ -1,27 +1,674 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="分布式事务把多个参与者的局部更新绑成原子决定；两阶段提交能统一 commit/abort，却可能在协调者失效时阻塞。"><title>分布式事务与两阶段提交 — MIT 6.5840 Field Notes</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../field-notes.css?v=20260816b">
+<script defer src="../field-notes.js?v=20260816b"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>5840<br><small>FIELD NOTES</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#labs">实验</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://pdos.csail.mit.edu/6.824/notes/l-2pc.txt" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 11 · 2026-03-17 · 事务与规模化</p><h1>分布式事务与两阶段提交</h1><p class="lesson-title-en">Distributed Transactions</p><p class="hero-lede">分布式事务把多个参与者的局部更新绑成原子决定；两阶段提交能统一 commit/abort，却可能在协调者失效时阻塞。</p><div class="lesson-meta"><span>48 MIN</span><span>进阶</span><span>02 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#section-1"><span>01</span>原子性与隔离性</a><a href="#section-2"><span>02</span>2PC 的两个阶段</a><a href="#section-3"><span>03</span>阻塞与恢复</a><a href="#section-4"><span>04</span>并发控制与死锁</a><a href="#check"><span>05</span>纠错与检查</a><a href="#source-vault"><span>06</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><ol><li>解释原子性与隔离性的核心问题</li><li>按协议顺序推演2PC 的两个阶段</li><li>评估工程取舍：2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</li></ol><div class="source-ribbon"><a href="https://pdos.csail.mit.edu/6.824/notes/l-2pc.txt" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>notes/l-2pc.txt</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/papers/chapter9-faq.txt" target="_blank" rel="noreferrer"><span>论文 FAQ</span><strong>papers/chapter9-faq.txt</strong><b>↗</b></a></div></section><section class="reading-section" id="section-1"><div class="section-label">01 / DEEP READING</div><h2>原子性与隔离性</h2><p>事务的原子性要求所有参与者要么都提交，要么都中止；隔离性要求并发执行等价于允许的串行结果。分布式事务还要面对参与者各自持久化、锁和故障恢复。仅在内存里交换 yes/no 不够，因为节点重启后必须恢复同一个决定。</p></section><section class="reading-section" id="section-2"><div class="section-label">02 / DEEP READING</div><h2>2PC 的两个阶段</h2><p>Prepare 阶段协调者询问所有参与者能否提交。参与者写入 prepare 日志、锁定资源并回复 yes，等于承诺将来可以提交；任一 no 导致 abort。若全部 yes，协调者持久化 commit 决定，再在第二阶段广播。参与者收到最终决定后写日志、执行并释放锁。</p><aside class="field-callout"><span>FIELD TRACE</span><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。”在每一步如何体现。</p></aside></section><section class="reading-section" id="section-3"><div class="section-label">03 / DEEP READING</div><h2>阻塞与恢复</h2><p>参与者已 prepare 后不能单方面 abort，因为其他参与者可能已收到 commit；若协调者失联，它只能等待决定，资源锁也可能长期保留。协调者重启后从日志恢复并重发决定。把协调者状态复制到共识组可减少单点故障，但并没有把 2PC 的跨组原子决定自动变成无阻塞协议。</p></section><section class="reading-section" id="section-4"><div class="section-label">04 / DEEP READING</div><h2>并发控制与死锁</h2><p>严格两阶段锁让写锁持有到事务结束，易于恢复和保证可串行化，却可能死锁。系统用 wait-for 图检测、超时或全局锁顺序中止某个事务。分片越多，跨分片事务的消息、日志和锁等待成本越高，因此数据布局是事务性能的一部分。</p></section>
+<section class="reading-section" id="check"><div class="section-label">05 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>参与者 Prepare 后若协调者超时，可以安全地自己 abort。</h3><p>它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</p></article><article><span>误区</span><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m11-q1"><p><strong>参与者回复 Prepare=yes 之前必须做什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>持久化足以在重启后履行提交承诺的状态</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>删除本地事务日志</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>把锁全部释放</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m11-q2"><p><strong>下列哪项最准确概括本讲的主要工程取舍？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>增加节点总能同时降低延迟并消除故障</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只要使用 RPC 就不再需要一致性协议</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m11-q3"><p><strong>为什么“参与者 Prepare 后若协调者超时，可以安全地自己 abort。”是错误的？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>因为所有网络都保证严格同步</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>因为客户端从不会重试</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div></section>
+<section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节、例子、问答与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="notes/l-2pc.txt"><summary><span><b>课堂讲义</b>notes/l-2pc.txt</span><small>333 行 · 2,091 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/l-2pc.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.5840 2026 Lecture 11: Distributed Transactions
 
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>分布式事务与两阶段提交 — MIT 6.5840</title>
-<link href="../../../assets/course/base.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
-<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
-<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
-<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
-<script defer="" src="../../../assets/vendor/katex.min.js"></script>
-<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
-<script defer="" src="../../../assets/course/math-render.js"></script>
-</head>
-<body>
-<div class="page"><p class="eyebrow">MIT 6.5840 · 第 11 讲</p><h1>分布式事务与两阶段提交</h1><p class="lede">分布式事务把多个参与者的局部更新绑成原子决定；两阶段提交能统一 commit/abort，却可能在协调者失效时阻塞。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释原子性与隔离性的核心问题</li><li>按协议顺序推演2PC 的两个阶段</li><li>评估工程取舍：2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">原子性与隔离性</h2><p>事务的原子性要求所有参与者要么都提交，要么都中止；隔离性要求并发执行等价于允许的串行结果。分布式事务还要面对参与者各自持久化、锁和故障恢复。仅在内存里交换 yes/no 不够，因为节点重启后必须恢复同一个决定。</p><h2 id="section-2">2PC 的两个阶段</h2><p>Prepare 阶段协调者询问所有参与者能否提交。参与者写入 prepare 日志、锁定资源并回复 yes，等于承诺将来可以提交；任一 no 导致 abort。若全部 yes，协调者持久化 commit 决定，再在第二阶段广播。参与者收到最终决定后写日志、执行并释放锁。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。”在每一步如何体现。</p></div></div><h2 id="section-3">阻塞与恢复</h2><p>参与者已 prepare 后不能单方面 abort，因为其他参与者可能已收到 commit；若协调者失联，它只能等待决定，资源锁也可能长期保留。协调者重启后从日志恢复并重发决定。把协调者状态复制到共识组可减少单点故障，但并没有把 2PC 的跨组原子决定自动变成无阻塞协议。</p><h2 id="section-4">并发控制与死锁</h2><p>严格两阶段锁让写锁持有到事务结束，易于恢复和保证可串行化，却可能死锁。系统用 wait-for 图检测、超时或全局锁顺序中止某个事务。分片越多，跨分片事务的消息、日志和锁等待成本越高，因此数据布局是事务性能的一部分。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>参与者 Prepare 后若协调者超时，可以安全地自己 abort。</h3><p>它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m11-q1"><p><strong>问题：</strong>参与者回复 Prepare=yes 之前必须做什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">持久化足以在重启后履行提交承诺的状态</button><button aria-pressed="false" data-choice="b">删除本地事务日志</button><button aria-pressed="false" data-choice="c">把锁全部释放</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m11-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m11-q3"><p><strong>问题：</strong>为什么“参与者 Prepare 后若协调者超时，可以安全地自己 abort。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>事务的原子性要求所有参与者要么都提交，要么都中止；隔离性要求并发执行等价于允许的串行结果。</li><li>2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</li><li>它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-2pc.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/chapter9-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
-<script src="../../../assets/vendor/prism.js"></script>
-<script src="../../../assets/vendor/prism-python.js"></script>
-<script src="../../../assets/vendor/prism-bash.js"></script>
-<script src="../../../assets/course/quiz.js"></script>
-<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
-<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
-</body>
-</html>
+Topics:
+  distributed transactions = concurrency control + atomic commit
+
+where are we in the course?
+  so far, mostly distribution for fault tolerance
+    multiple servers trying to look like one reliable server
+  now, many servers for performance
+    [diagram: clients, servers, data sharded by key]
+    split the data up (shard) over multiple servers, for parallelism
+    fine as long as clients use data items one at a time
+    what if an application operation involves records in different shards?
+      failures? atomicity?
+    important problem, we&#x27;ll see a number of approaches
+
+client application actions often involve multiple reads and writes
+  bank transfer: debit and credit
+  install bi-directional links in a social graph
+  insert new record, add to index
+  we&#x27;d like to hide interleaving and failure from application writers
+
+this is an old problem in databases
+  the traditional solution: transactions
+  programmer marks beginning/end of sequences of code as transactions
+  the system automatically provides good behavior
+
+example transactions
+  x and y are bank balances -- records in database tables
+    both start out as $10
+  T1 and T2 are transactions
+    T1: transfer $1 from y to x
+    T2: audit, to find the total amount of money in the bank
+  T1:             T2:
+  BEGIN-X         BEGIN-X
+    add(x, 1)       tmp1 = get(x)
+    add(y, -1)      tmp2 = get(y)
+  END-X             print tmp1, tmp2
+                  END-X
+
+the &quot;END-X&quot; indicates that the transaction would like to commit
+  it asks the transaction system to attempt to commit
+  as we&#x27;ll see, the commit may succeed, or it may fail
+
+what is correct behavior for a transaction?
+  usually called &quot;ACID&quot;
+    Atomic -- all writes or none, despite failures
+    Consistent -- obeys application-specific invariants
+    Isolated -- no interference between xactions -- serializable
+    Durable -- committed writes are permanent
+  ACID transactions are magic!
+    programmer writes straightforward serial code
+    system automatically adds locking!
+    system automatically adds fault tolerance!
+  of course we need to implement this magic
+
+a note on trends
+  some storage systems provide transactions, some don&#x27;t
+  some applications benefit a lot from transactions, some don&#x27;t
+  SQL databases provide transactions
+  but transactions are slow, particularly for sharded data
+    so for a while simple key/value stores gained popularity
+    just put and get on single records
+  but transactions are coming back
+
+today: ACID for distributed transactions
+  with data sharded over multiple servers
+
+What does serializable mean?
+  you execute some concurrent transactions, which yield results
+    &quot;results&quot; means both output and changes in the DB
+  the results are serializable if:
+    there exists a serial execution order of the transactions
+    that yields the same results as the actual execution
+  (serial means one at a time; wait for one to finish before starting the next)
+  (this definition should remind you of linearizability)
+
+You can test whether an execution&#x27;s result is serializable by
+  looking for a serial order that yields the same results.
+  for our example, the possible serial orders are
+    T1; T2
+    T2; T1
+  so the correct (serializable) results are:
+    T1; T2 : x=11 y=9 &quot;11,9&quot;
+    T2; T1 : x=11 y=9 &quot;10,10&quot;
+  the results for the two differ; either is OK
+  no other result is OK for a serializable system
+  the implementation might have executed T1 and T2 in parallel
+    but it must still yield results as if in a serial order
+
+what if T1&#x27;s operations run entirely between T2&#x27;s two get()s?
+  would the result be serializable?
+  T2 would print 10,9
+  but 10,9 is not one of the two serializable results!
+what if T2 runs entirely between T1&#x27;s two adds()s?
+  T2 would print 11,10
+  but 11,10 is not one of the two serializable results!
+what if x&#x27;s server does the increment but y&#x27;s server can&#x27;t?
+  x=11 y=10 is not one of the serializable results!
+
+a transaction can &quot;abort&quot; if something goes wrong
+  an abort un-does any modifications
+  the transaction might voluntarily abort,
+    e.g. if the account doesn&#x27;t exist, or y&#x27;s balance is &lt;= 0
+  the system may force an abort, e.g. to break a locking deadlock
+  server failure can result in abort
+  result of abort should be as if xaction never executed!!!
+    must un-do, or not apply, all updates
+  the application might (or might not) try the transaction again
+
+serializable transactions are nice for application programmers
+  write transaction as if there is nothing else going on
+  ordinary serial code, programmer doesn&#x27;t need to worry about locks
+
+now: implementing distributed transactions
+
+two main components:
+  concurrency control (to provide isolation/serializability)
+  atomic commit (to provide atomicity despite failure)
+
+first, concurrency control
+  the goal: isolated/serializable execution of concurrent transactions
+  for now, on a single DB server (not distributed)
+
+two classes of concurrency control for transactions:
+  pessimistic:
+    lock records before use
+    conflicts cause delays (waiting for locks)
+  optimistic:
+    use records without locking
+    commit checks if reads/writes were serializable
+    conflict causes abort+retry
+    called Optimistic Concurrency Control (OCC)
+  pessimistic is faster if conflicts are frequent
+  optimistic is faster if conflicts are rare
+
+today: pessimistic concurrency control
+in a few weeks: optimistic concurrency control (FaRM)
+
+&quot;Two-phase locking&quot; is one way to implement serializability
+  each database record has a lock
+  2PL rules:
+    a transaction must acquire a record&#x27;s lock before using it
+    a transaction must hold its locks until *after* commit or abort
+
+2PL for our example
+  suppose T1 and T2 start at the same time
+  the transaction system automatically acquires locks as needed
+  so first of T1/T2 to use x will get the lock
+  the other waits until the first completely finishes (reaches END-X)
+  this prohibits the non-serializable interleavings
+
+details:
+  an executing transaction acquires locks as needed, at the first use
+    add() and get() implicitly acquire record&#x27;s lock
+    END-X commits or aborts, then releases all locks
+  all locks are exclusive (for this discussion, no reader/writer locks)
+  the full name is &quot;strong strict two-phase locking&quot;
+    strong strict = hold locks until after commit
+  much more structured than e.g. Go&#x27;s Mutexes:
+    programmer must supply BEGIN-X/END-X
+    DB locks automatically, on first use of each record
+    DB unlocks automatically, at transaction end
+    DB may automatically abort to resolve deadlock
+  (consider: could Go mutexes usefully be automatic like this?)
+
+Why hold locks until after commit/abort?
+  why not release as soon as done with the record?
+  example of a resulting problem:
+    suppose T2 releases x&#x27;s lock after get(x)
+    T1 could then execute between T2&#x27;s get()s
+    T2 would print 10,9
+    not a serializable execution: neither T1;T2 nor T2;T1
+
+Two-phase locking can produce deadlock, e.g.
+  T3      T4
+  get(x)  get(y)
+  get(y)  get(x)
+The system must resolve deadlocks, usually by aborting
+  Detect waits-for cycles -- maybe too hard when locks are distributed
+  Time out
+  Wound-wait (pre-emptively abort newer xaction rather than waiting)
+
+Performance with 2PL
+  good: parallelism for transactions that use disjoint records
+  bad: locking has overhead even if lock is available
+  bad: locking conflicts require waiting
+
+The Question: describe a situation where Two-Phase Locking yields
+higher performance than Simple Locking. Simple locking: lock *every*
+record before *any* use; release after abort/commit.
+
+Next topic: distributed transactions versus failures
+
+how can distributed transactions cope with failures?
+  suppose, for our example, x and y are on different storage servers
+  suppose x&#x27;s server adds 1, but y&#x27;s crashes before subtracting?
+  or x&#x27;s server adds 1, but y&#x27;s realizes the account doesn&#x27;t exist?
+  or x and y both can do their part, but aren&#x27;t sure if the other will?
+  it&#x27;s a hard problem!
+
+We want &quot;atomic commit&quot;:
+  A bunch of computers are cooperating on some task
+  Each computer has a different role
+  We want atomicity: all execute, or none execute
+  Challenges: failures, performance
+
+We&#x27;re going to look at a protocol called &quot;two-phase commit&quot;
+  Used by distributed databases for multi-server transactions
+
+The setting
+  Data is sharded among multiple servers
+  Each transaction runs on a &quot;transaction coordinator&quot; (TC)
+  For each read/write, TC sends RPC to relevant shard server
+    Each shard server is a &quot;participant&quot;
+    Each participant manages locks for its shard of the data
+  There may be many concurrent transactions, many TCs
+    TC assigns unique transaction ID (TID) to each transaction
+    Every message, every piece of xaction state tagged with TID
+    To avoid confusion
+
+Two-phase commit without failures:
+  [time diagram: A, TC, B]
+  [state (just for B): DATA, TID LOCKS TEMP PREPARED]
+  TC sends put(), get(), &amp;c RPCs to A, B
+    A and B lock records (and wait if already locked).
+    Modifications are tentative, on a copy, only installed if commit.
+  TC gets to END-X.
+  TC sends PREPARE messages to A and B.
+  If A is able to commit,
+    A responds YES.
+    then A is in &quot;prepared&quot; state.
+  otherwise, A responds NO.
+  Same for B.
+  If both A and B said YES, TC sends COMMIT messages to A and B.
+  If either A or B said NO, TC sends ABORT messages.
+  A/B commit if they get a COMMIT message from the TC.
+    I.e. they copy tentative records to the real DB.
+    And release the transaction&#x27;s locks on their records.
+  A/B send ACK (acknowledge) to say they have finished committing.
+
+Why is this correct so far?
+  Neither A nor B can commit unless they both agreed.
+
+What if B crashes and restarts?
+  If B crashed *before* it got the PREPARE, it can forget the transaction.
+  If B crashed *after* sending YES, B must remember (despite crash)!
+    Because A might have received a COMMIT and committed.
+    So B must be able to commit (or not) even after a reboot.
+
+PREPARE requires participants to save state that survives a crash.
+  Typically by writing to disk (slow).
+  B must save xaction state on disk before saying YES,
+    including locks and tentative data updates.
+  If B reboots, and disk says PREPARED but didn&#x27;t receive COMMIT from TC,
+    B must ask TC, or wait for TC to re-send.
+  And meanwhile, B must continue to hold the transaction&#x27;s locks.
+
+What if TC crashes and restarts?
+  If TC might have sent COMMIT before crash, TC must remember!
+    Since one participant may already have committed.
+  Thus TC must write COMMIT to disk before sending COMMIT msgs.
+  And repeat COMMIT if it crashes and reboots,
+    or if a participant asks (i.e. if A/B didn&#x27;t get COMMIT msg).
+  Participants must filter out duplicate COMMITs (using TID).
+
+What if TC never gets a YES/NO from B?
+  Perhaps B crashed and didn&#x27;t recover; perhaps network is broken.
+  TC can time out, and tell participants to abort,
+    since TC has not sent any COMMIT msgs.
+  Good: allows servers to release locks.
+
+What if B times out or crashes while waiting for PREPARE from TC?
+  B has not yet responded to PREPARE, so TC can&#x27;t have decided commit
+  so B can unilaterally abort, and release locks
+  respond NO to future PREPARE
+
+What if B replied YES to PREPARE, but doesn&#x27;t receive COMMIT or ABORT?
+  Can B unilaterally decide to abort?
+    No! TC might have gotten YES from both,
+    and sent COMMIT to A, but crashed before sending to B.
+    So then A would commit and B would abort: incorrect.
+  B can&#x27;t unilaterally commit, either:
+    A might have voted NO.
+
+So: if B voted YES, it must &quot;block&quot;: wait for TC decision.
+
+When can TC completely forget about a committed transaction?
+  If it sees an ACK from every participant for the COMMIT.
+  Then no participant will ever need to ask again.
+
+When can participant completely forget about a committed transaction?
+  After it ACKs the TC&#x27;s COMMIT message.
+  If it gets another COMMIT, and has no record of the transaction,
+    it must have already committed and forgotten, and can send ACK (again).
+
+Two-phase commit perspective
+  Used in sharded DBs when a transaction uses data on multiple shards
+  But it has a bad reputation:
+    slow: multiple rounds of messages
+    slow: disk writes
+    locks are held over the prepare/commit exchanges; blocks other xactions
+    TC crash can cause indefinite blocking, WITH LOCKS HELD
+  Thus usually used only in a single small domain
+    E.g. not between banks, not between airlines, not over wide area
+  Faster distributed transactions are an active research area.
+
+Raft and two-phase commit solve different problems!
+  Use Raft to get high availability by replicating
+    i.e. to be able to operate when some servers are crashed
+    the servers all do the *same* thing
+  Use 2PC when each participant does something different
+    And *all* of them must do their part
+  2PC does not help availability
+    since all servers must be up to get anything done
+  Raft does not ensure that all servers do something
+    since only requires a majority to execute.
+
+What if you want high availability *and* atomic commit?
+  Here&#x27;s one plan.
+  [diagram]
+  The TC and servers should each be replicated with Raft
+  Run two-phase commit among the replicated services
+  Then you can tolerate failures and still make progress
+  Spanner uses this arrangement (after break).
+
+Next:
+  midterm on Thursday! in Walker.
+  read the papers, review lecture notes, look at old exams, look at your lab code
+
+---
+
+http://dbmsmusings.blogspot.com/2019/01/its-time-to-move-on-from-two-phase.html</code></pre></details><details class="archive" data-source-record data-source="papers/chapter9-faq.txt"><summary><span><b>论文 FAQ</b>papers/chapter9-faq.txt</span><small>329 行 · 2,500 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/papers/chapter9-faq.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">Distributed Transactions FAQ
+
+Q: How does this material fit into 6.5840?
+
+A: When data is distributed over many computers, it&#x27;s common for a
+single operation to need to read and/or modify multiple data items,
+perhaps stored on different computers. How such multi-step operations
+interact with concurrent operations on the same data, and what happens
+if a crash occurs in the middle of such an operation, are usually
+critical questions for the system&#x27;s robustness and ease of
+programming. The gold standard for good behavior is transactions,
+often provided by database systems. Transactions are usually
+implemented with two-phase locking and logging; distributed
+transactions usually add two-phase commit. Today&#x27;s reading from the
+6.1800 (6.033) textbook explains those ideas.
+
+Most of the storage systems we&#x27;ve looked at so far provide operations
+like put() and get() that involve only single records. In constrast,
+transactions usually refer to multi-record operations (e.g., bank
+transfers from one account to another). When the records in involved
+in a transaction are stored in different places (e.g. in a sharded
+storage system), then we&#x27;re talking about distributed transactions,
+for which two-phase commit is helpful. These ideas will show up in
+some of the upcoming papers we read (e.g. Spanner and FaRM).
+
+Q: Why is it so important for transactions to be atomic?
+
+A: What &quot;transaction&quot; means is that the entire sequence of steps
+inside the transaction occurs atomically with respect to failures and
+other transactions. Atomic here means &quot;all or none&quot;. Transactions are
+a feature provided by some storage systems to make programming easier.
+A situation where transactions are helpful is bank transfers. If the
+bank wants to transfer $100 from Alice&#x27;s account to Bob&#x27;s account, it
+would be awkward if a crash left Alice debited by $100 but Bob *not*
+credited by $100. If your storage system supports transactions, you
+can write something like
+
+BEGIN TRANSACTION
+  decrease Alice&#x27;s balance by 100;
+  increase Bob&#x27;s balance by 100;
+END TRANSACTION
+
+and the transaction system will make sure the transaction is atomic.
+Either both happen, or neither, even if there&#x27;s a failure; and no
+other transaction will observe the intermediate situation where only
+one balance has been modified.
+
+Q: Could one use Raft instead of two-phase commit?
+
+A: No: two-phase commit and Raft solve different problems.
+
+Two-phase commit causes different computers to do *different* things
+(e.g. Alice&#x27;s bank debits Alice, Bob&#x27;s bank credits Bob), and causes
+them *all* to do their thing, or none of them. Two-phase commit cannot
+make progress if any participant can&#x27;t be reached: it has to wait for
+all participating computers to perform their part of the transaction.
+
+Raft causes a majority of the peers to all do the *same* thing (so
+they remain replicas). It&#x27;s OK for Raft to wait only for a majority,
+since the peers are replicas, and therefor Raft-based systems can be
+available in the face of failures.
+
+Q: What is the difference between two-phase locking and two-phase commit?
+
+A: 2PL is a scheme for acquiring locks for records in a transaction,
+to ensure that different transactions that use the same records don&#x27;t
+interfere with each other; it is useful in both non-distributed and
+distributed settings.
+
+2PC is a scheme to execute a transaction across multiple machines,
+where each machine has some of the records used in the transaction;
+2PC ensures that each machine does its part of the transaction.
+
+2PC systems often use 2PL.
+
+Q: In two-phase commit, why would a worker send an abort message,
+rather than a PREPARED message?
+
+A: Perhaps the participant crashed and rebooted after it did some of
+its work for the transaction but before it received the prepare
+message; during the crash it will have lost the record of tentative
+updates it made and locks it acquired, so it cannot complete the
+transaction. Another possibility (depending on how the database works)
+is if the worker detected a violated constraint on the data (e.g. the
+transaction tried to write a record with a duplicate key in a table
+that requires unique keys). Another possibility is that the worker is
+involved in a deadlock, and must abort to break the deadlock.
+
+Q: Can two-phase locking generate deadlock?
+
+A: Yes. If two simultaneous transactions both use records R1 and R2,
+but in opposite orders, they may each acquire one of the locks, and
+then deadlock trying to get the other lock. Databases detect these
+deadlocks and break them. A database can detect deadlock by timing out
+lock acquisition, or by finding cycles in the waits-for graph among
+transactions. A deadlock can be broken by aborting one of the
+participating transactions.
+
+Q: What is serializability?
+
+A: It&#x27;s a common criterion for correctness of concurrent transactions
+in databases. An execution of a bunch of transactions is serializable
+if it yields the same results as some serial (one-at-a-time) execution
+of those transactions. Results include both the content of records in
+the database and any outputs from the transactions. So if transactions
+T1 and T2 execute concurrently, the results are serializable if they
+are the same as executing T1, waiting for T1 to complete, and then
+executing T2; or executing T2, waiting for it to complete, and then
+executing T1.
+
+Q: Why does it matter whether locks are held until after a transaction
+commits or aborts?
+
+A: If transactions release locks before they commit, it can be hard to
+avoid certain non-serializable (incorrect) executions due to aborts or
+crashes. In this example, suppose T1 releases the lock on x after it
+updates x, but before it commits or aborts:
+
+  T1:           T2:
+  BEGIN
+  x = x + 1
+                BEGIN
+                y = x
+                END
+
+  END
+
+It can&#x27;t be legal for y to end up greater than x. Yet if T1 releases
+its lock on x, then T2 acquires the lock, writes y, and commits, but
+then T1 aborts or the system crashes and cannot complete T1, we will
+end up with y greater than x.
+
+It&#x27;s to avoid having to cope with the above that people use the
+&quot;strong strict&quot; variant of 2PL, which only releases locks after a
+commit or abort.
+
+Q: What is the point of the two-phase locking rule that says a
+transaction isn&#x27;t allowed to acquire any locks after the first time
+that it releases a lock?
+
+A: Acquiring after releasing can lead to non-serializable executions.
+
+  T1:         T2:
+  x = x + 1
+              z = x + y
+  y = y + 1
+
+Suppose x and y start out as zero, and both transactions execute, and
+successfully commit. The only final values of z that are allowed by
+serializability are zero and 2 (corresponding to the orders T2;T1 and
+T1;T2). But if T1 releases its lock on x before acquiring the lock on
+y and modifying y, T2 could completely execute and commit while T1 is
+between its two statements, giving z a value of 1, which is not legal.
+If T1 keeps its lock on x while using y, as two-phase locking demands,
+this problem is avoided.
+
+Q: How does two-phase commit solve the dilemma of the two generals (or
+the Byzantine Generals Problem)?
+
+A: It doesn&#x27;t. Two-phase commit doesn&#x27;t encounter the two generals
+problem, and thus doesn&#x27;t need to solve it.
+
+One difference is that, in two-phase commit, there&#x27;s just one entity
+making the decision (the TC), and it can&#x27;t disagree with itself.
+Whereas in the two generals problem, there are two independent
+deciders who have trouble communicating, so there&#x27;s room for
+disagreement. Another difference is that two-phase commit has no
+real-time requirement (nothing like the requirement that the generals
+agree by dawn); it&#x27;s OK for workers to wait for as long as needed to
+receive the TC&#x27;s decision.
+
+Q: Are the locks exclusive, or can they allow multiple readers to have
+simultaneous access?
+
+A: By default, &quot;lock&quot; in 6.5840 refers to an exclusive lock. But there
+are databases that can grant locking access to a record to either
+multiple readers, or a single writer. Some care has to be taken when a
+transaction reads a record and then writes it, since the lock will
+initially be a read lock and then must be upgraded to a write lock.
+There&#x27;s also increased opportunity for deadlock in some situations; if
+two transactions simultaneously want to increment the same record
+(i.e. read, add one, write), they might deadlock when upgrading a read
+lock to a write lock on that record, whereas if locks are always
+exclusive, they won&#x27;t deadlock.
+
+Q: How should one decide between pessimistic and optimistic
+concurrency control?
+
+A: If your transactions conflict a lot (use the same records, and one
+or more transactions writes), then locking is better. Locking causes
+conflicting transactions to wait, whereas most OCC systems deal with
+conflict by aborting; aborts (really the consequent retries) are
+expensive.
+
+If your transactions rarely conflict, then OCC is preferable to
+locking. OCC doesn&#x27;t spend CPU time acquiring/releasing locks and, as
+long as conflicts are rare, OCC rarely aborts. The &quot;validation&quot; phase
+of OCC systems often uses locks, but they are usually held for shorter
+periods of time than the locks in pessimistic designs.
+
+Q: What should two-phase commit workers do if the transaction
+coordinator crashes?
+
+A: If a worker has told the coordinator that it is ready to commit,
+then the worker cannot later change its mind. The reason is that the
+coordinator may (before it crashed) have told other workers to commit.
+So the worker has to wait (with locks held) for the coordinator to
+reboot and send (or re-send) its decision.
+
+Waiting indefinitely with locks held is a real problem, since the
+locks can force a growing set of other transactions to block as well.
+So people tend to avoid two-phase commit, or they try to make
+coodinators reliable. For example, Google&#x27;s Spanner replicates
+coordinators (and all other servers) using Paxos.
+
+Q: Why don&#x27;t people use three-phase commit, which allows workers to
+commit or abort even if the coordinator crashes?
+
+A: Three-phase commit only works if workers can reliably distinguish
+between the coordinator being dead and the network not delivering
+packets. For example, three-phase commit won&#x27;t work correctly if
+there&#x27;s a network partition. In most practical networks, it&#x27;s not
+possible to distinguish a dead computer from a network failure, so
+three-phase commit can&#x27;t safely be used.
+
+Q: Can there be more than one transaction active? How do participants
+know which transaction a message refers to?
+
+A: There can be many concurrent transactions, managed by many TCs. A
+TC assigns a unique transaction ID (TID) to each transaction. Every
+message includes the TID of the relevant transaction. TCs and
+participants tag entries in their tables with the TID, so that (for
+example) when a COMMIT message arrives at a participant, it knows what
+tentative records to make permanent, and what locks to release.
+
+Q: How does a two-phase commit system undo modifications if a
+transaction has to abort?
+
+A: Each participant performs modifications to temporary copies of the
+records. If the participant answers &quot;yes&quot; to the TC&#x27;s prepare message,
+the participant must first save the temporary record values to its log
+on disk, so it can find them if it crashes and restarts. If the TC
+decides to commit, the participant must copy the temporary values to
+the real database records; if the TC decides to abort, the participant
+must discard the temporary records.
+
+Q: How does serializability relate to linearizability?
+
+A: They are similar notions, arising from different communities. Both
+require the final outcome to be the same as some serial execution.
+Serializability refers to entire transactions, each involving multiple
+operations and multiple records. Linearizability usually refers to
+single operations, each on a single record. It&#x27;s also the case that
+linearizability requires that the equivalent serial execution be
+consistent with the real-time order of the actual execution, while
+serializability usually does not.
+
+Q: Why do logs appear so often in the designs we look at?
+
+A: A log is a good way to capture the serial order that the system has
+chosen for operations, so that e.g. all replicas perform the
+operations in the same order, or a server considers operations in the
+same order after a crash+reboot as it did before the crash.
+
+Many distributed systems keep multiple operations in flight (often
+called a window or pipeline of operations). Often the fate of
+operations is not known until some time after they are received. A log
+is a good way to keep track of such pending operations. Raft is an
+example of this arrangement: a follower receives a stream of commands
+from the leader, but doesn&#x27;t hear that they are committed until later,
+and must have a place to store commands until they are committed.
+
+A log is an efficient way to write data to hard disk or SSD, since
+both media are faster at sequential writes (i.e. appends to the log)
+than at random writes.
+
+A log is a convenient way for crash-recovery software to see how far
+the system got before it crashed, and whether the last transactions
+have complete records in the log and thus can safely be replayed. That
+is, a log is a convenient way to implement crash-recoverable atomic
+transactions, via write-ahead logging.
+
+Q: Are there structures other than logs that would work as well?
+
+A: There&#x27;s nothing as general-purpose as logs.
+
+You can record order by storing data in some other way (e.g. a b-tree)
+and storing sequence numbers with the data (Frangipani does this for
+meta-data, in addition to using logs).
+
+You wouldn&#x27;t have to worry about performance if you used a persistent
+storage system that was as fast for random updates as for sequential,
+for example battery-backed RAM. However, such systems are often more
+expensive and less robust than hard drives or SSDs.
+
+For the write-ahead property, you could store a mini-log for each data
+record. However, it might then be time-consuming for the
+crash-recovery software to find the full set of incomplete mini-logs.
+
+A different way to get crash-recoverable atomic operations is to
+prepare an entire new data structure in fresh storage, and then use a
+single commiting write to substitute it for the original data
+structure. This makes the most sense with tree- shaped data
+structures. The NetApp WAFL file system uses that idea:
+
+https://atg.netapp.com/wp-content/uploads/2000/01/file-system-design.pdf
+
+This arrangement may make it hard to support concurrent transactions.
+
+Q: What is the Lock Manager?
+
+A: The software module that implements acquire() and release(). It may
+also implement deadlock detection by constructing a waits-for-graph as
+users of the module acquire locks using acquire().  In some cases the
+module is a separate service running on a machine (e.g., the lock
+service in Franginpani).
+
+Q: Why does Section 9.5.3 of the reading say that two-phase locking
+forbids this sequence?
+
+T1: READ X
+T2: WRITE Y
+T1: WRITE Y
+
+A: Perhaps the text means that T2 goes on to do other unrelated things
+before committing. In that case two-phase locking would force T1 to
+wait until T2 completely finished. However, in fact it would be
+correct (serializable) for T1 to commit before T2 finished. That is,
+there are correct executions that two-phase locking forbids.</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0010-raft-lab-qa.html"><span>← 上一讲</span><strong>Raft 实验问答与调试</strong></a><a href="0012-spanner.html"><span>下一讲 →</span><strong>Spanner 与外部一致性</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>11 / 21</strong><p>先读中文精读，画出消息、状态与失败边界；再展开资料附录逐条核对官方讲义和论文。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.5840</strong><p>Distributed Systems Engineering · Spring 2026</p></div><a href="../index.html">FIELD NOTES / COURSE MAP →</a></footer></body></html>
