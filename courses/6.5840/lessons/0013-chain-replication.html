@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>链式复制 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 13 讲</p><h1>链式复制</h1><p class="lede">链式复制把副本排成 head 到 tail 的有序管线：写沿链向后传播，读从 tail 返回，以简单规则获得高吞吐和强一致视图。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释正常路径的核心问题</li><li>按协议顺序推演为什么顺序成立</li><li>评估工程取舍：顺序管线简化一致性与副本协调，但写延迟随链长增加，尾部角色也可能成为读热点。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">正常路径</h2><p>客户端把更新发给 head，更新沿链逐个应用并转发；到达 tail 后才算已提交，回复再向客户端返回。查询由 tail 服务，因为它只暴露已经走完整条链的状态。每个副本的状态可分为已应用更新和仍待下游确认的 pending 集合。</p><h2 id="section-2">为什么顺序成立</h2><p>所有写都从同一个 head 进入并沿同一路径传播，因此副本前缀天然有序。tail 的状态是所有活跃副本中最保守的已提交前缀，读 tail 可与写完成顺序线性化。相比每次写向所有副本并行广播，链减少了协调分支，但增加端到端跳数。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“顺序管线简化一致性与副本协调，但写延迟随链长增加，尾部角色也可能成为读热点。”在每一步如何体现。</p></div></div><h2 id="section-3">故障后的重配置</h2><p>master 监测故障并发布新链。head 失败时删除它即可；tail 失败时新 tail 需要确认原 tail 已处理但尚未回复的更新；中间节点失败时，上游 pending 更新要转发给新的下游。重配置必须携带 epoch/配置版本，防止旧链继续接受请求。</p><h2 id="section-4">负载与适用场景</h2><p>查询集中在 tail，更新流量分布到链上各跳；吞吐可受最慢节点和网络链路限制。对象独立时可用多条链并把不同对象映射到不同节点，均衡 head/tail 角色。链式复制适合读多、对象可分区且希望协议简单的存储服务。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>链中任何副本都能在不加约束时提供线性一致读。</h3><p>中间副本可能包含尚未到达 tail 的未提交更新；正常协议从 tail 读取。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m13-q1"><p><strong>问题：</strong>链式复制正常情况下为什么从 tail 读取？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">tail 只暴露已传播完整条链的提交前缀</button><button aria-pressed="false" data-choice="b">tail 的磁盘一定最快</button><button aria-pressed="false" data-choice="c">head 不保存任何数据</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m13-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">顺序管线简化一致性与副本协调，但写延迟随链长增加，尾部角色也可能成为读热点。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m13-q3"><p><strong>问题：</strong>为什么“链中任何副本都能在不加约束时提供线性一致读。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">中间副本可能包含尚未到达 tail 的未提交更新；正常协议从 tail 读取。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>客户端把更新发给 head，更新沿链逐个应用并转发；到达 tail 后才算已提交，回复再向客户端返回。</li><li>顺序管线简化一致性与副本协调，但写延迟随链长增加，尾部角色也可能成为读热点。</li><li>中间副本可能包含尚未到达 tail 的未提交更新；正常协议从 tail 读取。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-cr.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/cr-osdi04.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/cr-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

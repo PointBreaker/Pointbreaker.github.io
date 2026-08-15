@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>乐观并发控制与 FaRM — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 14 讲</p><h1>乐观并发控制与 FaRM</h1><p class="lede">FaRM 用 RDMA、内存复制和乐观并发控制追求极低延迟，但快速路径仍围绕版本验证、锁定顺序和持久提交记录。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释OCC 的三阶段思路的核心问题</li><li>按协议顺序推演版本、锁与死锁避免</li><li>评估工程取舍：OCC 在低冲突时缩短临界区，高冲突时却会因 abort 和重试放大负载。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">OCC 的三阶段思路</h2><p>事务执行阶段从对象读取数据和版本并缓冲写集，不立即加锁；提交时先锁定写集，再验证读集版本未变化，最后安装写入并释放锁。验证失败就 abort 重试。低冲突时避免长时间持锁，冲突高时反复重试会浪费工作。</p><h2 id="section-2">版本、锁与死锁避免</h2><p>对象元数据同时携带版本和锁位。写集按全局地址顺序加锁，可避免循环等待；读集验证要排除自己已锁的写对象并检查版本。读取数据前后都检查版本，可识别并发写导致的 torn read。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“OCC 在低冲突时缩短临界区，高冲突时却会因 abort 和重试放大负载。”在每一步如何体现。</p></div></div><h2 id="section-3">复制与 commit record</h2><p>仅修改 primary 内存不足以容错。FaRM 把事务记录复制到多个机器并达到要求的持久边界后，才把 commit 视为不可撤销；随后可异步安装到对象副本。日志、对象版本和恢复过程共同确保重启后不会出现一半提交。</p><h2 id="section-4">RDMA 改变成本结构</h2><p>one-sided RDMA 允许绕过远端 CPU 直接读写内存，显著降低消息处理开销，但远端原子性、网卡队列和内存注册成为新约束。算法针对低网络延迟重新平衡批处理、锁粒度和复制方式，不能把传统数据库协议原样搬过去。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>OCC 完全不使用锁。</h3><p>执行阶段无锁，但提交阶段通常锁定写集，并验证读集以建立原子提交。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m14-q1"><p><strong>问题：</strong>OCC 提交阶段验证读集的目的是什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">确认执行期间读过的版本没有被其他事务改变</button><button aria-pressed="false" data-choice="b">为所有对象重新分片</button><button aria-pressed="false" data-choice="c">计算网络往返时间</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m14-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">OCC 在低冲突时缩短临界区，高冲突时却会因 abort 和重试放大负载。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m14-q3"><p><strong>问题：</strong>为什么“OCC 完全不使用锁。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">执行阶段无锁，但提交阶段通常锁定写集，并验证读集以建立原子提交。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>事务执行阶段从对象读取数据和版本并缓冲写集，不立即加锁；提交时先锁定写集，再验证读集版本未变化，最后安装写入并释放锁。</li><li>OCC 在低冲突时缩短临界区，高冲突时却会因 abort 和重试放大负载。</li><li>执行阶段无锁，但提交阶段通常锁定写集，并验证读集以建立原子提交。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-farm.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/farm-2015.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/farm-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

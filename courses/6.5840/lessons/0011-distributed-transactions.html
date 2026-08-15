@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>分布式事务与两阶段提交 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 11 讲</p><h1>分布式事务与两阶段提交</h1><p class="lede">分布式事务把多个参与者的局部更新绑成原子决定；两阶段提交能统一 commit/abort，却可能在协调者失效时阻塞。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释原子性与隔离性的核心问题</li><li>按协议顺序推演2PC 的两个阶段</li><li>评估工程取舍：2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">原子性与隔离性</h2><p>事务的原子性要求所有参与者要么都提交，要么都中止；隔离性要求并发执行等价于允许的串行结果。分布式事务还要面对参与者各自持久化、锁和故障恢复。仅在内存里交换 yes/no 不够，因为节点重启后必须恢复同一个决定。</p><h2 id="section-2">2PC 的两个阶段</h2><p>Prepare 阶段协调者询问所有参与者能否提交。参与者写入 prepare 日志、锁定资源并回复 yes，等于承诺将来可以提交；任一 no 导致 abort。若全部 yes，协调者持久化 commit 决定，再在第二阶段广播。参与者收到最终决定后写日志、执行并释放锁。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。”在每一步如何体现。</p></div></div><h2 id="section-3">阻塞与恢复</h2><p>参与者已 prepare 后不能单方面 abort，因为其他参与者可能已收到 commit；若协调者失联，它只能等待决定，资源锁也可能长期保留。协调者重启后从日志恢复并重发决定。把协调者状态复制到共识组可减少单点故障，但并没有把 2PC 的跨组原子决定自动变成无阻塞协议。</p><h2 id="section-4">并发控制与死锁</h2><p>严格两阶段锁让写锁持有到事务结束，易于恢复和保证可串行化，却可能死锁。系统用 wait-for 图检测、超时或全局锁顺序中止某个事务。分片越多，跨分片事务的消息、日志和锁等待成本越高，因此数据布局是事务性能的一部分。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>参与者 Prepare 后若协调者超时，可以安全地自己 abort。</h3><p>它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m11-q1"><p><strong>问题：</strong>参与者回复 Prepare=yes 之前必须做什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">持久化足以在重启后履行提交承诺的状态</button><button aria-pressed="false" data-choice="b">删除本地事务日志</button><button aria-pressed="false" data-choice="c">把锁全部释放</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m11-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m11-q3"><p><strong>问题：</strong>为什么“参与者 Prepare 后若协调者超时，可以安全地自己 abort。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>事务的原子性要求所有参与者要么都提交，要么都中止；隔离性要求并发执行等价于允许的串行结果。</li><li>2PC 提供清晰的原子提交边界，但 prepared 状态会锁住资源，并把协调者可达性带入延迟。</li><li>它可能已经投 yes，而其他参与者已获知 commit；单方面 abort 会破坏原子性。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-2pc.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/chapter9-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 2: Key/Value Server — MIT 6.5840</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+  <link rel="stylesheet" href="../../field-notes.css?v=20260815a">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.5840 · 实验 2</p>
+    <h1>实验 2：键值服务器</h1>
+    <p class="lede">构建不可靠网络上的键值服务，并让每个客户端操作表现为恰好一次：超时重试不丢请求，也不重复应用追加等非幂等操作。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>RPC 重试</li><li>exactly-once</li><li>request ID</li><li>结果缓存</li><li>线性一致性</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>labs/lab-kvsrv1.html</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 实验</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>labs/lab-kvsrv1.html</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">baseline</span><strong>可靠网络基线</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>阅读 <code>kvsrv1</code> 的 Client 与 Server 接口，实现 Get、Put 和 Append 的串行语义。在可靠网络测试中确认返回值约定：Append 通常需要返回旧值，便于测试观察一次操作是否被重复执行。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先让无丢包、单客户端路径正确，再引入重试；把协议字段与 KV 状态分开设计。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvsrv1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">retry</span><strong>客户端重试协议</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>RPC 失败或超时时客户端持续重试同一逻辑请求。每次逻辑操作携带稳定的客户端标识和序列号；重发不能生成新序列号。客户端同一时刻只发一个未完成请求时，可以利用递增序列简化服务端状态。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>区分 transport attempt 与 logical operation。超时不代表服务端未执行。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvsrv1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">dedup</span><strong>服务端去重与结果缓存</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>服务端为每个客户端记录最近已执行序列号及其回复。收到重复请求时返回缓存回复，不再修改 KV；收到新请求时在同一锁保护下执行、记录结果并回复。不要只缓存“已执行”布尔值，因为 Append 的旧值回复也必须一致。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>检查状态更新和去重记录是否原子；若先改 KV 再在另一个临界区写缓存，崩溃或并发会产生缝隙。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvsrv1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">cleanup</span><strong>确认与内存回收</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>按 handout 的接口使用确认信息，让服务端知道哪些旧回复不再需要，从而限制每客户端缓存。回收不能早于客户端确认，否则迟到的重试会再次执行。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>把确认号视为客户端承诺：序列号不大于该值的回复已安全收到。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvsrv1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">verify</span><strong>不可靠网络验收</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>运行提供的可靠、丢包、并发和内存测试，增加重复次数。验证每客户端顺序、Append 不重复、Get/Put 结果满足线性一致对象语义，并用 race detector 排除本地数据竞争。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>若测试出现多一个字符，通常是重复 Append；若永不结束，检查重试循环和服务端锁内阻塞。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvsrv1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>labs/lab-kvsrv1.html</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

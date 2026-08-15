@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Go 并发模式 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 5 讲</p><h1>Go 并发模式</h1><p class="lede">Go 的并发能力来自小而清晰的组合件：goroutine、channel、context 和接口；真正的工程质量取决于生命周期与所有权是否清楚。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释并发不是并行的同义词的核心问题</li><li>按协议顺序推演pipeline 与 fan-out/fan-in</li><li>评估工程取舍：轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">并发不是并行的同义词</h2><p>goroutine 是独立执行的函数，运行时把大量 goroutine 多路复用到线程。并发用于组织多个可能交错的活动，并行才是同一时刻在多个核心执行。设计时先明确工作单元、阻塞点和取消路径，再决定开多少 goroutine；无限制地为每个输入创建 goroutine 会把负载峰值变成内存峰值。</p><h2 id="section-2">pipeline 与 fan-out/fan-in</h2><p>pipeline 把每个阶段表示成接收 channel、处理、再发送的 goroutine。fan-out 让多个 worker 消费同一队列，fan-in 合并结果。每个发送者都必须知道下游是否还在读取，否则泄漏在阻塞发送上；通常由创建 channel 的一方负责关闭，并用 WaitGroup 保证所有发送者退出后再 close。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。”在每一步如何体现。</p></div></div><h2 id="section-3">context 与结构化生命周期</h2><p>context 传递截止时间、取消信号和请求范围值。父请求结束后，所有派生 goroutine 应能沿 Done 通道退出；不要把 context 存进长期结构或用它承载可选业务参数。取消是协作式的，所以循环、RPC 和 channel 等待都要显式 select 取消分支。</p><h2 id="section-4">接口、错误与测试</h2><p>小接口让调用者定义所需能力，便于替换网络、时钟和存储实现。错误要保留语义链，调用者用 errors.Is/As 分类处理。并发测试除了功能结果，还应运行 race detector、使用可控时钟或注入阻塞点，验证退出、取消和慢消费者路径。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>关闭 channel 是接收者用来通知发送者停止的通用办法。</h3><p>通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m5-q1"><p><strong>问题：</strong>谁通常应该关闭一个传递结果的 channel？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">知道不会再发送值的发送方</button><button aria-pressed="false" data-choice="b">任意一个接收方</button><button aria-pressed="false" data-choice="c">垃圾回收器</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m5-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m5-q3"><p><strong>问题：</strong>为什么“关闭 channel 是接收者用来通知发送者停止的通用办法。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>goroutine 是独立执行的函数，运行时把大量 goroutine 多路复用到线程。</li><li>轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</li><li>通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/Go-MIT6824-2026.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/go-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

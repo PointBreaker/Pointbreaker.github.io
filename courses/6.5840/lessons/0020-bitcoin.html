@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>比特币与点对点共识 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 20 讲</p><h1>比特币与点对点共识</h1><p class="lede">比特币把交易、工作量证明和最长累计工作链组合成无需中心协调者的复制账本，其共识是概率性的而非立即最终。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释交易与 UTXO的核心问题</li><li>按协议顺序推演区块与工作量证明</li><li>评估工程取舍：开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">交易与 UTXO</h2><p>交易引用先前未花费输出，并用数字签名授权新输出。节点独立验证签名、金额与双花规则。UTXO 模型让每个输入只能被消费一次，冲突交易不能同时进入同一合法链；钱包余额是相关 UTXO 的汇总，而不是账本里一个可直接覆盖的字段。</p><h2 id="section-2">区块与工作量证明</h2><p>矿工把交易组成区块，引用父区块哈希，并寻找使区块哈希低于目标的 nonce。工作量证明让创建替代历史需要持续计算成本。难度周期性调整以稳定出块速度。哈希指针使修改旧区块会使其后所有工作失效。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。”在每一步如何体现。</p></div></div><h2 id="section-3">链选择与确认</h2><p>节点选择累计工作量最大的有效链。网络延迟会产生临时分叉，后续区块通常让一支领先，另一支交易回到待处理池。支付者等待多个确认，是在降低被更长替代链推翻的概率；没有固定确认数能提供数学上的绝对最终性。</p><h2 id="section-4">激励与限制</h2><p>区块奖励和手续费激励矿工遵循协议并投入算力，但系统安全依赖算力分布、网络传播和经济行为。吞吐受区块大小和间隔限制，广播给所有全节点的设计换来公开验证。智能应用还要处理费用波动、确认延迟和链重组。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>一笔交易进入一个区块后就绝不可能回滚。</h3><p>短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m20-q1"><p><strong>问题：</strong>比特币节点选择主链的核心指标是什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">累计工作量最大的有效链</button><button aria-pressed="false" data-choice="b">区块数量最少的链</button><button aria-pressed="false" data-choice="c">交易手续费最低的链</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m20-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m20-q3"><p><strong>问题：</strong>为什么“一笔交易进入一个区块后就绝不可能回滚。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>交易引用先前未花费输出，并用数字签名授权新输出。</li><li>开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</li><li>短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-bitcoin.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/bitcoin.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/bitcoin-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

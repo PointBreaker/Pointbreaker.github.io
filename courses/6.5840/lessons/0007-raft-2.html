@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>容错与 Raft（二） — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 7 讲</p><h1>容错与 Raft（二）</h1><p class="lede">Raft 的难点集中在日志冲突、提交边界和崩溃恢复：复制成功不等于已经可执行，旧 term 的条目也不能被草率提交。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释nextIndex 与冲突修复的核心问题</li><li>按协议顺序推演提交规则</li><li>评估工程取舍：日志回退逻辑越精细，恢复越快，但索引、快照边界和并发状态也更容易出错。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">nextIndex 与冲突修复</h2><p>leader 为每个 follower 维护 nextIndex 和 matchIndex。AppendEntries 失败表示前缀不匹配，leader 向前回退并重试；优化实现可让 follower 返回冲突 term 及其首 index，一次跳过整段冲突。匹配后 follower 删除冲突后缀并追加新条目，最终与 leader 前缀一致。</p><h2 id="section-2">提交规则</h2><p>当某个 index 已复制到多数节点，且该条目的 term 等于 leader 当前 term，leader 才直接推进 commitIndex。旧 term 条目即使位于多数节点上，也通过提交一个当前 term 条目间接提交。这个限制避免历史 leader 的未决条目在复杂选举序列中被错误宣布。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“日志回退逻辑越精细，恢复越快，但索引、快照边界和并发状态也更容易出错。”在每一步如何体现。</p></div></div><h2 id="section-3">Apply 与持久化</h2><p>节点按 index 单调地把已提交条目发送到 applyCh，不能持锁执行可能阻塞的应用逻辑。currentTerm、votedFor 和 log 在回复成功前持久化；恢复时先读回这些字段。commitIndex 通常可由新 leader 重新发现，但状态机结果若做快照则需要与 Raft 持久状态原子保存。</p><h2 id="section-4">快照与日志压缩</h2><p>长期运行不能无限保留日志。服务在某个已应用 index 生成 snapshot，Raft 丢弃此前日志并记录 lastIncludedIndex/Term。落后 follower 若 nextIndex 已进入被压缩区间，leader 发送 InstallSnapshot；接收方安装后必须保证后续日志索引转换仍正确。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>leader 看到旧 term 条目位于多数副本即可直接提交它。</h3><p>Raft 只用计数直接提交当前 term 条目；旧条目随当前 term 条目一起间接提交。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m7-q1"><p><strong>问题：</strong>leader 何时可用多数计数直接推进某条日志的 commitIndex？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">该条目来自 leader 当前 term</button><button aria-pressed="false" data-choice="b">该条目是日志中最大的命令</button><button aria-pressed="false" data-choice="c">任意两个 follower 回复过</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m7-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">日志回退逻辑越精细，恢复越快，但索引、快照边界和并发状态也更容易出错。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m7-q3"><p><strong>问题：</strong>为什么“leader 看到旧 term 条目位于多数副本即可直接提交它。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">Raft 只用计数直接提交当前 term 条目；旧条目随当前 term 条目一起间接提交。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>leader 为每个 follower 维护 nextIndex 和 matchIndex。</li><li>日志回退逻辑越精细，恢复越快，但索引、快照边界和并发状态也更容易出错。</li><li>Raft 只用计数直接提交当前 term 条目；旧条目随当前 term 条目一起间接提交。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-raft2.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/raft-extended.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/raft2-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

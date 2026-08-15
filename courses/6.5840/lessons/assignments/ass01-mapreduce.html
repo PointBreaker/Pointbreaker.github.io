@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 1: MapReduce — MIT 6.5840</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+  <link rel="stylesheet" href="../../field-notes.css?v=20260815a">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.5840 · 实验 1</p>
+    <h1>实验 1：MapReduce</h1>
+    <p class="lede">在官方 Go 框架中实现 MapReduce coordinator 与 worker：完成任务分配、文件约定、超时重派和并行执行，并用公开测试验证输出与故障恢复。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>Go RPC</li><li>任务调度</li><li>中间文件</li><li>失败恢复</li><li>并行测试</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>labs/lab-mr.html</code>、<code>labs/go.html</code>、<code>labs/collab.html</code>、<code>labs/submit.html</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 实验</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>labs/lab-mr.html</code>、<code>labs/go.html</code>、<code>labs/collab.html</code>、<code>labs/submit.html</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>环境与基线</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>从课程仓库进入 <code>src/main</code>，先运行顺序版本理解应用接口，再运行官方测试观察尚未实现时的失败。保留干净工作区，不修改测试器、<code>mrapps</code> 或 RPC 模拟层。</p>
+<pre><code class="language-bash">cd ~/6.5840/src/main
+go run mrsequential.go wc.so pg-*.txt
+python3 test-mr.py
+</code></pre></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先追踪 <code>mrsequential.go</code> 如何调用 Map/Reduce，以及测试期望的 <code>mr-out-*</code> 文件格式。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-mr.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">worker</span><strong>Worker 数据路径</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现 worker 向 coordinator 请求任务。Map 任务读取指定输入，调用应用 Map，按 <code>ihash(key) % NReduce</code> 分桶，并把每桶 JSON 键值对写入中间文件；Reduce 任务读取属于自身编号的所有 Map 输出，按 key 排序分组，调用 Reduce 并生成 <code>mr-out-X</code>。使用临时文件加原子 rename，避免暴露半成品。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>中间文件名必须让 Reduce 能从 map 编号和 reduce 编号确定找到；编码格式在读写两侧保持一致。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-mr.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">coordinator</span><strong>Coordinator 状态机</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>维护 Map/Reduce 任务的 idle、in-progress、done 状态。只有全部 Map 完成后才发 Reduce；全部 Reduce 完成后 <code>Done()</code> 返回 true。RPC handler 不应长时间阻塞，任务完成报告必须幂等，以容忍 worker 或回复重复。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>用锁保护阶段与任务表；把“选择任务并标记 in-progress”放在同一个临界区。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-mr.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">failure</span><strong>超时与重派</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>若 worker 领取任务后崩溃，coordinator 应在大约十秒后允许另一 worker 重做。旧 worker 若随后返回，不得破坏已发布结果。Map/Reduce 应是确定性的，输出发布使用 rename；coordinator 以任务身份而不是 worker 身份判断完成。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>可在发任务时记录开始时间，并由后台扫描或请求路径检查超时。不要把整个作业在单个 worker 失败后重启。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-mr.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">verify</span><strong>验收清单</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>反复运行官方 <code>test-mr.py</code>，并用 <code>go test -race</code> 思路检查共享状态。确认 word count、indexer、Map/Reduce 并行度、worker crash 和 early exit 测试稳定通过；清理生成文件后再次测试，避免偶然依赖旧输出。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>偶发失败要保留日志与运行次数，优先排查任务被重复发布、文件 rename 时机和阶段切换竞态。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-mr.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>labs/lab-mr.html</code></li>
+      <li><code>labs/go.html</code></li>
+      <li><code>labs/collab.html</code></li>
+      <li><code>labs/submit.html</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>
