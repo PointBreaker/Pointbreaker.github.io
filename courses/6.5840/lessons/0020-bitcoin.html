@@ -1,27 +1,1119 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="比特币把交易、工作量证明和最长累计工作链组合成无需中心协调者的复制账本，其共识是概率性的而非立即最终。"><title>比特币与点对点共识 — MIT 6.5840 Field Notes</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../field-notes.css?v=20260816b">
+<script defer src="../field-notes.js?v=20260816b"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>5840<br><small>FIELD NOTES</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#labs">实验</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://pdos.csail.mit.edu/6.824/notes/l-bitcoin.txt" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 20 · 2026-04-30 · 新型系统与安全</p><h1>比特币与点对点共识</h1><p class="lesson-title-en">Bitcoin</p><p class="hero-lede">比特币把交易、工作量证明和最长累计工作链组合成无需中心协调者的复制账本，其共识是概率性的而非立即最终。</p><div class="lesson-meta"><span>48 MIN</span><span>进阶</span><span>03 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#section-1"><span>01</span>交易与 UTXO</a><a href="#section-2"><span>02</span>区块与工作量证明</a><a href="#section-3"><span>03</span>链选择与确认</a><a href="#section-4"><span>04</span>激励与限制</a><a href="#check"><span>05</span>纠错与检查</a><a href="#source-vault"><span>06</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><ol><li>解释交易与 UTXO的核心问题</li><li>按协议顺序推演区块与工作量证明</li><li>评估工程取舍：开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</li></ol><div class="source-ribbon"><a href="https://pdos.csail.mit.edu/6.824/notes/l-bitcoin.txt" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>notes/l-bitcoin.txt</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/papers/bitcoin.pdf" target="_blank" rel="noreferrer"><span>PDF 文本转录</span><strong>papers/bitcoin.pdf</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/papers/bitcoin-faq.txt" target="_blank" rel="noreferrer"><span>论文 FAQ</span><strong>papers/bitcoin-faq.txt</strong><b>↗</b></a></div></section><section class="reading-section" id="section-1"><div class="section-label">01 / DEEP READING</div><h2>交易与 UTXO</h2><p>交易引用先前未花费输出，并用数字签名授权新输出。节点独立验证签名、金额与双花规则。UTXO 模型让每个输入只能被消费一次，冲突交易不能同时进入同一合法链；钱包余额是相关 UTXO 的汇总，而不是账本里一个可直接覆盖的字段。</p></section><section class="reading-section" id="section-2"><div class="section-label">02 / DEEP READING</div><h2>区块与工作量证明</h2><p>矿工把交易组成区块，引用父区块哈希，并寻找使区块哈希低于目标的 nonce。工作量证明让创建替代历史需要持续计算成本。难度周期性调整以稳定出块速度。哈希指针使修改旧区块会使其后所有工作失效。</p><aside class="field-callout"><span>FIELD TRACE</span><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。”在每一步如何体现。</p></aside></section><section class="reading-section" id="section-3"><div class="section-label">03 / DEEP READING</div><h2>链选择与确认</h2><p>节点选择累计工作量最大的有效链。网络延迟会产生临时分叉，后续区块通常让一支领先，另一支交易回到待处理池。支付者等待多个确认，是在降低被更长替代链推翻的概率；没有固定确认数能提供数学上的绝对最终性。</p></section><section class="reading-section" id="section-4"><div class="section-label">04 / DEEP READING</div><h2>激励与限制</h2><p>区块奖励和手续费激励矿工遵循协议并投入算力，但系统安全依赖算力分布、网络传播和经济行为。吞吐受区块大小和间隔限制，广播给所有全节点的设计换来公开验证。智能应用还要处理费用波动、确认延迟和链重组。</p></section>
+<section class="reading-section" id="check"><div class="section-label">05 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>一笔交易进入一个区块后就绝不可能回滚。</h3><p>短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</p></article><article><span>误区</span><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m20-q1"><p><strong>比特币节点选择主链的核心指标是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>累计工作量最大的有效链</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>区块数量最少的链</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>交易手续费最低的链</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m20-q2"><p><strong>下列哪项最准确概括本讲的主要工程取舍？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>增加节点总能同时降低延迟并消除故障</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只要使用 RPC 就不再需要一致性协议</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m20-q3"><p><strong>为什么“一笔交易进入一个区块后就绝不可能回滚。”是错误的？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>因为所有网络都保证严格同步</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>因为客户端从不会重试</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div></section>
+<section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节、例子、问答与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="notes/l-bitcoin.txt"><summary><span><b>课堂讲义</b>notes/l-bitcoin.txt</span><small>292 行 · 1,860 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/l-bitcoin.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.5840 2026 Lecture 20: Bitcoin
 
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>比特币与点对点共识 — MIT 6.5840</title>
-<link href="../../../assets/course/base.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
-<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
-<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
-<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
-<script defer="" src="../../../assets/vendor/katex.min.js"></script>
-<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
-<script defer="" src="../../../assets/course/math-render.js"></script>
-</head>
-<body>
-<div class="page"><p class="eyebrow">MIT 6.5840 · 第 20 讲</p><h1>比特币与点对点共识</h1><p class="lede">比特币把交易、工作量证明和最长累计工作链组合成无需中心协调者的复制账本，其共识是概率性的而非立即最终。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释交易与 UTXO的核心问题</li><li>按协议顺序推演区块与工作量证明</li><li>评估工程取舍：开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">交易与 UTXO</h2><p>交易引用先前未花费输出，并用数字签名授权新输出。节点独立验证签名、金额与双花规则。UTXO 模型让每个输入只能被消费一次，冲突交易不能同时进入同一合法链；钱包余额是相关 UTXO 的汇总，而不是账本里一个可直接覆盖的字段。</p><h2 id="section-2">区块与工作量证明</h2><p>矿工把交易组成区块，引用父区块哈希，并寻找使区块哈希低于目标的 nonce。工作量证明让创建替代历史需要持续计算成本。难度周期性调整以稳定出块速度。哈希指针使修改旧区块会使其后所有工作失效。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。”在每一步如何体现。</p></div></div><h2 id="section-3">链选择与确认</h2><p>节点选择累计工作量最大的有效链。网络延迟会产生临时分叉，后续区块通常让一支领先，另一支交易回到待处理池。支付者等待多个确认，是在降低被更长替代链推翻的概率；没有固定确认数能提供数学上的绝对最终性。</p><h2 id="section-4">激励与限制</h2><p>区块奖励和手续费激励矿工遵循协议并投入算力，但系统安全依赖算力分布、网络传播和经济行为。吞吐受区块大小和间隔限制，广播给所有全节点的设计换来公开验证。智能应用还要处理费用波动、确认延迟和链重组。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>一笔交易进入一个区块后就绝不可能回滚。</h3><p>短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m20-q1"><p><strong>问题：</strong>比特币节点选择主链的核心指标是什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">累计工作量最大的有效链</button><button aria-pressed="false" data-choice="b">区块数量最少的链</button><button aria-pressed="false" data-choice="c">交易手续费最低的链</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m20-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m20-q3"><p><strong>问题：</strong>为什么“一笔交易进入一个区块后就绝不可能回滚。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>交易引用先前未花费输出，并用数字签名授权新输出。</li><li>开放参与和公开验证减少中心信任，却以能源、低吞吐和概率最终性为代价。</li><li>短分叉和链重组可能移除近期区块；更多确认只让回滚概率下降。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-bitcoin.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/bitcoin.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/bitcoin-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
-<script src="../../../assets/vendor/prism.js"></script>
-<script src="../../../assets/vendor/prism-python.js"></script>
-<script src="../../../assets/vendor/prism-bash.js"></script>
-<script src="../../../assets/course/quiz.js"></script>
-<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
-<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
-</body>
-</html>
+Bitcoin: A Peer-to-Peer Electronic Cash System, by Satoshi Nakamoto, 2008
+
+why this paper?
+  solves a problem that seemed obviously impossible
+    built entirely on a collection of untrusted participants
+    you don&#x27;t know who they are
+    some are certain to be corrupt
+    yet Bitcoin is secure enough for financial transactions
+  contains some very clever ideas!
+
+related to SUNDR straw man:
+  log of signed operations, linked by cryptographic hashes
+  agreement on log -&gt; agreement on state
+  forks are a key danger
+  unlike SUNDR: Bitcoin automatically resolves forks
+
+the key danger: double spending
+
+notation:
+  pub(new): public key of new owner
+  H(prev): cryptographic hash of this coin&#x27;s previous transaction record
+  sig(old): signature over this transaction by previous owner&#x27;s private key
+
+a simple (broken) transaction-chain scheme:
+  X has previously paid a coin to Y:
+    T6: pub(X), ...
+    T7: pub(Y), H(T6), sig(X)
+  Y buys a sandwich from Z and pays with this coin
+    Z sends public key to Y
+    Y creates a new transaction and signs it
+    T8: pub(Z), H(T7), sig(Y)
+  Y sends transaction T8 to Z
+  Z verifies T8:
+    really pub(Z)
+    T7 exists, hash is correct
+    T8&#x27;s sig(Y) verifies using T7&#x27;s pub(Y)
+      verify(T8, T8.sig(), T7.pub()) == ok
+  Z gives sandwich to Y
+
+Bitcoin only records transactions, not coins or accounts or balances
+  Z&#x27;s &quot;balance&quot;: unspent transactions for which Z knows private key
+  the &quot;identity&quot; of a coin is the (hash of) its most recent xaction
+
+can anyone other than the owner spend a coin?
+  current owner&#x27;s private key needed to sign next transaction
+  danger: perhaps attacker can steal Z&#x27;s private key
+    e.g. from PC or smartphone or online exchange
+    this is a serious problem in practice, and hard to solve well
+
+can a coin&#x27;s owner spend it twice in this scheme?
+  Y creates two transactions for same coin: Y-&gt;Z, Y-&gt;Q
+    both with H(T7)
+  Y shows different transactions to Z and Q
+  both transactions look good, including signatures and hash
+  now both Z and Q will give sandwiches to Y
+  double-spending is the most fundamental problem that bitcoin solves
+
+why is double-spending possible in my simple scheme?
+  Z and Q didn&#x27;t know about the other transaction
+
+a &quot;public ledger&quot; would reveal Y&#x27;s double-spend
+  publish a log of all transactions
+  ensure everyone sees the same log, in the same order
+  ensure no-one can un-publish or modify a log entry
+  Z, Q only believe transactions seen in log
+  result:
+    Q will see Y-&gt;Z is already in log, and will reject Y-&gt;Q
+  how to create such a ledger?
+
+the BitCoin peer network
+  lots of peer computers participate in agreement
+    [net diagram]
+    each has a complete copy of the whole chain
+    each has TCP connections to a few other peers -- a &quot;mesh overlay&quot;
+    new chain blocks flooded to all peers, by forwarding over TCP
+    proposed transactions also flooded to all peers
+    flooding helps ensure all peers are aware of all transactions
+  anyone can run a Bitcoin peer!
+    currently tens of thousands
+    so some peers will be malicious
+    design assumes honest &gt;&gt; malicious
+
+the BitCoin block chain
+  the block chain contains all transactions on all coins
+    so that double-spending will be visible
+  each block:
+    H(prevblock)
+    reward transaction
+    list of transactions (pub, H, sig)
+    &quot;nonce&quot;
+    block creation time (wall clock timestamp)
+  note that the block is not signed!
+  new block every 10 minutes containing xactions since prev block
+  payee believes transaction when seen in the block chain
+
+who creates each new block?
+  this is &quot;mining&quot; via &quot;proof-of-work&quot;
+  requirement: H(block) has N leading zeros
+    each peer tries random nonce values until this works out
+  trying one nonce is fast, but most nonces won&#x27;t work
+    it&#x27;s like flipping a zillion-sided coin until it comes up heads
+    each flip has an independent small chance of success
+    mining a block is *not* a specific fixed amount of work
+  it would likely take one CPU months to create one block
+  but thousands of peers are working on it
+  such that average time to first to find is about 10 minutes
+    though the variance is high
+  the winner floods the new block to all peers
+
+how does a Y-&gt;Z transaction work w/ block chain?
+  start: all peers know ...&lt;-B5
+    and are mining block B6 (trying different nonces)
+  Y sends Y-&gt;Z transaction to peers, which flood it
+  peers buffer the transaction until B6 computed
+  peers that heard Y-&gt;Z include it in next block
+  so eventually ...&lt;-B5&lt;-B6&lt;-B7, where B7 includes Y-&gt;Z
+
+Q: could there be *two* different successors to B6?
+A: yes:
+   1) two peers find nonces at about the same time, or
+   2) slow network, 2nd block found before 1st is flooded to all
+  two simultaneous blocks will be different
+    miners know about slightly different sets of new transactions, &amp;c.
+  if two successors, the blockchain temporarily forks
+    peers mine a successor to whichever block they heard first
+    but switch to longer chain if they hear one
+
+how is a fork resolved?
+  each peer initially believes the first new (and valid) block it sees
+  tries to mine a successor
+  if more saw Bx than By, more will mine for Bx,
+    so Bx successor likely to be created first
+  even if exactly half-and-half, one fork likely to be extended first
+    since significant variance in mining time
+  peers switch to the longest fork once they see it
+    so longer fork gets more mining power extending it
+    so agreement on a block tends to be re-enforced
+  what about transactions in the abandoned fork?
+    most will be in both forks
+    but some may be in just the abandoned fork -- appear, then disappear!
+
+what if Y-&gt;Z ends up in an abandoned transient fork?
+  that might allow Y to double-spend!
+  Z sees Y-&gt;Z; then it disappears; then Y can broadcast Y-&gt;Q
+
+thus:
+  double spending is possible, due to forks
+  but a transient fork is highly likely to be resolved quickly
+  if Z sees Y-&gt;Z with a few blocks after it,
+    it&#x27;s very unlikely that it could be overtaken by a
+    different fork containing Y-&gt;Q
+  if Z is selling a high-value item, Z should wait for a few
+    blocks before shipping it
+  if Z is selling something cheap, maybe OK to wait just for some peers
+    to see Y-&gt;Z and validate it (even before Y-&gt;Z is in a block)
+
+could attacker start a fork from an old block, with Y-&gt;Q instead of Y-&gt;Z?
+  yes -- but fork must be longer in order for peers to accept it
+  since attacker&#x27;s fork starts behind main fork,
+    attacker must mine blocks *faster* than total of other peers
+  with just one CPU, will take months to create even a few blocks
+    by that time the main chain will be much longer
+    no peer will switch to the attacker&#x27;s shorter chain
+
+&quot;51% attack&quot;
+  if the attacker has more CPU power than all the honest
+    bitcoin peers -- then the attacker can create the longest fork,
+    everyone will switch to it, allowing the attacker to double-spend.
+
+one way to think about bitcoin&#x27;s proof-of-work mining
+  random choice over peers for who gets to choose which fork to extend
+    weighted by CPU power
+  if most participants are honest,
+    they will re-inforce agreement on longest fork
+  random choice means a (small) attacker won&#x27;t get many
+    chances to try to switch agreement to a different fork
+  surprising that random choice is possible without knowing
+    participant identities or even how many!
+
+what motivates miners?
+  critical that there be many miners, to make 51% attacks harder
+  each new block pays miner a few newly created bitcoins -- a reward
+    block contains public key that gets the new bitcoins
+    this is incentive for people to operate bitcoin peers
+  hardness (# of leading zeros) automatically adjusted
+    to make avg interval be 10 minutes
+  consequences:
+    arms race, since more hardware -&gt; more reward
+    special hardware
+    pools of miners that collaborate
+    energy waste
+
+how is it possible to create reward money out of nothing?
+  the rules are determined by the code in (a majority) of peers
+  the peers all have code that honors the special reward transactions
+
+validation checks:
+  peer, new xaction:
+    previous transaction exists
+    no other transaction spends the same previous transaction
+    signature is by private key of pub key in previous transaction
+    then will add transaction to txn list for next block to mine
+  peer, new block:
+    hash value has enough leading zeroes (i.e. nonce is right, proves work)
+    previous block hash exists
+    all transactions in block are valid
+    peer switches to new chain if longer than current longest
+  Z:
+    (client does above checks, or relies on a peer to do them)
+    Y-&gt;Z is in a block
+    Z&#x27;s public key / address is in the transaction
+    there&#x27;s several more blocks in the chain
+  (other stuff has to be checked as well, lots of details)
+
+Q: why an open / &quot;permissionless&quot; / decentralized peer structure?
+
+Q: why is it reasonable to assume the majority of peers are honest?
+
+Q: if one started a new bitcoin-like cryptocurrency, with only a few peers,
+   would it be reasonable to trust it?
+
+Q: what transaction rate can bitcoin support?
+   10 minutes * 1 MB blocks -&gt; about 5 transactions/second
+   credit card system handles about 5000 / second
+
+Q: 10 minutes is annoying; could it be made much shorter?
+
+Q: what would happen if I modified my copy of the Bitcoin s/w?
+   e.g. to reduce the proof-of-work hardness?
+
+Q: could Bitcoin have been just a ledger w/o a new currency?
+   e.g. have dollars be the currency?
+   since the currency part is pretty awkward.
+   how to incentivize miners?
+   how to transfer actual dollars?
+
+Q: why don&#x27;t more people use Bitcoin for ordinary transactions?
+   high fees; not reversible; 10 minute delay; volatile value
+
+Q: are transactions anonymous?
+
+Q: how could one steal someone else&#x27;s bitcoins?
+
+Q: if I steal bitcoins, is it safe to spend them?
+
+Q: what if the block format needs to be changed?
+   esp if new format wouldn&#x27;t be acceptable to previous s/w version?
+   &quot;hard fork&quot;
+
+Q: how do peers find each other?
+
+Q: what if a peer has been tricked into only talking to corrupt peers?
+
+Q: what if a peer rejoins after a long period of disconnection?
+
+Q: why does it make sense for the mining reward to decrease with time?
+
+Q: is it a problem that there will be a fixed number of coins?
+   what if the real economy grows (or shrinks)?
+
+Q: why do bitcoins have value?
+   e.g. people seem willing to pay $76,000 per bitcoin (April 2026).
+
+Q: if lots of miners join, will blocks be created at a higher rate?
+
+Q: can bitcoins be forged, i.e. a totally fake coin created?
+
+weak points in the design?
+  proof-of-work uses a lot of electricity
+  too bad it&#x27;s a new currency as well as a payment system
+  transaction confirmation takes at least 10 minutes, or 60 for high confidence
+  flooding limits performance, may be a point of attack
+  maximum block size plus 10 minutes limits max transactions per second
+  vulnerable to majority attack
+  not very anonmyous
+  anonymous enough to attract illegal activity
+  users have trouble securing private keys
+
+key idea: block chain
+  public agreed-on ledger is a great idea
+  mining is a clever way to resolve forks / ensure agreement
+
+next week:
+  BFT, another way to obtain security from possibly-insecure servers
+
+---- References ----
+
+https://www.ieee-security.org/TC/SP2015/papers-archived/6949a104.pdf
+https://en.bitcoin.it/wiki/Script
+https://www.oreilly.com/library/view/mastering-bitcoin/9781491902639/ch08.html</code></pre></details><details class="archive" data-source-record data-source="papers/bitcoin.pdf"><summary><span><b>PDF 文本转录</b>papers/bitcoin.pdf</span><small>406 行 · 3,545 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/papers/bitcoin.pdf" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">Bitcoin: A Peer-to-Peer Electronic Cash System
+Satoshi Nakamoto
+satoshin@gmx.com
+www.bitcoin.org
+Abstract.  A purely peer-to-peer version of  electronic cash would allow online
+payments to be sent directly from one party to another without going through a
+financial institution.  Digital signatures provide part of the solution, but the main
+benefits are lost if a trusted third party is still required to prevent double-spending.
+We propose a solution to the double-spending problem using a peer-to-peer network.
+The network timestamps transactions by hashing them into an ongoing chain of
+hash-based proof-of-work, forming a record that cannot be changed without redoing
+the proof-of-work.  The longest chain not only serves as proof of the sequence of
+events witnessed, but proof that it came from the largest pool of CPU power.  As
+long as a majority of CPU power is controlled by nodes that are not cooperating to
+attack the network, they&#x27;ll generate the longest chain and outpace attackers.  The
+network itself requires minimal structure.  Messages are broadcast on a best effort
+basis, and nodes can leave and rejoin the network at will, accepting the longest
+proof-of-work chain as proof of what happened while they were gone.
+1. Introduction
+Commerce on the Internet has come to rely almost exclusively on financial institutions serving as
+trusted third parties to process electronic payments.  While the system works well enough for
+most  transactions,  it  still  suffers  from  the  inherent  weaknesses  of  the  trust  based  model.
+Completely non-reversible transactions are not really possible, since financial institutions cannot
+avoid  mediating  disputes.   The  cost  of  mediation  increases  transaction  costs,  limiting  the
+minimum practical transaction size and cutting off the possibility for small casual transactions,
+and there is a broader cost in the loss of ability to make non-reversible payments for non-
+reversible services.  With the possibility of reversal, the need for trust spreads.  Merchants must
+be wary of their customers, hassling them for more information than they would otherwise need.
+A certain percentage of fraud is accepted as unavoidable.  These costs and payment uncertainties
+can be avoided in person by using physical currency, but no mechanism exists to make payments
+over a communications channel without a trusted party.
+What is needed is an electronic payment system based on cryptographic proof instead of trust,
+allowing any two willing parties to transact directly with each other without the need for a trusted
+third party.  Transactions that are computationally impractical to reverse would protect sellers
+from fraud, and routine escrow mechanisms could easily be implemented to protect buyers.  In
+this paper, we propose a solution to the double-spending problem using a peer-to-peer distributed
+timestamp server to generate computational proof of the chronological order of transactions.  The
+system  is  secure  as  long  as  honest  nodes  collectively  control  more  CPU  power  than  any
+cooperating group of attacker nodes.
+1
+
+2. Transactions
+We define an electronic coin as a chain of digital signatures.  Each owner transfers the coin to the
+next by digitally signing a hash of the previous transaction and the public key of the next owner
+and adding these to the end of the coin.  A payee can verify the signatures to verify the chain of
+ownership.
+The problem of course is the payee can&#x27;t verify that one of the owners did not double-spend
+the coin.  A common solution is to introduce a trusted central authority, or mint, that checks every
+transaction for double spending.  After each transaction, the coin must be returned to the mint to
+issue a new coin, and only coins issued directly from the mint are trusted not to be double-spent.
+The  problem with  this solution  is that  the  fate of the entire  money system depends on the
+company running the mint, with every transaction having to go through them, just like a bank.
+We need a way for the payee to know that the previous owners did not sign any earlier
+transactions.  For our purposes, the earliest transaction is the one that counts, so we don&#x27;t care
+about later attempts to double-spend.  The only way to confirm the absence of a transaction is to
+be aware of all transactions.  In the mint based model, the mint was aware of all transactions and
+decided which arrived first.  To accomplish this without a trusted party, transactions must be
+publicly announced [1], and we need a system for participants to agree on a single history of the
+order in which they were received.  The payee needs proof that at the time of each transaction, the
+majority of nodes agreed it was the first received.
+3. Timestamp Server
+The solution we propose begins with a timestamp server.  A timestamp server works by taking a
+hash  of a  block  of  items  to  be  timestamped  and  widely  publishing  the  hash,  such  as  in  a
+newspaper or Usenet post [2-5].  The timestamp proves that the data must have existed at the
+time, obviously, in order to get into the hash.  Each timestamp includes the previous timestamp in
+its hash, forming a chain, with each additional timestamp reinforcing the ones before it.
+2
+Block
+Item Item ...
+Hash
+Block
+Item Item ...
+Hash
+Transaction
+Owner 1&#x27;s
+Public Key
+Owner 0&#x27;s
+Signature
+Hash
+Transaction
+Owner 2&#x27;s
+Public Key
+Owner 1&#x27;s
+Signature
+Hash
+ Verify
+Transaction
+Owner 3&#x27;s
+Public Key
+Owner 2&#x27;s
+Signature
+Hash
+ Verify
+Owner 2&#x27;s
+Private Key
+Owner 1&#x27;s
+Private Key
+Sign  Sign
+Owner 3&#x27;s
+Private Key
+
+4. Proof-of-Work
+To implement a distributed timestamp server on a peer-to-peer basis, we will need to use a proof-
+of-work system similar to Adam Back&#x27;s Hashcash [6], rather than newspaper or Usenet posts.
+The proof-of-work involves scanning for a value that when hashed, such as with SHA-256, the
+hash begins with a number of zero bits.  The average work required is exponential in the number
+of zero bits required and can be verified by executing a single hash.
+For our timestamp network, we implement the proof-of-work by incrementing a nonce in the
+block until a value is found that gives the block&#x27;s hash the required zero bits.  Once the CPU
+effort has been expended to make it satisfy the proof-of-work, the block cannot be changed
+without redoing the work.  As later blocks are chained after it, the work to change the block
+would include redoing all the blocks after it.
+The proof-of-work also solves the problem of determining representation in majority decision
+making.  If the majority were based on one-IP-address-one-vote, it could be subverted by anyone
+able  to  allocate  many  IPs.   Proof-of-work  is  essentially  one-CPU-one-vote.   The  majority
+decision is represented by the longest chain, which has the greatest proof-of-work effort invested
+in it.  If a majority of CPU power is controlled by honest nodes, the honest chain will grow the
+fastest and outpace any competing chains.  To modify a past block, an attacker would have to
+redo the proof-of-work of the block and all blocks after it and then catch up with and surpass the
+work of the honest nodes.  We will show later that the probability of a slower attacker catching up
+diminishes exponentially as subsequent blocks are added.
+To compensate for increasing hardware speed and varying interest in running nodes over time,
+the proof-of-work difficulty is determined by a moving average targeting an average number of
+blocks per hour.  If they&#x27;re generated too fast, the difficulty increases.
+5. Network
+The steps to run the network are as follows:
+1) New transactions are broadcast to all nodes.
+2) Each node collects new transactions into a block.
+3) Each node works on finding a difficult proof-of-work for its block.
+4) When a node finds a proof-of-work, it broadcasts the block to all nodes.
+5) Nodes accept the block only if all transactions in it are valid and not already spent.
+6) Nodes express their acceptance of the block by working on creating the next block in the
+chain, using the hash of the accepted block as the previous hash.
+Nodes always consider the longest chain to be the correct one and will keep working on
+extending it.  If two nodes broadcast different versions of the next block simultaneously, some
+nodes may receive one or the other first.  In that case, they work on the first one they received,
+but save the other branch in case it becomes longer.  The tie will be broken when the next proof-
+of-work is found and one branch becomes longer; the nodes that were working on the other
+branch will then switch to the longer one.
+3
+Block
+Prev Hash Nonce
+Tx Tx ...
+Block
+Prev Hash Nonce
+Tx Tx ...
+
+New transaction broadcasts do not necessarily need to reach all nodes.  As long as they reach
+many nodes, they will get into a block before long.  Block broadcasts are also tolerant of dropped
+messages.  If a node does not receive a block, it will request it when it receives the next block and
+realizes it missed one.
+6. Incentive
+By convention, the first transaction in a block is a special transaction that starts a new coin owned
+by the creator of the block.  This adds an incentive for nodes to support the network, and provides
+a way to initially distribute coins into circulation, since there is no central authority to issue them.
+The steady addition of a constant of amount of new coins is analogous to gold miners expending
+resources to add gold to circulation.  In our case, it is CPU time and electricity that is expended.
+The incentive can also be funded with transaction fees.  If the output value of a transaction is
+less than its input value, the difference is a transaction fee that is added to the incentive value of
+the  block  containing  the  transaction.   Once  a  predetermined  number  of  coins  have  entered
+circulation, the incentive can transition entirely to transaction fees and be completely inflation
+free.
+The incentive may help encourage nodes to stay honest.  If a greedy attacker is able to
+assemble more CPU power than all the honest nodes, he would have to choose between using it
+to defraud people by stealing back his payments, or using it to generate new coins.  He ought to
+find it more profitable to play by the rules, such rules that favour him with more new coins than
+everyone else combined, than to undermine the system and the validity of his own wealth.
+7. Reclaiming Disk Space
+Once the latest transaction in a coin is buried under enough blocks, the spent transactions before
+it can be discarded to save disk space.  To facilitate this without breaking the block&#x27;s hash,
+transactions are hashed in a Merkle Tree [7][2][5], with only the root included in the block&#x27;s hash.
+Old blocks can then be compacted by stubbing off branches of the tree.  The interior hashes do
+not need to be stored.
+A block header with no transactions would be about 80 bytes.  If we suppose blocks are
+generated every 10 minutes, 80 bytes * 6 * 24 * 365 = 4.2MB per year.  With computer systems
+typically selling with 2GB of RAM as of 2008, and Moore&#x27;s Law predicting current growth of
+1.2GB per year, storage should not be a problem even if the block headers must be kept in
+memory.
+4
+BlockBlock
+Block Header (Block Hash)
+Prev Hash Nonce
+Hash01
+Hash0 Hash1 Hash2 Hash3
+Hash23
+Root Hash
+Hash01
+Hash2
+Tx3
+Hash23
+Block Header (Block Hash)
+Root Hash
+Transactions Hashed in a Merkle Tree After Pruning Tx0-2 from the Block
+Prev Hash Nonce
+Hash3
+Tx0 Tx1 Tx2 Tx3
+
+8. Simplified Payment Verification
+It is possible to verify payments without running a full network node.  A user only needs to keep
+a copy of the block headers of the longest proof-of-work chain, which he can get by querying
+network nodes until he&#x27;s convinced he has the longest chain, and obtain the Merkle branch
+linking the transaction to the block it&#x27;s timestamped in.  He can&#x27;t  check the transaction for
+himself, but by linking it to a place in the chain, he can see that a network node has accepted it,
+and blocks added after it further confirm the network has accepted it.
+As such, the verification is reliable as long as honest nodes control the network, but is more
+vulnerable  if  the  network  is overpowered  by an  attacker.  While  network  nodes can  verify
+transactions for themselves, the  simplified  method  can be  fooled by an attacker&#x27;s fabricated
+transactions for as long as the attacker can continue to overpower the network.  One strategy to
+protect against this would be to accept alerts from network nodes when they detect an invalid
+block, prompting  the  user&#x27;s  software  to  download  the  full  block  and alerted  transactions to
+confirm the inconsistency.  Businesses that receive frequent payments will probably still want to
+run their own nodes for more independent security and quicker verification.
+9. Combining and Splitting Value
+Although it would be possible to handle coins individually, it would be unwieldy to make a
+separate transaction for every cent in a transfer.  To allow value to be split and combined,
+transactions contain multiple inputs and outputs.  Normally there will be either a single input
+from a larger previous transaction or multiple inputs combining smaller amounts, and at most two
+outputs: one for the payment, and one returning the change, if any, back to the sender.
+It should be noted that fan-out, where a transaction depends on several transactions, and those
+transactions depend on many more, is not a problem here.  There is never the need to extract a
+complete standalone copy of a transaction&#x27;s history.
+5
+Transaction
+In
+...
+In Out
+...
+Hash01
+Hash2 Hash3
+Hash23
+Block Header
+Merkle Root
+Prev Hash Nonce
+Block Header
+Merkle Root
+Prev Hash Nonce
+Block Header
+Merkle Root
+Prev Hash Nonce
+Merkle Branch for Tx3
+Longest Proof-of-Work Chain
+Tx3
+
+10. Privacy
+The traditional banking model achieves a level of privacy by limiting access to information to the
+parties involved and the trusted third party.  The necessity to announce all transactions publicly
+precludes this method, but privacy can still be maintained by breaking the flow of information in
+another place: by keeping public keys anonymous.  The public can see that someone is sending
+an amount to someone else, but without information linking the transaction to anyone.  This is
+similar to the level of information released by stock exchanges, where the time and size of
+individual trades, the &quot;tape&quot;, is made public, but without telling who the parties were.
+As an additional firewall, a new key pair should be used for each transaction to keep them
+from being linked to a common owner.  Some  linking is still unavoidable with multi-input
+transactions, which necessarily reveal that their inputs were owned by the same owner.  The risk
+is that if the owner of a key is revealed, linking could reveal other transactions that belonged to
+the same owner.
+11. Calculations
+We consider the scenario of an attacker trying to generate an alternate chain faster than the honest
+chain.  Even if this is accomplished, it does not throw the system open to arbitrary changes, such
+as creating value out of thin air or taking money that never belonged to the attacker.  Nodes are
+not going to accept an invalid transaction as payment, and honest nodes will never accept a block
+containing them.  An attacker can only try to change one of his own transactions to take back
+money he recently spent.
+The race between the honest chain and an attacker chain can be characterized as a Binomial
+Random Walk.  The success event is the honest chain being extended by one block, increasing its
+lead by +1, and the failure event is the attacker&#x27;s chain being extended by one block, reducing the
+gap by -1.
+The probability of an attacker catching up from a given deficit is analogous to a Gambler&#x27;s
+Ruin problem.  Suppose a gambler with unlimited credit starts at a deficit and plays potentially an
+infinite number of trials to try to reach breakeven.  We can calculate the probability he ever
+reaches breakeven, or that an attacker ever catches up with the honest chain, as follows [8]:
+p = probability an honest node finds the next block
+q = probability the attacker finds the next block
+qz = probability the attacker will ever catch up from z blocks behind
+qz={
+1 if p≤q
+q/ pz
+if pq}
+6
+Identities Transactions Trusted
+Third Party Counterparty Public
+Identities Transactions Public
+New Privacy Model
+Traditional Privacy Model
+
+Given our assumption that p &gt; q, the probability drops exponentially as the number of blocks the
+attacker has to catch up with increases.  With the odds against him, if he doesn&#x27;t make a lucky
+lunge forward early on, his chances become vanishingly small as he falls further behind.
+We now consider how long the recipient of a new transaction needs to wait before being
+sufficiently certain the sender can&#x27;t change the transaction.  We assume the sender is an attacker
+who wants to make the recipient believe he paid him for a while, then switch it to pay back to
+himself after some time has passed.  The receiver will be alerted when that happens, but the
+sender hopes it will be too late.
+The receiver generates a new key pair and gives the public key to the sender shortly before
+signing.  This prevents the sender from preparing a chain of blocks ahead of time by working on
+it continuously until he is lucky enough to get far enough ahead, then executing the transaction at
+that moment.  Once the transaction is sent, the dishonest sender starts working in secret on a
+parallel chain containing an alternate version of his transaction.
+The recipient waits until the transaction has been added to a block and  z blocks have been
+linked  after  it.   He  doesn&#x27;t  know  the  exact  amount  of  progress  the  attacker  has  made, but
+assuming the honest blocks took the average expected time per block, the attacker&#x27;s potential
+progress will be a Poisson distribution with expected value:
+=z q
+p
+To get the probability the attacker could still catch up now, we multiply the Poisson density for
+each amount of progress he could have made by the probability he could catch up from that point:
+∑k=0
+∞
+k
+e−
+k! ⋅{
+q/ pz−k
+if k≤ z
+1 if k z}
+Rearranging to avoid summing the infinite tail of the distribution...
+1−∑k=0
+z
+k
+e−
+k! 1−q/ pz−k
+
+Converting to C code...
+#include &lt;math.h&gt;
+double AttackerSuccessProbability(double q, int z)
+{
+    double p = 1.0 - q;
+    double lambda = z * (q / p);
+    double sum = 1.0;
+    int i, k;
+    for (k = 0; k &lt;= z; k++)
+    {
+        double poisson = exp(-lambda);
+        for (i = 1; i &lt;= k; i++)
+            poisson *= lambda / i;
+        sum -= poisson * (1 - pow(q / p, z - k));
+    }
+    return sum;
+}
+7
+
+Running some results, we can see the probability drop off exponentially with z.
+q=0.1
+z=0    P=1.0000000
+z=1    P=0.2045873
+z=2    P=0.0509779
+z=3    P=0.0131722
+z=4    P=0.0034552
+z=5    P=0.0009137
+z=6    P=0.0002428
+z=7    P=0.0000647
+z=8    P=0.0000173
+z=9    P=0.0000046
+z=10   P=0.0000012
+q=0.3
+z=0    P=1.0000000
+z=5    P=0.1773523
+z=10   P=0.0416605
+z=15   P=0.0101008
+z=20   P=0.0024804
+z=25   P=0.0006132
+z=30   P=0.0001522
+z=35   P=0.0000379
+z=40   P=0.0000095
+z=45   P=0.0000024
+z=50   P=0.0000006
+Solving for P less than 0.1%...
+P &lt; 0.001
+q=0.10   z=5
+q=0.15   z=8
+q=0.20   z=11
+q=0.25   z=15
+q=0.30   z=24
+q=0.35   z=41
+q=0.40   z=89
+q=0.45   z=340
+12. Conclusion
+We have proposed a system for electronic transactions without relying on trust.  We started with
+the usual framework of coins made from digital signatures, which provides strong control of
+ownership, but is incomplete without a way to prevent double-spending.  To solve this, we
+proposed a peer-to-peer network using proof-of-work to record a public history of transactions
+that quickly becomes computationally impractical  for  an attacker to change if honest nodes
+control a majority of CPU power.  The network is robust in its unstructured simplicity.  Nodes
+work all at once with little coordination.  They do not need to be identified, since messages are
+not routed to any particular place and only need to be delivered on a best effort basis.  Nodes can
+leave  and  rejoin  the  network  at  will,  accepting  the  proof-of-work  chain  as  proof  of  what
+happened while they were gone.  They vote with their CPU power, expressing their acceptance of
+valid blocks by working on extending them and rejecting invalid blocks by refusing to work on
+them.  Any needed rules and incentives can be enforced with this consensus mechanism.
+8
+
+References
+[1] W. Dai, &quot;b-money,&quot; http://www.weidai.com/bmoney.txt, 1998.
+[2] H. Massias, X.S. Avila, and J.-J. Quisquater, &quot;Design of a secure timestamping service with minimal
+trust requirements,&quot; In 20th Symposium on Information Theory in the Benelux, May 1999.
+[3] S. Haber, W.S. Stornetta, &quot;How to time-stamp a digital document,&quot; In Journal of Cryptology, vol 3, no
+2, pages 99-111, 1991.
+[4] D. Bayer, S. Haber, W.S. Stornetta, &quot;Improving the efficiency and reliability of digital time-stamping,&quot;
+In Sequences II: Methods in Communication, Security and Computer Science, pages 329-334, 1993.
+[5] S. Haber, W.S. Stornetta, &quot;Secure names for bit-strings,&quot; In Proceedings of the 4th ACM Conference
+on Computer and Communications Security, pages 28-35, April 1997.
+[6] A. Back, &quot;Hashcash - a denial of service counter-measure,&quot;
+http://www.hashcash.org/papers/hashcash.pdf, 2002.
+[7] R.C. Merkle, &quot;Protocols for public key cryptosystems,&quot; In Proc. 1980 Symposium on Security and
+Privacy, IEEE Computer Society, pages 122-133, April 1980.
+[8] W. Feller, &quot;An introduction to probability theory and its applications,&quot; 1957.
+9</code></pre></details><details class="archive" data-source-record data-source="papers/bitcoin-faq.txt"><summary><span><b>论文 FAQ</b>papers/bitcoin-faq.txt</span><small>410 行 · 3,341 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/papers/bitcoin-faq.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.824 Bitcoin FAQ
+
+Q: I don&#x27;t understand why the blockchain is so important. Isn&#x27;t the
+requirement for the owner&#x27;s signature on each transaction enough to
+prevent bitcoins from being stolen?
+
+A: The signature is not enough, because it doesn&#x27;t prevent the owner
+from spending money twice: signing two transactions that transfer the
+same bitcoin to different recipients. The blockchain acts as a
+publishing system to try to ensure that once a bitcoin has been spent
+once, lots of participants will know, and will be able to reject a
+second spend.
+
+Q: Why does Bitcoin need to define a new currency? Wouldn&#x27;t it be more
+convenient to use an existing currency like dollars?
+
+A: The new currency (Bitcoins) allows the system to motivate miners
+with freshly created money; this would be harder with dollars because
+it&#x27;s illegal for ordinary people to create fresh dollars. One would
+also need a way to connect balances and transactions on a
+dollar-denominated blockchain with dollars in the external world. But
+have a look at &quot;stablecoins&quot; such as Tether.
+
+Q: What is mining?
+
+A: The proof-of-work process by which new blocks are found, by trying
+many different nonces until one yields a block hash with enough
+leading zero bits.
+
+Q: Why is the purpose of proof-of-work?
+
+A: It makes it hard for an attacker to convince the system to switch
+to a blockchain fork in which a coin is spent in a different way than
+in the main fork. You can view proof-of-work as making a random choice
+over the participating CPUs of who gets to choose which fork to
+extend. If the attacker controls only a few CPUs, the attacker won&#x27;t
+be able to extend a new malicious fork fast enough to overtake the
+main blockchain.
+
+Q: Could a Bitcoin-like system use something less wasteful than
+proof-of-work?
+
+A: Proof-of-work is hard to fake or simulate, a nice property in a
+totally open system like Bitcoin where you cannot trust anyone to
+follow rules. The main alternative is proof-of-stake, as used in
+Ethereum, Algorand, and Byzcoin. Have a look at
+https://ethereum.org/en/developers/docs/consensus-mechanisms/pos/ In a
+smallish closed system, in which the participants are known and mostly
+trusted, Byzantine agreement protocols could be used, as in
+Hyperledger, or variants of it as in Stellar.
+
+Q: Can Alice spend the same coin twice by sending &quot;pay Bob&quot; and &quot;pay
+Charlie&quot; to different subsets of miners?
+
+A: Suppose Alice does that. One of the two subsets of miners is likely
+to find the nonce for a new block first. Let&#x27;s assume the first block
+to be found is B50 and it contains &quot;pay Bob&quot;. This block will be
+flooded to all miners, so the miners working on &quot;pay Charlie&quot; will
+switch to mining a successor block to B50. These miners validate
+transactions they place in blocks, so they will notice that the &quot;pay
+Charlie&quot; coin was spent in B50, and they will ignore the &quot;pay Charlie&quot;
+transaction. Thus, in this scenario, double-spend won&#x27;t work.
+
+There&#x27;s a small chance that two miners find blocks at the same time,
+perhaps B50&#x27; containing &quot;pay Bob&quot; and B50&#x27;&#x27; containing &quot;pay Charlie&quot;.
+At this point there&#x27;s a fork in the block chain. These two blocks will
+be flooded to all the nodes. Each node will start mining a successor
+to one of them (the first it hears). Again the most likely outcome is
+that a single miner will finish significantly before any other miner,
+and flood the successor, and most peers will switch to that winning
+fork. The chance of repeatedly having two miners simultaneously find
+blocks gets very small as the forks get longer. So eventually all the
+peers will switch to the same fork, and in that fork there will be
+only one spend of the coin.
+
+The possibility of accidentally having a short-lived fork is the
+reason that careful clients wait until there are a few successor
+blocks before believing a transaction.
+
+Q: It takes an average of 10 minutes for a Bitcoin block to be
+validated. Does this mean that the parties involved aren&#x27;t sure if the
+transaction really happened until 10 minutes later?
+
+A: Yes. The 10 minutes is awkward. But it&#x27;s not always a problem. For
+example, suppose you buy a toaster oven with Bitcoin from a web site.
+The web site can check that the transaction is known by a few servers,
+though not yet in a block, and show you a &quot;purchase completed&quot; page.
+Before shipping it to you, they should check that the transaction is
+in a block. For low-value in-person transactions, such as buying a cup
+of coffee, it&#x27;s probably enough for the seller to ask a few peers to
+check that the bitcoins haven&#x27;t already been spent (i.e. it&#x27;s
+reasonably safe to not bother waiting for the transaction to appear in
+the blockchain at all). For a large in-person purchase (e.g., a car),
+it is important to wait for sufficiently long to be assured that the
+block will stay in the block chain before handing over the goods.
+
+Q: What can be done to speed up transactions on the blockchain?
+
+A: I think the constraint here is that 10 minutes needs to be much
+larger (i.e. &gt;= 10x) than the time to broadcast a newly found block to
+all peers. The point of that is to minimize the chances of two peers
+finding new blocks at about the same time, before hearing about the
+other peer&#x27;s block. Two new blocks at the same time is a fork; forks
+are bad since they cause disagreement about which transactions are
+real, and they waste miners&#x27; time. Since blocks can be pretty big (up
+to a megabyte), and peers could have slow Internet links, and the
+diameter of the peer network might be large, it could easily take a
+minute to flood a new block. If one could reduce the flooding time,
+then the 10 minutes could also be reduced.
+
+Q: Bitcoin is limited to processing no more than a few transactions
+per second, due to the 10 minutes and the limit of one megabyte per
+block. Why the one megabyte limit?
+
+A: I think the worry was that huge blocks would take a long time to
+flood to peers with low-speed links. Here&#x27;s a discussion:
+https://en.wikipedia.org/wiki/Bitcoin_scalability_problem
+
+When Bitcoin was originally designed, the intent was that lots of
+ordinary people do the mining on ordinary computers, connected with
+relatively slow home Internet links. Such a system could not have
+supported a huge transaction rate, and would have taken a long time to
+flood new blocks. The original design has proved difficult to modify,
+since there&#x27;s no central authority that can change things.
+
+Q: The entire blockchain needs to be downloaded before a node can
+participate in the network. Won&#x27;t that take an impractically long time
+as the blockchain grows?
+
+A: It&#x27;s true that it takes a while for a new node to get all the
+transactions. But once a given server has done this work, it can save
+the block chain, and doesn&#x27;t need to fetch it again. It only needs to
+know about new blocks, which is not a huge burden. On the other hand
+most ordinary users of Bitcoin don&#x27;t run full Bitcoin nodes; instead
+they trust a few full nodes to answer questions about whether coins
+have already been spent.
+
+Q: Is it feasible for an attacker to gain a majority of the computing
+power among peers? What are the implications for bitcoin if this happens?
+
+A: It may be feasible; some people think that big cooperative groups
+of miners have been close to a majority at times:
+http://www.coindesk.com/51-attacks-real-threat-bitcoin/
+
+If &gt;50% of compute power is controlled by a single entity, they can
+double-spend bitcoins: transfer a coin to one payee, and then generate
+a new fork from before that transaction in which the transaction
+doesn&#x27;t exist. Bitcoin&#x27;s security would be broken if this happened.
+
+Q: From some news stories, I have heard that a large number of bitcoin
+miners are controlled by a small number of companies.
+
+A: True. See here: https://blockchain.info/pools. It looks like two or
+three mining pools together hold about half of the compute power
+today.
+
+Q: Are there any ways for Bitcoin mining to do useful work, beyond simply
+brute-force calculating SHA-256 hashes?
+
+A: Maybe -- here are two attempts to do what you suggest:
+https://www.cs.umd.edu/~elaine/docs/permacoin.pdf
+http://primecoin.io/
+
+Q: There is hardware specifically designed to mine Bitcoin. How does
+this type of hardware differ from the type of hardware in a laptop?
+
+A: Mining hardware has a lot of transistors dedicated to computing
+SHA256 quickly, but is not particularly fast for other operations.
+Ordinary server and laptop CPUs can do many things (e.g. floating
+point division) reasonably quickly, but don&#x27;t have so much hardware
+dedicated to SHA256 specifically. Some Intel CPUs do have instructions
+specifically for SHA256; however, they aren&#x27;t competitive with
+specialized Bitcoin hardware that massively parallelizes the hashing
+using lots of dedicated transistors.
+
+Q: The paper estimates that the disk space required to store the block
+chain will grow by 4.2 megabytes per year. That seems very low!
+
+A: The 4.2 MB/year is for just the block headers, and is still the
+actual rate of growth. The current 730+ GB is for full blocks.
+
+Q: Would the advent of quantum computing break the bitcoin system?
+
+A: Here&#x27;s a plausible-looking article:
+http://www.bitcoinnotbombs.com/bitcoin-vs-the-nsas-quantum-computer/
+Quantum computers might be able to forge bitcoin&#x27;s digital signatures
+(ECDSA).
+
+Q: Bitcoin uses the hash of the transaction record to identify the
+transaction, so it can be named in future transactions. Is this
+guaranteed to lead to unique IDs?
+
+A: The hashes are technically not guaranteed to be unique. But in
+practice the hash function (SHA-256) is believed to produce different
+outputs for different inputs with fantastically high probability.
+
+Q: It sounds like anyone can create new Bitcoins. Why is that OK?
+Won&#x27;t it lead to forgery or inflation?
+
+A: Only the person who first computes a proper nonce for the current
+last block in the chain gets the 3.125-bitcoin reward for &quot;mining&quot; it. It
+takes a huge amount of computation to do this. If you buy a computer
+and have it spend all its time attempting to mine bitcoin blocks, you
+will not make enough bitcoins to pay for the computer.
+
+Q: The paper mentions that some amount of fraud is admissible; where
+does this fraud come from?
+
+A: This part of the paper is about problems with the current way of
+paying for things, e.g. credit cards. Fraud occurs when you buy
+something on the Internet, but the seller keeps the money and doesn&#x27;t
+send you the item. Or if a merchant remembers your credit card number,
+and buys things with it without your permission. Or if someone buys
+something with a credit card, but never pays the credit card bill. Or
+if someone buys something with a stolen credit card.
+
+Q: Has there been fraudulent use of Bitcoin?
+
+A: Yes. I think most of the problems have been at web sites that act
+as wallets to store peoples&#x27; bitcoin private keys. Such web sites,
+since they have access to the private keys, can transfer their
+customers&#x27; money to anyone. So someone who works at (or breaks into)
+such a web site can steal the customers&#x27; Bitcoins.
+
+If people used Bitcoin to buy things, we&#x27;d probably see fraud in the
+form of sellers accepting payment but not delivering the goods.
+
+Q: Satoshi&#x27;s paper mentions that each transaction has a transaction
+fee that is given to whoever mined the block. Why would a miner not
+simply try to mine blocks with transactions with the highest
+transaction fees?
+
+A: Miners do favor transactions offering higher fees. You can read about
+typical approaches here:
+https://en.bitcoin.it/wiki/Transaction_fees
+And here&#x27;s a graph (the red line) of how long your transaction waits
+as a function of how high a fee you offer:
+https://bitcoinfees.github.io/misc/profile/
+
+Q: Why would a miner bother including transactions that yield no fee?
+
+A: I think many don&#x27;t mine no-fee transactions any more.
+
+Q: How are transaction fees determined/advertised?
+
+A: Have a look here:
+https://en.bitcoin.it/wiki/Transaction_fees
+Different miners use different strategies to decide
+which transactions to include in blocks.
+It sounds like (by default) wallets look in the block chain at the
+recent correlation between fee and time until a transaction is
+included in a mined block, and choose a fee that correlates with
+relatively quick inclusion.
+Fees are typically around a dollar or two per transaction.
+
+Q: What are some techniques for storing my personal bitcoins, in
+particular the private keys needed to spend my bitcoins? I&#x27;ve heard of
+people printing out the keys, replicating them on USB, etc. Does a
+secure online repository exist?
+
+A: Any scheme that keeps the private keys on a computer attached to
+the Internet is a tempting target for thieves. On the other hand, it&#x27;s
+a pain to use your bitcoins if the private keys are on a sheet of
+paper. So my guess is that careful people store the private keys for
+small amounts on their computer, but for large balances they store the
+keys offline.
+
+Q: What other kinds of virtual currency were there before and after
+Bitcoin (I know the paper mentioned hashcash)? What was different
+about Bitcoin that led it to have more success than its predecessors?
+
+A: There were many previous proposals for digital cash systems, none
+with any noticeable success. It&#x27;s tempting to think that Bitcoin has
+succeeded because its design is better than others: that it has
+just the right blend of incentives and decentralization and ease of
+use. But there are too many forgotten yet apparently well-designed
+technologies out there for me to believe that.
+
+Q: What happens when more (or fewer) people mine Bitcoin?
+
+A: Bitcoin adjusts the difficulty to match the measured compute power
+devoted to mining. So if more and more computers mine, the mining
+difficulty will get harder, but only hard enough to maintain the average
+inter-block interval at 10 minutes. If lots of people stop mining, the
+difficulty will decrease. This mechanism won&#x27;t prevent new blocks from
+being created, it will just ensure that they are created about every
+10 minutes on average.
+
+Q: Is there any way to make Bitcoin completely anonymous?
+
+A: Have a look here: https://en.wikipedia.org/wiki/Zerocoin
+
+Q: If I lose the private key(s) associated with the bitcoins I own,
+how can I get my money back?
+
+A: You can&#x27;t.
+
+Q: What do people buy and sell with bitcoins?
+
+A: Much of the action in bitcoin is speculation: people buying bitcoin
+in the hope that its price will go up. There seems to be a fair amount
+of illegal activity that exploits Bitcoin&#x27;s relative anonymity (buying
+illegal drugs, demanding ransom). You can buy some ordinary (legal)
+stuff on the Internet with Bitcoin too.
+It&#x27;s a bit of a pain, though, so I don&#x27;t imagine many non-enthusiasts
+would use bitcoin in preference to a credit card.
+
+Q: Why is bitcoin illegal in some countries?
+
+A: Here are some guesses.
+
+Many governments adjust the supply of money in order to achieve
+certain economic goals, such as low inflation, high employment, and
+stable exchange rates. Widespread use of bitcoin may make that harder.
+
+Many governments regulate banks (and things that function as banks) in
+order to prevent problems, e.g. banks going out of business and
+thereby causing their customers to lose deposits. This has happened to
+some bitcoin exchanges. Since bitcoin can&#x27;t easily be regulated, maybe
+the next best thing is to outlaw it.
+
+Bitcoin seems particularly suited to certain illegal transactions
+because it is fairly anonymous. Governments regulate big transfers of
+conventional money (banks must report big transfers) in order to track
+illegal activity; but you can&#x27;t easily do this with bitcoin.
+
+Q: Why do bitcoins have any value at all? Why do people accept it as
+money?
+
+A: Because other people are willing to sell things in return for
+bitcoins, and are willing to exchange bitcoins for ordinary currency
+such as dollars. This is a circular argument, but has worked many
+times in the past; consider why people view baseball trading cards as
+having value, or why they think paper money has value.
+
+Q: How is the price of Bitcoin determined?
+
+A: The price of Bitcoin in other currencies (e.g. euros or dollars) is
+determined by supply and demand. If more people want to buy Bitcoins
+than sell them, the price will go up. If the opposite, then the price
+will go down. There is no single price; instead, there is just recent
+history of what prices people have been willing to buy and sell at on
+public exchanges. The public exchanges bring buyers and sellers
+together, and publish the prices they agree to:
+
+  https://bitcoin.org/en/exchanges
+
+Q: Why is the price of bitcoin so volatile?
+
+A: The price is driven partially by people&#x27;s hopes and fears. When
+they are optimistic about Bitcoin, or see that the price is rising,
+they buy so as not to miss out, and thus bid the price up further.
+When they read negative news stories about Bitcoin or the economy in
+general, they sell out of fear that the price will drop and cause them
+to lose money. This kind of speculation happens with many goods;
+there&#x27;s nothing special about Bitcoin in this respect. For example:
+
+  https://en.wikipedia.org/wiki/Tulip_mania
+
+Q: How should we think about which parts of Bitcoin&#x27;s design solve
+which problems?
+
+A: Here&#x27;s one way to think about problems and solutions.
+
+Because Bitcoin transactions are signed, they can&#x27;t be forged without
+the owner&#x27;s private key, so money can&#x27;t directly be stolen. The
+remaining attacks are theft of private keys, and double-spending by
+causing different parties to see different transactions or by causing
+transactions to disappear.
+
+All Bitcoin peers flood all the blocks they know of to other peers, so
+it&#x27;s likely that all peers will know of all transactions. Thus it&#x27;s
+hard to reveal a transaction to one peer, but conceal it from another.
+
+Each block contains a hash over what the block&#x27;s creator thought was
+the previous block in the chain, and thus implicitly over the whole
+chain back to the origin. This means there&#x27;s a unique and agreed-on
+sequence of blocks (and transactions) leading up to each block, but
+leaves open the possibility that the blocks form a tree with multiple
+forks, rather than a single chain.
+
+One fork could contain a transaction transferring funds to one
+recipient, and another fork could contain a transaction transferring
+the same funds to a different recipient. So it&#x27;s important that the
+peers agree on which is the &quot;real&quot; fork, so that they agree on who
+owns what. It&#x27;s also important that it be hard for someone to cause
+agreement to switch from one fork to another; such a switch would
+allow double-spending.
+
+Part of Bitcoin&#x27;s plan for agreement is that peers always use the fork
+with the longest path from the origin. But what if two leaves are the
+same distance from the origin? Bitcoin&#x27;s proof-of-work mining
+mechanism makes it likely that one peer will mine a new block
+extending one of these leaves significantly before any other peer
+completes mining; and will flood that block to all peers; and then
+most peers will agree that the newly mined block forms the longest
+fork, breaking the tie. The winning miner is effectively randomly
+selected, making it likely that it is honest and will follow the rules
+and actually flood the block.
+
+An attacker could try to double-spend by transferring funds one way,
+and then causing an alternate fork with a different spend to grow
+longer than the original fork; the longest-fork rule would then cause
+everyone to switch forks. Bitcoin&#x27;s proof-of-work mining makes it hard
+to force a switch from the longest fork to an initially shorter fork,
+since more peers will be working to extend the longest fork than to
+extend the fraudulent fork. Because a switch from one fork to another
+is not impossible if the longest fork is only one or two blocks
+longer, careful recipients only believe in a transaction if it&#x27;s still
+in the longest fork after a few more blocks have been mined.</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0019-sundr.html"><span>← 上一讲</span><strong>分叉一致性与 SUNDR</strong></a><a href="0021-bft-pbft.html"><span>下一讲 →</span><strong>拜占庭容错与 PBFT</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>20 / 21</strong><p>先读中文精读，画出消息、状态与失败边界；再展开资料附录逐条核对官方讲义和论文。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.5840</strong><p>Distributed Systems Engineering · Spring 2026</p></div><a href="../index.html">FIELD NOTES / COURSE MAP →</a></footer></body></html>

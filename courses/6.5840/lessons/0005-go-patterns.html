@@ -1,27 +1,1322 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Go 的并发能力来自小而清晰的组合件：goroutine、channel、context 和接口；真正的工程质量取决于生命周期与所有权是否清楚。"><title>Go 并发模式 — MIT 6.5840 Field Notes</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../field-notes.css?v=20260816b">
+<script defer src="../field-notes.js?v=20260816b"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>5840<br><small>FIELD NOTES</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#labs">实验</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://pdos.csail.mit.edu/6.824/notes/Go-MIT6824-2026.pdf" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 05 · 2026-02-19 · 基础</p><h1>Go 并发模式</h1><p class="lesson-title-en">Go Patterns</p><p class="hero-lede">Go 的并发能力来自小而清晰的组合件：goroutine、channel、context 和接口；真正的工程质量取决于生命周期与所有权是否清楚。</p><div class="lesson-meta"><span>48 MIN</span><span>进阶</span><span>02 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#section-1"><span>01</span>并发不是并行的同义词</a><a href="#section-2"><span>02</span>pipeline 与 fan-out/fan-in</a><a href="#section-3"><span>03</span>context 与结构化生命周期</a><a href="#section-4"><span>04</span>接口、错误与测试</a><a href="#check"><span>05</span>纠错与检查</a><a href="#source-vault"><span>06</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><ol><li>解释并发不是并行的同义词的核心问题</li><li>按协议顺序推演pipeline 与 fan-out/fan-in</li><li>评估工程取舍：轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</li></ol><div class="source-ribbon"><a href="https://pdos.csail.mit.edu/6.824/notes/Go-MIT6824-2026.pdf" target="_blank" rel="noreferrer"><span>PDF 文本转录</span><strong>notes/Go-MIT6824-2026.pdf</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/papers/go-faq.txt" target="_blank" rel="noreferrer"><span>论文 FAQ</span><strong>papers/go-faq.txt</strong><b>↗</b></a></div></section><section class="reading-section" id="section-1"><div class="section-label">01 / DEEP READING</div><h2>并发不是并行的同义词</h2><p>goroutine 是独立执行的函数，运行时把大量 goroutine 多路复用到线程。并发用于组织多个可能交错的活动，并行才是同一时刻在多个核心执行。设计时先明确工作单元、阻塞点和取消路径，再决定开多少 goroutine；无限制地为每个输入创建 goroutine 会把负载峰值变成内存峰值。</p></section><section class="reading-section" id="section-2"><div class="section-label">02 / DEEP READING</div><h2>pipeline 与 fan-out/fan-in</h2><p>pipeline 把每个阶段表示成接收 channel、处理、再发送的 goroutine。fan-out 让多个 worker 消费同一队列，fan-in 合并结果。每个发送者都必须知道下游是否还在读取，否则泄漏在阻塞发送上；通常由创建 channel 的一方负责关闭，并用 WaitGroup 保证所有发送者退出后再 close。</p><aside class="field-callout"><span>FIELD TRACE</span><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。”在每一步如何体现。</p></aside></section><section class="reading-section" id="section-3"><div class="section-label">03 / DEEP READING</div><h2>context 与结构化生命周期</h2><p>context 传递截止时间、取消信号和请求范围值。父请求结束后，所有派生 goroutine 应能沿 Done 通道退出；不要把 context 存进长期结构或用它承载可选业务参数。取消是协作式的，所以循环、RPC 和 channel 等待都要显式 select 取消分支。</p></section><section class="reading-section" id="section-4"><div class="section-label">04 / DEEP READING</div><h2>接口、错误与测试</h2><p>小接口让调用者定义所需能力，便于替换网络、时钟和存储实现。错误要保留语义链，调用者用 errors.Is/As 分类处理。并发测试除了功能结果，还应运行 race detector、使用可控时钟或注入阻塞点，验证退出、取消和慢消费者路径。</p></section>
+<section class="reading-section" id="check"><div class="section-label">05 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>关闭 channel 是接收者用来通知发送者停止的通用办法。</h3><p>通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</p></article><article><span>误区</span><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m5-q1"><p><strong>谁通常应该关闭一个传递结果的 channel？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>知道不会再发送值的发送方</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>任意一个接收方</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>垃圾回收器</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m5-q2"><p><strong>下列哪项最准确概括本讲的主要工程取舍？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>增加节点总能同时降低延迟并消除故障</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只要使用 RPC 就不再需要一致性协议</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m5-q3"><p><strong>为什么“关闭 channel 是接收者用来通知发送者停止的通用办法。”是错误的？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>因为所有网络都保证严格同步</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>因为客户端从不会重试</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div></section>
+<section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节、例子、问答与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="notes/go-mit6824-2026.pdf"><summary><span><b>PDF 文本转录</b>notes/Go-MIT6824-2026.pdf</span><small>1,166 行 · 5,541 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/Go-MIT6824-2026.pdf" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">Patterns and Hints
+for Concurrency in Go
+Russ Cox
+MIT 6.5840 / “Spring” 2026
 
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Go 并发模式 — MIT 6.5840</title>
-<link href="../../../assets/course/base.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
-<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
-<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
-<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
-<script defer="" src="../../../assets/vendor/katex.min.js"></script>
-<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
-<script defer="" src="../../../assets/course/math-render.js"></script>
-</head>
-<body>
-<div class="page"><p class="eyebrow">MIT 6.5840 · 第 5 讲</p><h1>Go 并发模式</h1><p class="lede">Go 的并发能力来自小而清晰的组合件：goroutine、channel、context 和接口；真正的工程质量取决于生命周期与所有权是否清楚。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释并发不是并行的同义词的核心问题</li><li>按协议顺序推演pipeline 与 fan-out/fan-in</li><li>评估工程取舍：轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">并发不是并行的同义词</h2><p>goroutine 是独立执行的函数，运行时把大量 goroutine 多路复用到线程。并发用于组织多个可能交错的活动，并行才是同一时刻在多个核心执行。设计时先明确工作单元、阻塞点和取消路径，再决定开多少 goroutine；无限制地为每个输入创建 goroutine 会把负载峰值变成内存峰值。</p><h2 id="section-2">pipeline 与 fan-out/fan-in</h2><p>pipeline 把每个阶段表示成接收 channel、处理、再发送的 goroutine。fan-out 让多个 worker 消费同一队列，fan-in 合并结果。每个发送者都必须知道下游是否还在读取，否则泄漏在阻塞发送上；通常由创建 channel 的一方负责关闭，并用 WaitGroup 保证所有发送者退出后再 close。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。”在每一步如何体现。</p></div></div><h2 id="section-3">context 与结构化生命周期</h2><p>context 传递截止时间、取消信号和请求范围值。父请求结束后，所有派生 goroutine 应能沿 Done 通道退出；不要把 context 存进长期结构或用它承载可选业务参数。取消是协作式的，所以循环、RPC 和 channel 等待都要显式 select 取消分支。</p><h2 id="section-4">接口、错误与测试</h2><p>小接口让调用者定义所需能力，便于替换网络、时钟和存储实现。错误要保留语义链，调用者用 errors.Is/As 分类处理。并发测试除了功能结果，还应运行 race detector、使用可控时钟或注入阻塞点，验证退出、取消和慢消费者路径。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>关闭 channel 是接收者用来通知发送者停止的通用办法。</h3><p>通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m5-q1"><p><strong>问题：</strong>谁通常应该关闭一个传递结果的 channel？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">知道不会再发送值的发送方</button><button aria-pressed="false" data-choice="b">任意一个接收方</button><button aria-pressed="false" data-choice="c">垃圾回收器</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m5-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m5-q3"><p><strong>问题：</strong>为什么“关闭 channel 是接收者用来通知发送者停止的通用办法。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>goroutine 是独立执行的函数，运行时把大量 goroutine 多路复用到线程。</li><li>轻量 goroutine 让并发表达简单，但若没有背压和取消，简单启动会演变成泄漏与资源失控。</li><li>通常应由发送方关闭；停止信号应使用独立 done/context，避免 send-on-closed-channel。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/Go-MIT6824-2026.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/go-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
-<script src="../../../assets/vendor/prism.js"></script>
-<script src="../../../assets/vendor/prism-python.js"></script>
-<script src="../../../assets/vendor/prism-bash.js"></script>
-<script src="../../../assets/course/quiz.js"></script>
-<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
-<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
-</body>
-</html>
+Concurrency is not Parallelism
+Concurrency: composition of independently executing processes.
+Parallelism: simultaneous execution of (possibly related)
+computations.
+Concurrency is about dealing with lots of things at once.
+Parallelism is about doing lots of things at once.
+
+Prologue:
+Goroutines for State
+
+/&quot;([^&quot;\\]|\\.)*&quot;/
+
+state := 0
+for {
+    c := read()
+    switch state {
+    case 0:
+        if c != &#x27;&quot;&#x27; {
+            return false
+        }
+        state = 1
+    case 1:
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            state = 2
+        } else {
+            state = 1
+        }
+    case 2:
+        state = 1
+    }
+}
+
+state := 0
+for {
+    c := read()
+    switch state {
+    case 0:
+
+        if c != &#x27;&quot;&#x27; {
+            return false
+        }
+        state = 1
+    case 1:
+
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            state = 2
+        } else {
+            state = 1
+        }
+    case 2:
+
+        state = 1
+    }
+}
+state := 0
+for {
+
+    switch state {
+    case 0:
+        c := read()
+        if c != &#x27;&quot;&#x27; {
+            return false
+        }
+        state = 1
+    case 1:
+        c := read()
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            state = 2
+        } else {
+            state = 1
+        }
+    case 2:
+        read()
+        state = 1
+    }
+}
+
+state := 0
+for {
+
+    switch state {
+    case 0:
+        c := read()
+        if c != &#x27;&quot;&#x27; {
+            return false
+        }
+        state = 1
+    case 1:
+        c := read()
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            state = 2
+        } else {
+            state = 1
+        }
+    case 2:
+        read()
+        state = 1
+    }
+}
+
+
+
+
+    state0:
+        c := read()
+        if c != &#x27;&quot;&#x27; {
+            return false
+        }
+        goto state1
+    state1:
+        c := read()
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            goto state2
+        } else {
+            goto state1
+        }
+    state2:
+        read()
+        goto state1
+
+
+
+
+
+
+    state0:
+        c := read()
+        if c != &#x27;&quot;&#x27; {
+            return false
+        }
+        goto state1
+    state1:
+        c := read()
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            goto state2
+        } else {
+            goto state1
+        }
+    state2:
+        read()
+        goto state1
+
+
+
+
+
+    state0:
+        c := read()
+        if c != &#x27;&quot;&#x27; {
+            return false
+        }
+
+    state1:
+        c := read()
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            goto state2
+        } else {
+            goto state1
+        }
+    state2:
+        read()
+        goto state1
+
+
+       state0:         c := read()         if c != &#x27;&quot;&#x27; {             return false         }             state1:         c := read()         if c == &#x27;&quot;&#x27; {             return true         }         if c == &#x27;\\&#x27; {             goto state2         } else {             goto state1         }     state2:         read()         goto state1
+       state0:         c := read()         if c != &#x27;&quot;&#x27; {             return false         }              state1:         c := read()         if c == &#x27;&quot;&#x27; {             return true         }         if c == &#x27;\\&#x27; {             read()             goto state1         } else {             goto state1         }
+
+       state0:         c := read()         if c != &#x27;&quot;&#x27; {             return false         }              state1:         c := read()         if c == &#x27;&quot;&#x27; {             return true         }         if c == &#x27;\\&#x27; {             read()         }         goto state1
+       state0:         c := read()         if c != &#x27;&quot;&#x27; {             return false         }              state1:         c := read()         if c == &#x27;&quot;&#x27; {             return true         }         if c == &#x27;\\&#x27; {             read()             goto state1         } else {             goto state1         }
+
+       state0:         c := read()         if c != &#x27;&quot;&#x27; {             return false         }              state1:         c := read()         if c == &#x27;&quot;&#x27; {             return true         }         if c == &#x27;\\&#x27; {             read()         }         goto state1
+         c := read()     if c != &#x27;&quot;&#x27; {         return false     }              for {         c := read()         if c == &#x27;&quot;&#x27; {             return true         }         if c == &#x27;\\&#x27; {             read()         }     }
+
+         c := read()     if c != &#x27;&quot;&#x27; {         return false     }              for {         c := read()         if c == &#x27;&quot;&#x27; {             return true         }         if c == &#x27;\\&#x27; {             read()         }     }
+              if read() != &#x27;&quot;&#x27; {         return false     }              var c rune     for c != &#x27;&quot;&#x27; {         c = read()         if c == &#x27;\\&#x27; {             read()         }     }     return true
+
+
+
+
+
+
+    if read() != &#x27;&quot;&#x27; {
+        return false
+    }
+    inEscape := false
+    for {
+        c := read()
+        if inEscape {
+            inEscape = false
+            continue
+        }
+        if c == &#x27;&quot;&#x27; {
+            return true
+        }
+        if c == &#x27;\\&#x27; {
+            inEscape = true
+        }
+    }
+
+
+
+
+
+
+
+
+    if read() != &#x27;&quot;&#x27; {
+        return false
+    }
+
+    var c rune
+    for c != &#x27;&quot;&#x27; {
+        c = read()
+        if c == &#x27;\\&#x27; {
+            read()
+        }
+    }
+    return true
+
+
+
+
+
+
+
+     func parse(read func() rune) bool {         if read() != &#x27;&quot;&#x27; {         return false     }              var c rune     for c != &#x27;&quot;&#x27; {         c = read()         if c == &#x27;\\&#x27; {             read()         }     }     return true }
+state==0 →
+state==1 →
+state==2 →
+Hint: Convert data state into code state
+when it makes programs clearer.
+← inEscape==false
+← inEscape==true
+
+type quoter struct {     state int }  func (q *quoter) Init() {     r.state = 0 }  func (q *quoter) Write(c rune) Status {     switch q.state {     case 0:         if c != &#x27;&quot;&#x27; {             return BadInput         }         q.state = 1     case 1:         if c == &#x27;&quot;&#x27; {             return Success         }         if c == &#x27;\\&#x27; {             q.state = 2         } else {             q.state = 1         }     case 2:         q.state = 1     }     return NeedMoreInput }
+
+type quoter struct {     char   chan rune     status chan Status }  func (q *quoter) Init() {     q.char = make(chan rune)     q.status = make(chan Status)     go q.parse()     &lt;-q.status // always NeedMoreInput }  func (q *quoter) Write(c rune) Status {     q.char &lt;- c     return &lt;-q.status }            Hint: Use additional goroutines
+to hold additional code state.
+func (q *quoteReader) parse() {     if q.read() != &#x27;&quot;&#x27; {         q.status &lt;- SyntaxError         return     }              var c rune     for c != &#x27;&quot;&#x27; {         c = q.read()         if c == &#x27;\\&#x27; {             q.read()         }     }     q.status &lt;- Done }  func (q *quoter) read() int {     q.status &lt;- NeedMoreInput     return &lt;-q.char }
+
+package main  import (     &quot;net/http&quot;     _ &quot;net/http/pprof&quot; )  var c = make(chan int)  func main() {     for i := range 100 {         go f(0x10*i)     }     http.ListenAndServe(&quot;localhost:8080&quot;, nil) }  func f(x int) {     g(x+1) }  func g(x int) {     h(x+1) }  func h(x int) {     c &lt;- 1     f(x+1) }
+Hint: Know why and when
+each goroutine will exit.
+
+$ go run x.go
+^\
+
+SIGQUIT: quit
+PC=0x105a17b m=0 sigcode=0
+
+...
+
+goroutine 18 [chan send]:
+main.h(0x12)
+    /tmp/x.go:26 +0x45
+main.g(0x11)
+    /tmp/x.go:22 +0x20
+main.f(0x10)
+    /tmp/x.go:18 +0x20
+created by main.main
+    /tmp/x.go:12 +0x42
+
+goroutine 19 [chan send]:
+main.h(0x22)
+    /tmp/x.go:26 +0x45
+main.g(0x21)
+    /tmp/x.go:22 +0x20
+main.f(0x20)
+    /tmp/x.go:18 +0x20
+created by main.main
+    /tmp/x.go:12 +0x42
+
+...
+
+Hint: Type Ctrl-\ to kill a program and
+dump all its goroutine stacks.
+
+goroutine profile: total 106
+100 @ 0x12d8715 0x12d86c0 0x12d8690 0x1058d61
+#   0x12d8714   main.h+0x44 /tmp/x.go:26
+#   0x12d86bf   main.g+0x1f /tmp/x.go:22
+#   0x12d868f   main.f+0x1f /tmp/x.go:18
+
+2 @ 0x11ddfcf 0x11dddcf 0x1248265 0x124f513 0x1253636 0x1058d61
+#   0x11ddfce   net/textproto.(*Reader).readLineSlice+0x5e  go/src/net/textproto/reader.go:55
+#   0x11dddce   net/textproto.(*Reader).ReadLine+0x2e       go/src/net/textproto/reader.go:36
+#   0x1248264   net/http.readRequest+0xa4                   go/src/net/http/request.go:926
+#   0x124f512   net/http.(*conn).readRequest+0x1b2          go/src/net/http/server.go:934
+#   0x1253635   net/http.(*conn).serve+0x495                go/src/net/http/server.go:1763
+
+1 @ 0x115a102 0x116b1cd 0x124dc92 0x1058d61
+#   0x115a101   net.(*netFD).Read+0x51                      go/src/net/fd_unix.go:207
+#   0x116b1cc   net.(*conn).Read+0x6c                       go/src/net/net.go:182
+#   0x124dc91   net/http.(*connReader).backgroundRead+0x61  go/src/net/http/server.go:656
+
+1 @ 0x12cfe22 0x12cfc20 0x12cc6e5 0x12d8051 0x12d8365 0x1254b84 0x1255fa0 0x1257312 0x1253845
+0x1058d61
+#   0x12cfe21   runtime/pprof.writeRuntimeProfile+0xa1      go/src/runtime/pprof/pprof.go:634
+#   0x12cfc1f   runtime/pprof.writeGoroutine+0x9f           go/src/runtime/pprof/pprof.go:596
+#   0x12cc6e4   runtime/pprof.(*Profile).WriteTo+0x3b4      go/src/runtime/pprof/pprof.go:310
+#   0x12d8050   net/http/pprof.handler.ServeHTTP+0x1d0      go/src/net/http/pprof/pprof.go:232
+#   0x12d8364   net/http/pprof.Index+0x1e4                  go/src/net/http/pprof/pprof.go:244
+#   0x1254b83   net/http.HandlerFunc.ServeHTTP+0x43         go/src/net/http/server.go:1942
+#   0x1255f9f   net/http.(*ServeMux).ServeHTTP+0x12f        go/src/net/http/server.go:2242
+#   0x1257311   net/http.serverHandler.ServeHTTP+0x91       go/src/net/http/server.go:2572
+#   0x1253844   net/http.(*conn).serve+0x6a4                go/src/net/http/server.go:1825
+Hint: Use the HTTP server’s
+/debug/pprof/goroutine
+to inspect live goroutine stacks.
+
+Pattern #1
+Publish/subscribe server
+
+type PubSub interface {
+    // Publish publishes the event e to
+    // all current subscriptions.
+    Publish(e Event)
+
+    // Subscribe registers c to receive future events.
+    // All subscribers receive events in the same order,
+    // and that order respects program order:
+    // if Publish(e1) happens before Publish(e2),
+    // subscribers receive e1 before e2.
+    Subscribe(c chan&lt;- Event)
+
+    // Cancel cancels the prior subscription of channel c.
+    // After any pending already-published events
+    // have been sent on c, the server will signal that the
+    // subscription is cancelled by closing c.
+    Cancel(c chan&lt;- Event)
+}
+
+type PubSub interface {
+    // Publish publishes the event e to
+    // all current subscriptions.
+    Publish(e Event)
+
+    // Subscribe registers c to receive future events.
+    // All subscribers receive events in the same order,
+    // and that order respects program order:
+    // if Publish(e1) happens before Publish(e2),
+    // subscribers receive e1 before e2.
+    Subscribe(c chan&lt;- Event)
+
+    // Cancel cancels the prior subscription of channel c.
+    // After any pending already-published events
+    // have been sent on c, the server will signal that the
+    // subscription is cancelled by closing c.
+    Cancel(c chan&lt;- Event)
+}
+Hint: Close a channel to signal
+that no more values will be sent.
+
+type Server struct {     mu sync.Mutex     sub map[chan&lt;- Event]bool }  func (s *Server) Init() {     s.sub = make(map[chan&lt;- Event]bool) }  func (s *Server) Publish(e Event) {     s.mu.Lock()     defer s.mu.Unlock()      for c := range s.sub {         c &lt;- e     } }  func (s *Server) Subscribe(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if s.sub[c] {         panic(&quot;pubsub: already subscribed&quot;)     }     s.sub[c] = true }  func (s *Server) Cancel(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if !s.sub[c] {         panic(&quot;pubsub: not subscribed&quot;)     }     close(c)     delete(s.sub, c) }
+
+type Server struct {     mu sync.Mutex     sub map[chan&lt;- Event]bool }  func (s *Server) Init() {     s.sub = make(map[chan&lt;- Event]bool) }  func (s *Server) Publish(e Event) {     s.mu.Lock()     defer s.mu.Unlock()      for c := range s.sub {         c &lt;- e     } }  func (s *Server) Subscribe(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if s.sub[c] {         panic(&quot;pubsub: already subscribed&quot;)     }     s.sub[c] = true }  func (s *Server) Cancel(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if !s.sub[c] {         panic(&quot;pubsub: not subscribed&quot;)     }     close(c)     delete(s.sub, c) } Hint: Prefer defer for unlocking mutexes.
+
+type Server struct {     mu sync.Mutex     sub map[chan&lt;- Event]bool }  func (s *Server) Init() {     s.sub = make(map[chan&lt;- Event]bool) }  func (s *Server) Publish(e Event) {     s.mu.Lock()     defer s.mu.Unlock()      for c := range s.sub {         c &lt;- e     } }  func (s *Server) Subscribe(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if s.sub[c] {         panic(&quot;pubsub: already subscribed&quot;)     }     s.sub[c] = true }  func (s *Server) Cancel(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if !s.sub[c] {         panic(&quot;pubsub: not subscribed&quot;)     }     close(c)     delete(s.sub, c) }
+Hint: Consider the eﬀect
+of slow goroutines.
+
+Options for slow goroutines
+•Slow down event generation.
+•Drop events.
+Examples: os/signal, runtime/pprof
+•Queue an arbitrary number of events.
+Hint: Think carefully before
+introducing unbounded queuing.
+
+type Server struct {     mu sync.Mutex     sub map[chan&lt;- Event]bool }  func (s *Server) Init() {     s.sub = make(map[chan&lt;- Event]bool) }
+type Server struct {     publish   chan Event     subscribe chan subReq     cancel    chan subReq }  type subReq struct {     c  chan&lt;- Event     ok chan bool }  func (s *Server) Init() {     s.publish = make(chan Event)     s.subscribe = make(chan subReq)     s.cancel = make(chan subReq)     go s.loop() }
+
+func (s *Server) Publish(e Event) {     s.mu.Lock()     defer s.mu.Unlock()      for c := range s.sub {         c &lt;- e     } }  func (s *Server) Subscribe(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if s.sub[c] {         panic(&quot;pubsub: already subscribed&quot;)     }     s.sub[c] = true }  func (s *Server) Cancel(c chan&lt;- Event) {     s.mu.Lock()     defer s.mu.Unlock()      if !s.sub[c] {         panic(&quot;pubsub: not subscribed&quot;)     }     close(c)     delete(s.sub, c) }
+func (s *Server) loop() {
+    sub := make(map[chan&lt;- Event]bool)
+    for {
+        select {
+        case e := &lt;-s.publish:
+            for c := range sub {
+                c &lt;- e
+            }
+
+        case r := &lt;-s.subscribe:
+            if sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            sub[r.c] = true
+            r.ok &lt;- true
+
+        case c := &lt;-s.cancel:
+            if !sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            close(r.c)
+            delete(sub, r.c)
+            r.ok &lt;- true
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+func (s *Server) Publish(e Event) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+
+    for c := range s.sub {
+        c &lt;- e
+    }
+}
+
+func (s *Server) Subscribe(c chan&lt;- Event) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+
+    if s.sub[c] {
+        panic(&quot;pubsub: already subscribed&quot;)
+    }
+    s.sub[c] = true
+}
+
+func (s *Server) Cancel(c chan&lt;- Event) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+
+    if !s.sub[c] {
+        panic(&quot;pubsub: not subscribed&quot;)
+    }
+    close(c)
+    delete(s.sub, c)
+}
+
+
+
+
+func (s *Server) Publish(e Event) {
+    s.publish &lt;- e
+}
+
+
+
+
+
+
+func (s *Server) Subscribe(c chan&lt;- Event) {
+    r := subReq{c: c, ok: make(chan bool)}
+    s.subscribe &lt;- r
+    if !&lt;-r.ok {
+        panic(&quot;pubsub: already subscribed&quot;)
+    }
+}
+
+
+
+func (s *Server) Cancel(c chan&lt;- Event) {
+    r := subReq{c: c, ok: make(chan bool)}
+    s.cancel &lt;- r
+    if !&lt;-r.ok {
+        panic(&quot;pubsub: not subscribed&quot;)
+    }
+}
+
+
+
+
+
+
+
+
+type Server struct {
+    publish chan Event
+    subscribe chan subReq
+    cancel chan subReq
+}
+
+type subReq struct {
+    c chan&lt;- Event
+    ok chan bool
+}
+
+func (s *Server) Init() {
+    s.publish = make(chan Event)
+    s.subscribe = make(chan subReq)
+    s.cancel = make(chan subReq)
+    go s.loop()
+}
+
+func (s *Server) Publish(e Event) {
+    s.publish &lt;- e
+}
+
+func (s *Server) Subscribe(c chan&lt;- Event) {
+    r := subReq{c: c, ok: make(chan bool)}
+    s.subscribe &lt;- r
+    if !&lt;-r.ok {
+        panic(&quot;pubsub: already subscribed&quot;)
+    }
+}
+
+func (s *Server) Cancel(c chan&lt;- Event) {
+    r := subReq{c: c, ok: make(chan bool)}
+    s.cancel &lt;- r
+    if !&lt;-r.ok {
+        panic(&quot;pubsub: not subscribed&quot;)
+    }
+}
+func (s *Server) loop() {
+    sub := make(map[chan&lt;- Event]bool)
+    for {
+        select {
+        case e := &lt;-s.publish:
+            for c := range sub {
+                c &lt;- e
+            }
+
+        case r := &lt;-s.subscribe:
+            if sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            sub[r.c] = true
+            r.ok &lt;- true
+
+        case c := &lt;-s.cancel:
+            if !sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            close(r.c)
+            delete(sub, r.c)
+            r.ok &lt;- true
+        }
+    }
+}
+
+
+
+
+
+
+
+
+Hint: Convert mutexes
+into goroutines
+when it makes programs clearer
+
+func helper(in &lt;-chan Event,
+            out chan&lt;- Event) {
+    var q []Event
+    for {
+        select {
+        case e := &lt;-in:
+            q = append(q, e)
+        case out &lt;- q[0]:
+            q = q[1:]
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func helper(in &lt;-chan Event,
+            out chan&lt;- Event) {
+    var q []Event
+    for {
+        select {
+        case e := &lt;-in:
+            q = append(q, e)
+        case out &lt;- q[0]:
+            q = q[1:]
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+func helper(in &lt;-chan Event,
+            out chan&lt;- Event) {
+    var q []Event
+    for {
+        // Decide whether and what to send.
+        var sendOut chan&lt;- Event
+        var next Event
+        if len(q) &gt; 0 {
+            sendOut = out
+            next = q[0]
+        }
+
+        select {
+        case e := &lt;-in:
+            q = append(q, e)
+        case sendOut &lt;- next:
+            q = q[1:]
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+func helper(in &lt;-chan Event,
+            out chan&lt;- Event) {
+    var q []Event
+    for {
+        // Decide whether and what to send.
+        var sendOut chan&lt;- Event
+        var next Event
+        if len(q) &gt; 0 {
+            sendOut = out
+            next = q[0]
+        }
+
+        select {
+        case e := &lt;-in:
+            q = append(q, e)
+        case sendOut &lt;- next:
+            q = q[1:]
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+func helper(in &lt;-chan Event,
+            out chan&lt;- Event) {
+    var q []Event
+    for in != nil || len(q) &gt; 0 {
+        // Decide whether and what to send.
+        var sendOut chan&lt;- Event
+        var next Event
+        if len(q) &gt; 0 {
+            sendOut = out
+            next = q[0]
+        }
+
+        select {
+        case e, ok := &lt;-in:
+            if !ok {
+                in = nil // stop receiving from in
+                break
+            }
+            q = append(q, e)
+        case sendOut &lt;- next:
+            q = q[1:]
+        }
+    }
+    close(out)
+}
+
+
+
+
+
+
+
+func (s *Server) loop() {
+    sub := make(map[chan&lt;- Event]bool)
+    for {
+        select {
+        case e := &lt;-s.publish:
+            for c := range sub {
+                c &lt;- e
+            }
+
+        case r := &lt;-s.subscribe:
+            if sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            sub[r.c] = true
+            r.ok &lt;- true
+
+        case c := &lt;-s.cancel:
+            if !sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            close(r.c)
+            delete(sub, r.c)
+            r.ok &lt;- true
+        }
+    }
+}
+
+
+
+
+
+
+func (s *Server) loop() {
+    sub := make(map[chan&lt;- Event]bool)
+    for {
+        select {
+        case e := &lt;-s.publish:
+            for c := range sub {
+                c &lt;- e
+            }
+
+        case r := &lt;-s.subscribe:
+            if sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            sub[r.c] = true
+            r.ok &lt;- true
+
+        case c := &lt;-s.cancel:
+            if !sub[r.c] {
+                r.ok &lt;- false
+                break
+            }
+            close(r.c)
+            delete(sub, r.c)
+            r.ok &lt;- true
+        }
+    }
+}
+
+
+
+
+
+func (s *Server) loop() {
+    sub := make(map[chan&lt;- Event]chan&lt;- Event)
+    for {
+        select {
+        case e := &lt;-s.publish:
+            for _, h := range sub {
+                h &lt;- e
+            }
+
+        case r := &lt;-s.subscribe:
+            if sub[r.c] != nil {
+                r.ok &lt;- false
+                break
+            }
+            h = make(chan Event)
+            go helper(h, r.c)
+            sub[r.c] = h
+            r.ok &lt;- true
+
+        case c := &lt;-s.cancel:
+            if sub[r.c] == nil {
+                r.ok &lt;- false
+                break
+            }
+            close(sub[r.c])
+            delete(sub, r.c)
+            r.ok &lt;- true
+        }
+    }
+}
+
+
+
+Hint: Use goroutines
+to let independent concerns
+run independently.
+
+Pattern #2
+Work scheduler
+
+func Schedule(servers []string, numTask int,
+              call func(srv string, task int))
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      idle := make(chan string, len(servers))     for _, srv := range servers {         idle &lt;- srv     } }
+Hint: Use a buﬀered channel
+as a concurrent blocking queue.
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      idle := make(chan string, len(servers))     for _, srv := range servers {         idle &lt;- srv     }      for task := range numTask {         go func() {             srv := &lt;-idle             call(srv, task)             idle &lt;- srv         }()     } }
+Hint: Use goroutines
+to let independent concerns
+run independently.
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      idle := make(chan string, len(servers))     for _, srv := range servers {         idle &lt;- srv     }      for task := range numTask {         go func() {             srv := &lt;-idle             call(srv, task)             idle &lt;- srv         }()     } }
+Hint: Think carefully before
+introducing unbounded queuing.
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      idle := make(chan string, len(servers))     for _, srv := range servers {         idle &lt;- srv     }      for task := range numTask {        go func() {             srv := &lt;-idle             call(srv, task)             idle &lt;- srv         }()     } }
+                                       for task := range numTask {              srv := &lt;-idle         go func() {             call(srv, task)             idle &lt;- srv         }()     }
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      idle := make(chan string, len(servers))     for _, srv := range servers {         idle &lt;- srv     }      for task := range numTask {         srv := &lt;-idle         go func() {             call(srv, task)             idle &lt;- srv         }()     }      for range servers {         &lt;-idle     } }
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      idle := make(chan string, len(servers))     for _, srv := range servers {         idle &lt;- srv     }      for task := range numTask {         srv := &lt;-idle         go func() {             call(srv, task)             idle &lt;- srv         }()     }      for range servers {         &lt;-idle     } }
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := 0      runTasks := func(srv string) {         for task := range work {             call(srv, task)         }         done++     }      for _, srv := range servers {         go runTasks(srv)     }      for task := range numTask {         work &lt;- task     }     close(work)      for done &lt; len(servers) {         runtime.Gosched()     } }
+Hint: Think carefully before
+introducing unbounded queuing.
+Hint: Close a channel to signal
+that no more values will be sent.
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := 0      runTasks := func(srv string) {         for task := range work {             call(srv, task)         }         done++     }      for _, srv := range servers {         go runTasks(srv)     }      for task := range numTask {         work &lt;- task     }     close(work)      for done &lt; len(servers) {         runtime.Gosched()     } }
+$ go run -race /tmp/x.go
+==================
+WARNING: DATA RACE
+Write at 0x00c0000121d8 by goroutine 6:
+  main.Schedule.func1()
+      /tmp/x.go:19 +0x80
+  main.Schedule.gowrap1()
+      /tmp/x.go:23 +0x48
+
+Previous read at 0x00c0000121d8 by main goroutine:
+  main.Schedule()
+      /tmp/x.go:31 +0x27c
+  main.main()
+      /tmp/x.go:6 +0x90
+
+Goroutine 6 (running) created at:
+  main.Schedule()
+      /tmp/x.go:23 +0x13c
+  main.main()
+      /tmp/x.go:6 +0x90
+==================
+
+
+
+Hint: Use the race detector,
+for development and even production.
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := 0      runTasks := func(srv string) {         for task := range work {             call(srv, task)         }         done++     }      for _, srv := range servers {         go runTasks(srv)     }      for task := range numTask {         work &lt;- task     }     close(work)      for done &lt; len(servers) {         runtime.Gosched()     } }
+$ go run -race /tmp/x.go ================== WARNING: DATA RACE Write at 0x00c00019c008 by goroutine 7:   main.Schedule.func1()       /tmp/x.go:19 +0x80   main.Schedule.gowrap1()       /tmp/x.go:23 +0x48  Previous write at 0x00c00019c008 by goroutine 6:   main.Schedule.func1()       /tmp/x.go:19 +0x80   main.Schedule.gowrap1()       /tmp/x.go:23 +0x48|  Goroutine 7 (running) created at:   main.Schedule()       /tmp/x.go:23 +0x13c   main.main()       /tmp/x.go:6 +0x90  Goroutine 6 (finished) created at:   main.Schedule()       /tmp/x.go:23 +0x13c   main.main()       /tmp/x.go:6 +0x90 ==================
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := 0      runTasks := func(srv string) {         for task := range work {             call(srv, task)         }         done++     }      for _, srv := range servers {         go runTasks(srv)     }      for task := range numTask {         work &lt;- task     }     close(work)      for done &lt; len(servers) {         runtime.Gosched()     } }
+Hint:
+Don’t communicate by sharing memory.
+Share memory by communicating.
+       work := make(chan int)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)         }         done &lt;- true     }      ...            for range servers {         &lt;-done     }
+
+func Schedule(servers []string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)         }         done &lt;- true     }      for _, srv := range servers {         go runTasks(srv)     }      for task := range numTask {         work &lt;- task     }     close(work)      for range servers {         &lt;-done     } }
+                    func Schedule(servers chan string, numTask int,               call func(srv string, task int)) {                                                                go func() {             for srv := range servers {                 go runTasks(srv)             }         }()
+Hint: Use goroutines
+to let independent concerns
+run independently.
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)         }         done &lt;- true     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for range numTask {         work &lt;- task     }     close(work)      for range servers {         &lt;-done     } }
+                                       runTasks := func(srv string) {    for task := range work {         call(srv, task)         done &lt;- true     } }                                                                                                                 for range numTask {     &lt;-done }
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)             done &lt;- true         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for range numTask {         work &lt;- task     }     close(work)      for range numTask {         &lt;-done     } }
+Hint: Know why and when
+each communication will proceed.
+$ go run /tmp/x.go
+fatal error: all goroutines are asleep - deadlock!
+
+goroutine 1 [chan send]:
+main.Schedule(0xc4200120c0, 0x3, 0x3, 0x14, 0x106acc8)
+ /tmp/x.go:26 +0x150
+main.main()
+ /tmp/x.go:4 +0x96
+
+goroutine 5 [chan send]:
+main.Schedule.func1(0x1066bc0, 0x1)
+ /tmp/x.go:15 +0xba
+created by main.Schedule.func2
+ /tmp/x.go:21 +0x5f
+
+
+
+
+
+
+
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)             done &lt;- true         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }     close(work)      for i := range numTask {         &lt;-done     } }
+                                                    i := 0 WorkLoop:     for task := range numTask {         for {             select {             case work &lt;- task:                 continue WorkLoop             case &lt;-done:                 i++             }         }     }     close(work)      for ; i &lt; numTask; i++ {         &lt;-done     }
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)             done &lt;- true         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }     close(work)      for range numTask {         &lt;-done     } }
+                                                                                                                                               go func() {     for task := range numTask {         work &lt;- task          }     close(work) }()
+Hint: Use goroutines
+to let independent concerns
+run independently.
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int)) {      work := make(chan int)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)             done &lt;- true         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }     close(work)      for range numTask {         &lt;-done     } }
+                work := make(chan int, numTask)
+Hint: Think carefully before
+introducing unbounded queuing.
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int)) {      work := make(chan int, numTask)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)             done &lt;- true         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }     close(work)      for range numTask {         &lt;-done     } }
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int) bool) {      work := make(chan int, numTask)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)             done &lt;- true         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }     close(work)      for range numTask {         &lt;-done     } }
+                 runTasks := func(srv string) {     for task := range work {          if call(srv, task) {            done &lt;- true                 } else {            work &lt;- task         }       }     }       ...                                           for task := range numTask {      work &lt;- task     }          for range numTask {     &lt;-done } close(work)
+Hint: Know why and when
+each communication will proceed.
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int) bool) {      work := make(chan int, numTask)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             call(srv, task)             done &lt;- true         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }     close(work)      for range numTask {         &lt;-done     } }
+                 runTasks := func(srv string) {     for task := range work {          if call(srv, task) {            done &lt;- true                 } else {            work &lt;- task         }       }     }       ...                                           for task := range numTask {      work &lt;- task     }          for range numTask {     &lt;-done } close(work)          Hint: Close a channel to signal
+that no more values will be sent.
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int) bool) {      work := make(chan int, numTask)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             if call(srv, task) {                 done &lt;- true             } else {                 work &lt;- task             }         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }      for range numTask {         &lt;-done     }     close(work) }
+
+func Schedule(servers chan string, numTask int,               call func(srv string, task int) bool) {      work := make(chan int, numTask)     done := make(chan bool)      runTasks := func(srv string) {         for task := range work {             if call(srv, task) {                 done &lt;- true             } else {                 work &lt;- task             }         }     }      go func() {         for _, srv := range servers {             go runTasks(srv)         }     }()      for task := range numTask {         work &lt;- task     }      for range numTask {         &lt;-done     }     close(work) }
+              work := make(chan int, numTask) done := make(chan bool) exit := make(chan bool)   ...         go func() {     for {                select {           case srv := &lt;-servers:             go runTasks(srv)         case &lt;-exit:             return         }     } }()   ...          for range numTask {     &lt;-done } close(work)      exit &lt;- true
+Hint: Make sure you know
+why and when each goroutine will exit.
+
+Pattern #3
+Replicated service client
+
+type ReplicatedClient interface {
+    // Init initializes the client to use the given servers.
+    // To make a particular request later,
+    // the client can use callOne(srv, args), where srv
+    // is one of the servers from the list.
+    Init(servers []string, callOne func(string, Args) Reply)
+
+    // Call makes a request on any available server.
+    // Multiple goroutines may call Call concurrently.
+    Call(args Args) Reply
+}
+
+
+
+
+type Client struct {       servers []string     callOne func(string, Args) Reply      mu     sync.Mutex      prefer int }   func (c *Client) Init(servers []string, callOne func(string, Args) Reply) {       c.servers = servers     c.callOne = callOne }
+Hint: Use a mutex if that is
+the clearest way to write the code.
+
+type Client struct {
+    servers []string
+    callOne func(string, Args) Reply
+
+    mu     sync.Mutex
+    prefer int
+}
+
+func (c *Client) Init(servers []string, callOne func(string, Args) Reply) {
+    c.servers = servers
+    c.callOne = callOne
+}
+
+func (c *Client) Call(args Args) Reply {
+    type result struct {
+        serverID int
+        reply Reply
+    }
+
+    done := make(chan result, 1)
+    id := ...
+
+    go func() {
+        done &lt;- result{id, c.callOne(c.servers[id], args)}
+    }()
+}
+
+
+
+
+Hint: Use goroutines
+to let independent concerns
+run independently.
+
+func (c *Client) Call(args Args) Reply {          type result struct {         serverID int         reply Reply     }          const timeout = 1 * time.Second     t := time.NewTimer(timeout)     defer t.Stop()      done := make(chan result, 1)        id := ...      go func() {         done &lt;- result{id, c.callOne(c.servers[id], args)}     }()      select {     case r := &lt;-done:         return r.reply     case &lt;-t.C:         // timeout     } }
+Hint: Stop timers you don’t need.
+(fixed in Go 1.23)
+
+Hint: Know why and when
+each goroutine will exit.
+
+Hint: Know why and when
+each communication will proceed.
+
+func (c *Client) Call(args Args) Reply {          type result struct {         serverID int         reply Reply     }          const timeout = 1 * time.Second     t := time.NewTimer(timeout)     defer t.Stop()      done := make(chan result, len(c.servers))        for id := range c.servers {         go func() {             done &lt;- result{id, c.callOne(c.servers[id], args)}         }()          select {         case r := &lt;-done:             return r.reply         case &lt;-t.C:             // timeout             t.Reset(timeout)         }     }      r := &lt;-done     return r.reply }
+
+    c.mu.Lock()     prefer := c.prefer     c.mu.Unlock()      var r result       for off := range c.servers {         id := (prefer + off) % len(c.servers)         go func() {             done &lt;- result{id, c.callOne(c.servers[id], args)}         }()          select {         case r = &lt;-done:             goto Done         case &lt;-t.C:             // timeout             t.Reset(timeout)         }     }      r = &lt;-done Done:     c.mu.Lock()     c.prefer = r.serverID     c.mu.Unlock()     return r.reply
+Hint: Use a goto if that is
+the clearest way to write the code.
+
+Pattern #4
+Protocol multiplexer
+
+type ProtocolMux interface {
+    // Init initializes the mux to manage messages to the given service.
+    Init(Service)
+
+    // Call makes a request with the given message and returns the reply.
+    // Multiple goroutines may call Call concurrently.
+    Call(Msg) Msg
+}
+
+type Service interface {
+    // ReadTag returns the muxing identifier in the request or reply message.
+    // Multiple goroutines may call ReadTag concurrently.
+    ReadTag(Msg) int64
+
+    // Send sends a request message to the remote service.
+    // Send must not be called concurrently with itself.
+    Send(Msg)
+
+    // Recv waits for and returns a reply message from the remote service.
+    // Recv must not be called concurrently with itself.
+    Recv() Msg
+}
+
+
+
+type Mux struct {
+    srv  Service
+    send chan Msg
+
+    mu sync.Mutex
+    pending map[int64]chan&lt;- Msg
+}
+
+func (m *Mux) Init(srv Service) {
+    m.srv = srv
+    m.pending = make(map[int64]chan Msg)
+    go m.sendLoop()
+    go m.recvLoop()
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+type Mux struct {
+    srv  Service
+    send chan Msg
+
+    mu sync.Mutex
+    pending map[int64]chan&lt;- Msg
+}
+
+func (m *Mux) Init(srv Service) {
+    m.srv = srv
+    m.pending = make(map[int64]chan Msg)
+    go m.sendLoop()
+    go m.recvLoop()
+}
+
+func (m *Mux) sendLoop() {
+    for args := range m.send {
+        m.srv.Send(args)
+    }
+}
+
+
+
+
+
+
+
+
+func (m *Mux) sendLoop() {     for args := range m.send {         m.srv.Send(args)     } }  func (m *Mux) recvLoop() {     for {         reply := m.srv.Recv()         tag := m.srv.ReadTag(reply)          m.mu.Lock()         done := m.pending[tag]         delete(m.pending, tag)         m.mu.Unlock()          if done == nil {             panic(&quot;unexpected reply&quot;)         }         done &lt;- reply     } }
+
+func (m *Mux) sendLoop() {     for args := range m.send {         m.srv.Send(args)     } }  func (m *Mux) recvLoop() {     for {         reply := m.srv.Recv()         tag := m.srv.Tag(reply)          m.mu.Lock()         done := m.pending[tag]         delete(m.pending, tag)         m.mu.Unlock()          if done == nil {             panic(&quot;unexpected reply&quot;)         }         done &lt;- reply     } }
+func (m *Mux) Call(args Msg) (reply Msg) {     tag := m.srv.ReadTag(args)     done := make(chan Msg, 1)      m.mu.Lock()     if m.pending[tag] != nil {         m.mu.Unlock()         panic(&quot;mux: duplicate call tag&quot;)     }     m.pending[tag] = done     m.mu.Unlock()      m.send &lt;- args     return &lt;-done }
+Hint: Use goroutines, channels,
+and mutexes together if that is
+the clearest way to write the code.
+
+Hints
+
+Use the race detector, for development and even production.
+Don’t communicate by sharing memory. Share memory by communicating.
+
+Convert data state into code state when it makes programs clearer.
+Convert mutexes into goroutines when it makes programs clearer.
+Use additional goroutines to hold additional code state.
+Use goroutines to let independent concerns run independently.
+
+Consider the eﬀect of slow goroutines.
+Know why and when each communication will proceed.
+Know why and when each goroutine will exit.
+Type Ctrl-\ to kill a program and dump all its goroutine stacks.
+Use the HTTP server’s /debug/pprof/goroutine to inspect live goroutine stacks.
+
+Use a buﬀered channel as a concurrent blocking queue.
+Think carefully before introducing unbounded queuing.
+Close a channel to signal that no more values will be sent.
+
+Use a mutex if that is the clearest way to write the code.
+Prefer defer for unlocking mutexes.
+Use a goto if that is the clearest way to write the code.
+Use goroutines, channels, and mutexes together
+if that is the clearest way to write the code.</code></pre></details><details class="archive" data-source-record data-source="papers/go-faq.txt"><summary><span><b>论文 FAQ</b>papers/go-faq.txt</span><small>144 行 · 908 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/papers/go-faq.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">Q: Can I stop these complaints about my unused variable/import?
+
+A: There&#x27;s a good explanation at https://golang.org/doc/faq#unused_variables_and_imports.
+
+Q: Is the defer keyword in other languages?
+
+A: Defer was new in Go. We originally added it to provide a way to
+recover from panics (see &quot;recover&quot; in the spec), but it turned out
+to be very useful for idioms like &quot;defer mu.Unlock()&quot; as well.
+Later, Swift added a defer statement too. It seems clearly inspired
+by Go but I&#x27;m not sure how close the details are.
+
+Q: Why is the type after the variable declaration, unlike C languages?
+
+A: There&#x27;s a good explanation at https://blog.golang.org/gos-declaration-syntax.
+
+Q: Why not adopt classes and OOP like in C++ and Java?
+
+A: We believe that Go&#x27;s approach to object-oriented programming,
+which is closer to Smalltalk than to Java/C++/Simula, is more
+lightweight and makes it easier to adapt large programs. I talked
+about this at Google I/O in 2010. See
+https://github.com/golang/go/wiki/GoTalks#go-programming for links
+to the video and slides.
+
+Q: Why does struct require a trailing comma on a multiline definition?
+
+A: Originally it didn&#x27;t, but all statements were terminated by
+semicolons. We made semicolons optional shortly after the public
+release of Go. When we did that, we tried to avoid Javascript&#x27;s
+mistake of making the semicolon rules very complex and error-prone.
+Instead we have a simple rule: every line ends in an implicit
+semicolon unless the final token is something that cannot possibly
+end a statement (for example, a plus sign, or a comma). One effect
+of this is that if you don&#x27;t put the trailing comma on the line,
+it gets an implicit semicolon, which doesn&#x27;t parse well. It&#x27;s
+unfortunate, and it wasn&#x27;t that way before the semicolon rules, but
+we&#x27;re so happy about not typing semicolons all the time that we&#x27;ll
+live with it. The original proposal for semicolon insertion is at
+https://groups.google.com/d/msg/golang-nuts/XuMrWI0Q8uk/kXcBb4W3rH8J.
+See the next answer also.
+
+Q: Why are list definitions inconsistent, where some need commas and some do not?
+
+A: The ones that don&#x27;t need commas need semicolons, but those
+semicolons are being inserted automatically (see previous answer).
+The rule is that statements are separated by semicolons and smaller
+pieces of syntax by commas:
+
+    import &quot;x&quot;;
+    import &quot;y&quot;;
+
+    var x = []int{
+        1,
+        2,
+        3,
+    }
+
+When you factor out a group of imports, you still have semicolons:
+
+    import (
+        &quot;x&quot;;
+        &quot;y&quot;;
+    )
+
+    var x = []int{
+        1,
+        2,
+        3,
+    }
+
+But then when we made semicolons optional, the semicolons disappeared
+from the statement blocks leaving the commas behind:
+
+    import (
+        &quot;x&quot;
+        &quot;y&quot;
+    )
+
+    var x = []int{
+        1,
+        2,
+        3,
+    }
+
+Now the distinction is between nothing and something, instead of
+two different characters, and it&#x27;s more pronounced. If we had known
+from the start that semicolons would be optional I think we might
+have used them in more syntactic forms, or maybe made some forms
+accept either commas or semicolons. At this point that seems
+unlikely, though.
+
+Q: Why does Go name its while loops &quot;for&quot;?
+
+A: C has both while(cond) {} and for(;cond;) {}. It didn&#x27;t seem
+like Go needed two keywords for the same thing.
+
+Q: There seem to be a lot of new languages emerging these days,
+including Rust, D, Swift and Nim, among probably others.  Are there
+any lessons you&#x27;ve learned from these other languages and their
+communities that you wish you&#x27;d been able to incorporate into Go?
+
+A: I do watch those languages for developments. I think they&#x27;ve
+learned things from Go and I hope we&#x27;ve also learned things from
+them. Some day I&#x27;d like the Go compiler to do a better job of
+inferring ownership rules, or maybe even having lightweight ownership
+expressions in the type system. Javari, Midori, Pony, and Rust are
+inspirations here. I wrote a bit more about this at
+https://research.swtch.com/go2017.
+
+Q: Why the focus on concurrency and goroutines?
+
+A: We knew from past experience that good concurrency support using
+channels and lightweight processes would make writing the kinds of
+systems we built at Google a lot easier, as I hope the lecture
+showed. There&#x27;s a bit more explanation at https://golang.org/doc/faq#csp,
+and some background about our earlier experiences at
+https://swtch.com/~rsc/thread/.
+
+Q: Does Go pass function arguments by value or by reference?
+
+A: For most types (e.g. numbers, structs) Go passes a copy of the
+value, so that the caller does not see any modifications that the
+callee makes. strings are effectively call-by-value since their
+content cannot be modified.
+
+A few built-in types -- channels, maps, and slices -- are effectively
+call-by-reference in the sense that updates to the data structure are
+seen by both caller and callee.
+
+Calling a method with a pointer receiver passes the object by
+reference (by passing a pointer to it), even though the call lacks any
+&amp; and thus looks like it should be by value.
+
+This non-uniformity can be confusing. For example, if you want to pass
+a sync.WaitGroup to a function, you probably need to pass a pointer to
+it with &amp;wg, whereas you should probably pass a channel without any &amp;.
+
+For a complex type like a map or a slice, there&#x27;s room for
+disagreement about what call-by-value and call-by-reference mean. If
+you have a variable of type map, and you think the map lives inside
+the variable, then Go&#x27;s maps look like call-by-reference. If you think
+the variable contains a pointer to map data in the heap, then Go&#x27;s
+maps look like call-by-value (where the value is the pointer).</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0004-paxos.html"><span>← 上一讲</span><strong>Paxos 共识</strong></a><a href="0006-raft-1.html"><span>下一讲 →</span><strong>容错与 Raft（一）</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>05 / 21</strong><p>先读中文精读，画出消息、状态与失败边界；再展开资料附录逐条核对官方讲义和论文。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.5840</strong><p>Distributed Systems Engineering · Spring 2026</p></div><a href="../index.html">FIELD NOTES / COURSE MAP →</a></footer></body></html>

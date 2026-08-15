@@ -1,27 +1,820 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="从单机并发跨到网络边界：线程帮助一个进程同时等待多个事件，RPC 把消息交换包装成函数调用，但失败语义绝不会因此消失。"><title>RPC、线程与 Go 并发 — MIT 6.5840 Field Notes</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../field-notes.css?v=20260816b">
+<script defer src="../field-notes.js?v=20260816b"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>5840<br><small>FIELD NOTES</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#labs">实验</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://pdos.csail.mit.edu/6.824/notes/l-rpc.txt" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 02 · 2026-02-05 · 基础</p><h1>RPC、线程与 Go 并发</h1><p class="lesson-title-en">RPC and Threads</p><p class="hero-lede">从单机并发跨到网络边界：线程帮助一个进程同时等待多个事件，RPC 把消息交换包装成函数调用，但失败语义绝不会因此消失。</p><div class="lesson-meta"><span>48 MIN</span><span>基础</span><span>04 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#section-1"><span>01</span>线程、共享状态与锁</a><a href="#section-2"><span>02</span>channel 与条件同步</a><a href="#section-3"><span>03</span>RPC 的表面与真实语义</a><a href="#section-4"><span>04</span>爬虫与 KV 示例</a><a href="#check"><span>05</span>纠错与检查</a><a href="#source-vault"><span>06</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><ol><li>解释线程、共享状态与锁的核心问题</li><li>按协议顺序推演channel 与条件同步</li><li>评估工程取舍：并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</li></ol><div class="source-ribbon"><a href="https://pdos.csail.mit.edu/6.824/notes/l-rpc.txt" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>notes/l-rpc.txt</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/notes/crawler.go" target="_blank" rel="noreferrer"><span>Go 源码</span><strong>notes/crawler.go</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/notes/kv.go" target="_blank" rel="noreferrer"><span>Go 源码</span><strong>notes/kv.go</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/papers/tour-faq.txt" target="_blank" rel="noreferrer"><span>论文 FAQ</span><strong>papers/tour-faq.txt</strong><b>↗</b></a></div></section><section class="reading-section" id="section-1"><div class="section-label">01 / DEEP READING</div><h2>线程、共享状态与锁</h2><p>Go 的 goroutine 共享同一地址空间，适合把等待网络、磁盘和计时器的工作重叠起来。共享内存也意味着操作会交错；只要一个不变量跨越多个字段或多条语句，就要用 mutex 让检查与更新成为一个临界区。不要在持锁时做可能长时间阻塞的 RPC，否则一个慢节点会冻结本地并发。</p></section><section class="reading-section" id="section-2"><div class="section-label">02 / DEEP READING</div><h2>channel 与条件同步</h2><p>channel 同时传递数据和同步关系，适合表达所有权转移、工作队列和结果汇聚。条件变量适合“状态受锁保护、条件暂时不成立”的场景：等待者必须在循环中重新检查条件，因为唤醒只表示状态可能改变。关闭 channel 是广播生命周期结束的信号，不等同于发送一个普通零值。</p><aside class="field-callout"><span>FIELD TRACE</span><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。”在每一步如何体现。</p></aside></section><section class="reading-section" id="section-3"><div class="section-label">03 / DEEP READING</div><h2>RPC 的表面与真实语义</h2><p>RPC stub 负责编码参数、发送请求、等待响应并解码结果。调用者看见的像函数，但网络可能丢包、重复、延迟或重排；超时只能证明调用者没及时收到回复，不能证明服务器没有执行。服务端方法要显式设计重试语义，并把 request ID、缓存结果或幂等操作作为协议的一部分。</p></section><section class="reading-section" id="section-4"><div class="section-label">04 / DEEP READING</div><h2>爬虫与 KV 示例</h2><p>并发爬虫需要把“已访问集合”的检查与插入做成原子步骤，否则两个 goroutine 会重复抓取同一 URL。KV 服务则展示更难的问题：客户端在 Put 后丢失回复，重试可能造成重复写。线程正确性与分布式正确性是两层约束：前者保护本地状态，后者处理跨网络的不确定结果。</p></section>
+<section class="reading-section" id="check"><div class="section-label">05 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>RPC 超时意味着服务端没有执行请求。</h3><p>超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</p></article><article><span>误区</span><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m2-q1"><p><strong>为什么 RPC 客户端重试 Put 时通常需要 request ID？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>让服务端识别重复请求并复用原结果</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>让 TCP 自动加密数据</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>让 goroutine 自动释放锁</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m2-q2"><p><strong>下列哪项最准确概括本讲的主要工程取舍？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>增加节点总能同时降低延迟并消除故障</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只要使用 RPC 就不再需要一致性协议</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m2-q3"><p><strong>为什么“RPC 超时意味着服务端没有执行请求。”是错误的？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>因为所有网络都保证严格同步</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>因为客户端从不会重试</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div></section>
+<section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节、例子、问答与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="notes/l-rpc.txt"><summary><span><b>课堂讲义</b>notes/l-rpc.txt</span><small>305 行 · 1,767 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/l-rpc.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.5840 2026 Lecture 2: Threads and RPC
 
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>RPC、线程与 Go 并发 — MIT 6.5840</title>
-<link href="../../../assets/course/base.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
-<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
-<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
-<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
-<script defer="" src="../../../assets/vendor/katex.min.js"></script>
-<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
-<script defer="" src="../../../assets/course/math-render.js"></script>
-</head>
-<body>
-<div class="page"><p class="eyebrow">MIT 6.5840 · 第 2 讲</p><h1>RPC、线程与 Go 并发</h1><p class="lede">从单机并发跨到网络边界：线程帮助一个进程同时等待多个事件，RPC 把消息交换包装成函数调用，但失败语义绝不会因此消失。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：基础</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释线程、共享状态与锁的核心问题</li><li>按协议顺序推演channel 与条件同步</li><li>评估工程取舍：并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">线程、共享状态与锁</h2><p>Go 的 goroutine 共享同一地址空间，适合把等待网络、磁盘和计时器的工作重叠起来。共享内存也意味着操作会交错；只要一个不变量跨越多个字段或多条语句，就要用 mutex 让检查与更新成为一个临界区。不要在持锁时做可能长时间阻塞的 RPC，否则一个慢节点会冻结本地并发。</p><h2 id="section-2">channel 与条件同步</h2><p>channel 同时传递数据和同步关系，适合表达所有权转移、工作队列和结果汇聚。条件变量适合“状态受锁保护、条件暂时不成立”的场景：等待者必须在循环中重新检查条件，因为唤醒只表示状态可能改变。关闭 channel 是广播生命周期结束的信号，不等同于发送一个普通零值。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。”在每一步如何体现。</p></div></div><h2 id="section-3">RPC 的表面与真实语义</h2><p>RPC stub 负责编码参数、发送请求、等待响应并解码结果。调用者看见的像函数，但网络可能丢包、重复、延迟或重排；超时只能证明调用者没及时收到回复，不能证明服务器没有执行。服务端方法要显式设计重试语义，并把 request ID、缓存结果或幂等操作作为协议的一部分。</p><h2 id="section-4">爬虫与 KV 示例</h2><p>并发爬虫需要把“已访问集合”的检查与插入做成原子步骤，否则两个 goroutine 会重复抓取同一 URL。KV 服务则展示更难的问题：客户端在 Put 后丢失回复，重试可能造成重复写。线程正确性与分布式正确性是两层约束：前者保护本地状态，后者处理跨网络的不确定结果。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>RPC 超时意味着服务端没有执行请求。</h3><p>超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m2-q1"><p><strong>问题：</strong>为什么 RPC 客户端重试 Put 时通常需要 request ID？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">让服务端识别重复请求并复用原结果</button><button aria-pressed="false" data-choice="b">让 TCP 自动加密数据</button><button aria-pressed="false" data-choice="c">让 goroutine 自动释放锁</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m2-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m2-q3"><p><strong>问题：</strong>为什么“RPC 超时意味着服务端没有执行请求。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>Go 的 goroutine 共享同一地址空间，适合把等待网络、磁盘和计时器的工作重叠起来。</li><li>并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</li><li>超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-rpc.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>notes/crawler.go</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>notes/kv.go</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/tour-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
-<script src="../../../assets/vendor/prism.js"></script>
-<script src="../../../assets/vendor/prism-python.js"></script>
-<script src="../../../assets/vendor/prism-bash.js"></script>
-<script src="../../../assets/course/quiz.js"></script>
-<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
-<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
-</body>
-</html>
+Topic: implementing distributed systems
+  ... and Go programming for the labs
+  Go threads, and the web crawler
+  Go RPC
+  Details are Go specific but the concepts are important and widely used
+
+Why Go?
+  good support for threads
+  convenient RPC
+  type- and memory- safe
+  garbage-collected (no use after freeing problems)
+    threads + GC is particularly attractive!
+  not too complex
+  Go is often used in distributed systems
+
+After the tutorial, use https://golang.org/doc/effective_go.html
+
+Threads
+  a useful structuring tool, but can be tricky
+  Go calls them goroutines; everyone else calls them threads
+
+Thread = &quot;thread of execution&quot;
+  threads allow one program to do many things at once
+  each thread executes serially, just like a non-threaded program
+  the threads share memory
+  each thread includes some per-thread state:
+    program counter, registers, stack
+
+Why threads?
+  I/O concurrency
+    Client sends requests to many servers in parallel and waits for replies.
+    Server processes many simultaneous client requests.
+      Each request may block.
+      While waiting for the disk to read data for client X,
+        process a request from client Y.
+  Multicore performance
+    Execute code in parallel on several cores.
+  Convenience
+    In background, once per second, check whether each worker is still alive.
+
+Is there an alternative to threads?
+  Yes: write code that explicitly interleaves activities, in a single thread.
+    Usually called &quot;event-driven.&quot;
+  Keep a table of state about each activity, e.g. each client request.
+  One &quot;event&quot; loop that:
+    checks for new input for each activity (e.g. arrival of reply from server),
+    does the next step for each activity,
+    updates state.
+  Event-driven can get you I/O concurrency,
+    and eliminates thread costs (which can be substantial),
+    but doesn&#x27;t get multi-core speedup,
+    and is painful to program.
+
+Threading challenges:
+  sharing data safely
+    what if two threads do n = n + 1 at the same time?
+      or one thread reads while another increments?
+    this is a &quot;race&quot;
+      = two threads use same memory at same time, one (or both) writes
+      often a bug
+    -&gt; use locks (Go&#x27;s sync.Mutex)
+    -&gt; or avoid sharing mutable data
+  coordination between threads
+    one thread is producing data, another thread is consuming it
+      how can the consumer wait (and release the CPU)?
+      how can the producer wake up the consumer?
+    -&gt; use Go channels or sync.Cond or sync.WaitGroup
+  deadlock
+    a cycle of threads waiting for each other
+    via locks, or channels, or RPC
+
+Let&#x27;s look at the tutorial&#x27;s web crawler as a threading example.
+
+What is a web crawler?
+  goal: fetch all web pages, e.g. to feed to an indexer
+  you give it a starting web page
+  it recursively follows all links
+  [diagram: pages, links, a DAG, a cycle]
+  but don&#x27;t fetch a given page more than once
+    and don&#x27;t get stuck in cycles
+
+Crawler challenges
+  Exploit I/O concurrency
+    Network latency is more limiting than network capacity
+      internet latency: maybe 0.1 seconds, due to speed of light &amp;c
+      internet throughput: maybe MB/sec or GB/sec
+    Fetch many pages in parallel
+      To increase URLs fetched per second
+    =&gt; Use threads for concurrency
+  Fetch each URL only *once*
+    avoid wasting network bandwidth
+    avoid link cycles
+    be nice to remote servers
+    =&gt; Need to remember which URLs visited
+  Know when finished
+
+We&#x27;ll look at three solutions [crawler.go on schedule page]
+  Serial
+  Concurrent, coordination via shared data
+  Concurrent, coordination via channels
+
+Serial crawler:
+  performs depth-first exploration via recursive Serial calls
+  the &quot;fetched&quot; map avoids repeats, breaks cycles
+    a single map, passed by reference, caller sees callee&#x27;s updates
+  finished when all [recursive] links are explored: easy
+  but: fetches only one page at a time -- slow
+    can we just put a &quot;go&quot; in front of the Serial() call?
+    what will happen?
+    let&#x27;s try it... what happened?
+
+ConcurrentMutex crawler:
+  Creates a thread for each page fetch
+    Many concurrent fetches, higher fetch rate
+  the &quot;go func&quot; creates a goroutine and starts it running
+    func... is an &quot;anonymous function&quot;
+  The threads share the fs.fetched map
+    So only one thread will fetch any given page
+  Why the Mutex (Lock() and Unlock()) in testAndSet()?
+    One reason:
+      Two threads make simultaneous calls to ConcurrentMutex() with same URL
+        Due to two different pages containing link to same URL
+      T1 reads fetched[url], T2 reads fetched[url]
+      Both see that url hasn&#x27;t been fetched (fetched[url] = false)
+      Both fetch, which is wrong
+      The mutex causes one to wait while the other does both check and set
+        So only one thread sees fetched[url]==false
+      We say &quot;the lock protects fs.fetched[]&quot;
+        But note Go does not enforce any relationship between locks and data!
+      The code between lock/unlock is often called a &quot;critical section&quot;
+    Another reason:
+      Internally, map is a complex data structure (tree? expandable hash?)
+      Concurrent update/update may wreck internal invariants
+      Concurrent update/read may crash the read
+    defer...
+    What if I comment out Lock() / Unlock()?
+      go run crawler.go
+        Does it always work? Always fail? Why?
+      go run -race crawler.go
+        Detects races even when output is correct!
+    What if I forget to Unlock()?  deadlock
+  How does the ConcurrentMutex crawler decide it is done?
+    sync.WaitGroup -- it&#x27;s basically a counter
+    Wait() waits for all Add()s to be balanced by Done()s
+      i.e. waits for all child threads to finish
+    [diagram: tree of goroutines, overlaid on cyclic URL graph]
+    there&#x27;s a WaitGroup per node in the tree
+  How many concurrent threads might there be?
+
+ConcurrentChannel crawler
+  a Go channel:
+    a channel is an object
+      ch := make(chan int)
+    a channel lets one thread send an object to another thread
+    ch &lt;- x
+      the sender waits until some goroutine receives
+    y := &lt;- ch
+      a receiver waits until some goroutine sends
+    also: for y := range ch
+    channels both communicate and synchronize
+    several threads can send and receive on a channel
+    send+recv takes less than a microsecond -- fairly cheap
+    remember: sender blocks until the receiver receives!
+      &quot;synchronous&quot;
+      watch out for deadlock
+  ConcurrentChannel coordinator()
+    coordinator() creates a worker goroutine to fetch each page
+    worker() sends slice of page&#x27;s URLs on a channel
+      multiple workers send on the single channel
+    coordinator() reads URL slices from the channel
+  At what line does the coordinator wait?
+    Does the coordinator use CPU time while it waits?
+  Note: there is no recursion here; coordinator() creates all workers.
+  Note: no need to lock the fetched map, because it isn&#x27;t shared!
+  How does the coordinator know it is done?
+    Keeps count of workers in n.
+    Each worker sends exactly one item on channel.
+  The channel does two things:
+    1. communication of values.
+    2. notification of events (e.g. thread termination).
+
+Why is it safe for multiple threads use the same channel?
+
+Is this a race:
+  Worker thread modifies (creates) url slice, coordinator uses it?
+  * worker only writes slice *before* sending
+  * coordinator only reads slice *after* receiving
+  So they can&#x27;t use the slice at the same time, so there&#x27;s no race.
+
+Why does ConcurrentChannel() create a goroutine just for &quot;ch &lt;- ...&quot;?
+  Let&#x27;s get rid of the goroutine...
+
+When to use sharing and locks, versus channels?
+  Most (all?) problems can be solved in either style
+  What makes the most sense depends on how the programmer thinks
+    state -- sharing and locks
+    communication -- channels
+  For the 6.824 labs, I recommend sync.Mutex/sync.Cond for shared state
+
+Remote Procedure Call (RPC)
+  a key piece of distributed system machinery; all the labs use RPC
+  goal: easy-to-program client/server communication
+  hide details of network protocols
+  convert data (strings, arrays, maps, &amp;c) to &quot;wire format&quot;
+  portability / interoperability
+
+RPC message diagram:
+  Client             Server
+    request---&gt;
+       &lt;---response
+
+Software structure
+  client app        handler fns
+   stub fns         dispatcher
+   RPC lib           RPC lib
+     net  ------------ net
+
+Go example: kv.go on schedule page
+  A toy key/value storage server -- Put(key,value), Get(key)-&gt;value
+  Uses Go&#x27;s RPC library
+  Common:
+    Declare Args and Reply struct for each server handler.
+  Client:
+    connect()&#x27;s Dial() creates a TCP connection to the server
+    get() and put() are client &quot;stubs&quot;
+    Call() asks the RPC library to perform the call
+      you specify connection, function name, arguments, place to put reply
+      library marshalls args, sends request, waits, unmarshalls reply
+      return value from Call() indicates whether it got a reply
+      usually you&#x27;ll also have a reply.Err indicating service-level failure
+  Server:
+    Go requires server to declare an object with methods as RPC handlers
+    Server then registers that object with the RPC library
+    Server accepts TCP connections, gives them to RPC library
+    The RPC library
+      reads each request
+      creates a new goroutine for this request
+      unmarshalls request
+      looks up the named object (in table create by Register())
+      calls the object&#x27;s named method (dispatch)
+      marshalls reply
+      writes reply on TCP connection
+    The server&#x27;s Get() and Put() handlers
+      Must lock, since RPC library creates a new goroutine for each request
+      read args; modify reply
+
+A few details:
+  Binding: how does client know what server computer to talk to?
+    For Go&#x27;s RPC, server name/port is an argument to Dial
+    Big systems have some kind of name or configuration server
+  Marshalling: format data into packets
+    Go&#x27;s RPC library can pass strings, arrays, objects, maps, &amp;c
+    Go passes pointers by copying the pointed-to data
+    Cannot pass channels or functions
+    Marshals only exported fields (i.e., fields w/ CAPITAL letter)
+
+RPC problem: what to do about failures?
+  e.g. lost packet, broken network, slow server, crashed server
+
+What does a failure look like to the client RPC library?
+  Client never sees a response from the server
+  Client does *not* know if the server saw the request!
+    [diagram of losses at various points]
+    Maybe server never saw the request
+    Maybe server executed, crashed just before sending reply
+    Maybe server executed, but network died just before delivering reply
+  Remote procedure call doesn&#x27;t behave the same as procedure call on a single machine!
+    A recurring challenge in implementing distributed systems
+
+Simplest failure-handling scheme: &quot;best-effort RPC&quot;
+  Call() waits for response for a while
+  If none arrives, re-send the request
+  Do this a few times
+  Then give up and return an error
+
+Q: is &quot;best effort&quot; easy for applications to cope with?
+
+A particularly bad situation:
+  client executes
+    Put(&quot;k&quot;, 10);
+    Put(&quot;k&quot;, 20);
+  both succeed
+  what will Get(&quot;k&quot;) yield?
+  [diagram, timeout, re-send, original arrives late]
+
+Q: is best effort ever OK?
+   read-only operations
+   operations that it&#x27;s harmless to repeat
+     e.g. DB checks if record has already been inserted
+
+Other common semantics: at-most-once
+  For example, Go RPC is a simple form of &quot;at-most-once&quot;
+    open TCP connection
+    write request to TCP connection
+    Go RPC never re-sends a request
+      So server won&#x27;t see duplicate requests
+    Go RPC code returns an error if it doesn&#x27;t get a reply
+      perhaps after a timeout (from TCP)
+      perhaps server didn&#x27;t see request
+      perhaps server processed request but server/net failed before reply came back
+  Labs explore others way of implementing at-most-once
+    No retry is too restrictive for replicated servers
+    Like to retry at another replica if first replica fails</code></pre></details><details class="archive" data-source-record data-source="notes/crawler.go"><summary><span><b>Go 源码</b>notes/crawler.go</span><small>183 行 · 422 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/crawler.go" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">package main
+
+import (
+    &quot;fmt&quot;
+    &quot;sync&quot;
+)
+
+//
+// Several solutions to the crawler exercise from the Go tutorial
+// https://tour.golang.org/concurrency/10
+//
+
+//
+// Serial crawler
+//
+
+func Serial(url string, fetcher Fetcher, fetched map[string]bool) {
+    if fetched[url] {
+        return
+    }
+    fetched[url] = true
+    urls, err := fetcher.Fetch(url)
+    if err != nil {
+        return
+    }
+    for _, u := range urls {
+        Serial(u, fetcher, fetched)
+    }
+}
+
+//
+// Concurrent crawler with shared state and Mutex
+//
+
+type fetchState struct {
+    mu      sync.Mutex
+    fetched map[string]bool
+}
+
+func (fs *fetchState) testAndSet(url string) bool {
+    fs.mu.Lock()
+    defer fs.mu.Unlock()
+    r := fs.fetched[url]
+    fs.fetched[url] = true
+    return r
+}
+
+func ConcurrentMutex(url string, fetcher Fetcher, fs *fetchState) {
+    if fs.testAndSet(url) {
+        return
+    }
+    urls, err := fetcher.Fetch(url)
+    if err != nil {
+        return
+    }
+    var done sync.WaitGroup
+    for _, u := range urls {
+        done.Add(1)
+        go func(u string) {
+            ConcurrentMutex(u, fetcher, fs)
+            done.Done()
+        }(u)
+    }
+    done.Wait()
+}
+
+func makeState() *fetchState {
+    return &amp;fetchState{fetched: make(map[string]bool)}
+}
+
+//
+// Concurrent crawler with channels
+//
+
+func worker(url string, ch chan []string, fetcher Fetcher) {
+    urls, err := fetcher.Fetch(url)
+    if err != nil {
+        ch &lt;- []string{}
+    } else {
+        ch &lt;- urls
+    }
+}
+
+func coordinator(ch chan []string, fetcher Fetcher) {
+    n := 1
+    fetched := make(map[string]bool)
+    for urls := range ch {
+        for _, u := range urls {
+            if fetched[u] == false {
+                fetched[u] = true
+                n += 1
+                go worker(u, ch, fetcher)
+            }
+        }
+        n -= 1
+        if n == 0 {
+            break
+        }
+    }
+}
+
+func ConcurrentChannel(url string, fetcher Fetcher) {
+    ch := make(chan []string)
+    go func() {
+        ch &lt;- []string{url}
+    }()
+    coordinator(ch, fetcher)
+}
+
+//
+// main
+//
+
+func main() {
+    fmt.Printf(&quot;=== Serial===\n&quot;)
+    Serial(&quot;http://golang.org/&quot;, fetcher, make(map[string]bool))
+
+    fmt.Printf(&quot;=== ConcurrentMutex ===\n&quot;)
+    ConcurrentMutex(&quot;http://golang.org/&quot;, fetcher, makeState())
+
+    fmt.Printf(&quot;=== ConcurrentChannel ===\n&quot;)
+    ConcurrentChannel(&quot;http://golang.org/&quot;, fetcher)
+}
+
+//
+// Fetcher
+//
+
+type Fetcher interface {
+    // Fetch returns a slice of URLs found on the page.
+    Fetch(url string) (urls []string, err error)
+}
+
+// fakeFetcher is Fetcher that returns canned results.
+type fakeFetcher map[string]*fakeResult
+
+type fakeResult struct {
+    body string
+    urls []string
+}
+
+func (f fakeFetcher) Fetch(url string) ([]string, error) {
+    if res, ok := f[url]; ok {
+        fmt.Printf(&quot;found:   %s\n&quot;, url)
+        return res.urls, nil
+    }
+    fmt.Printf(&quot;missing: %s\n&quot;, url)
+    return nil, fmt.Errorf(&quot;not found: %s&quot;, url)
+}
+
+// fetcher is a populated fakeFetcher.
+var fetcher = fakeFetcher{
+    &quot;http://golang.org/&quot;: &amp;fakeResult{
+        &quot;The Go Programming Language&quot;,
+        []string{
+            &quot;http://golang.org/pkg/&quot;,
+            &quot;http://golang.org/cmd/&quot;,
+        },
+    },
+    &quot;http://golang.org/pkg/&quot;: &amp;fakeResult{
+        &quot;Packages&quot;,
+        []string{
+            &quot;http://golang.org/&quot;,
+            &quot;http://golang.org/cmd/&quot;,
+            &quot;http://golang.org/pkg/fmt/&quot;,
+            &quot;http://golang.org/pkg/os/&quot;,
+        },
+    },
+    &quot;http://golang.org/pkg/fmt/&quot;: &amp;fakeResult{
+        &quot;Package fmt&quot;,
+        []string{
+            &quot;http://golang.org/&quot;,
+            &quot;http://golang.org/pkg/&quot;,
+        },
+    },
+    &quot;http://golang.org/pkg/os/&quot;: &amp;fakeResult{
+        &quot;Package os&quot;,
+        []string{
+            &quot;http://golang.org/&quot;,
+            &quot;http://golang.org/pkg/&quot;,
+        },
+    },
+}</code></pre></details><details class="archive" data-source-record data-source="notes/kv.go"><summary><span><b>Go 源码</b>notes/kv.go</span><small>124 行 · 252 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/kv.go" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">package main
+
+import (
+    &quot;fmt&quot;
+    &quot;log&quot;
+    &quot;net&quot;
+    &quot;net/rpc&quot;
+    &quot;sync&quot;
+)
+
+//
+// Common RPC request/reply definitions
+//
+
+type PutArgs struct {
+    Key   string
+    Value string
+}
+
+type PutReply struct {
+}
+
+type GetArgs struct {
+    Key string
+}
+
+type GetReply struct {
+    Value string
+}
+
+//
+// Client
+//
+
+func connect() *rpc.Client {
+    client, err := rpc.Dial(&quot;tcp&quot;, &quot;:1234&quot;)
+    if err != nil {
+        log.Fatal(&quot;dialing:&quot;, err)
+    }
+    return client
+}
+
+func get(key string) string {
+    client := connect()
+    args := GetArgs{ key }
+    reply := GetReply{}
+    err := client.Call(&quot;KV.Get&quot;, &amp;args, &amp;reply)
+    if err != nil {
+        log.Fatal(&quot;error:&quot;, err)
+    }
+    client.Close()
+    return reply.Value
+}
+
+func put(key string, val string) {
+    client := connect()
+    args := PutArgs{ key, val }
+    reply := PutReply{}
+    err := client.Call(&quot;KV.Put&quot;, &amp;args, &amp;reply)
+    if err != nil {
+        log.Fatal(&quot;error:&quot;, err)
+    }
+    client.Close()
+}
+
+//
+// Server
+//
+
+type KV struct {
+    mu   sync.Mutex
+    data map[string]string
+}
+
+func server() {
+    kv := &amp;KV{data: map[string]string{}}
+    rpcs := rpc.NewServer()
+    rpcs.Register(kv)
+    l, e := net.Listen(&quot;tcp&quot;, &quot;:1234&quot;)
+    if e != nil {
+        log.Fatal(&quot;listen error:&quot;, e)
+    }
+    go func() {
+        for {
+            conn, err := l.Accept()
+            if err == nil {
+                go rpcs.ServeConn(conn)
+            } else {
+                break
+            }
+        }
+        l.Close()
+    }()
+}
+
+func (kv *KV) Get(args *GetArgs, reply *GetReply) error {
+    kv.mu.Lock()
+    defer kv.mu.Unlock()
+
+    reply.Value = kv.data[args.Key]
+
+    return nil
+}
+
+func (kv *KV) Put(args *PutArgs, reply *PutReply) error {
+    kv.mu.Lock()
+    defer kv.mu.Unlock()
+
+    kv.data[args.Key] = args.Value
+
+    return nil
+}
+
+//
+// main
+//
+
+func main() {
+    server()
+
+    put(&quot;subject&quot;, &quot;6.5840&quot;)
+    fmt.Printf(&quot;Put(subject, 6.5840) done\n&quot;)
+    fmt.Printf(&quot;get(subject) -&gt; %s\n&quot;, get(&quot;subject&quot;))
+}</code></pre></details><details class="archive" data-source-record data-source="papers/tour-faq.txt"><summary><span><b>论文 FAQ</b>papers/tour-faq.txt</span><small>198 行 · 1,347 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/papers/tour-faq.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">Go FAQ
+
+Q: Why does 6.5840 use Go for the labs?
+
+A: Until a few years ago 6.5840 used C++, which worked well. Go works a
+little better for 6.5840 labs for a couple of reasons. Go is garbage
+collected and type-safe, which eliminates some common classes of bugs.
+Go has good support for threads (goroutines), and a nice RPC package,
+which are directly useful in 6.5840. Threads and garbage collection
+work particularly well together, since garbage collection can
+eliminate programmer effort to decide when the last thread using an
+object has stopped using it. There are other languages with these
+features that would probably work fine for 6.5840 labs, such as Java.
+
+Q: are there any tips/tricks for building an intuition of how to build
+effective Go code?
+
+A: Get experience by writing Go code and reading other&#x27;s people go
+code.  This page has many useful tips: https://go.dev/doc/effective_go
+
+Q: Do goroutines run in parallel? Can you use them to increase
+performance?
+
+A: Go&#x27;s goroutines are the same as threads in other languages. The Go
+runtime executes goroutines on all available cores, in parallel. If
+there are fewer cores than runnable goroutines, the runtime will
+pre-emptively time-share the cores among goroutines.
+
+Q: How do Go channels work? How does Go make sure they are
+synchronized between the many possible goroutines?
+
+A: You can see the source at https://golang.org/src/runtime/chan.go,
+though it is not easy to follow.
+
+At a high level, a chan is a struct holding a buffer and a lock.
+Sending on a channel involves acquiring the lock, waiting (perhaps
+releasing the CPU) until some thread is receiving, and handing off the
+message. Receiving involves acquiring the lock and waiting for a
+sender. You could implement your own channels with Go sync.Mutex and
+sync.Cond.
+
+Q: I&#x27;m using a channel to wake up another goroutine, by sending a
+dummy bool on the channel. But if that other goroutine is already
+running (and thus not receiving on the channel), the sending goroutine
+blocks. What should I do?
+
+A: Try condition variables (Go&#x27;s sync.Cond) rather than channels.
+Condition variables work well to alert goroutines that may (or may
+not) be waiting for something. Channels, because they are synchronous,
+are awkward if you&#x27;re not sure if there will be a goroutine waiting at
+the other end of the channel.
+
+Q: How can I have a goroutine wait for input from any one of a number
+of different channels? Trying to receive on any one channel blocks if
+there&#x27;s nothing to read, preventing the goroutine from checking other
+channels.
+
+A: Try creating a separate goroutine for each channel, and have each
+goroutine block on its channel. That&#x27;s not always possible, but when
+it works it&#x27;s often the simplest approach.
+
+Otherwise try Go&#x27;s select.
+
+Q: When should we use sync.WaitGroup instead of channels? and vice versa?
+
+A: WaitGroup is fairly special-purpose; it&#x27;s only useful when waiting
+for a bunch of activities to complete. Channels are more
+general-purpose; for example, you can communicate values over
+channels. You can wait for multiple goroutines using channels, though it
+takes a few more lines of code than with WaitGroup.
+
+Q: I need my code to perform a task once per second. What&#x27;s the
+easiest way to do that?
+
+A: Create a goroutine dedicated to that periodic task. It should have
+a loop that uses time.Sleep() to pause for a second, and then do the
+task, and then loop around to the time.Sleep().
+
+Q: How do we know when the overhead of spawning goroutines exceeds
+the concurrency we gain from them?
+
+A: It depends! If your machine has 16 cores, and you are looking for
+CPU parallelism, you should have roughly 16 executable goroutines. If
+it takes 0.1 second of real time to fetch a web page, and your network
+is capable of transmitting 100 web pages per second, you probably need
+about 10 goroutines concurrently fetching in order to use all of the
+network capacity. Experimentally, as you increase the number of
+goroutines, for a while you&#x27;ll see increased throughput, and then
+you&#x27;ll stop getting more throughput; at that point you have enough
+goroutines from the point of view of performance.
+
+Q: How would one create a Go channel that connects over the Internet?
+How would one specify the protocol to use to send messages?
+
+A: A Go channel only works within a single program; channels cannot be
+used to talk to other programs or other computers.
+
+Have a look at Go&#x27;s RPC package, which lets you talk to other Go
+programs over the Internet:
+
+  https://golang.org/pkg/net/rpc/
+
+Q: What are some important/useful Go-specific concurrency patterns to know?
+
+A: Here&#x27;s a slide deck on this topic, from a Go expert:
+
+https://talks.golang.org/2012/concurrency.slide
+
+Q: How are slices implemented?
+
+A: A slice is an object that contains a pointer to an array and a start and
+end index into that array. This arrangement allows multiple slices to
+share an underlying array, with each slice perhaps exposing a different
+range of array elements.
+
+Here&#x27;s a more extended discussion:
+
+  https://blog.golang.org/go-slices-usage-and-internals
+
+I use slices often, and arrays never. A Go slice is more flexible than
+a Go array since an array&#x27;s size is part of its type, whereas a
+function that takes a slice as argument can take a slice of any
+length.
+
+Q: What are common debugging tools people use for Go?
+
+A: fmt.Printf()
+
+As far as I know there&#x27;s not a great debugger for Go, though gdb can be
+made to work:
+
+https://golang.org/doc/gdb
+
+In any case, for most bugs I&#x27;ve found fmt.Printf() to be an extremely
+effective debugging tool.
+
+Q: When is it right to use a synchronous RPC call and when is it right to
+use an asynchronous RPC call?
+
+A: Most code needs the RPC reply before it can proceed; in that case it
+makes sense to use synchronous RPC.
+
+But sometimes a client wants to launch many concurrent RPCs; in that
+case async may be better. Or the client wants to do other work while it
+waits for the RPC to complete, perhaps because the server is far away
+(so speed-of-light time is high) or because the server might not be
+reachable so that the RPC suffers a long timeout period.
+
+I have never used async RPC in Go. When I want to send an RPC but not
+have to wait for the result, I create a goroutine, and have the
+goroutine make a synchronous Call().
+
+Q: Is Go used in industry?
+
+A: Yes. You can see an estimate of how much different programming
+languages are used here:
+
+https://www.tiobe.com/tiobe-index/
+
+Q: What are common problems that developers face when starting with Go?
+
+A:  Here are a few:
+
+- Not protecting maps with locks when there is concurrent access. Use
+  Go&#x27;s race detector!
+
+- Deadlocks with channels.
+
+- Not capturing a variable when creating a goroutine.
+
+- Leaking goroutines.
+
+Q: Does Go support inheritance? (In the Java/C++ kind of &quot;extends&quot; way?)
+
+A: Go doesn&#x27;t support C++ style inheritance but has generics,
+interfaces, and embedded structs, which allow you to do many things
+for which you would use inheritance in C++.
+
+Q: The thing I found most confusing about the Go tutorial was that
+goroutines don&#x27;t continue executing after the main thread has
+completed. I don&#x27;t think this was mentioned explicitly anywhere in the
+tutorial; I figured it out through debuging the crawler exercise.
+
+A: Yes, I don&#x27;t think it is in the tutorial, but the language spec is
+explicit about this: https://golang.org/ref/spec (see Program
+execution).
+
+Q: I&#x27;m still a little confused about when to choose value or pointer
+receivers. Can you provide any concrete/real-world examples of when we
+would choose one over the other?
+
+A: When you want to modify the state of the receiver, you have to use
+pointer receivers.  If the struct is very big, you probably want to
+use a pointer receiver because value receivers operate on a copy.  If
+neither applies, you can use a value receiver.  However, be careful
+with value receivers; e.g., if you have a mutex in a struct, you
+cannot make it a value receiver, because the mutex would be copied,
+defeating its purpose.</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0001-introduction-mapreduce.html"><span>← 上一讲</span><strong>导论与 MapReduce</strong></a><a href="0003-gfs.html"><span>下一讲 →</span><strong>Google 文件系统（GFS）</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>02 / 21</strong><p>先读中文精读，画出消息、状态与失败边界；再展开资料附录逐条核对官方讲义和论文。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.5840</strong><p>Distributed Systems Engineering · Spring 2026</p></div><a href="../index.html">FIELD NOTES / COURSE MAP →</a></footer></body></html>

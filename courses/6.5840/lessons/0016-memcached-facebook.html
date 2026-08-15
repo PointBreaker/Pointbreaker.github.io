@@ -1,27 +1,1935 @@
-<!DOCTYPE html>
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Facebook 的 Memcached 不是一个单体缓存，而是围绕数据库、区域、失效消息和流量尖峰构建的缓存生态。"><title>Facebook 的 Memcached — MIT 6.5840 Field Notes</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../field-notes.css?v=20260816b">
+<script defer src="../field-notes.js?v=20260816b"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>5840<br><small>FIELD NOTES</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#labs">实验</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://pdos.csail.mit.edu/6.824/notes/l-memcached.txt" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 16 · 2026-04-16 · 事务与规模化</p><h1>Facebook 的 Memcached</h1><p class="lesson-title-en">Memcached at Facebook</p><p class="hero-lede">Facebook 的 Memcached 不是一个单体缓存，而是围绕数据库、区域、失效消息和流量尖峰构建的缓存生态。</p><div class="lesson-meta"><span>48 MIN</span><span>进阶</span><span>03 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#section-1"><span>01</span>look-aside 缓存</a><a href="#section-2"><span>02</span>租约抑制 stale set 与惊群</a><a href="#section-3"><span>03</span>失效管线与 mcrouter</a><a href="#section-4"><span>04</span>一致性与容量治理</a><a href="#check"><span>05</span>纠错与检查</a><a href="#source-vault"><span>06</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><ol><li>解释look-aside 缓存的核心问题</li><li>按协议顺序推演租约抑制 stale set 与惊群</li><li>评估工程取舍：缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</li></ol><div class="source-ribbon"><a href="https://pdos.csail.mit.edu/6.824/notes/l-memcached.txt" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>notes/l-memcached.txt</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/papers/memcache-fb.pdf" target="_blank" rel="noreferrer"><span>PDF 文本转录</span><strong>papers/memcache-fb.pdf</strong><b>↗</b></a><a href="https://pdos.csail.mit.edu/6.824/papers/memcache-faq.txt" target="_blank" rel="noreferrer"><span>论文 FAQ</span><strong>papers/memcache-faq.txt</strong><b>↗</b></a></div></section><section class="reading-section" id="section-1"><div class="section-label">01 / DEEP READING</div><h2>look-aside 缓存</h2><p>应用先读 memcache，miss 时读数据库并回填；写数据库后发送 delete 让旧缓存失效。缓存本身不负责从数据库装载数据，因此应用控制对象语义。删除而不是更新可减少多写者并发下的乱序覆盖，但会在下次读时产生 miss。</p></section><section class="reading-section" id="section-2"><div class="section-label">02 / DEEP READING</div><h2>租约抑制 stale set 与惊群</h2><p>miss 时服务器返回短期 lease token，只有持有效 token 的客户端能回填，防止旧查询结果在 delete 后再次写入。对热点 key，lease 还限制同时回源的客户端数量，避免大量 miss 把数据库压垮。客户端等待或重试是背压的一部分。</p><aside class="field-callout"><span>FIELD TRACE</span><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。”在每一步如何体现。</p></aside></section><section class="reading-section" id="section-3"><div class="section-label">03 / DEEP READING</div><h2>失效管线与 mcrouter</h2><p>数据库写入产生失效记录，mcsqueal 从提交日志抽取 delete 并广播到缓存集群。mcrouter 负责请求路由、连接聚合、故障转移和 key 前缀策略。缓存节点被划入 cluster/region，复制和路由策略根据网络距离与故障域调整。</p></section><section class="reading-section" id="section-4"><div class="section-label">04 / DEEP READING</div><h2>一致性与容量治理</h2><p>memcache 是性能层而非事实来源，允许短暂陈旧，但必须避免长期错误值。容量不足引发 eviction 和 miss 率上升，继而把负载推回数据库形成反馈环。运维要同时观察命中率、回源 QPS、失效延迟和热点分布。</p></section>
+<section class="reading-section" id="check"><div class="section-label">05 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>写数据库后直接 set 新值总比 delete 更安全。</h3><p>并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</p></article><article><span>误区</span><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m16-q1"><p><strong>memcache lease token 主要帮助解决什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>并发 miss 的惊群和陈旧结果回填</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>磁盘 RAID 重建</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>Paxos leader 选举</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m16-q2"><p><strong>下列哪项最准确概括本讲的主要工程取舍？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>增加节点总能同时降低延迟并消除故障</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只要使用 RPC 就不再需要一致性协议</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m16-q3"><p><strong>为什么“写数据库后直接 set 新值总比 delete 更安全。”是错误的？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>因为所有网络都保证严格同步</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>因为客户端从不会重试</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div></section>
+<section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节、例子、问答与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="notes/l-memcached.txt"><summary><span><b>课堂讲义</b>notes/l-memcached.txt</span><small>291 行 · 1,889 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/notes/l-memcached.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.5840 2026 Lecture 16: Scaling Memcache at Facebook
 
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Facebook 的 Memcached — MIT 6.5840</title>
-<link href="../../../assets/course/base.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
-<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
-<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
-<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
-<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
-<script defer="" src="../../../assets/vendor/katex.min.js"></script>
-<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
-<script defer="" src="../../../assets/course/math-render.js"></script>
-</head>
-<body>
-<div class="page"><p class="eyebrow">MIT 6.5840 · 第 16 讲</p><h1>Facebook 的 Memcached</h1><p class="lede">Facebook 的 Memcached 不是一个单体缓存，而是围绕数据库、区域、失效消息和流量尖峰构建的缓存生态。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释look-aside 缓存的核心问题</li><li>按协议顺序推演租约抑制 stale set 与惊群</li><li>评估工程取舍：缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">look-aside 缓存</h2><p>应用先读 memcache，miss 时读数据库并回填；写数据库后发送 delete 让旧缓存失效。缓存本身不负责从数据库装载数据，因此应用控制对象语义。删除而不是更新可减少多写者并发下的乱序覆盖，但会在下次读时产生 miss。</p><h2 id="section-2">租约抑制 stale set 与惊群</h2><p>miss 时服务器返回短期 lease token，只有持有效 token 的客户端能回填，防止旧查询结果在 delete 后再次写入。对热点 key，lease 还限制同时回源的客户端数量，避免大量 miss 把数据库压垮。客户端等待或重试是背压的一部分。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。”在每一步如何体现。</p></div></div><h2 id="section-3">失效管线与 mcrouter</h2><p>数据库写入产生失效记录，mcsqueal 从提交日志抽取 delete 并广播到缓存集群。mcrouter 负责请求路由、连接聚合、故障转移和 key 前缀策略。缓存节点被划入 cluster/region，复制和路由策略根据网络距离与故障域调整。</p><h2 id="section-4">一致性与容量治理</h2><p>memcache 是性能层而非事实来源，允许短暂陈旧，但必须避免长期错误值。容量不足引发 eviction 和 miss 率上升，继而把负载推回数据库形成反馈环。运维要同时观察命中率、回源 QPS、失效延迟和热点分布。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>写数据库后直接 set 新值总比 delete 更安全。</h3><p>并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m16-q1"><p><strong>问题：</strong>memcache lease token 主要帮助解决什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">并发 miss 的惊群和陈旧结果回填</button><button aria-pressed="false" data-choice="b">磁盘 RAID 重建</button><button aria-pressed="false" data-choice="c">Paxos leader 选举</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m16-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m16-q3"><p><strong>问题：</strong>为什么“写数据库后直接 set 新值总比 delete 更安全。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>应用先读 memcache，miss 时读数据库并回填；写数据库后发送 delete 让旧缓存失效。</li><li>缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</li><li>并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-memcached.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/memcache-fb.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/memcache-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
-<script src="../../../assets/vendor/prism.js"></script>
-<script src="../../../assets/vendor/prism-python.js"></script>
-<script src="../../../assets/vendor/prism-bash.js"></script>
-<script src="../../../assets/course/quiz.js"></script>
-<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
-<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
-</body>
-</html>
+Scaling Memcache at Facebook, by Nishtala et al, NSDI 2013
+
+why are we reading this paper?
+  it&#x27;s an experience paper
+  how did the authors scale up a big system?
+  problems? solutions?
+  a window into the real world
+  performance vs consistency vs practicality
+
+the big facebook infrastructure picture
+  lots of data: friend lists, status, posts, likes, photos
+  fresh/consistent data not critical -- humans are tolerant
+  read-heavy (helpful)
+  little locality (not helpful)
+  high load: billions of storage operations per second
+    much higher than a single storage server can handle
+      ~100,000 simple queries/s for mysql
+      ~1,000,000 get/puts/s  for memcached
+  multiple data centers (at least west and east coast)
+  [diagram]
+  each data center -- &quot;region&quot;:
+    &quot;real&quot; data sharded over MySQL DBs -- ACID, but slow
+    memcached layer (mc) -- in RAM: fast but limited size
+    web servers (clients of memcached and DB) -- &quot;stateless&quot;
+  each data center&#x27;s DBs contain full replica
+  west coast is primary, others are replicas via MySQL async log replication
+
+let&#x27;s talk about performance first
+  much of paper is about avoiding stale cached data
+  but staleness arose from efforts to increase performance
+
+what is memcached?
+  a simple key/value server: put(k,v), get(k), delete(k).
+  in RAM: fast, not durable, no replication.
+  LRU eviction, since RAM size limited
+  stores what clients tell it to.
+  usually lots of memcached servers are deployed.
+    clients decide what to store where.
+
+how do FB apps use mc? Figure 1.
+  FB uses mc as a &quot;look-aside&quot; cache
+    real data is in the DB
+    application talks separately to mc and (if miss or write) to DB
+    mc doesn&#x27;t know about the DB
+  read(k):
+    h = hash(k) % n  -- hash chooses which memcache server to talk to
+    v = mc[h].get(k)
+    if v is nil:
+      v = fetch from DB
+      put(k, v)
+  write(k,v):
+    send k,v to DB
+    h = hash(k) % n
+    mc[h].delete(k)
+
+memcached very popular!
+  look-aside makes it easy to add to existing web applications
+  cache anything from DB rows to entire computed html pages
+  flexible, simple, fast
+
+what is the benefit of using mc?
+  it&#x27;s only helpful for reads -- but that&#x27;s by far the majority of operations
+  high hit rate -&gt; reduces load on DB servers
+    Table 2 says about 99% hit rate, i.e. 100x reduction in DB read load
+    wow; but watch out: a 1% decrease in hit rate *doubles* DB load
+  this caching is not about reducing user-visible delay,
+    it&#x27;s about protecting the DB servers from massive overload.
+
+lots of mc servers are needed to handle the total load
+  CPU/network parallelism
+  total RAM
+  how to divide the load among the memcache servers?
+
+the client hash function determines how keys are assigned to mc servers
+  can shard (partition), or replicate, or some combination
+  all web servers use the same hash(k) function
+    so if C1 caches key k, C2 will see it!
+  central configuration manager tells clients how to hash
+
+will sharding or replication yield most mc throughput?
+  this is a central concern in many designs
+  [two little diagrams]
+  sharding: divide keys over mc servers
+  replicate: divide clients over mc servers
+  sharding:
+    + memory-efficient (only one copy of each k/v pair)
+    - not effective if a few keys are extremely popular
+    - each web server must talk to many mc servers (high packet overhead)
+    - risk of &quot;in-cast congestion&quot;
+  replication:
+    + useful if a few keys are very popular for reads
+    + can pack many requests/responses per packet (low overhead)
+    + few servers need be contacted, reducing per-packet costs
+    + easier to design supporting network (2 x-capacity nets easier than 1 2x)
+    - uses more memory, so fewer distinct items can be cached
+    - writes are more expensive
+
+performance and multiple regions (Section 5)
+
+[diagram: west, db primary shards, mc servers, clients |
+ east, db secondary shards, ...,
+ feed from db primaries to secondaries ]
+
+Q: what is the point of regions -- multiple complete replicas?
+   lower RTT to users (east coast, west coast)
+   quick local reads, from local mc and DB
+   (though writes are expensive: must be sent to primary region)
+   hot replica in case primary site fails
+
+Q: why not divide users over regions?
+   i.e. why not east-coast users&#x27; data in east-coast region, &amp;c
+   then no need to replicate: might cut hardware costs in half!
+   but: social net -&gt; not much locality
+   might work well for e.g. e-mail
+
+Q: why OK performance despite writes sent to the primary region?
+   writes are much rarer than reads
+   users do not wait for writes to finish
+
+performance within a region (Section 4)
+
+[diagram: db shards, multiple clusters, each w/ mc&#x27;s and clients ]
+
+multiple mc clusters *within* each region
+  cluster = complete set of mc cache servers + web servers
+  each web server hashes keys over just the mc servers in its cluster
+
+why multiple clusters per region?
+  why not a single big cluster in each region?
+    divide the load among many parallel mc servers?
+  1. more mc servers don&#x27;t help very popular keys
+     replicating (one copy per cluster) does help
+  2. more mcs in cluster -&gt; sharded more finely -&gt;
+       each web view sends more packets (to more mc servers)
+     and more in-cast congestion from replies
+     client requests fetch 20 to 500 keys! over many mc servers
+     MUST request in parallel (total latency too large if serial)
+     but then all replies come back at the same time
+     network switches, NIC run out of buffers
+  3. hard to build network for single big cluster
+     any-to-any client/server access
+     so cross-section b/w must be large -- expensive
+     two clusters -&gt; 1/2 the cross-section b/w
+
+but -- replicating is a waste of RAM for less-popular items
+  &quot;regional pool&quot; shared by all clusters
+  unpopular objects (no need for many copies)
+  the application s/w decides what keys to put in regional pool
+  frees mc servers to replicate more popular objects
+
+bringing up new mc cluster is a performance problem
+  new cluster has 0% hit rate
+  so its clients could generate big spike in DB load
+  thus the clients of new cluster first get() from existing cluster (4.3)
+    and put() into new cluster
+    basically lazy copy of existing cluster to new cluster
+
+another overload problem: thundering herd
+  one client updates DB and delete()s a key
+  lots of clients get() but miss
+    they all fetch the same data from DB
+  not good: needless DB load
+  solution: mc gives just the first missing client a &quot;lease&quot;
+    lease = permission to refresh from DB
+    mc remembers set of valid leases
+    mc tells others &quot;try get() again in a few milliseconds&quot;
+  effect: only one client reads the DB and does put()
+    others re-try get() later and hopefully hit
+
+what if an mc server fails (Section 3.3)?
+  can&#x27;t have DB servers handle the misses -- too much load
+  can&#x27;t shift load to another mc server -- too much load
+  Gutter -- pool of idle mc servers, clients only use after mc server fails
+    separate Gutter per cluster
+  after a while, failed mc server will be replaced
+  as long as only a few mc servers are down at any one time,
+    a small Gutter pool can act as backups for a large set of mc servers
+
+The Question:
+  why aren&#x27;t invalidates (deletes) sent to Gutter servers?
+    from web servers and MySQL/McSqueal
+  my guess:
+    Gutter can hold *any* key
+    so all invalidates would have to be sent to Gutter
+    this at least doubles delete traffic
+    and may place a heavy load on small # of Gutter servers
+
+let&#x27;s talk about consistency now
+
+what is the paper&#x27;s consistency plan?
+  writes go direct to primary DB, with transactions, so DB stays consistent
+    e.g. incrementing a &quot;like&quot; count will be correct
+  what about reads?
+    reads not guaranteed to see the latest write
+    different clients not guaranteed to see the same values
+    but not too stale! only a few seconds
+    i.e. eventual consistency
+  *and* &quot;read-your-own-writes&quot;
+
+this is a common pattern:
+  updates are ACID -- and slow
+  reads are not very consistent -- but fast
+
+why is it OK that reads can yield stale data?
+  the data is news feed items, postings, likes, &amp;c
+  users may see web pages with content that lags the DB a little
+  few people will notice or care as long as it&#x27;s only a little
+  next time they look, mc will likely have caught up to the DB
+
+what does the paper mean by &quot;consistency&quot;?
+  they mean how out-of-date a read might be
+  &quot;more consistent&quot; means reads don&#x27;t lag recent writes by too much
+  it&#x27;s a given that reads can be stale; just trying to limit how stale
+  this is a user-experience view of consistency
+    it is not about correctness / guaranteed properties
+
+how are DB replicas kept in sync across regions?
+  one region is primary
+  all clients send updates only to primary region&#x27;s DB servers
+  primary DBs distribute log of updates to DBs in secondary regions
+  secondary DBs apply
+  secondary DBs are complete replicas (not caches)
+  DB replication delay can be considerable (many seconds)
+
+Q: why do clients send updates only to primary region&#x27;s DB servers?
+   why not to local region DB server?
+
+what do they do about now-stale cached data when DB is written?
+  there can be many cached copies of an item in a given region:
+    one per cluster
+  1. DBs send invalidates (delete()s) to relevant mc servers in region
+     this is McSqueal in Figure 6
+  2. writing client also invalidates mc in local cluster
+     for read-your-own-writes
+  secondary DBs hear updates, send out invalidates
+
+they ran into a number of DB-vs-mc consistency problems
+  due to concurrent updates affecting different cached copies in different orders
+  dangerous if can lead to permanently stale cached data
+
+example race (Section 2, Figure 1):
+  suppose client write(k,v) looked like (this is broken):
+    send k,v to DB
+    put(k,v) in mc -- rather than delete(k)
+  what if two clients write the same key at the same time?
+    updates might arrive at DB in one order
+    but at mc server in the other order!
+    leading to perhaps-permanent cached incorrect data
+  solution: they delete(k), not update; delete is correct in either order
+
+example race (Section 3.2.1):
+  k not in cache
+  C1 get(k), misses
+  C1 v1 = read k from DB
+    C2 writes k = v2 in DB
+    C2 delete(k)
+  C1 put(k, v1)
+  now mc has stale data, delete(k) has already happened
+  will stay stale indefinitely, until k is next written
+  solved with leases:
+    mc gives C1 a lease on k with the &quot;miss&quot; -- permission to write k.
+    C2&#x27;s delete(k) invalidates C1&#x27;s lease.
+    so mc ignores C1&#x27;s put(k).
+    key still missing, so next reader will refresh it from DB
+
+Q: aren&#x27;t the consistency problems caused by clients copying DB data to mc?
+   why not have only DB install values in mc, and never clients?
+     then there would be no racing client updates &amp;c, just ordered writes
+
+A: that&#x27;s correct in principle, but:
+  1. DB doesn&#x27;t generally know how to compute values for mc
+     generally client app code computes cached items from DB results,
+       i.e. mc content is often not simply a literal DB record
+  2. DB doesn&#x27;t know what&#x27;s cached, would end up sending lots
+     of values for keys that aren&#x27;t cached
+
+FB/mc lessons for storage system designers?
+  cache is vital for surviving high load, not just to reduce latency
+  need flexible tools for controlling partition vs replication
+  linearizability is too much; eventual often not enough
+
+next tuesday:
+  guest lecture from an AWS designer!
+
+--- references
+
+http://cs.cmu.edu/~beckmann/publications/papers/2020.osdi.cachelib.pdf
+https://engineering.fb.com/2008/08/20/core-data/scaling-out/
+https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf</code></pre></details><details class="archive" data-source-record data-source="papers/memcache-fb.pdf"><summary><span><b>PDF 文本转录</b>papers/memcache-fb.pdf</span><small>1,339 行 · 10,680 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/papers/memcache-fb.pdf" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">USENIX Association  1 0th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13)  3 85
+Scaling Memcache at Facebook
+Rajesh Nishtala, Hans Fugal, Steven Grimm, Marc Kwiatkowski, Herman Lee, Harry C. Li,
+Ryan McElroy , Mike Paleczny , Daniel Peek, Paul Saab, David Stafford, T ony T ung,
+Venkateshwaran Venkataramani
+{rajeshn,hans}@fb.com, {sgrimm, marc}@facebook.com, {herman, hcli, rm, mpal, dpeek, ps, dstaff, ttung, veeve }@fb.com
+Facebook Inc.
+Abstract: Memcached is a well known, simple, in-
+memory caching solution. This paper describes how
+Facebook leverages memcached as a building block to
+construct and scale a distributed key-value store that
+supports the world’s largest social network. Our system
+handles billions of requests per second and holds tril-
+lions of items to deliver a rich experience for over a bil-
+lion users around the world.
+1 Introduction
+Popular and engaging social networking sites present
+signiﬁcant infrastructure challenges. Hundreds of mil-
+lions of people use these networks every day and im-
+pose computational, network, and I/O demands that tra-
+ditional web architectures struggle to satisfy. A social
+network’s infrastructure needs to (1) allow near real-
+time communication, (2) aggregate content on-the-ﬂy
+from multiple sources, (3) be able to access and update
+very popular shared content, and (4) scale to process
+millions of user requests per second.
+We describe how we improved the open source ver-
+sion of memcached [14] and used it as a building block to
+construct a distributed key-value store for the largest so-
+cial network in the world. We discuss our journey scal-
+ing from a single cluster of servers to multiple geograph-
+ically distributed clusters. To the best of our knowledge,
+this system is the largest memcached installation in the
+world, processing over a billion requests per second and
+storing trillions of items.
+This paper is the latest in a series of works that have
+recognized the ﬂexibility and utility of distributed key-
+value stores [1, 2, 5, 6, 12, 14, 34, 36]. This paper fo-
+cuses on memcached—an open-source implementation
+of an in-memory hash table—as it provides low latency
+access to a shared storage pool at low cost. These quali-
+ties enable us to build data-intensive features that would
+otherwise be impractical. For example, a feature that
+issues hundreds of database queries per page request
+would likely never leave the prototype stage because it
+would be too slow and expensive. In our application,
+however, web pages routinely fetch thousands of key-
+value pairs from memcached servers.
+One of our goals is to present the important themes
+that emerge at different scales of our deployment. While
+qualities like performance, efﬁciency, fault-tolerance,
+and consistency are important at all scales, our experi-
+ence indicates that at speciﬁc sizes some qualities re-
+quire more effort to achieve than others. For exam-
+ple, maintaining data consistency can be easier at small
+scales if replication is minimal compared to larger ones
+where replication is often necessary. Additionally, the
+importance of ﬁnding an optimal communication sched-
+ule increases as the number of servers increase and net-
+working becomes the bottleneck.
+This paper includes four main contributions: (1)
+We describe the evolution of Facebook’s memcached-
+based architecture. (2) We identify enhancements to
+memcached that improve performance and increase
+memory efﬁciency. (3) We highlight mechanisms that
+improve our ability to operate our system at scale. (4)
+We characterize the production workloads imposed on
+our system.
+2 Overview
+The following properties greatly inﬂuence our design.
+First, users consume an order of magnitude more con-
+tent than they create. This behavior results in a workload
+dominated by fetching data and suggests that caching
+can have signiﬁcant advantages. Second, our read op-
+erations fetch data from a variety of sources such as
+MySQL databases, HDFS installations, and backend
+services. This heterogeneity requires a ﬂexible caching
+strategy able to store data from disparate sources.
+Memcached provides a simple set of operations (set,
+get, and delete) that makes it attractive as an elemen-
+tal component in a large-scale distributed system. The
+open-source version we started with provides a single-
+machine in-memory hash table. In this paper, we discuss
+how we took this basic building block, made it more ef-
+ﬁcient, and used it to build a distributed key-value store
+that can process billions of requests per second. Hence-
+
+386 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) USENIX Association
+database
+web
+server
+memcache
+1. get k 2. SELECT ...
+3. set (k,v)
+database
+web
+server
+memcache
+2. delete k
+1. UPDATE ...
+Figure 1: Memcache as a demand-ﬁlled look-aside
+cache. The left half illustrates the read path for a web
+server on a cache miss. The right half illustrates the
+write path.
+forth, we use ‘memcached’ to refer to the source code
+or a running binary and ‘memcache’ to describe the dis-
+tributed system.
+Query cache: We rely on memcache to lighten the read
+load on our databases. In particular, we use memcache
+as a demand-ﬁlled look-aside cache as shown in Fig-
+ure 1. When a web server needs data, it ﬁrst requests
+the value from memcache by providing a string key. If
+the item addressed by that key is not cached, the web
+server retrieves the data from the database or other back-
+end service and populates the cache with the key-value
+pair. For write requests, the web server issues SQL state-
+ments to the database and then sends a delete request to
+memcache that invalidates any stale data. We choose to
+delete cached data instead of updating it because deletes
+are idempotent. Memcache is not the authoritative source
+of the data and is therefore allowed to evict cached data.
+While there are several ways to address excessive
+read trafﬁc on MySQL databases, we chose to use
+memcache. It was the best choice given limited engi-
+neering resources and time. Additionally, separating our
+caching layer from our persistence layer allows us to ad-
+just each layer independently as our workload changes.
+Generic cache:We also leverage memcache as a more
+general key-value store. For example, engineers use
+memcache to store pre-computed results from sophisti-
+cated machine learning algorithms which can then be
+used by a variety of other applications. It takes little ef-
+fort for new services to leverage the existing marcher
+infrastructure without the burden of tuning, optimizing,
+provisioning, and maintaining a large server ﬂeet.
+As is, memcached provides no server-to-server co-
+ordination; it is an in-memory hash table running on
+a single server. In the remainder of this paper we de-
+scribe how we built a distributed key-value store based
+on memcached capable of operating under Facebook’s
+workload. Our system provides a suite of conﬁgu-
+ration, aggregation, and routing services to organize
+memcached instances into a distributed system.
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g7/g19/g18/g17/g21/g4/g6/g17/g12/g1
+/g5/g16/g22/g20/g21/g13/g19/g20/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g4/g8/g6/g1/g3/g8/g11/g12/g8/g11/g1
+/g2/g8/g10/g7/g5/g7/g9/g8/g1
+/g10/g21/g18/g19/g11/g14/g13/g1/g5/g16/g22/g20/g21/g13/g19/g1/g2/g8/g11/g20/g21/g13/g19/g3/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g7/g19/g18/g17/g21/g4/g6/g17/g12/g1
+/g5/g16/g22/g20/g21/g13/g19/g20/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g1
+/g4/g8/g6/g1/g3/g8/g11/g12/g8/g11/g1
+/g2/g8/g10/g7/g5/g7/g9/g8/g1
+/g10/g21/g18/g19/g11/g14/g13/g1/g5/g16/g22/g20/g21/g13/g19/g1/g2/g10/g16/g11/g23/g13/g3/g1
+/g9/g13/g14/g15/g18/g17/g1/g2/g8/g11/g20/g21/g13/g19/g3/g1/g9/g13/g14/g15/g18/g17/g1/g2/g10/g16/g11/g23/g13/g3/g1
+Figure 2: Overall architecture
+We structure our paper to emphasize the themes that
+emerge at three different deployment scales. Our read-
+heavy workload and wide fan-out is the primary con-
+cern when we have one cluster of servers. As it becomes
+necessary to scale to multiple frontend clusters, we ad-
+dress data replication between these clusters. Finally, we
+describe mechanisms to provide a consistent user ex-
+perience as we spread clusters around the world. Op-
+erational complexity and fault tolerance is important at
+all scales. We present salient data that supports our de-
+sign decisions and refer the reader to work by Atikoglu
+et al.[8] for a more detailed analysis of our workload. At
+a high-level, Figure 2 illustrates this ﬁnal architecture in
+which we organize co-located clusters into a region and
+designate a master region that provides a data stream to
+keep non-master regions up-to-date.
+While evolving our system we prioritize two ma-
+jor design goals. (1) Any change must impact a user-
+facing or operational issue. Optimizations that have lim-
+ited scope are rarely considered. (2) We treat the prob-
+ability of reading transient stale data as a parameter to
+be tuned, similar to responsiveness. We are willing to
+expose slightly stale data in exchange for insulating a
+backend storage service from excessive load.
+3 In a Cluster: Latency and Load
+We now consider the challenges of scaling to thousands
+of servers within a cluster. At this scale, most of our
+efforts focus on reducing either the latency of fetching
+cached data or the load imposed due to a cache miss.
+3.1 Reducing Latency
+Whether a request for data results in a cache hit or miss,
+the latency of memcache’s response is a critical factor
+in the response time of a user’s request. A single user
+web request can often result in hundreds of individual
+
+USENIX Association  10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) 387
+memcache get requests. For example, loading one of our
+popular pages results in an average of 521 distinct items
+fetched from memcache. 1
+We provision hundreds of memcached servers in a
+cluster to reduce load on databases and other services.
+Items are distributed across the memcached servers
+through consistent hashing [22]. Thus web servers have
+to routinely communicate with many memcached servers
+to satisfy a user request. As a result, all web servers
+communicate with every memcached server in a short
+period of time. This all-to-allcommunication pattern
+can cause incast congestion [30] or allow a single server
+to become the bottleneck for many web servers. Data
+replication often alleviates the single-server bottleneck
+but leads to signiﬁcant memory inefﬁciencies in the
+common case.
+We reduce latency mainly by focusing on the
+memcache client, which runs on each web server. This
+client serves a range of functions, including serializa-
+tion, compression, request routing, error handling, and
+request batching. Clients maintain a map of all available
+servers, which is updated through an auxiliary conﬁgu-
+ration system.
+Parallel requests and batching:We structure our web-
+application code to minimize the number of network
+round trips necessary to respond to page requests. We
+construct a directed acyclic graph (DAG) representing
+the dependencies between data. A web server uses this
+DAG to maximize the number of items that can be
+fetched concurrently. On average these batches consist
+of 24 keys per request
+2 .
+Client-server communication:Memcached servers do
+not communicate with each other. When appropriate,
+we embed the complexity of the system into a stateless
+client rather than in the memcached servers. This greatly
+simpliﬁes memcached and allows us to focus on making
+it highly performant for a more limited use case. Keep-
+ing the clients stateless enables rapid iteration in the
+software and simpliﬁes our deployment process. Client
+logic is provided as two components: a library that can
+be embedded into applications or as a standalone proxy
+named mcrouter. This proxy presents a memcached
+server interface and routes the requests/replies to/from
+other servers.
+Clients use UDP and TCP to communicate with
+memcached servers. We rely on UDP for get requests to
+reduce latency and overhead. Since UDP is connection-
+less, each thread in the web server is allowed to directly
+communicate with memcached servers directly, bypass-
+ing mcrouter, without establishing and maintaining a
+1 The 95 th percentile of fetches for that page is 1,740 items.
+2 The 95 th percentile is 95 keys per request.
+Average of Medians Average of 95th Percentiles
+microseconds
+0 200 600 1000 1400
+UDP direct
+by mcrouter (TCP)
+Figure 3: Get latency for UDP , TCP via mcrouter
+connection thereby reducing the overhead. The UDP
+implementation detects packets that are dropped or re-
+ceived out of order (using sequence numbers) and treats
+them as errors on the client side. It does not provide
+any mechanism to try to recover from them. In our in-
+frastructure, we ﬁnd this decision to be practical. Un-
+der peak load, memcache clients observe that 0.25% of
+get requests are discarded. About 80% of these drops
+are due to late or dropped packets, while the remainder
+are due to out of order delivery. Clients treat get er-
+rors as cache misses, but web servers will skip insert-
+ing entries into memcached after querying for data to
+avoid putting additional load on a possibly overloaded
+network or server.
+For reliability, clients perform set and delete opera-
+tions over TCP through an instance of mcrouter run-
+ning on the same machine as the web server. For opera-
+tions where we need to conﬁrm a state change (updates
+and deletes) TCP alleviates the need to add a retry mech-
+anism to our UDP implementation.
+Web servers rely on a high degree of parallelism and
+over-subscription to achieve high throughput. The high
+memory demands of open TCP connections makes it
+prohibitively expensive to have an open connection be-
+tween every web thread and memcached server without
+some form of connection coalescing via mcrouter. Co-
+alescing these connections improves the efﬁciency of
+the server by reducing the network, CPU and memory
+resources needed by high throughput TCP connections.
+Figure 3 shows the average, median, and 95
+th percentile
+latencies of web servers in production getting keys over
+UDP and through mcrouter via TCP . In all cases, the
+standard deviation from these averages was less than
+1%. As the data show, relying on UDP can lead to a
+20% reduction in latency to serve requests.
+Incast congestion:Memcache clients implement ﬂow-
+control mechanisms to limit incast congestion. When a
+
+388 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) USENIX Association
+100 200 300 400 500
+0 10 20 30 40
+Window Size
+milliseconds
+95th Percentile
+Median
+Figure 4: Average time web requests spend waiting to
+be scheduled
+client requests a large number of keys, the responses
+can overwhelm components such as rack and cluster
+switches if those responses arrive all at once. Clients
+therefore use a sliding window mechanism [11] to con-
+trol the number of outstanding requests. When the client
+receives a response, the next request can be sent. Similar
+to TCP’s congestion control, the size of this sliding win-
+dow grows slowly upon a successful request and shrinks
+when a request goes unanswered. The window applies
+to all memcache requests independently of destination;
+whereas TCP windows apply only to a single stream.
+Figure 4 shows the impact of the window size on the
+amount of time user requests are in the runnable state
+but are waiting to be scheduled inside the web server.
+The data was gathered from multiple racks in one fron-
+tend cluster. User requests exhibit a Poisson arrival pro-
+cess at each web server. According to Little’s Law [26],
+L = λW , the number of requests queued in the server
+(L ) is directly proportional to the average time a request
+takes to process ( W ), assuming that the input request
+rate is constant (which it was for our experiment). The
+time web requests are waiting to be scheduled is a di-
+rect indication of the number of web requests in the
+system. With lower window sizes, the application will
+have to dispatch more groups of memcache requests se-
+rially, increasing the duration of the web request. As the
+window size gets too large, the number of simultaneous
+memcache requests causes incast congestion. The result
+will be memcache errors and the application falling back
+to the persistent storage for the data, which will result
+in slower processing of web requests. There is a balance
+between these extremes where unnecessary latency can
+be avoided and incast congestion can be minimized.
+3.2 Reducing Load
+We use memcache to reduce the frequency of fetch-
+ing data along more expensive paths such as database
+queries. Web servers fall back to these paths when the
+desired data is not cached. The following subsections
+describe three techniques for decreasing load.
+3.2.1 Leases
+We introduce a new mechanism we call leasesto address
+two problems: stale sets and thundering herds. A stale
+set occurs when a web server sets a value in memcache
+that does not reﬂect the latest value that should be
+cached. This can occur when concurrent updates to
+memcache get reordered. A thundering herd happens
+when a speciﬁc key undergoes heavy read and write ac-
+tivity. As the write activity repeatedly invalidates the re-
+cently set values, many reads default to the more costly
+path. Our lease mechanism solves both problems.
+Intuitively, a memcached instance gives a leaseto a
+client to set data back into the cache when that client ex-
+periences a cache miss. The lease is a 64-bit token bound
+to the speciﬁc key the client originally requested. The
+client provides the lease token when setting the value
+in the cache. With the lease token, memcached can ver-
+ify and determine whether the data should be stored and
+thus arbitrate concurrent writes. V eriﬁcation can fail if
+memcached has invalidated the lease token due to re-
+ceiving a delete request for that item. Leases prevent
+stale sets in a manner similar to how load-link/store-
+conditional operates [20].
+A slight modiﬁcation to leasesalso mitigates thunder-
+ing herds. Each memcached server regulates the rate at
+which it returns tokens. By default, we conﬁgure these
+servers to return a token only once every 10 seconds per
+key. Requests for a key’s value within 10 seconds of a
+token being issued results in a special notiﬁcation telling
+the client to wait a short amount of time. Typically, the
+client with the lease will have successfully set the data
+within a few milliseconds. Thus, when waiting clients
+retry the request, the data is often present in cache.
+To illustrate this point we collect data for all cache
+misses of a set of keys particularly susceptible to thun-
+dering herds for one week. Without leases, all of the
+cache misses resulted in a peak database query rate of
+17K/s. With leases, the peak database query rate was
+1.3K/s. Since we provision our databases based on peak
+load, our lease mechanism translates to a signiﬁcant ef-
+ﬁciency gain.
+Stale values: With leases, we can minimize the appli-
+cation’s wait time in certain use cases. We can further
+reduce this time by identifying situations in which re-
+turning slightly out-of-date data is acceptable. When a
+key is deleted, its value is transferred to a data struc-
+
+USENIX Association  10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) 389
+Minimum, mean, and maximum
+T erabytes 20
+40
+60
+80
+Daily Weekly
+Low−churn
+Daily Weekly
+High−churn
+Figure 5: Daily and weekly working set of a high-churn
+family and a low-churn key family
+ture that holds recently deleted items, where it lives for
+a short time before being ﬂushed. A get request can re-
+turn a lease token or data that is marked as stale. Appli-
+cations that can continue to make forward progress with
+stale data do not need to wait for the latest value to be
+fetched from the databases. Our experience has shown
+that since the cached value tends to be a monotonically
+increasing snapshot of the database, most applications
+can use a stale value without any changes.
+3.2.2 Memcache Pools
+Using memcache as a general-purpose caching layer re-
+quires workloads to share infrastructure despite differ-
+ent access patterns, memory footprints, and quality-of-
+service requirements. Different applications’ workloads
+can produce negative interference resulting in decreased
+hit rates.
+To accommodate these differences, we partition a
+cluster’s memcached servers into separate pools. We
+designate one pool (named wildcard) as the default and
+provision separate pools for keys whose residence in
+wildcard is problematic. For example, we may provi-
+sion a small pool for keys that are accessed frequently
+but for which a cache miss is inexpensive. We may also
+provision a large pool for infrequently accessed keys for
+which cache misses are prohibitively expensive.
+Figure 5 shows the working set of two different sets
+of items, one that is low-churn and another that is high-
+churn. The working set is approximated by sampling all
+operations on one out of every one million items. For
+each of these items, we collect the minimum, average,
+and maximum item size. These sizes are summed and
+multiplied by one million to approximate the working
+set. The difference between the daily and weekly work-
+ing sets indicates the amount of churn. Items with differ-
+ent churn characteristics interact in an unfortunate way:
+low-churn keys that are still valuable are evicted before
+high-churn keys that are no longer being accessed. Plac-
+ing these keys in different pools prevents this kind of
+negative interference, and allows us to size high-churn
+pools appropriate to their cache miss cost. Section 7 pro-
+vides further analysis.
+3.2.3 Replication Within Pools
+Within some pools, we use replication to improve the la-
+tency and efﬁciency of memcached servers. We choose
+to replicate a category of keys within a pool when (1)
+the application routinely fetches many keys simultane-
+ously, (2) the entire data set ﬁts in one or two memcached
+servers and (3) the request rate is much higher than what
+a single server can manage.
+We favor replication in this instance over further di-
+viding the key space. Consider a memcached server
+holding 100 items and capable of responding to 500k
+requests per second. Each request asks for 100 keys.
+The difference in memcached overhead for retrieving
+100 keys per request instead of 1 key is small. To scale
+the system to process 1M requests/sec, suppose that we
+add a second server and split the key space equally be-
+tween the two. Clients now need to split each request for
+100 keys into two parallel requests for ∼50 keys. Con-
+sequently, both servers still have to process 1M requests
+per second. However, if we replicate all 100 keys to mul-
+tiple servers, a client’s request for 100 keys can be sent
+to any replica. This reduces the load per server to 500k
+requests per second. Each client chooses replicas based
+on its own IP address. This approach requires delivering
+invalidations to all replicas to maintain consistency.
+3.3 Handling Failures
+The inability to fetch data from memcache results in ex-
+cessive load to backend services that could cause fur-
+ther cascading failures. There are two scales at which
+we must address failures: (1) a small number of hosts
+are inaccessible due to a network or server failure or (2)
+a widespread outage that affects a signiﬁcant percent-
+age of the servers within the cluster. If an entire clus-
+ter has to be taken ofﬂine, we divert user web requests
+to other clusters which effectively removes all the load
+from memcache within that cluster.
+For small outages we rely on an automated remedi-
+ation system [3]. These actions are not instant and can
+take up to a few minutes. This duration is long enough to
+cause the aforementioned cascading failures and thus we
+introduce a mechanism to further insulate backend ser-
+vices from failures. We dedicate a small set of machines,
+named Gutter, to take over the responsibilities of a few
+failed servers. Gutter accounts for approximately 1% of
+the memcached servers in a cluster.
+When a memcached client receives no response to its
+get request, the client assumes the server has failed and
+issues the request again to a special Gutter pool. If this
+second request misses, the client will insert the appropri-
+ate key-value pair into the Gutter machine after querying
+the database. Entries in Gutter expire quickly to obviate
+
+390 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) USENIX Association
+Gutter invalidations. Gutter limits the load on backend
+services at the cost of slightly stale data.
+Note that this design differs from an approach in
+which a client rehashes keys among the remaining
+memcached servers. Such an approach risks cascading
+failures due to non-uniform key access frequency. For
+example, a single key can account for 20% of a server’s
+requests. The server that becomes responsible for this
+hot key might also become overloaded. By shunting load
+to idle servers we limit that risk.
+Ordinarily, each failed request results in a hit on the
+backing store, potentially overloading it. By using Gut-
+ter to store these results, a substantial fraction of these
+failures are converted into hits in the gutter pool thereby
+reducing load on the backing store. In practice, this sys-
+tem reduces the rate of client-visible failures by 99%
+and converts 10%–25% of failures into hits each day. If
+a memcached server fails entirely, hit rates in the gutter
+pool generally exceed 35% in under 4 minutes and often
+approach 50%. Thus when a few memcached servers are
+unavailable due to failure or minor network incidents,
+Gutter protects the backing store from a surge of trafﬁc.
+4 In a Region: Replication
+It is tempting to buy more web and memcached servers
+to scale a cluster as demand increases. However, na ¨ıvely
+scaling the system does not eliminate all problems.
+Highly requested items will only become more popular
+as more web servers are added to cope with increased
+user trafﬁc. Incast congestion also worsens as the num-
+ber of memcached servers increases. We therefore split
+our web and memcached servers into multiple frontend
+clusters. These clusters, along with a storage cluster that
+contain the databases, deﬁne a region. This region ar-
+chitecture also allows for smaller failure domains and
+a tractable network conﬁguration. We trade replication
+of data for more independent failure domains, tractable
+network conﬁguration, and a reduction of incast conges-
+tion.
+This section analyzes the impact of multiple frontend
+clusters that share the same storage cluster. Speciﬁcally
+we address the consequences of allowing data replica-
+tion across these clusters and the potential memory efﬁ-
+ciencies of disallowing this replication.
+4.1 Regional Invalidations
+While the storage cluster in a region holds the authori-
+tative copy of data, user demand may replicate that data
+into frontend clusters. The storage cluster is responsi-
+ble for invalidating cached data to keep frontend clus-
+ters consistent with the authoritative versions. As an op-
+timization, a web server that modiﬁes data also sends
+invalidations to its own cluster to provide read-after-
+Memcache
+Mcrouter
+Update
+Operations Storage
+MySQL McSqueal
+Commit Log
+Storage Server
+Figure 6: Invalidation pipeline showing keys that need
+to be deleted via the daemon (mcsqueal).
+write semantics for a single user request and reduce the
+amount of time stale data is present in its local cache.
+SQL statements that modify authoritative state are
+amended to include memcache keys that need to be
+invalidated once the transaction commits [7]. We de-
+ploy invalidation daemons (named mcsqueal) on every
+database. Each daemon inspects the SQL statements that
+its database commits, extracts any deletes, and broad-
+casts these deletes to the memcache deployment in every
+frontend cluster in that region. Figure 6 illustrates this
+approach. We recognize that most invalidations do not
+delete data; indeed, only 4% of all deletes issued result
+in the actual invalidation of cached data.
+Reducing packet rates: While mcsqueal could con-
+tact memcached servers directly, the resulting rate of
+packets sent from a backend cluster to frontend clus-
+ters would be unacceptably high. This packet rate prob-
+lem is a consequence of having many databases and
+many memcached servers communicating across a clus-
+ter boundary. Invalidation daemons batch deletes into
+fewer packets and send them to a set of dedicated servers
+running mcrouter instances in each frontend cluster.
+These mcrouters then unpack individual deletes from
+each batch and route those invalidations to the right
+memcached server co-located within the frontend clus-
+ter. The batching results in an 18× improvement in the
+median number of deletes per packet.
+Invalidation via web servers: It is simpler for web
+servers to broadcast invalidations to all frontend clus-
+ters. This approach unfortunately suffers from two prob-
+lems. First, it incurs more packet overhead as web
+servers are less effective at batching invalidations than
+mcsqueal pipeline. Second, it provides little recourse
+when a systemic invalidation problem arises such as
+misrouting of deletes due to a conﬁguration error. In the
+past, this would often require a rolling restart of the en-
+tire memcache infrastructure, a slow and disruptive pro-
+
+USENIX Association  10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) 391
+A (Cluster) B (Region)
+Median number of users 30 1
+Gets per second 3.26 M 458 K
+Median value size 10.7 kB 4.34 kB
+Table 1: Deciding factors for cluster or regional replica-
+tion of two item families
+cess we want to avoid. In contrast, embedding invalida-
+tions in SQL statements, which databases commit and
+store in reliable logs, allows mcsqueal to simply replay
+invalidations that may have been lost or misrouted.
+4.2 Regional Pools
+Each cluster independently caches data depending on
+the mix of the user requests that are sent to it. If
+users’ requests are randomly routed to all available fron-
+tend clusters then the cached data will be roughly the
+same across all the frontend clusters. This allows us to
+take a cluster ofﬂine for maintenance without suffer-
+ing from reduced hit rates. Over-replicating the data can
+be memory inefﬁcient, especially for large, rarely ac-
+cessed items. We can reduce the number of replicas by
+having multiple frontend clusters share the same set of
+memcached servers. We call this a regional pool.
+Crossing cluster boundaries incurs more latency. In
+addition, our networks have 40% less average available
+bandwidth over cluster boundaries than within a single
+cluster. Replication trades more memcached servers for
+less inter-cluster bandwidth, lower latency, and better
+fault tolerance. For some data, it is more cost efﬁcient
+to forgo the advantages of replicating data and have a
+single copy per region. One of the main challenges of
+scaling memcache within a region is deciding whether
+a key needs to be replicated across all frontend clusters
+or have a single replica per region. Gutter is also used
+when servers in regional pools fail.
+Table 1 summarizes two kinds of items in our appli-
+cation that have large values. We have moved one kind
+(B) to a regional pool while leaving the other (A) un-
+touched. Notice that clients access items falling into cat-
+egory B an order of magnitude less than those in cate-
+gory A. Category B’s low access rate makes it a prime
+candidate for a regional pool since it does not adversely
+impact inter-cluster bandwidth. Category B would also
+occupy 25% of each cluster’s wildcard pool so region-
+alization provides signiﬁcant storage efﬁciencies. Items
+in category A, however, are twice as large and accessed
+much more frequently, disqualifying themselves from
+regional consideration. The decision to migrate data into
+regional pools is currently based on a set of manual
+heuristics based on access rates, data set size, and num-
+ber of unique users accessing particular items.
+4.3 Cold Cluster Warmup
+When we bring a new cluster online, an existing one
+fails, or perform scheduled maintenance the caches will
+have very poor hit rates diminishing the ability to in-
+sulate backend services. A system called Cold Clus-
+ter Warmup mitigates this by allowing clients in the
+“cold cluster” (i.e. the frontend cluster that has an empty
+cache) to retrieve data from the “warm cluster” (i.e. a
+cluster that has caches with normal hit rates) rather than
+the persistent storage. This takes advantage of the afore-
+mentioned data replication that happens across frontend
+clusters. With this system cold clusters can be brought
+back to full capacity in a few hours instead of a few days.
+Care must be taken to avoid inconsistencies due to
+race conditions. For example, if a client in the cold clus-
+ter does a database update, and a subsequent request
+from another client retrieves the stale value from the
+warm cluster before the warm cluster has received the
+invalidation, that item will be indeﬁnitely inconsistent
+in the cold cluster. Memcached deletes support nonzero
+hold-off times that reject add operations for the spec-
+iﬁed hold-off time. By default, all deletes to the cold
+cluster are issued with a two second hold-off. When a
+miss is detected in the cold cluster, the client re-requests
+the key from the warm cluster and adds it into the cold
+cluster. The failure of the add indicates that newer data
+is available on the database and thus the client will re-
+fetch the value from the databases. While there is still a
+theoretical possibility that deletes get delayed more than
+two seconds, this is not true for the vast majority of the
+cases. The operational beneﬁts of cold cluster warmup
+far outweigh the cost of rare cache consistency issues.
+We turn it off once the cold cluster’s hit rate stabilizes
+and the beneﬁts diminish.
+5 Across Regions: Consistency
+There are several advantages to a broader geographic
+placement of data centers. First, putting web servers
+closer to end users can signiﬁcantly reduce latency.
+Second, geographic diversity can mitigate the effects
+of events such as natural disasters or massive power
+failures. And third, new locations can provide cheaper
+power and other economic incentives. We obtain these
+advantages by deploying to multiple regions. Each re-
+gion consists of a storage cluster and several frontend
+clusters. We designate one region to hold the master
+databases and the other regions to contain read-only
+replicas; we rely on MySQL’s replication mechanism
+to keep replica databases up-to-date with their mas-
+ters. In this design, web servers experience low latency
+when accessing either the local memcached servers or
+the local database replicas. When scaling across mul-
+
+392 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) USENIX Association
+tiple regions, maintaining consistency between data in
+memcache and the persistent storage becomes the pri-
+mary technical challenge. These challenges stem from
+a single problem: replica databases may lag behind the
+master database.
+Our system represents just one point in the wide
+spectrum of consistency and performance trade-offs.
+The consistency model, like the rest of the system, has
+evolved over the years to suit the scale of the site. It
+mixes what can be practically built without sacriﬁcing
+our high performance requirements. The large volume
+of data that the system manages implies that any minor
+changes that increase network or storage requirements
+have non-trivial costs associated with them. Most ideas
+that provide stricter semantics rarely leave the design
+phase because they become prohibitively expensive. Un-
+like many systems that are tailored to an existing use
+case, memcache and Facebook were developed together.
+This allowed the applications and systems engineers to
+work together to ﬁnd a model that is sufﬁciently easy
+for the application engineers to understand yet perfor-
+mant and simple enough for it to work reliably at scale.
+We provide best-effort eventual consistency but place an
+emphasis on performance and availability. Thus the sys-
+tem works very well for us in practice and we think we
+have found an acceptable trade-off.
+Writes from a master region: Our earlier decision re-
+quiring the storage cluster to invalidate data via daemons
+has important consequences in a multi-region architec-
+ture. In particular, it avoids a race condition in which
+an invalidation arrives before the data has been repli-
+cated from the master region. Consider a web server in
+the master region that has ﬁnished modifying a database
+and seeks to invalidate now stale data. Sending invalida-
+tions within the master region is safe. However, having
+the web server invalidate data in a replica region may be
+premature as the changes may not have been propagated
+to the replica databases yet. Subsequent queries for the
+data from the replica region will race with the replica-
+tion stream thereby increasing the probability of setting
+stale data into memcache. Historically, we implemented
+mcsqueal after scaling to multiple regions.
+Writes from a non-master region: Now consider a
+user who updates his data from a non-master region
+when replication lag is excessively large. The user’s next
+request could result in confusion if his recent change is
+missing. A cache reﬁll from a replica’s database should
+only be allowed after the replication stream has caught
+up. Without this, subsequent requests could result in the
+replica’s stale data being fetched and cached.
+We employ a remote marker mechanism to minimize
+the probability of reading stale data. The presence of the
+marker indicates that data in the local replica database
+are potentially stale and the query should be redirected
+to the master region. When a web server wishes to up-
+date data that affects a key k, that server (1) sets a re-
+mote marker r
+k in the region, (2) performs the write to
+the master embedding k and rk to be invalidated in the
+SQL statement, and (3) deletes k in the local cluster. On
+a subsequent request for k, a web server will be unable
+to ﬁnd the cached data, check whether rk exists, and di-
+rect its query to the master or local region depending on
+the presence of r
+k . In this situation, we explicitly trade
+additional latency when there is a cache miss, for a de-
+creased probability of reading stale data.
+We implement remote markers by using a regional
+pool. Note that this mechanism may reveal stale in-
+formation during concurrent modiﬁcations to the same
+key as one operation may delete a remote marker that
+should remain present for another in-ﬂight operation. It
+is worth highlighting that our usage of memcache for re-
+mote markers departs in a subtle way from caching re-
+sults. As a cache, deleting or evicting keys is always a
+safe action; it may induce more load on databases, but
+does not impair consistency. In contrast, the presence of
+a remote marker helps distinguish whether a non-master
+database holds stale data or not. In practice, we ﬁnd both
+the eviction of remote markers and situations of concur-
+rent modiﬁcation to be rare.
+Operational considerations:Inter-region communica-
+tion is expensive since data has to traverse large geo-
+graphical distances (e.g. across the continental United
+States). By sharing the same channel of communication
+for the delete stream as the database replication we gain
+network efﬁciency on lower bandwidth connections.
+The aforementioned system for managing deletes in
+Section 4.1 is also deployed with the replica databases to
+broadcast the deletes to memcached servers in the replica
+regions. Databases and mcrouters buffer deletes when
+downstream components become unresponsive. A fail-
+ure or delay in any of the components results in an in-
+creased probability of reading stale data. The buffered
+deletes are replayed once these downstream components
+are available again. The alternatives involve taking a
+cluster ofﬂine or over-invalidating data in frontend clus-
+ters when a problem is detected. These approaches result
+in more disruptions than beneﬁts given our workload.
+6 Single Server Improvements
+The all-to-allcommunication pattern implies that a sin-
+gle server can become a bottleneck for a cluster. This
+section describes performance optimizations and mem-
+ory efﬁciency gains in memcached which allow better
+
+USENIX Association  10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) 393
+scaling within clusters. Improving single server cache
+performance is an active research area [9, 10, 28, 25].
+6.1 Performance Optimizations
+We began with a single-threaded memcached which used
+a ﬁxed-size hash table. The ﬁrst major optimizations
+were to: (1) allow automatic expansion of the hash ta-
+ble to avoid look-up times drifting to O(n), (2) make the
+server multi-threaded using a global lock to protect mul-
+tiple data structures, and (3) giving each thread its own
+UDP port to reduce contention when sending replies and
+later spreading interrupt processing overhead. The ﬁrst
+two optimizations were contributed back to the open
+source community. The remainder of this section ex-
+plores further optimizations that are not yet available in
+the open source version.
+Our experimental hosts have an Intel Xeon
+CPU (X5650) running at 2.67GHz (12 cores and
+12 hyperthreads), an Intel 82574L gigabit ethernet
+controller and 12GB of memory. Production servers
+have additional memory. Further details have been
+previously published [4]. The performance test setup
+consists of ﬁfteen clients generating memcache trafﬁc
+to a single memcached server with 24 threads. The
+clients and server are co-located on the same rack and
+connected through gigabit ethernet. These tests measure
+the latency of memcached responses over two minutes
+of sustained load.
+Get Performance: We ﬁrst investigate the effect of re-
+placing our original multi-threaded single-lock imple-
+mentation with ﬁne-grained locking. We measured hits
+by pre-populating the cache with 32-byte values before
+issuing memcached requests of 10 keys each. Figure 7
+shows the maximum request rates that can be sustained
+with sub-millisecond average response times for differ-
+ent versions of memcached. The ﬁrst set of bars is our
+memcached before ﬁne-grained locking, the second set
+is our current memcached, and the ﬁnal set is the open
+source version 1.4.10 which independently implements
+a coarser version of our locking strategy.
+Employing ﬁne-grained locking triples the peak get
+rate for hits from 600k to 1.8M items per second. Per-
+formance for misses also increased from 2.7M to 4.5M
+items per second. Hits are more expensive because the
+return value has to be constructed and transmitted, while
+misses require a single static response (END) for the en-
+tire multiget indicating that all keys missed.
+We also investigated the performance effects of us-
+ing UDP instead of TCP . Figure 8 shows the peak re-
+quest rate we can sustain with average latencies of less
+than one millisecond for single gets and multigets of 10
+keys. We found that our UDP implementation outper-
+Facebook Facebook−μlocks 1.4.10
+Max sustained
+items / second
+hits
+misses
+0 2M 4M 6M
+Figure 7: Multiget hit and miss performance comparison
+by memcached version
+Get 10−key multiget
+Max sustained
+items / second
+TCP
+UDP
+0 1M 2M
+Figure 8: Get hit performance comparison for single
+gets and 10-key multigets over TCP and UDP
+forms our TCP implementation by 13% for single gets
+and 8% for 10-key multigets.
+Because multigets pack more data into each request
+than single gets, they use fewer packets to do the same
+work. Figure 8 shows an approximately four-fold im-
+provement for 10-key multigets over single gets.
+6.2 Adaptive Slab Allocator
+Memcached employs a slab allocator to manage memory.
+The allocator organizes memory into slab classes, each
+of which contains pre-allocated, uniformly sized chunks
+of memory. Memcached stores items in the smallest pos-
+sible slab class that can ﬁt the item’s metadata, key, and
+value. Slab classes start at 64 bytes and exponentially in-
+crease in size by a factor of 1.07 up to 1 MB, aligned on
+4-byte boundaries
+3 . Each slab class maintains a free-list
+of available chunks and requests more memory in 1MB
+slabs when its free-list is empty. Once a memcached
+server can no longer allocate free memory, storage for
+new items is done by evicting the least recently used
+(LRU) item within that slab class. When workloads
+change, the original memory allocated to each slab class
+may no longer be enough resulting in poor hit rates.
+3 This scaling factor ensures that we have both 64 and 128 byte
+items which are more amenable to hardware cache lines.
+
+394 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) USENIX Association
+We implemented an adaptive allocator that period-
+ically re-balances slab assignments to match the cur-
+rent workload. It identiﬁes slab classes as needing more
+memory if they are currently evicting items and if the
+next item to be evicted was used at least 20% more re-
+cently than the average of the least recently used items in
+other slab classes. If such a class is found, then the slab
+holding the least recently used item is freed and trans-
+ferred to the needy class. Note that the open-source com-
+munity has independently implemented a similar allo-
+cator that balances the eviction rates across slab classes
+while our algorithm focuses on balancing the age of the
+oldest items among classes. Balancing age provides a
+better approximation to a single global Least Recently
+Used (LRU) eviction policy for the entire server rather
+than adjusting eviction rates which can be heavily inﬂu-
+enced by access patterns.
+6.3 The Transient Item Cache
+While memcached supports expiration times, entries
+may live in memory well after they have expired.
+Memcached lazily evicts such entries by checking ex-
+piration times when serving a get request for that item
+or when they reach the end of the LRU. Although efﬁ-
+cient for the common case, this scheme allows short-
+lived keys that see a single burst of activity to waste
+memory until they reach the end of the LRU.
+We therefore introduce a hybrid scheme that relies on
+lazy eviction for most keys and proactively evicts short-
+lived keys when they expire. We place short-lived items
+into a circular buffer of linked lists (indexed by sec-
+onds until expiration) – called the Transient Item Cache
+– based on the expiration time of the item. Every sec-
+ond, all of the items in the bucket at the head of the
+buffer are evicted and the head advances by one. When
+we added a short expiration time to a heavily used set of
+keys whose items have short useful lifespans; the pro-
+portion of memcache pool used by this key family was
+reduced from 6% to 0.3% without affecting the hit rate.
+6.4 Software Upgrades
+Frequent software changes may be needed for upgrades,
+bug ﬁxes, temporary diagnostics, or performance test-
+ing. A memcached server can reach 90% of its peak hit
+rate within a few hours. Consequently, it can take us over
+12 hours to upgrade a set of memcached servers as the re-
+sulting database load needs to be managed carefully. We
+modiﬁed memcached to store its cached values and main
+data structures in System V shared memory regions so
+that the data can remain live across a software upgrade
+and thereby minimize disruption.
+distinct memcached servers
+percentile of requests
+20 100 200 300 400 500 600
+0 20 40 60 80 100
+All requests
+A popular data intensive page
+Figure 9: Cumulative distribution of the number of dis-
+tinct memcached servers accessed
+7 Memcache Workload
+We now characterize the memcache workload using data
+from servers that are running in production.
+7.1 Measurements at the Web Server
+We record all memcache operations for a small percent-
+age of user requests and discuss the fan-out, response
+size, and latency characteristics of our workload.
+Fanout: Figure 9 shows the distribution of distinct
+memcached servers a web server may need to contact
+when responding to a page request. As shown, 56%
+of all page requests contact fewer than 20 memcached
+servers. By volume, user requests tend to ask for small
+amounts of cached data. There is, however, a long tail to
+this distribution. The ﬁgure also depicts the distribution
+for one of our more popular pages that better exhibits
+the all-to-all communication pattern. Most requests of
+this type will access over 100 distinct servers; accessing
+several hundred memcached servers is not rare.
+Response size:Figure 10 shows the response sizes from
+memcache requests. The difference between the median
+(135 bytes) and the mean (954 bytes) implies that there
+is a very large variation in the sizes of the cached items.
+In addition there appear to be three distinct peaks at ap-
+proximately 200 bytes and 600 bytes. Larger items tend
+to store lists of data while smaller items tend to store
+single pieces of content.
+Latency: We measure the round-trip latency to request
+data from memcache, which includes the cost of rout-
+ing the request and receiving the reply, network transfer
+time, and the cost of deserialization and decompression.
+Over 7 days the median request latency is 333 microsec-
+onds while the 75
+th and 95 th percentiles (p75 and p95)
+are 475μs and 1.135ms respectively. Our median end-
+to-end latency from an idle web server is 178μs while
+the p75 and p95 are 219μs and 374μs, respectively. The
+
+USENIX Association  10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) 395
+Bytes
+percentile of requests
+0 200 400 600
+0 20 40 60 80 100
+Figure 10: Cumulative distribution of value sizes
+fetched
+wide variance between the p95 latencies arises from
+handling large responses and waiting for the runnable
+thread to be scheduled as discussed in Section 3.1.
+7.2 Pool Statistics
+We now discuss key metrics of four memcache pools.
+The pools are wildcard (the default pool), app (a pool
+devoted for a speciﬁc application), a replicated pool for
+frequently accessed data, and a regional pool for rarely
+accessed information. In each pool, we collect average
+statistics every 4 minutes and report in Table 2 the high-
+est average for one month collection period. This data
+approximates the peak load seen by those pools. The ta-
+ble shows the widely different get, set, and delete rates
+for different pools. Table 3 shows the distribution of re-
+sponse sizes for each pool. Again, the different char-
+acteristics motivate our desire to segregate these work-
+loads from one another.
+As discussed in Section 3.2.3, we replicate data
+within a pool and take advantage of batching to handle
+the high request rates. Observe that the replicated pool
+has the highest get rate (about 2.7 × that of the next high-
+est one) and the highest ratio of bytes to packets despite
+having the smallest item sizes. This data is consistent
+with our design in which we leverage replication and
+batching to achieve better performance. In the app pool,
+a higher churn of data results in a naturally higher miss
+rate. This pool tends to have content that is accessed for
+a few hours and then fades away in popularity in favor
+of newer content. Data in the regional pool tends to be
+large and infrequently accessed as shown by the request
+rates and the value size distribution.
+7.3 Invalidation Latency
+We recognize that the timeliness of invalidations is a
+critical factor in determining the probability of expos-
+ing stale data. To monitor this health, we sample one out
+master region replica region
+seconds of delay
+fraction of deletes that failed
+1s 10s 1m 10m 1h 1d 1s 10s 1m 10m 1h 1d
+1e−06 1e−05 1e−04 1e−03
+Figure 11: Latency of the Delete Pipeline
+of a million deletes and record the time the delete was is-
+sued. We subsequently query the contents of memcache
+across all frontend clusters at regular intervals for the
+sampled keys and log an error if an item remains cached
+despite a delete that should have invalidated it.
+In Figure 11, we use this monitoring mechanism to re-
+port our invalidation latencies across a 30 day span. We
+break this data into two different components: (1) the
+delete originated from a web server in the master region
+and was destined to a memcached server in the master re-
+gion and (2) the delete originated from a replica region
+and was destined to another replica region. As the data
+show, when the source and destination of the delete are
+co-located with the master our success rates are much
+higher and achieve four 9s of reliability within 1 second
+and ﬁve 9s after one hour. However when the deletes
+originate and head to locations outside of the master re-
+gion our reliability drops to three 9s within a second and
+four 9s within 10 minutes. In our experience, we ﬁnd
+that if an invalidation is missing after only a few sec-
+onds the most common reason is that the ﬁrst attempt
+failed and subsequent retrials will resolve the problem.
+8 Related Work
+Several other large websites have recognized the util-
+ity of key-value stores. DeCandia et al. [12] present
+a highly available key-value store that is used by a
+variety of application services at Amazon.com. While
+their system is optimized for a write heavy workload,
+ours targets a workload dominated by reads. Similarly,
+LinkedIn uses V oldemort [5], a system inspired by Dy-
+namo. Other major deployments of key-value caching
+solutions include Redis [6] at Github, Digg, and Bliz-
+zard, and memcached at Twitter [33] and Zynga. Lak-
+shman et al. [1] developed Cassandra, a schema-based
+distributed key-value store. We preferred to deploy and
+scale memcached due to its simpler design.
+Our work in scaling memcache builds on extensive
+work in distributed data structures. Gribble et al. [19]
+
+396 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) USENIX Association
+pool miss rate get
+s
+set
+s
+delete
+s
+packets
+s outbound
+bandwidth (MB/s)
+wildcard 1.76% 262k 8.26k 21.2k 236k 57.4
+app 7.85% 96.5k 11.9k 6.28k 83.0k 31.0
+replicated 0.053% 710k 1.75k 3.22k 44.5k 30.1
+regional 6.35% 9.1k 0.79k 35.9k 47.2k 10.8
+Table 2: Trafﬁc per server on selected memcache pools averaged over 7 days
+pool mean std dev p5 p25 p50 p75 p95 p99
+wildcard 1.11 K 8.28 K 77 102 169 363 3.65 K 18.3 K
+app 881 7.70 K 103 247 269 337 1.68K 10.4 K
+replicated 66 2 62 68 68 68 68 68
+regional 31.8 K 75.4 K 231 824 5.31 K 24.0 K 158 K 381 K
+Table 3: Distribution of item sizes for various pools in bytes
+present an early version of a key-value storage system
+useful for Internet scale services. Ousterhout et al.[29]
+also present the case for a large scale in-memory key-
+value storage system. Unlike both of these solutions,
+memcache does not guarantee persistence. We rely on
+other systems to handle persistent data storage.
+Ports et al. [31] provide a library to manage the
+cached results of queries to a transactional database.
+Our needs require a more ﬂexible caching strategy. Our
+use of leases [18] and stale reads [23] leverages prior
+research on cache consistency and read operations in
+high-performance systems. Work by Ghandeharizadeh
+and Y ap [15] also presents an algorithm that addresses
+the stale set problem based on time-stamps rather than
+explicit version numbers.
+While software routers are easier to customize and
+program, they are often less performant than their hard-
+ware counterparts. Dobrescu et al. [13] address these
+issues by taking advantage of multiple cores, multiple
+memory controllers, multi-queue networking interfaces,
+and batch processing on general purpose servers. Ap-
+plying these techniques to mcrouter’s implementation
+remains future work. Twitter has also independently de-
+veloped a memcache proxy similar to mcrouter [32].
+In Coda [35], Satyanarayanan et al.demonstrate how
+datasets that diverge due to disconnected operation can
+be brought back into sync. Glendenning et al.[17] lever-
+age Paxos [24] and quorums [16] to build Scatter, a dis-
+tributed hash table with linearizable semantics [21] re-
+silient to churn. Lloyd et al.[27] examine causal consis-
+tency in COPS, a wide-area storage system.
+TAO [37] is another Facebook system that relies heav-
+ily on caching to serve large numbers of low-latency
+queries. TAO differs from memcache in two fundamental
+ways. (1) TAO implements a graph data model in which
+nodes are identiﬁed by ﬁxed-length persistent identiﬁers
+(64-bit integers). (2) TAO encodes a speciﬁc mapping of
+its graph model to persistent storage and takes respon-
+sibility for persistence. Many components, such as our
+client libraries and mcrouter, are used by both systems.
+9 Conclusion
+In this paper, we show how to scale a memcached-based
+architecture to meet the growing demand of Facebook.
+Many of the trade-offs discussed are not fundamental,
+but are rooted in the realities of balancing engineering
+resources while evolving a live system under continu-
+ous product development. While building, maintaining,
+and evolving our system we have learned the following
+lessons. (1) Separating cache and persistent storage sys-
+tems allows us to independently scale them. (2) Features
+that improve monitoring, debugging and operational ef-
+ﬁciency are as important as performance. (3) Managing
+stateful components is operationally more complex than
+stateless ones. As a result keeping logic in a stateless
+client helps iterate on features and minimize disruption.
+(4) The system must support gradual rollout and roll-
+back of new features even if it leads to temporary het-
+erogeneity of feature sets. (5) Simplicity is vital.
+Acknowledgements
+We would like to thank Philippe Ajoux, Nathan Bron-
+son, Mark Drayton, David Fetterman, Alex Gartrell, An-
+drii Grynenko, Robert Johnson, Sanjeev Kumar, Anton
+Likhtarov, Mark Marchukov, Scott Marlette, Ben Mau-
+rer, David Meisner, Konrad Michels, Andrew Pope, Jeff
+Rothschild, Jason Sobel, and Y ee Jiun Song for their
+contributions. We would also like to thank the anony-
+mous reviewers, our shepherd Michael Piatek, Tor M.
+Aamodt, Remzi H. Arpaci-Dusseau, and Tayler Hether-
+ington for their valuable feedback on earlier drafts of
+the paper. Finally we would like to thank our fellow en-
+gineers at Facebook for their suggestions, bug-reports,
+and support which makes memcache what it is today.
+
+USENIX Association  10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) 397
+References
+[1] Apache Cassandra. http://cassandra.apache.org/.
+[2] Couchbase. http://www.couchbase.com/.
+[3] Making Facebook Self-Healing. https://www.facebook.
+com/note.php?note_id=10150275248698920.
+[4] Open Compute Project. http://www.opencompute.org.
+[5] Project V oldemort. http://project-voldemort.com/.
+[6] Redis. http://redis.io/.
+[7] Scaling Out. https://www.facebook.com/note.php?note_
+id=23844338919.
+[8] A TIKOGLU , B., X U ,Y . ,F RACHTENBERG , E., J IANG , S., AND
+P ALECZNY , M. Workload analysis of a large-scale key-value
+store. ACM SIGMETRICS Performance Evaluation Review 40 ,
+1 (June 2012), 53–64.
+[9] B EREZECKI , M., F RACHTENBERG , E., P ALECZNY , M., AND
+S TEELE , K. Power and performance evaluation of memcached
+on the tilepro64 architecture. Sustainable Computing: Informat-
+ics and Systems 2, 2 (June 2012), 81 – 90.
+[10] B OYD -W ICKIZER , S., C LEMENTS , A. T., M AO , Y. ,
+P ESTEREV , A., K AASHOEK ,M .F . ,M ORRIS , R., AND
+Z ELDOVICH , N. An analysis of linux scalability to many cores.
+In Proceedings of the 9th USENIX Symposium on Operating
+Systems Design &amp; Implementation (2010), pp. 1–8.
+[11] C ERF , V . G., AND K AHN , R. E. A protocol for packet network
+intercommunication. ACM SIGCOMM Compututer Communi-
+cation Review 35, 2 (Apr. 2005), 71–82.
+[12] D E C ANDIA , G., H ASTORUN , D., J AMPANI , M., K AKULAP -
+AT I , G., L AKSHMAN , A., P ILCHIN , A., S IV ASUBRAMANIAN ,
+S., V OSSHALL , P. , AND V OGELS , W. Dynamo: amazon’s
+highly available key-value store. ACM SIGOPS Operating Sys-
+tems Review 41, 6 (Dec. 2007), 205–220.
+[13] F ALL , K., I ANNACCONE , G., M ANESH , M., R A TNASAMY , S.,
+A RGYRAKI , K., D OBRESCU , M., AND E GI , N. Routebricks:
+enabling general purpose network infrastructure. ACM SIGOPS
+Operating Systems Review 45, 1 (Feb. 2011), 112–125.
+[14] F ITZPA TRICK , B. Distributed caching with memcached. Linux
+Journal 2004, 124 (Aug. 2004), 5.
+[15] G HANDEHARIZADEH , S., AND Y AP , J. Gumball: a race con-
+dition prevention technique for cache augmented sql database
+management systems. In Proceedings of the 2nd ACM SIGMOD
+Workshop on Databases and Social Networks (2012), pp. 1–6.
+[16] G IFFORD , D. K. Weighted voting for replicated data. In Pro-
+ceedings of the 7th ACM Symposium on Operating Systems Prin-
+ciples (1979), pp. 150–162.
+[17] G
+LENDENNING , L., B ESCHASTNIKH , I., K RISHNAMURTHY ,
+A., AND A NDERSON , T. Scalable consistency in Scatter. In
+Proceedings of the 23rd ACM Symposium on Operating Systems
+Principles (2011), pp. 15–28.
+[18] G
+R AY , C., AND C HERITON , D. Leases: An efﬁcient fault-
+tolerant mechanism for distributed ﬁle cache consistency. ACM
+SIGOPS Operating Systems Review 23, 5 (Nov. 1989), 202–210.
+[19] G RIBBLE , S. D., B REWER , E. A., H ELLERSTEIN , J. M., AND
+C ULLER , D. Scalable, distributed data structures for internet
+service construction. In Proceedings of the 4th USENIX Sym-
+posium on Operating Systems Design &amp; Implementation (2000),
+pp. 319–332.
+[20] H EINRICH , J. MIPS R4000 Microprocessor User’s Manual.
+MIPS technologies, 1994.
+[21] H ERLIHY , M. P ., AND W ING , J. M. Linearizability: a correct-
+ness condition for concurrent objects. ACM Transactions on
+Programming Languages and Systems 12, 3 (July 1990), 463–
+492.
+[22] K ARGER , D., L EHMAN , E., L EIGHTON ,T . ,P ANIGRAHY , R.,
+L EVINE , M., AND L EWIN , D. Consistent Hashing and Random
+trees: Distributed Caching Protocols for Relieving Hot Spots on
+the World Wide Web. In Proceedings of the 29th annual ACM
+Symposium on Theory of Computing (1997), pp. 654–663.
+[23] K EETON , K., M ORREY , III, C. B., S OULES , C. A., AND
+V EITCH , A. Lazybase: freshness vs. performance in informa-
+tion management. ACM SIGOPS Operating Systems Review 44,
+1 (Dec. 2010), 15–19.
+[24] L AMPORT , L. The part-time parliament. ACM Transactions on
+Computer Systems 16, 2 (May 1998), 133–169.
+[25] L IM , H., F AN , B., A NDERSEN , D. G., AND K AMINSKY , M.
+Silt: a memory-efﬁcient, high-performance key-value store. In
+Proceedings of the 23rd ACM Symposium on Operating Systems
+Principles (2011), pp. 1–13.
+[26] L
+ITTLE , J., AND G RA VES , S. Little’s law. Building Intuition
+(2008), 81–100.
+[27] L LOYD ,W . ,F REEDMAN , M., K AMINSKY , M., AND A NDER -
+SEN , D. Don’t settle for eventual: scalable causal consistency for
+wide-area storage with COPS. In Proceedings of the 23rd ACM
+Symposium on Operating Systems Principles (2011), pp. 401–
+416.
+[28] M ETREVELI , Z., Z ELDOVICH , N., AND K AASHOEK , M.
+Cphash: A cache-partitioned hash table. In Proceedings of the
+17th ACM SIGPLAN symposium on Principles and Practice of
+Parallel Programming (2012), pp. 319–320.
+[29] O USTERHOUT , J., A GRAW AL ,P . ,E RICKSON , D.,
+K OZYRAKIS , C., L EVERICH , J., M AZI `ERES , D., M I -
+TRA , S., N ARA Y ANAN , A., O NGARO , D., P ARULKAR , G.,
+R OSENBLUM , M., R UMBLE , S. M., S TRA TMANN , E., AND
+S TUTSMAN , R. The case for ramcloud. Communications of the
+ACM 54, 7 (July 2011), 121–130.
+[30] P HANISHA YEE , A., K REV A T , E., V ASUDEV AN ,V . ,A NDER -
+SEN , D. G., G ANGER , G. R., G IBSON , G. A., AND S E -
+SHAN , S. Measurement and analysis of tcp throughput col-
+lapse in cluster-based storage systems. In Proceedings of the 6th
+USENIX Conference on File and Storage Technologies (2008),
+pp. 12:1–12:14.
+[31] P ORTS , D. R. K., C LEMENTS ,A .T . ,Z HANG , I., M ADDEN ,
+S., AND L ISKOV , B. Transactional consistency and automatic
+management in an application data cache. In Proceedings of
+the 9th USENIX Symposium on Operating Systems Design &amp;
+Implementation (2010), pp. 1–15.
+[32] R
+AJASHEKHAR , M. Twemproxy: A fast, light-weight proxy for
+memcached. https://dev.twitter.com/blog/twemproxy.
+[33] R AJASHEKHAR , M., AND Y UE , Y. Caching with twem-
+cache. http://engineering.twitter.com/2012/07/
+caching-with-twemcache.html.
+[34] R A TNASAMY , S., F RANCIS ,P . ,H ANDLEY , M., K ARP , R.,
+AND S HENKER , S. A scalable content-addressable network.
+ACM SIGCOMM Computer Communication Review 31, 4 (Oct.
+2001), 161–172.
+[35] S A TY ANARA Y ANAN , M., K ISTLER , J., K UMAR ,P . ,O KASAKI ,
+M., S IEGEL , E., AND S TEERE , D. Coda: A highly available ﬁle
+system for a distributed workstation environment. IEEE Trans-
+actions on Computers 39, 4 (Apr. 1990), 447–459.
+
+398 10th USENIX Symposium on Networked Systems Design and Implementation (NSDI ’13) USENIX Association
+[36] S TOICA , I., M ORRIS , R., K ARGER , D., K AASHOEK , M., AND
+B ALAKRISHNAN , H. Chord: A scalable peer-to-peer lookup
+service for internet applications. ACM SIGCOMM Computer
+Communication Review 31, 4 (Oct. 2001), 149–160.
+[37] V ENKA TARAMANI ,V . ,A MSDEN , Z., B RONSON , N., C ABR -
+ERA III, G., C HAKKA ,P . ,D IMOV ,P . ,D ING , H., F ERRIS , J.,
+G IARDULLO , A., H OON , J., K ULKARNI , S., L AWRENCE , N.,
+M ARCHUKOV , M., P ETROV , D., AND P UZAR , L. Tao: how
+facebook serves the social graph. In Proceedings of the ACM
+SIGMOD International Conference on Management of Data
+(2012), pp. 791–792.</code></pre></details><details class="archive" data-source-record data-source="papers/memcache-faq.txt"><summary><span><b>论文 FAQ</b>papers/memcache-faq.txt</span><small>294 行 · 2,250 词 · 完整收录</small></summary><div class="archive-actions"><a href="https://pdos.csail.mit.edu/6.824/papers/memcache-faq.txt" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.824 Scaling Memcached at Facebook FAQ
+
+Q: Does the paper&#x27;s design eliminate the possibility of stale data?
+
+A: No, the design allows clients to read stale data from memcached in
+some fairly common situations. For example, if a client writes some
+data in the database, there will be a delay before mcsqueal sends out
+invalidates (delete()s) to all the memcached servers that may be
+caching data derived from that write, in all the clusters in the
+region. A client that reads during that delay may read old cached
+data, not the newly written data.
+
+Q: Why is it OK for memcache to yield stale data?
+
+A: The cached data is typically displayed to users on web pages, for
+example news feed items, friend status, and messages. If the data is
+out of date by a fraction of a second, users will usually not notice.
+
+The big danger they are avoiding is long-term caching of stale
+data. It&#x27;s OK to serve data that&#x27;s out of date by a few seconds. It&#x27;s
+not OK to serve data that&#x27;s out of date by hours. Without the paper&#x27;s
+machinery, unbounded memcached staleness could arise due to lost
+deletes or out of order updates.
+
+Q: What if a client reads stale data from memcached, computes
+something based on it, and writes the result to the database?
+
+A: Facebook&#x27;s application programmers don&#x27;t write code like that.
+Instead, the client sends a transaction to the database; the
+transaction includes both the reads and the writes. So updates get
+strong consistency and don&#x27;t involve stale data.
+
+Q: Why do they use memcached at all? Why not just read directly from
+the MySQL database servers in the &quot;storage cluster&quot;?
+
+A: The MySQL servers are not nearly fast enough to serve the volume of
+reads generated by Facebook&#x27;s web servers. memcached is orders of
+magnitude faster than MySQL.
+
+Q: What would a no-compromises design look like?
+
+A: Ideally a design would handle billions of requests per second, be
+easy for application programmers to use, work well for users spread
+all over the world, provide strong consistency, and not cost too much.
+That&#x27;s a hard set of goals, and I don&#x27;t know of a satisfying answer.
+
+One source of problems is that MySQL, while powerful and easy to use,
+has relatively low performance. So one could imagine using a faster
+database, such as FaRM, which might eliminate the need for a cache,
+and thus eliminate problems with cache consistency.
+
+Another source of problems is the lack of integration between
+memcached and MySQL. Perhaps one could have the cache and database
+cooperate more closely; it might help if the cache (rather than the
+application) controlled the handling of cache misses, and if the
+database was in sole charge of updating or invalidating cached data.
+
+For geographic distribution, have a look at Yahoo&#x27;s PNUTS, which was
+designed from the start to have useful consistency properties (though
+not linearizability) while supporting multiple regions.
+
+Q: What&#x27;s the difference between the paper&#x27;s &quot;memcached&quot; and &quot;memcache&quot;?
+
+A: &quot;memcached&quot; refers to the software, which you can find here:
+
+  https://github.com/memcached/memcached
+
+memcached is a simple and fast key/value server. It stores data in
+RAM, with no fault tolerance, so people only use it for caching (not
+for persistent storage).
+
+The paper uses &quot;memcache&quot; to refer to Facebook&#x27;s set of servers
+running memcached.
+
+Q: What is the &quot;stale set&quot; problem in 3.2.1, and how do leases solve it?
+
+A: Here&#x27;s an example of the &quot;stale set&quot; problem that could occur if
+there were no leases:
+
+1. Client C1 asks memcache for k; memcache says k doesn&#x27;t exist.
+2. C1 asks MySQL for k, MySQL replies with value 1.
+   C1 is slow at this point for some reason...
+3. Someone updates k&#x27;s value in MySQL to 2.
+4. MySQL/mcsqueal/mcrouter send an invalidate for k to memcache,
+   though memcache is not caching k, so there&#x27;s nothing to invalidate.
+5. C2 asks memcache for k; memcache says k doesn&#x27;t exist.
+6. C2 asks MySQL for k, mySQL replies with value 2.
+7. C2 installs k=2 in memcache.
+8. C1 installs k=1 in memcache.
+
+Now memcache has a stale version of k, and it may never be updated.
+
+The paper&#x27;s leases fix the example:
+
+1. Client C1 asks memcache for k; memcache says k doesn&#x27;t exist,
+   returns lease L1 to C1, and remembers the lease.
+2. C1 asks MySQL for k, MySQL replies with value 1.
+   C1 is slow at this point for some reason...
+3. Someone updates k&#x27;s value in MySQL to 2.
+4. MySQL/mcsqueal/mcrouter send an invalidate for k to memcache,
+   though memcache is not caching k, so there&#x27;s nothing to invalidate.
+   But memcache does invalidate C1&#x27;s lease L1 (deletes L1 from its set
+   of valid leases).
+5. C2 asks memcache for k; memcache says k doesn&#x27;t exist,
+   and returns lease L2 to C2 (since there was no current lease for k).
+6. C2 asks MySQL for k, mySQL replies with value 2.
+7. C2 installs k=2 in memcache, supplying valid lease L2.
+8. C1 installs k=1 in memcache, supplying invalid lease L1,
+   so memcache ignores C1.
+
+Now memcache is left caching the correct k=2.
+
+Q: What is the &quot;thundering herd&quot; problem in 3.2.1, and how do leases
+solve it?
+
+A: The thundering herd problem:
+
+* key k is popular -- lots of clients read it.
+* ordinarily clients read k from memcache, which is fast.
+* but suppose someone writes k, causing it to be invalidated in memcache.
+* for a while, every client that tries to read k will miss in memcache.
+* they will all ask MySQL for k.
+* MySQL may be overloaded with too many simultaneous requests.
+
+The paper&#x27;s leases solve this problem by allowing only the first
+client that misses to ask MySQL for the latest data. The other clients
+wait for a bit to give the first client a chance to fetch the data
+from MySQL and install it in memcache, then the other clients re-try
+memcache.
+
+Q: Why do writing clients delete() from memcache, rather than updating
+the values in memcache?
+
+A: Suppose two clients, C1 and C2, want to update the same item at the
+same time; C1 wants to set the item to value &quot;x&quot;, and C2 to &quot;y&quot;. They
+both send their updates to the MySQL database, which executes the
+writes in one order or the other. Let&#x27;s suppose the database executes
+C1&#x27;s write first, then C2&#x27;s write, so that the final value in the
+database is &quot;y&quot;. Then C1 sends put(k, &quot;x&quot;) to memcached, and C2 sends
+put(k, &quot;y&quot;) to memcached, at about the same time. Memcached may
+execute the requests in either order, so it may execute C2&#x27;s put(&quot;y&quot;)
+first, and C1&#x27;s put(&quot;x&quot;) second, so that memcached ends up caching
+&quot;x&quot;. Now memcached is caching a value that differs from the one in the
+database, which is a bad situation.
+
+This problem doesn&#x27;t arise if C1 and C2 delete() instead of put().
+
+Q: What is McRouter?
+
+A: The point of mcrouter is to aggregate memcached RPCs from many
+clients and send them in big batches to memcached servers. It&#x27;s more
+efficient to have a smallish number of mcrouter servers talk to
+memcached than a large number of individual clients. One reason is
+that there&#x27;s overhead to each network (TCP) connection; better that
+each memcached have a TCP connection per mcrouter than per client.
+Another reason is that there&#x27;s overhead (packet header space and
+interrupt) for each packet, so it&#x27;s helpful that a mcrouter can pack
+many client requests into each TCP packet.
+
+Q: Isn&#x27;t it wasteful that the gutter servers are idle when they aren&#x27;t
+taking over for a failed server? Why not use the gutter servers for
+ordinary memcached service as well as gutter?
+
+A: I think non-gutter memcached servers are often close to fully
+loaded, and have little spare capacity. If one fails, the replacement
+server needs to have been more or less idle, in order to handle the
+failed server&#x27;s load.
+
+Q: How do Section 4.2&#x27;s regional pools reduce the number of replicas?
+
+A: Each region has multiple clusters. Each cluster has a complete cache.
+Thus a given data item may be cached in each of the clusters. If there
+are N clusters in a region, there may be N distinct cached copies of a
+data item, one per cluster.
+
+Items that are cached in the regional pool are only cached once per
+region, not N times.
+
+The tradeoff is that the potential serving capacity is N times higher if
+there are N copies.
+
+Q: What storage system work has gone on at Facebook since this paper?
+
+A: Here&#x27;s a sample:
+
+https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf
+https://www.cs.princeton.edu/~wlloyd/papers/existential-sosp15.pdf
+http://www.cs.cmu.edu/~beckmann/publications/papers/2020.osdi.cachelib.pdf
+https://www.usenix.org/system/files/fast21-pan.pdf
+
+Q: Why not just put a cache into MySQL, where it can be better
+integrated to provide good consistency?
+
+A: It would be fantastic if someone could add a transparent cache to
+MySQL that made it as fast as a cluster of memcached servers. But
+no-one has done that; it may not be possible. MySQL does cache, and
+it&#x27;s still much slower than memcached. Presumably a lot of the reason
+is that MySQL presents a much more powerful and complex interface than
+memcached (MySQL supports SQL queries, an interface which is about
+1000x as complex as memcached&#x27;s put()/get()/delete).
+
+Q: Figure 11 shows that Memcache can serve data that is even a day
+old. Although this happens with low probability, couldn&#x27;t it
+still cause significant, perhaps catastrophic, problems in
+applications using Memcache?
+
+A: Yes, indeed.  It is something FB has struggled with because it makes
+writing applications more challenging. It is the topic of two
+follow-on papers (see the references above).
+
+The bottom-line of these papers is still roughly the same: the
+probability of inconsistency is so low that they are willing to accept
+it: even though a few users in principle might be able to notice the
+inconsistency, they probably won&#x27;t realize it or care.  (Their
+target applications are not banking applications.)
+
+Q: How does the MySQL replication system work?
+
+A: See https://dev.mysql.com/doc/refman/8.0/en/replication.html. FB uses
+the log-based replication scheme as a component of the
+publish/subscribe system, as described in &quot;Wormhole: Reliable Pub-Sub
+to support Geo-replicated Internet Services&quot;, Sharma et al, 2015. The
+core of the replication scheme is to read updates from MySQL&#x27;s
+transaction log and send those to the backup, which applies them to
+its data.
+
+Q: What does &quot;look-aside&quot; caching refer to?
+
+A: The cache sits on the side as opposed in between the application
+and the storage layer. If the application misses in the cache, the
+application retrieves the database records and updates the cache,
+instead of the cache doing it. This arrangement is relatively simple,
+since the cache and database don&#x27;t have to know about each other, and
+the application is free to use different key schemes for the cache
+versus the database.
+
+Q: What is incast congestion?
+
+A: A situation in which a computer receives many packets from
+different sources at the same time, too many to process immediately,
+and (in the worst case) more than it can buffer, leading to discarded
+packets. The congestion and discarding can also occur inside the
+network switch feeding this computer.
+
+In the paper, this comes up when a web server needs many distinct
+items of information from memcache (perhaps 100s or 1000s), which may
+be stored on 100s of different memcached servers. For speed, the
+client asks for many items in parallel. But that means it will receive
+many replies in parallel, perhaps leading to incast congestion and
+loss of replies. Section 3.1&#x27;s window mechanism is intended to limit
+the number of parallel requests, and thus the number of simultaneous
+reply packets.
+
+Q: What is the cold cluster warmup inconsistency which Section 4.3
+describes?
+
+A: Here&#x27;s a scenario:
+
+  0. key k starts out with value v1.
+  1. client C1 updates k to v2 in the DB
+  2. C1 and the DB send delete(k) to the memcache cold cluster
+     but the DB is slow at sending delete(k) to the warm cluster
+  3. client C2 sends get(k) to the cold cluster, which sends back a &quot;miss&quot;
+  4. C2 sends get(k) to the warm cluster, receives v1
+  5. C2 set(k, v1) into cold cluster
+  6. the DB&#x27;s delete(k) finally reaches the warm cluster
+
+Now the cold memcache cluster holds the stale v1 value, but the delete()
+has already happened. So the value will stay stale indefinitely, until
+the key is next written.
+
+The two-second hold-off scheme solves this. After C1 calls delete(k),
+the cold cluster memcached ignores any set(k) for two seconds. By then,
+the DB&#x27;s delete(k) should have reached the warm cluster.
+
+Q: How is the privacy of user data stored in memcached protected?
+
+A: The paper does not touch on this question, so we can only guess.
+
+The first line of defense is that only Facebook&#x27;s own computers can
+talk to their memcached and MySQL servers. Probably there are
+firewalls between Facebook&#x27;s datacenters and the Internet so that no
+outsider can directly contact any of Facebook&#x27;s internal servers.
+
+At a higher level, Facebook&#x27;s web servers have code that decides what
+data to reveal to who. If you entrust sensitive information to
+Facebook, you have to trust that their code has similar notions to
+your own about who should see your information.
+
+One also has to think about the possibility of bugs in Facebook&#x27;s
+permissions code; or bugs that allow outside hackers to break into
+Facebook&#x27;s computers; or corrupt or malicious or careless Facebook
+employees. Dealing with such threats requires internal controls that
+limit how data can be used even within Facebook.</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0015-verification-ironfleet.html"><span>← 上一讲</span><strong>分布式系统验证与 IronFleet</strong></a><a href="0017-aws-lambda.html"><span>下一讲 →</span><strong>AWS Lambda 与按需容器加载</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>16 / 21</strong><p>先读中文精读，画出消息、状态与失败边界；再展开资料附录逐条核对官方讲义和论文。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.5840</strong><p>Distributed Systems Engineering · Spring 2026</p></div><a href="../index.html">FIELD NOTES / COURSE MAP →</a></footer></body></html>
