@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RPC、线程与 Go 并发 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 2 讲</p><h1>RPC、线程与 Go 并发</h1><p class="lede">从单机并发跨到网络边界：线程帮助一个进程同时等待多个事件，RPC 把消息交换包装成函数调用，但失败语义绝不会因此消失。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：基础</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释线程、共享状态与锁的核心问题</li><li>按协议顺序推演channel 与条件同步</li><li>评估工程取舍：并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">线程、共享状态与锁</h2><p>Go 的 goroutine 共享同一地址空间，适合把等待网络、磁盘和计时器的工作重叠起来。共享内存也意味着操作会交错；只要一个不变量跨越多个字段或多条语句，就要用 mutex 让检查与更新成为一个临界区。不要在持锁时做可能长时间阻塞的 RPC，否则一个慢节点会冻结本地并发。</p><h2 id="section-2">channel 与条件同步</h2><p>channel 同时传递数据和同步关系，适合表达所有权转移、工作队列和结果汇聚。条件变量适合“状态受锁保护、条件暂时不成立”的场景：等待者必须在循环中重新检查条件，因为唤醒只表示状态可能改变。关闭 channel 是广播生命周期结束的信号，不等同于发送一个普通零值。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。”在每一步如何体现。</p></div></div><h2 id="section-3">RPC 的表面与真实语义</h2><p>RPC stub 负责编码参数、发送请求、等待响应并解码结果。调用者看见的像函数，但网络可能丢包、重复、延迟或重排；超时只能证明调用者没及时收到回复，不能证明服务器没有执行。服务端方法要显式设计重试语义，并把 request ID、缓存结果或幂等操作作为协议的一部分。</p><h2 id="section-4">爬虫与 KV 示例</h2><p>并发爬虫需要把“已访问集合”的检查与插入做成原子步骤，否则两个 goroutine 会重复抓取同一 URL。KV 服务则展示更难的问题：客户端在 Put 后丢失回复，重试可能造成重复写。线程正确性与分布式正确性是两层约束：前者保护本地状态，后者处理跨网络的不确定结果。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>RPC 超时意味着服务端没有执行请求。</h3><p>超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m2-q1"><p><strong>问题：</strong>为什么 RPC 客户端重试 Put 时通常需要 request ID？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">让服务端识别重复请求并复用原结果</button><button aria-pressed="false" data-choice="b">让 TCP 自动加密数据</button><button aria-pressed="false" data-choice="c">让 goroutine 自动释放锁</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m2-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m2-q3"><p><strong>问题：</strong>为什么“RPC 超时意味着服务端没有执行请求。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>Go 的 goroutine 共享同一地址空间，适合把等待网络、磁盘和计时器的工作重叠起来。</li><li>并发提高资源利用率，却扩大了可交错状态空间；RPC 简化接口，却不能消除网络失败语义。</li><li>超时只说明回复未按时到达；请求可能未到达、正在执行、已执行但回复丢失。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-rpc.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>notes/crawler.go</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>notes/kv.go</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/tour-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

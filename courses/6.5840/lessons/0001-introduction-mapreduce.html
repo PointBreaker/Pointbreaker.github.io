@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>导论与 MapReduce — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 1 讲</p><h1>导论与 MapReduce</h1><p class="lede">用 MapReduce 建立整门课的坐标系：分布式系统通过并行扩展吞吐，用复制隐藏故障，却必须在一致性、性能和可编程性之间持续取舍。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：基础</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释为什么需要分布式系统的核心问题</li><li>按协议顺序推演Map、Shuffle、Reduce</li><li>评估工程取舍：MapReduce 牺牲交互式和任意通信模型，换取调度、并行化与失败恢复的统一框架。</li></ul><h2 id="section-1">为什么需要分布式系统</h2><p>分布式系统是一组通过网络协作、共同提供服务的计算机。把计算分散出去可以扩展容量、贴近物理设备并利用隔离提升安全性，但也引入并发、部分失败和不可预测延迟。所谓“部分失败”是关键：某台机器或某条链路可能坏掉，而其余组件仍然正常，因此观察者很难区分对方宕机和消息只是很慢。</p><h2 id="section-2">Map、Shuffle、Reduce</h2><p>MapReduce 把作业限制为三段：Map 独立处理输入分片并产生中间键值对；Shuffle 按 key 分区、拉取和排序；Reduce 聚合同一 key 的所有值。协调器负责分配任务、跟踪完成状态并把 Map 输出位置告诉 Reduce。限制程序结构换来了可调度性：Map 任务互不依赖，Reduce 任务在输入齐备后也能并行执行。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“MapReduce 牺牲交互式和任意通信模型，换取调度、并行化与失败恢复的统一框架。”在每一步如何体现。</p></div></div><h2 id="section-3">数据本地性与负载均衡</h2><p>输入和最终输出放在 GFS，中间结果先落到 Map worker 本地磁盘。协调器尽量把 Map 安排到持有输入副本的机器上，从而减少穿过机架交换机的流量。任务数量远多于 worker 数量，较快的机器自然领取更多任务；尾部阶段还可对慢任务启动备份执行，降低 straggler 对总完成时间的影响。</p><h2 id="section-4">失败恢复为什么依赖确定性</h2><p>worker 失败时，协调器只重跑丢失的 Map 或 Reduce。若同一 Map 被执行两次，不同 Reduce 可能看到不同副本；因此用户函数应当近似纯函数：同一输入生成同一输出，不依赖随机数、外部可变状态或不可重复 I/O。Reduce 的输出通过临时文件加原子 rename 发布，避免两个尝试把半成品混在一起。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>重跑任务天然等价于 exactly-once。</h3><p>重跑只在确定性计算和原子发布边界内表现得像一次；外部副作用仍需额外的幂等或事务机制。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m1-q1"><p><strong>问题：</strong>Shuffle 阶段的核心职责是什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">把中间键值对按 key 分区并送到对应 Reduce</button><button aria-pressed="false" data-choice="b">把所有输入复制到每台机器</button><button aria-pressed="false" data-choice="c">直接把最终结果写回客户端</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m1-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">MapReduce 牺牲交互式和任意通信模型，换取调度、并行化与失败恢复的统一框架。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m1-q3"><p><strong>问题：</strong>为什么“重跑任务天然等价于 exactly-once。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">重跑只在确定性计算和原子发布边界内表现得像一次；外部副作用仍需额外的幂等或事务机制。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>分布式系统是一组通过网络协作、共同提供服务的计算机。</li><li>MapReduce 牺牲交互式和任意通信模型，换取调度、并行化与失败恢复的统一框架。</li><li>重跑只在确定性计算和原子发布边界内表现得像一次；外部副作用仍需额外的幂等或事务机制。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l01.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/mapreduce.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

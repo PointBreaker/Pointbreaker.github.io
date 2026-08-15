@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>拜占庭容错与 PBFT — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 21 讲</p><h1>拜占庭容错与 PBFT</h1><p class="lede">PBFT 把崩溃故障模型扩展到任意恶意行为：在 3f+1 副本中，只要至多 f 个拜占庭节点，就能用 2f+1 证书维持安全。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释为什么是 3f+1的核心问题</li><li>按协议顺序推演pre-prepare、prepare、commit</li><li>评估工程取舍：PBFT 提供确定性的拜占庭安全与快速最终性，但副本数、全互发通信和密码学验证成本较高。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">为什么是 3f+1</h2><p>两个包含 2f+1 副本的 quorum 在 3f+1 总数中至少相交 f+1 个节点，其中至少一个诚实。诚实节点不会为同一序号和 view 的冲突请求签署必要阶段，因此冲突提交证书不能同时成立。拜占庭节点可撒谎、沉默或向不同节点发不同消息，不能简单把超时当崩溃处理。</p><h2 id="section-2">pre-prepare、prepare、commit</h2><p>primary 为请求分配序号并发送 pre-prepare。backup 验证后广播 prepare；收集足够匹配 prepare 形成 prepared 证据，再广播 commit。获得 2f+1 commit 后执行并回复客户端。prepare 让副本在同一 view 对顺序达成约束，commit 确保证据跨 view change 延续。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“PBFT 提供确定性的拜占庭安全与快速最终性，但副本数、全互发通信和密码学验证成本较高。”在每一步如何体现。</p></div></div><h2 id="section-3">客户端与 checkpoint</h2><p>客户端给请求加时间戳并等待 f+1 个一致回复，保证至少一个来自诚实副本。副本周期性生成稳定 checkpoint，并在获得 2f+1 证明后丢弃旧协议消息。水位窗口限制可接受序号，防止恶意 primary 让日志无限跳跃。</p><h2 id="section-4">view change 与成本</h2><p>primary 可被超时怀疑，副本发 view-change，携带稳定 checkpoint 和已 prepared 请求证据；新 primary 收集 2f+1 后构造新 view，不能遗漏必须保留的请求。正常路径全互发消息近似 O(n²)，签名/MAC、批处理和只读优化决定实际性能。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>PBFT 只要 2f+1 个副本就能容忍 f 个拜占庭故障。</h3><p>异步网络下维持安全并取得 quorum 交集需要至少 3f+1 副本。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m21-q1"><p><strong>问题：</strong>PBFT 在 3f+1 副本中常用多大的提交证书？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">2f+1 个匹配消息</button><button aria-pressed="false" data-choice="b">f 个消息</button><button aria-pressed="false" data-choice="c">任意一个 primary 回复</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m21-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">PBFT 提供确定性的拜占庭安全与快速最终性，但副本数、全互发通信和密码学验证成本较高。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m21-q3"><p><strong>问题：</strong>为什么“PBFT 只要 2f+1 个副本就能容忍 f 个拜占庭故障。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">异步网络下维持安全并取得 quorum 交集需要至少 3f+1 副本。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>两个包含 2f+1 副本的 quorum 在 3f+1 总数中至少相交 f+1 个节点，其中至少一个诚实。</li><li>PBFT 提供确定性的拜占庭安全与快速最终性，但副本数、全互发通信和密码学验证成本较高。</li><li>异步网络下维持安全并取得 quorum 交集需要至少 3f+1 副本。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-bft.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>notes/65840-pbft.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/castro-practicalbft.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/bft-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

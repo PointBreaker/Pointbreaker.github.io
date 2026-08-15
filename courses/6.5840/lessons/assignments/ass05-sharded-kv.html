@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 5: Sharded KV — MIT 6.5840</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+  <link rel="stylesheet" href="../../field-notes.css?v=20260815a">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.5840 · 实验 5</p>
+    <h1>实验 5：分片键值服务</h1>
+    <p class="lede">构建多组 Raft 支撑的分片 KV：配置由控制器管理，分片在组间迁移，并用跨组事务保证重配置期间请求不丢失、不重复。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>sharding</li><li>configuration</li><li>migration</li><li>distributed transaction</li><li>reconfiguration</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>labs/lab-shard1.html</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 实验</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 6 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>labs/lab-shard1.html</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">5a</span><strong>5A：配置与分片分配</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现配置服务的 Join、Leave、Move 和 Query，并通过 Raft 复制。每个配置有单调编号和 <code>shard -&gt; gid</code> 映射；Join/Leave 后尽量均衡分片，同时最小化不必要移动。历史 Query 必须返回不可变的旧配置副本。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>使用确定性的排序和 tie-break，确保所有副本对同一命令计算出完全相同的映射。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-shard1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">routing</span><strong>客户端路由与 ErrWrongGroup</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>客户端根据 key 计算 shard，用当前配置找到 replica group；遇到 ErrWrongGroup 或重复超时后刷新配置。group 只在确认自己拥有该 shard 且迁移状态允许服务时处理请求，旧配置请求不能在错误组提交。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>缓存 leader 与配置可提升速度，但它们都只是 hint；错误响应必须驱动刷新。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-shard1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5bc</span><strong>5B/C：分片迁移</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>配置变化后，新 owner 从旧 owner 获取分片数据及其去重元数据，通过自己的 Raft 日志安装，再让旧 owner 在安全条件下删除。迁移操作必须带配置号并幂等；重复拉取、重复安装、节点重启都不能丢数据或重复执行客户端写。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>把每个 shard 建模为明确状态，如 serving/pulling/pushing/gc，并只允许配置号相邻的合法转换。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-shard1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">5d</span><strong>5D：跨组事务</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>按 handout 的事务接口实现涉及多个 shard/group 的原子操作。协调者建立参与者集合，执行 prepare/commit 或 abort；每组把锁、事务状态和最终决定通过本组 Raft 复制。重试携带稳定事务 ID，参与者对重复阶段消息返回原决定。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先规定全局锁/参与者顺序以避免死锁，并明确 prepared 状态在协调者失联时如何恢复。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-shard1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">gc</span><strong>垃圾回收与配置推进</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>旧 owner 只有在新 owner 确认持久安装后才能删除分片；新配置也不应无限越过未完成迁移。为迁移、事务和去重记录设计可证明安全的 GC 水位。跨组 RPC 不能持有本地状态机锁。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>删除消息同样要经 Raft 并幂等；网络回复丢失时允许安全重试。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-shard1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">verify</span><strong>端到端验收</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>运行动态 Join/Leave、并发读写、迁移期间分区、组重启、不可靠网络、事务冲突与快照测试。验证每个已完成请求只影响一个一致历史，任何 shard 在配置边界不会同时被两组可写。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>用 <code>(config, shard, state)</code> 结构化日志；出现丢 key 时追踪其最后一个 owner、安装证书与 GC 决定。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-shard1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>labs/lab-shard1.html</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

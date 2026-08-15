@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 4: KV Raft — MIT 6.5840</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+  <link rel="stylesheet" href="../../field-notes.css?v=20260815a">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.5840 · 实验 4</p>
+    <h1>实验 4：基于 Raft 的容错 KV</h1>
+    <p class="lede">把 KV 状态机接到 Raft：完成客户端路由、每请求等待、重复抑制和快照，使服务在 leader 变化、网络分区与重启后保持线性一致。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>replicated state machine</li><li>linearizability</li><li>deduplication</li><li>snapshot</li><li>client routing</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>labs/lab-kvraft1.html</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 实验</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>labs/lab-kvraft1.html</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">4a</span><strong>4A：无快照 KV Raft</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>客户端保存可能的 leader 并在 ErrWrongLeader/超时后轮询其他服务器。服务端把 Get/Put/Append 编码为命令交给 <code>rf.Start()</code>，只有命令提交并由 applyCh 应用后才回复。等待者必须确认提交在该 index 的命令仍是自己发起的命令，避免旧 leader 错回。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>用 <code>(clientID, sequence)</code> 标识操作；index 只是本次 leader 的临时等待位置，不是请求身份。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvraft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">linear</span><strong>线性一致与去重</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>所有会影响客户端观察的操作，包括 Get，都通过 Raft 顺序化，或使用经过证明的线性读协议。状态机应用时原子检查 request ID，重复写不再次修改状态，但返回与首次一致。不同客户端可并发，同一客户端序列单调。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>不要在 RPC handler 收到 Start 成功后立即回复；isLeader 只表示调用瞬间，不表示条目已经提交。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvraft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">4bc</span><strong>4B/C：快照与恢复</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>当 Persister 的 Raft state 接近 <code>maxraftstate</code> 时，KV 服务把键值表和去重元数据编码成 snapshot，并调用 Raft Snapshot。重启或收到 InstallSnapshot 后恢复两者；若只保存 KV 而丢失去重表，旧请求重放会再次执行。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>快照覆盖的 index 要与刚应用完成的状态完全一致。编码/安装不要和后续 apply 产生锁顺序死锁。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvraft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">waiters</span><strong>等待通道生命周期</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>为日志 index 创建等待结果通道或条件记录，apply 时通知。RPC 超时、leader 变化和 snapshot 跨过 index 后要清理等待者，避免泄漏。通知动作应非阻塞或在锁外完成，且每个 index 的旧等待者不能收到新 term 命令结果。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>返回结果包含请求身份，等待者比较后再认领。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvraft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">verify</span><strong>故障矩阵验收</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>分别运行可靠、丢包、分区、leader crash、全部重启、并发客户端和 snapshot 压力测试，并启用 race detector。确认完成操作不会回滚、重复 Append 不出现、失去多数时不返回未经提交结果。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>把失败按“客户端协议、Raft、状态机、快照”四层缩小；先检查最早错误的 apply 序列。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-kvraft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>labs/lab-kvraft1.html</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

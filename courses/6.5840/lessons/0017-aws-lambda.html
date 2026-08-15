@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AWS Lambda 与按需容器加载 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 17 讲</p><h1>AWS Lambda 与按需容器加载</h1><p class="lede">无服务器平台的冷启动不是单一“启动容器”动作；按需容器加载把镜像读取、解压、页缓存和请求关键路径拆开优化。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释冷启动路径的核心问题</li><li>按协议顺序推演按需加载</li><li>评估工程取舍：按需加载缩短首请求等待，却把远端存储抖动和缺页延迟带入运行期。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">冷启动路径</h2><p>一次新实例启动可能包含调度、网络准备、镜像定位、层读取与解压、运行时初始化、用户代码加载。镜像很大不代表首个请求会访问全部字节；若必须完整下载解压才启动，平台把非关键数据也放进尾延迟。</p><h2 id="section-2">按需加载</h2><p>把容器文件系统表示为可随机访问、可寻址的块或 chunk，启动时先获得元数据，缺页时再拉取实际块。预取器根据常见访问序列提前获取即将需要的数据，后台继续填充。目标是让首个请求只为 working set 付费。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“按需加载缩短首请求等待，却把远端存储抖动和缺页延迟带入运行期。”在每一步如何体现。</p></div></div><h2 id="section-3">缓存层次与共享</h2><p>worker 本地缓存、区域缓存和远端对象存储构成层次。内容寻址让相同层和 chunk 可跨镜像复用，降低传输；但缓存命中具有强烈负载依赖，评估必须区分 warm、cold 和并发突发。缓存污染和逐出策略会反过来影响尾延迟。</p><h2 id="section-4">可靠性与观测</h2><p>按需读取把存储依赖延伸到函数运行期间，远端块不可用会从“启动失败”变成运行时 page fault 失败。系统需要校验、重试、并发请求合并和降级策略。关键指标包括 time-to-first-request、按需读取字节、缺页次数、缓存命中率及 P99 延迟。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>冷启动优化只要缩小镜像总大小即可。</h3><p>关键是首请求实际 working set、数据布局和缓存路径；总大小只是其中一个因素。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m17-q1"><p><strong>问题：</strong>按需容器加载为何能缩短冷启动？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">首请求只拉取实际访问的镜像块</button><button aria-pressed="false" data-choice="b">它取消了所有隔离</button><button aria-pressed="false" data-choice="c">它让函数永不被回收</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m17-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">按需加载缩短首请求等待，却把远端存储抖动和缺页延迟带入运行期。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m17-q3"><p><strong>问题：</strong>为什么“冷启动优化只要缩小镜像总大小即可。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">关键是首请求实际 working set、数据布局和缓存路径；总大小只是其中一个因素。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>一次新实例启动可能包含调度、网络准备、镜像定位、层读取与解压、运行时初始化、用户代码加载。</li><li>按需加载缩短首请求等待，却把远端存储抖动和缺页延迟带入运行期。</li><li>关键是首请求实际 working set、数据布局和缓存路径；总大小只是其中一个因素。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/mbrooker_cs_slides_2026.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/atc23-brooker.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

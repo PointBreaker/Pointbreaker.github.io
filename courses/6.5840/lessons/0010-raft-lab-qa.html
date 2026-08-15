@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Raft 实验问答与调试 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 10 讲</p><h1>Raft 实验问答与调试</h1><p class="lede">这不是新算法，而是一次实现校准：把 Raft Figure 2 翻译成锁纪律、计时器、持久化点和可复现调试证据。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释从不变量倒推代码的核心问题</li><li>按协议顺序推演锁与 RPC 的标准形状</li><li>评估工程取舍：更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">从不变量倒推代码</h2><p>先写下关键不变量：term 单调增加、每 term 最多投一票、日志匹配、已提交索引单调、apply 顺序不回退。每个 handler 和回复处理都要说明自己保持了哪些不变量。若修复只是在某个测试上加 sleep 或特殊分支，却无法解释不变量，通常会在另一种调度下失败。</p><h2 id="section-2">锁与 RPC 的标准形状</h2><p>在锁内读取状态并构造不可变 RPC 参数，释放锁后发送，重新加锁后检查回复是否仍属于当前 term/角色。不要持锁等待网络；不要让两个 goroutine 无纪律地修改 nextIndex；不要把 applyCh 发送放在锁内。使用短临界区并集中状态转换，降低竞态组合。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。”在每一步如何体现。</p></div></div><h2 id="section-3">计时器与陈旧事件</h2><p>选举计时器应由有效 leader 通信或投票行为重置，并使用随机超时。旧 term 回复、旧 timer firing 和旧 leader goroutine 都可能在角色变化后到达；处理前必须再次检查 term 与状态。逻辑时钟条件比墙钟睡眠更可靠。</p><h2 id="section-4">可复现调试</h2><p>运行单个测试很多次并启用 race detector；记录 term、角色、日志边界、RPC 方向和 commit/apply 变化。官方 tester 的时间线可标注自定义事件，适合定位分区与崩溃交界。保留失败 seed 和短日志，先找到最早违反不变量的位置，而不是追最后一个报错。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>增加 sleep 能从根本上修复 Raft 偶发失败。</h3><p>sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m10-q1"><p><strong>问题：</strong>处理 RPC 回复前最重要的重新检查是什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">当前 term 和角色是否仍与发送时匹配</button><button aria-pressed="false" data-choice="b">日志文件是否超过 1 MB</button><button aria-pressed="false" data-choice="c">客户端是否仍在线</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m10-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m10-q3"><p><strong>问题：</strong>为什么“增加 sleep 能从根本上修复 Raft 偶发失败。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>先写下关键不变量：term 单调增加、每 term 最多投一票、日志匹配、已提交索引单调、apply 顺序不回退。</li><li>更丰富的日志提升可调试性，但必须结构化和可筛选，否则并发输出会淹没因果链。</li><li>sleep 只改变调度概率；应定位竞态、陈旧回复或不变量破坏，并用状态条件修复。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-raft-QA.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>labs/guidance.html</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>labs/vis.html</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

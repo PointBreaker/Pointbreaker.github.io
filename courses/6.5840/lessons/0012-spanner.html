@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Spanner 与外部一致性 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 12 讲</p><h1>Spanner 与外部一致性</h1><p class="lede">Spanner 组合 Paxos、两阶段提交与 TrueTime，在全球复制数据库中提供外部一致事务和无需锁的历史读。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释数据分片与复制的核心问题</li><li>按协议顺序推演TrueTime 区间</li><li>评估工程取舍：更小的时钟不确定度降低 commit wait，却要求昂贵且可靠的时间同步基础设施。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">数据分片与复制</h2><p>数据按 key range 分成 tablet，多个 tablet 可组合为 directory 以便共同迁移。每个分片由一个 Paxos group 复制，leader lease 管理读写。跨分片读写事务由 2PC 协调多个 Paxos group，因此共识保证每组持久决定，2PC 保证各组统一提交。</p><h2 id="section-2">TrueTime 区间</h2><p>TT.now() 返回 [earliest, latest] 而非伪装成精确时间，并保证真实时间位于区间内；区间宽度 epsilon 来自 GPS/原子钟、同步间隔和通信不确定性。协议围绕不确定性做证明：若要确认时间 t 已过去，等待 TT.after(t) 成真。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“更小的时钟不确定度降低 commit wait，却要求昂贵且可靠的时间同步基础设施。”在每一步如何体现。</p></div></div><h2 id="section-3">commit wait 与外部一致性</h2><p>读写事务选择提交时间戳 s 后，必须等待到真实时间确定超过 s 才向客户端返回。这样若事务 T1 已返回后 T2 才开始，T2 取得的时间戳必然更大，序列化顺序尊重真实时间。等待成本大致受时钟不确定度限制，时间基础设施直接进入数据库延迟预算。</p><h2 id="section-4">只读事务与快照</h2><p>预声明只读事务不取得写锁，系统选择一个安全时间戳并从足够新的副本读取。多版本存储保留历史版本，让长读不会阻塞写。副本的 safe time 限制它能服务到多新的快照；陈旧但一致的读可就近执行。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>TrueTime 提供一个完全精确的全球时钟。</h3><p>它显式返回包含真实时间的不确定区间，协议通过等待消化这段不确定性。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m12-q1"><p><strong>问题：</strong>Spanner 为什么在提交回复前执行 commit wait？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">确保时间戳顺序尊重事务的真实时间先后</button><button aria-pressed="false" data-choice="b">等待所有历史版本被删除</button><button aria-pressed="false" data-choice="c">让客户端重新选分片</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m12-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">更小的时钟不确定度降低 commit wait，却要求昂贵且可靠的时间同步基础设施。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m12-q3"><p><strong>问题：</strong>为什么“TrueTime 提供一个完全精确的全球时钟。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">它显式返回包含真实时间的不确定区间，协议通过等待消化这段不确定性。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>数据按 key range 分成 tablet，多个 tablet 可组合为 directory 以便共同迁移。</li><li>更小的时钟不确定度降低 commit wait，却要求昂贵且可靠的时间同步基础设施。</li><li>它显式返回包含真实时间的不确定区间，协议通过等待消化这段不确定性。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-spanner.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/spanner.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/spanner-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

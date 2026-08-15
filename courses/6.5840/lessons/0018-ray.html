@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ray 分布式计算框架 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 18 讲</p><h1>Ray 分布式计算框架</h1><p class="lede">Ray 用 task、actor 和分布式对象引用统一动态 AI/科学计算工作负载，让调度与数据移动由对象依赖图驱动。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释task 与 object ref的核心问题</li><li>按协议顺序推演actor</li><li>评估工程取舍：动态任务图和去中心化调度提升灵活性，却让资源、对象局部性和 lineage 管理更复杂。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">task 与 object ref</h2><p>remote function 调用立即返回 object ref，任务在依赖对象就绪后执行。引用而不是值在控制面传播，真实对象放入共享对象存储；这允许调用者继续构造动态 DAG。不可变对象简化共享和容错，也避免多个 worker 原地修改同一份状态。</p><h2 id="section-2">actor</h2><p>actor 是有状态 worker，方法调用按其并发规则执行并返回引用。它适合参数服务器、模拟器和长期服务，但状态使调度、恢复和背压更复杂。调用者应避免把单个 actor 变成所有任务的串行瓶颈。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“动态任务图和去中心化调度提升灵活性，却让资源、对象局部性和 lineage 管理更复杂。”在每一步如何体现。</p></div></div><h2 id="section-3">分布式调度</h2><p>每个节点的 raylet 负责本地资源和任务调度，优先本地决策，必要时把任务转移到其他节点。任务的 CPU/GPU 等资源需求与对象位置共同影响放置。去中心化减少中央 scheduler 瓶颈，但需要一致的资源视图和失败检测。</p><h2 id="section-4">容错与 lineage</h2><p>无状态 task 的输出丢失时，可沿 lineage 重新执行生成它的任务；对象重建要求输入仍可得且任务近似确定。actor 状态则需要 checkpoint 或应用级恢复。lineage 不能无限保留，系统要在重建能力与元数据规模之间做截断。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>object ref 本身包含完整对象数据。</h3><p>它是对分布式对象的引用；对象由对象存储管理，并按依赖和位置传输。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m18-q1"><p><strong>问题：</strong>Ray 如何常见地恢复丢失的无状态 task 输出？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">依据 lineage 重新执行生成任务</button><button aria-pressed="false" data-choice="b">等待对象自动从内存出现</button><button aria-pressed="false" data-choice="c">把 actor 全部改成线程</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m18-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">动态任务图和去中心化调度提升灵活性，却让资源、对象局部性和 lineage 管理更复杂。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m18-q3"><p><strong>问题：</strong>为什么“object ref 本身包含完整对象数据。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">它是对分布式对象的引用；对象由对象存储管理，并按依赖和位置传输。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>remote function 调用立即返回 object ref，任务在依赖对象就绪后执行。</li><li>动态任务图和去中心化调度提升灵活性，却让资源、对象局部性和 lineage 管理更复杂。</li><li>它是对分布式对象的引用；对象由对象存储管理，并按依赖和位置传输。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-ray.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/ray.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/ray-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

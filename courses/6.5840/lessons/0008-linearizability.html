@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>一致性与线性一致性 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 8 讲</p><h1>一致性与线性一致性</h1><p class="lede">一致性模型是客户端可观察行为的合同。线性一致性要求每个操作像在调用与返回之间某个瞬间原子发生，并尊重真实时间。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释历史与合法顺序的核心问题</li><li>按协议顺序推演线性一致性不是串行一致性</li><li>评估工程取舍：线性一致性简化应用推理，但跨副本确认会增加延迟，并在失去多数时牺牲可用性。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">历史与合法顺序</h2><p>把一次执行写成 invocation/response 事件历史。若操作 A 的 response 先于 B 的 invocation，任何线性化都必须把 A 放在 B 前；重叠操作可任选顺序，只要得到的串行历史满足对象规范。线性化点是证明工具，不必对应代码里真实存在的一条机器指令。</p><h2 id="section-2">线性一致性不是串行一致性</h2><p>串行一致性只要求每个客户端的程序顺序被保留，不要求跨客户端真实时间。线性一致性额外保留 non-overlap 的先后关系，因此适合把分布式对象当成单机原子对象使用。它是 compositional 的：若每个对象都线性一致，组合历史也线性一致。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“线性一致性简化应用推理，但跨副本确认会增加延迟，并在失去多数时牺牲可用性。”在每一步如何体现。</p></div></div><h2 id="section-3">读写寄存器的推理</h2><p>对 KV 寄存器，Put 的线性化点常落在命令提交并应用时，Get 则必须读到线性化点之前最后一次 Put。仅向 leader 本地读取不一定安全：leader 可能已失去多数派却尚未发现。可通过把读纳入日志、ReadIndex/多数确认或带租约的时钟假设建立权威。</p><h2 id="section-4">可用性边界</h2><p>网络分区时，若两侧都继续提供线性一致的读写，就可能产生相互矛盾的最新值。系统必须让至少一侧停止或降级。CAP 的重点不是三个标签任选两个，而是分区发生时，一致响应与始终响应之间的具体选择。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>只要所有操作最终排成某个串行顺序，就是线性一致。</h3><p>还必须尊重真实时间：先完成的操作不能被排到后来才开始的操作之后。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m8-q1"><p><strong>问题：</strong>线性一致性比串行一致性多保留哪类顺序？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">不重叠操作的真实时间先后</button><button aria-pressed="false" data-choice="b">服务器进程号顺序</button><button aria-pressed="false" data-choice="c">消息包大小顺序</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m8-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">线性一致性简化应用推理，但跨副本确认会增加延迟，并在失去多数时牺牲可用性。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m8-q3"><p><strong>问题：</strong>为什么“只要所有操作最终排成某个串行顺序，就是线性一致。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">还必须尊重真实时间：先完成的操作不能被排到后来才开始的操作之后。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>把一次执行写成 invocation/response 事件历史。</li><li>线性一致性简化应用推理，但跨副本确认会增加延迟，并在失去多数时牺牲可用性。</li><li>还必须尊重真实时间：先完成的操作不能被排到后来才开始的操作之后。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-linearizability.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/p463-herlihy.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/linearizability-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

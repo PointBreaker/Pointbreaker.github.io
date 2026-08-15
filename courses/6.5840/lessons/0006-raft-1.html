@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>容错与 Raft（一） — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 6 讲</p><h1>容错与 Raft（一）</h1><p class="lede">Raft 把共识拆成 leader election、日志复制和安全规则，用 term 与日志新旧关系把复杂情况组织成可实现的状态机。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释角色、term 与选举的核心问题</li><li>按协议顺序推演投票限制</li><li>评估工程取舍：随机超时和稳定 leader 提升活性与效率，但安全性仍由 term、投票持久化和日志新旧规则共同保证。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">角色、term 与选举</h2><p>节点是 follower、candidate 或 leader。若 follower 在随机 election timeout 内没收到有效心跳，就递增 currentTerm、投自己并并发发送 RequestVote。获得多数票成为 leader。随机超时降低平票概率；收到更高 term 的 RPC 或回复时，任何角色都必须更新 term 并退回 follower。</p><h2 id="section-2">投票限制</h2><p>每个 term 最多投一票，votedFor 必须持久化。除了 term 足够新，候选者日志还必须至少和投票者一样新：先比较最后条目的 term，再比较 index。这一限制保证包含已提交条目的候选者更可能胜出，是 leader completeness 的入口。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“随机超时和稳定 leader 提升活性与效率，但安全性仍由 term、投票持久化和日志新旧规则共同保证。”在每一步如何体现。</p></div></div><h2 id="section-3">空 AppendEntries 也是协议消息</h2><p>leader 周期性发送 AppendEntries；没有 entries 时它就是 heartbeat。接收者仍要检查 term 以及 prevLogIndex/prevLogTerm 是否匹配，不能因为“只是心跳”就绕过一致性检查。成功心跳重置选举计时器，维持 leader 权威。</p><h2 id="section-4">并发实现边界</h2><p>currentTerm、votedFor、log、commitIndex 和角色等共享状态应在同一锁纪律下访问。发送 RPC 前复制必要参数并释放锁，回复回来后再次验证 term 和角色仍然匹配；过期回复不能修改新一轮状态。定时循环要能在 killed 状态退出。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>heartbeat 不包含日志，因此接收者可以无条件接受。</h3><p>空 AppendEntries 仍携带 prevLogIndex/prevLogTerm，必须通过一致性检查。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m6-q1"><p><strong>问题：</strong>Raft 判断候选日志是否至少一样新时先比较什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">最后日志条目的 term</button><button aria-pressed="false" data-choice="b">日志文件字节数</button><button aria-pressed="false" data-choice="c">节点启动时间</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m6-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">随机超时和稳定 leader 提升活性与效率，但安全性仍由 term、投票持久化和日志新旧规则共同保证。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m6-q3"><p><strong>问题：</strong>为什么“heartbeat 不包含日志，因此接收者可以无条件接受。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">空 AppendEntries 仍携带 prevLogIndex/prevLogTerm，必须通过一致性检查。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>节点是 follower、candidate 或 leader。</li><li>随机超时和稳定 leader 提升活性与效率，但安全性仍由 term、投票持久化和日志新旧规则共同保证。</li><li>空 AppendEntries 仍携带 prevLogIndex/prevLogTerm，必须通过一致性检查。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-raft.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/raft-extended.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/raft-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

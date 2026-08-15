@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Facebook 的 Memcached — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 16 讲</p><h1>Facebook 的 Memcached</h1><p class="lede">Facebook 的 Memcached 不是一个单体缓存，而是围绕数据库、区域、失效消息和流量尖峰构建的缓存生态。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释look-aside 缓存的核心问题</li><li>按协议顺序推演租约抑制 stale set 与惊群</li><li>评估工程取舍：缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">look-aside 缓存</h2><p>应用先读 memcache，miss 时读数据库并回填；写数据库后发送 delete 让旧缓存失效。缓存本身不负责从数据库装载数据，因此应用控制对象语义。删除而不是更新可减少多写者并发下的乱序覆盖，但会在下次读时产生 miss。</p><h2 id="section-2">租约抑制 stale set 与惊群</h2><p>miss 时服务器返回短期 lease token，只有持有效 token 的客户端能回填，防止旧查询结果在 delete 后再次写入。对热点 key，lease 还限制同时回源的客户端数量，避免大量 miss 把数据库压垮。客户端等待或重试是背压的一部分。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。”在每一步如何体现。</p></div></div><h2 id="section-3">失效管线与 mcrouter</h2><p>数据库写入产生失效记录，mcsqueal 从提交日志抽取 delete 并广播到缓存集群。mcrouter 负责请求路由、连接聚合、故障转移和 key 前缀策略。缓存节点被划入 cluster/region，复制和路由策略根据网络距离与故障域调整。</p><h2 id="section-4">一致性与容量治理</h2><p>memcache 是性能层而非事实来源，允许短暂陈旧，但必须避免长期错误值。容量不足引发 eviction 和 miss 率上升，继而把负载推回数据库形成反馈环。运维要同时观察命中率、回源 QPS、失效延迟和热点分布。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>写数据库后直接 set 新值总比 delete 更安全。</h3><p>并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m16-q1"><p><strong>问题：</strong>memcache lease token 主要帮助解决什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">并发 miss 的惊群和陈旧结果回填</button><button aria-pressed="false" data-choice="b">磁盘 RAID 重建</button><button aria-pressed="false" data-choice="c">Paxos leader 选举</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m16-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m16-q3"><p><strong>问题：</strong>为什么“写数据库后直接 set 新值总比 delete 更安全。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>应用先读 memcache，miss 时读数据库并回填；写数据库后发送 delete 让旧缓存失效。</li><li>缓存降低读延迟和数据库负载，却引入失效传播、热点和陈旧窗口等新的正确性问题。</li><li>并发 set 可能乱序让旧值覆盖新值；look-aside 常用 delete 让后续读从数据库重建。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-memcached.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/memcache-fb.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/memcache-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

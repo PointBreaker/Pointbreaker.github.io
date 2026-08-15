@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lab 3: Raft — MIT 6.5840</title>
+  <link rel="stylesheet" href="../../../../assets/course/base.css">
+  <link rel="stylesheet" href="../../../../assets/course/guide.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/prism.css">
+  <link rel="stylesheet" href="../../../../assets/vendor/katex.min.css">
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+  <link rel="stylesheet" href="../../field-notes.css?v=20260815a">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+  <script defer src="../../../../assets/vendor/katex.min.js"></script>
+  <script defer src="../../../../assets/vendor/katex-auto-render.min.js"></script>
+  <script defer src="../../../../assets/course/math-render.js"></script>
+</head>
+<body>
+  <div class="page">
+    <p class="eyebrow">MIT 6.5840 · 实验 3</p>
+    <h1>实验 3：Raft</h1>
+    <p class="lede">按 3A–3D 四个里程碑实现 Raft：选主、日志复制、持久化和日志压缩。页面完整保留接口、阶段边界、调试方法与公开测试命令，但不提供可提交实现。</p>
+    <section class="assignment-guide-grid" aria-label="练习导读"><article><p class="assignment-guide-kicker">知识焦点</p><h2>先建立概念地图</h2><ul><li>leader election</li><li>log replication</li><li>persistence</li><li>snapshot</li><li>Figure 2</li></ul></article><article><p class="assignment-guide-kicker">建议顺序</p><h2>题面 → 提示 → 答案</h2><p>先完整作答，再按需展开提示；最后才展开官方参考解答并逐步核对证明与计算。</p></article><article><p class="assignment-guide-kicker">本地来源</p><h2>可离线完成</h2><p>题面与解答均由本地一手资料整理：<code>labs/lab-raft1.html</code>、<code>labs/guidance.html</code>、<code>labs/vis.html</code></p></article></section>
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 实验</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 5 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>labs/lab-raft1.html</code>、<code>labs/guidance.html</code>、<code>labs/vis.html</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">3a</span><strong>3A：选主与心跳</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>在 <code>raft1/raft.go</code> 中实现 follower/candidate/leader、随机 election timeout、RequestVote 和空 AppendEntries。每个 term 最多投一票；更高 term 使节点退回 follower。leader 心跳频率不得超过 tester 限制，同时应在旧 leader 失联后五秒内选出新 leader。</p>
+<pre><code class="language-bash">cd ~/6.5840/src
+make RUN="-run 3A" raft1
+</code></pre></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>严格逐条实现论文 Figure 2。发送 RPC 前复制参数并释放锁，处理回复时重新核对 term。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-raft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3b</span><strong>3B：日志复制</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现 Start、AppendEntries 日志字段、prevLog 匹配、冲突后缀删除、nextIndex/matchIndex 和多数提交。只有当前 term 的条目可用多数计数直接推进 commitIndex；所有节点按索引顺序向 applyCh 发送 ApplyMsg。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>为每个 follower 独立维护复制进度。空心跳也要执行 prevLog 一致性检查和 leaderCommit 更新。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-raft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3c</span><strong>3C：持久化与恢复</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>在 currentTerm、votedFor 或 log 变化后持久化，并在 Make 时恢复。确保在发送表示成功的 RPC 回复之前，承诺状态已落盘。使用 handout 提供的 Persister；不要序列化锁、channel 或派生状态。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>集中实现 <code>persist()</code>/<code>readPersist()</code>，每个修改点逐项对照 Figure 2 的 Persistent state。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-raft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">3d</span><strong>3D：快照与日志压缩</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现服务触发的 Snapshot 与 leader 到落后 follower 的 InstallSnapshot。维护绝对日志 index 与切片下标的转换，保存 lastIncludedIndex/Term，并把 snapshot 与 Raft state 原子持久化。接收旧快照不能让 apply 或 commit 回退。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先定义两个索引辅助函数并全程使用，避免在压缩后继续假设 <code>log[index]</code>。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-raft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">debug</span><strong>并发与故障调试</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>运行每个子测试多次并启用 <code>-race</code>。利用 tester 生成的可视化时间线和 <code>tester.Annotate</code> 标记 term、角色、RPC、commit/apply。记录第一个不变量破坏，而不是只追最后的超时报错。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>常见问题包括持锁 RPC、陈旧回复覆盖新状态、重置 timer 条件过宽、applyCh 持锁阻塞和旧 term 提交规则错误。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>labs/lab-raft1.html</code> · 官方 handout 对应章节 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="sources">一手资料</h2>
+    <ul>
+      <li><code>labs/lab-raft1.html</code></li>
+      <li><code>labs/guidance.html</code></li>
+      <li><code>labs/vis.html</code></li>
+    </ul>
+  </div>
+  <script src="../../../../assets/vendor/prism.js"></script>
+  <script src="../../../../assets/vendor/prism-python.js"></script>
+  <script src="../../../../assets/vendor/prism-bash.js"></script>
+  <script src="../../../../assets/course/quiz.js"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Paxos 共识 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 4 讲</p><h1>Paxos 共识</h1><p class="lede">Paxos 解决的不是“谁最快回复”，而是在消息丢失、延迟和节点崩溃下，让多数派只能选择一个值。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释提案号与多数派交集的核心问题</li><li>按协议顺序推演选择值的安全规则</li><li>评估工程取舍：Paxos 用多数派交集获得安全性，但在无稳定 leader 时可能牺牲活性和消息效率。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">提案号与多数派交集</h2><p>每个提案带唯一且递增的编号。Prepare 阶段让 proposer 取得多数 acceptor 的承诺：不再接受编号更小的提案；Accept 阶段请求这些 acceptor 接受一个值。任意两个多数派必然相交，相交 acceptor 的历史把已经可能被选中的值带入更高编号提案。</p><h2 id="section-2">选择值的安全规则</h2><p>proposer 收到多数 Promise 后，若回复里包含已接受提案，就必须选择其中编号最高者的值；只有所有回复都没有已接受值时，才能自由选择客户端值。这条规则把“更高编号”变成对旧决定的继承，而不是覆盖。安全性不依赖时钟，也不依赖消息最终到达。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“Paxos 用多数派交集获得安全性，但在无稳定 leader 时可能牺牲活性和消息效率。”在每一步如何体现。</p></div></div><h2 id="section-3">活性与 leader</h2><p>两个 proposer 可能不断以更高编号打断对方，安全性仍在但系统不前进。工程系统通常选稳定 leader，让它连续为日志槽位提出值，减少 Prepare 冲突。leader 是活性优化，不是安全性的唯一来源；旧 leader 的消息仍会被更高 ballot 和 acceptor 承诺拒绝。</p><h2 id="section-4">从单值到复制日志</h2><p>单值 Paxos 只决定一个槽位。复制状态机要为每个日志 index 运行一个实例，并保证所有副本按相同顺序执行确定性命令。还需要处理缺槽、leader 恢复、结果学习和日志截断，这些工程细节正是 Multi-Paxos 和后续 Raft 要解决的问题。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>收到最多票的任意值都可以在第二阶段提出。</h3><p>若 Promise 中已有 accepted value，必须继承最高 accepted proposal 的值。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m4-q1"><p><strong>问题：</strong>Prepare 回复中出现多个已接受值时，proposer 应选哪个？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">已接受提案号最高的值</button><button aria-pressed="false" data-choice="b">字典序最小的值</button><button aria-pressed="false" data-choice="c">最早收到回复的值</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m4-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">Paxos 用多数派交集获得安全性，但在无稳定 leader 时可能牺牲活性和消息效率。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m4-q3"><p><strong>问题：</strong>为什么“收到最多票的任意值都可以在第二阶段提出。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">若 Promise 中已有 accepted value，必须继承最高 accepted proposal 的值。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>每个提案带唯一且递增的编号。</li><li>Paxos 用多数派交集获得安全性，但在无稳定 leader 时可能牺牲活性和消息效率。</li><li>若 Promise 中已有 accepted value，必须继承最高 accepted proposal 的值。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-paxos.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>notes/paxos-code.html</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/paxos-simple.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/paxos-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>

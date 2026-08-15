@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ZooKeeper 协调服务 — MIT 6.5840</title>
+<link href="../../../assets/course/base.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/prism.css" rel="stylesheet"/>
+<link href="../../../assets/vendor/katex.min.css" rel="stylesheet"/>
+<link href="../../../assets/course/lesson.css?v=20260814f" rel="stylesheet"/>
+<link href="../field-notes.css?v=20260815a" rel="stylesheet"/>
+<link href="../../../assets/course/interactive.css?v=20260814f" rel="stylesheet"/>
+<script defer="" src="../../../assets/vendor/katex.min.js"></script>
+<script defer="" src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer="" src="../../../assets/course/math-render.js"></script>
+</head>
+<body>
+<div class="page"><p class="eyebrow">MIT 6.5840 · 第 9 讲</p><h1>ZooKeeper 协调服务</h1><p class="lede">ZooKeeper 不替应用保存所有业务数据，而是提供一个高可用、顺序一致的协调内核，让配置、成员关系、锁和 leader election 可组合。</p><div class="meta"><span>预计用时：48 分钟</span><span>难度：进阶</span><span>Distributed Systems · Raft · Replication · Consistency</span></div><hr class="rule"/><h2 id="objectives">学习目标</h2><ul><li>解释数据模型与会话的核心问题</li><li>按协议顺序推演Zab 与读路径</li><li>评估工程取舍：本地读提升读吞吐和可用性，但客户端必须理解陈旧读、会话和 watch 的边界。</li></ul><h2 id="prerequisites">先修回顾</h2><ul><li>能区分网络延迟、节点崩溃与部分失败</li><li>会用状态机和不变量描述协议</li></ul><h2 id="section-1">数据模型与会话</h2><p>ZooKeeper 暴露层次化 znode 命名空间。znode 可持久，也可绑定会话成为 ephemeral；客户端会话失效后 ephemeral 节点自动消失。sequential 创建给名称追加单调编号，配合目录结构可实现排队。数据量应小，协调状态和业务大对象分离。</p><h2 id="section-2">Zab 与读路径</h2><p>写请求由 leader 排序并经多数副本提交，形成全局 zxid 顺序。普通读可由任意副本本地响应，因此吞吐高但可能读到旧值；sync 可让后续读至少追上调用前已知的写。系统提供 linearizable writes 与 FIFO client order 等保证，而不是所有读都默认线性一致。</p><div class="problem-method"><strong>推导示例</strong><div class="worked-example"><p><strong>推演方法：</strong> 用一个最小失败场景逐步标注消息、持久状态与客户端可见结果，再检查“本地读提升读吞吐和可用性，但客户端必须理解陈旧读、会话和 watch 的边界。”在每一步如何体现。</p></div></div><h2 id="section-3">watch 是提示，不是日志</h2><p>客户端可以对 znode 注册一次性 watch，数据变化后收到通知。通知可能合并，断线期间也不能把 watch 当作完整事件流；正确模式是收到提示后重新读取状态并重新注册。状态是真相，watch 只是促使客户端再次检查的边沿触发信号。</p><h2 id="section-4">避免 herd effect 的锁</h2><p>朴素锁让所有等待者 watch 同一个节点，释放时同时唤醒造成惊群。更好的 recipe 创建 ephemeral sequential 节点，按序号排序，只 watch 自己的直接前驱。前驱消失时重新检查排序；会话失效则节点自动清理，减少遗留锁。</p><h2 id="misconceptions">常见误区</h2><div class="summary-grid"><article class="summary-card"><h3>ZooKeeper 的任意副本本地读都线性一致。</h3><p>普通读可能陈旧；写有全局顺序，需使用 sync 或更高层协议约束读新鲜度。</p></article><article class="summary-card"><h3>只记住正常路径就足以实现协议。</h3><p>分布式协议的正确性主要由超时、重试、重排、崩溃恢复和旧消息路径决定。</p></article></div><h2 id="quiz">知识检查</h2><div class="quiz" data-answer="a" data-correct="正确。这个选择直接对应官方讲义/论文中的协议职责。" data-incorrect="再检查本讲的状态、消息流与可见结果边界。" data-quiz="m9-q1"><p><strong>问题：</strong>可扩展 ZooKeeper 锁通常让等待者 watch 什么？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">排序中自己的直接前驱节点</button><button aria-pressed="false" data-choice="b">根目录下的所有节点</button><button aria-pressed="false" data-choice="c">leader 的 IP 地址</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。协议的价值必须和它付出的通信、阻塞或弱语义成本一起理解。" data-incorrect="分布式设计不存在免费的可靠性或扩展性。" data-quiz="m9-q2"><p><strong>问题：</strong>下列哪项最准确概括本讲的主要工程取舍？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">本地读提升读吞吐和可用性，但客户端必须理解陈旧读、会话和 watch 的边界。</button><button aria-pressed="false" data-choice="b">增加节点总能同时降低延迟并消除故障</button><button aria-pressed="false" data-choice="c">只要使用 RPC 就不再需要一致性协议</button></div><p aria-live="polite" class="quiz-feedback"></p></div><div class="quiz" data-answer="a" data-correct="正确。能识别这条边界，才能在异常路径保持协议不变量。" data-incorrect="回到“常见误区”，区分系统真正保证的性质与直觉推断。" data-quiz="m9-q3"><p><strong>问题：</strong>为什么“ZooKeeper 的任意副本本地读都线性一致。”是错误的？</p><div class="quiz-options"><button aria-pressed="false" data-choice="a">普通读可能陈旧；写有全局顺序，需使用 sync 或更高层协议约束读新鲜度。</button><button aria-pressed="false" data-choice="b">因为所有网络都保证严格同步</button><button aria-pressed="false" data-choice="c">因为客户端从不会重试</button></div><p aria-live="polite" class="quiz-feedback"></p></div><h2 id="recap">本讲要点</h2><ul><li>ZooKeeper 暴露层次化 znode 命名空间。</li><li>本地读提升读吞吐和可用性，但客户端必须理解陈旧读、会话和 watch 的边界。</li><li>普通读可能陈旧；写有全局顺序，需使用 sync 或更高层协议约束读新鲜度。</li></ul><h2 id="sources">一手资料</h2><ul><li><code>notes/l-zookeeper.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/zookeeper.pdf</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li><li><code>papers/zookeeper-faq.txt</code> · 按官方课表对应讲次 · confidence: high · 本地下载并完成文本提取；页面保留官方来源文件名。</li></ul><footer id="pb-page-end"><p>MIT 6.5840: Distributed Systems Engineering · Spring 2026</p></footer></div>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism-python.js"></script>
+<script src="../../../assets/vendor/prism-bash.js"></script>
+<script src="../../../assets/course/quiz.js"></script>
+<script defer="" src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer="" src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</body>
+</html>
