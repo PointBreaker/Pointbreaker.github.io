@@ -10,14 +10,6 @@ Use these rules when local official discussion or homework solutions are availab
 - Read the PDF page when extracted text loses a diagram, table, handwritten annotation, or mathematical symbol.
 - Use local question files for the statement and local official solution files for the answer. Do not reconstruct an “official” answer from lecture notes.
 
-## Claude Code batching
-
-- Use `scripts/run_claude_extraction.py` with an explicitly selected, machine-verified model and the bundled `work-item-extraction.schema.json`. Do not require a particular model family from every user.
-- Batch one long homework with its solution, or at most four short discussion/solution pairs.
-- Embed inventory-extracted text and use `--no-tools` for the main extraction. Run a separate, small `Read`-enabled pass only for visually incomplete PDF pages. Split a batch that reaches the configured timeout without producing an artifact.
-- For a single long handout that still times out, shard by problem number and merge only disjoint, schema-valid results with `scripts/merge_extraction_shards.py`. Never concatenate model prose or resolve conflicting shard identities automatically.
-- Keep all results and run metadata under `.course-build/claude-extraction/`; never pass the full extraction through the primary context merely to save it.
-
 ## Page structure
 
 Render in this order:

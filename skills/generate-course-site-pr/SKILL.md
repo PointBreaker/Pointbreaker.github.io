@@ -51,7 +51,6 @@ Use the official homepage for the schedule, course identity, public links, and m
 
 Read [references/content-quality.md](references/content-quality.md) before writing content.
 Read [references/interactive-content.md](references/interactive-content.md) when the course contains mathematical relationships, diagrams, matrices, parameter-sensitive behavior, algorithms, or multi-stage processes that may benefit from a visual explanation.
-Read [references/claude-code-extraction.md](references/claude-code-extraction.md) before optionally delegating high-volume local text extraction to Claude Code. Select a model that the current user can access, verify the actual model metadata, and keep source interpretation, dependency modeling, content decisions, frontend architecture, and final QA in the primary agent. If Claude Code is unavailable, continue with the primary agent rather than blocking the course build.
 Read [references/solution-bearing-coursework.md](references/solution-bearing-coursework.md) when local discussion solutions, homework solutions, answer keys, or worked solutions are present and the user authorizes publishing them.
 
 ### 3. Create the course plan

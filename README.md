@@ -33,8 +33,6 @@ Use $generate-course-site-pr to turn this folder into a new CourseStack course a
 
 Skill 会盘点资源、建立课程计划、生成前端与内容、识别适合可视化的数学关系或算法过程、生成静态 SVG 或声明式交互组件、检查公式和页面、创建分支并打开 PR。它不会访问 `drive.google.com` 或 `docs.google.com`，请提前下载需要的官方资料。
 
-当本地 PDF/PPT 数量很大时，Skill 可以把批量文本提取交给 Claude Code，但只会在 CLI 元数据确认实际模型为 `longcat-2.0` 后执行。Claude Code 只负责带来源证据的结构化候选数据；课程事实取舍、`Lecture → HW → Exam` 依赖建模、页面设计、数学核验和最终 PR 仍由主 Agent 负责。
-
 CourseStack Interactive v1 支持参数化函数图、矩阵热力图和分步推导。所有交互使用仓库内的共享运行时，不依赖外部 CDN，并强制保留静态降级图。
 
 所有讲义、作业与 Lab 页面会通过共享阅读层自动接入 GitHub Discussions 评论。点击顶部“讨论”会打开右侧抽屉；桌面端会为抽屉让出空间，不遮挡正文。评论由 Giscus 承载，页面路径作为独立话题标识；新课程无需复制评论代码。
