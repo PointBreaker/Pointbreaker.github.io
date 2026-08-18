@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="探索并发共享可变数据类型的编程：构建多人网络 Memory 翻牌游戏，处理等待、并发玩家与实时更新。"><title>PS4: Memory Scramble — MIT 6.102</title>
+<link rel="stylesheet" href="../../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../../index.html#lectures">课程</a><a href="../../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">MIT 6.102 · PS4 · Assignment 9</p><h1>PS4：Memory Scramble</h1><p class="hero-lede">探索并发共享可变数据类型的编程：构建多人网络 Memory 翻牌游戏，处理等待、并发玩家与实时更新。</p></div></header>
+<main class="reading-shell"><article class="reading-article page">
+
+
+    <h2 id="objectives">实验目标</h2>
+    <ul>
+      <li>设计并实现可变 <code>Board</code> ADT 表示游戏棋盘。</li>
+      <li>通过 HTTP 协议连接 Web 服务器，支持多客户端。</li>
+      <li>用异步方法 / <code>await</code> / Promise 实现等待与并发玩家。</li>
+      <li>实现 <code>map()</code> 与 <code>watch()</code>，练习观察者模式与原子性思考。</li>
+    </ul>
+
+    <h2 id="prerequisites">先修知识</h2>
+    <ul>
+      <li>PS3 的解析器与 ADT 经验。</li>
+      <li>阅读材料：并发、互斥、Promise、回调、消息传递与网络。</li>
+    </ul>
+
+    <h2 id="overview">任务概述</h2>
+    <p>Memory Scramble 是翻牌配对游戏的多人实时版。玩家同时翻牌找配对：</p>
+    <ul>
+      <li>第一次翻牌：控制该牌；若被他人控制则等待。</li>
+      <li>第二次翻牌：配对成功则保持控制；失败则放弃控制。</li>
+      <li>下次翻牌前：已配对的牌移出，未配对且无人控制的牌翻回背面。</li>
+    </ul>
+    <p>棋盘从文件加载，<code>ROW x COLUMN</code> 格式，随后逐行逐张卡列出。</p>
+
+    <h2 id="problems">分步指引</h2>
+
+    <h3>Problem 1：棋盘 ADT</h3>
+    <p>规格 / 测试 / 实现可变 <code>Board</code> ADT。必须支持 <code>parseFromFile(filename)</code>。实现 AF、RI、防 rep 暴露、<code>checkRep</code>、<code>toString</code>。先不考虑并发。</p>
+
+    <h3>Problem 2：连接 Web 服务器</h3>
+    <p>实现 <code>commands.ts</code> 的 <code>look()</code> 与 <code>flip()</code>（粘合代码，每函数不超过 3 行）。用 <code>npm start 8080 boards/perfect.txt</code> 启动服务器，在浏览器多标签页测试。</p>
+
+    <h3>Problem 3：并发玩家</h3>
+    <p>把 <code>Board</code> 改为异步，用 <code>await</code> / Promise 实现等待。不要用忙等待（busy-wait）。用 <code>simulation.ts</code> 增加玩家数测试。</p>
+
+    <h3>Problem 4：换牌 map()</h3>
+    <p>实现 <code>map()</code>：把每张卡替换为 <code>f(card)</code>。<code>f</code> 是异步的，替换期间允许其他命令交错执行，但必须保持一致性（配对卡仍配对）。</p>
+
+    <h3>Problem 5：棋盘事件 watch()</h3>
+    <p>实现 <code>watch()</code>：挂起直到棋盘变化（翻面、移出、换牌）。设计变更通知机制（单次或持续监听），用 callback 或 promise。</p>
+
+    <h2 id="http-protocol">HTTP 协议</h2>
+    <p>玩家用 ID 标识。服务器返回棋盘状态，每格为 <code>none</code>/<code>down</code>/<code>up CARD</code>/<code>my CARD</code>。</p>
+    <p>命令：<code>look</code>、<code>flip</code>、<code>map</code>、<code>watch</code>。失败用拒绝的 promise（async 函数 throw）表示。</p>
+
+    <h2 id="submission">提交与验收</h2>
+    <ul>
+      <li>commit 并 push 到 github.mit.edu，评分使用 9:00pm 截止时的仓库状态。</li>
+      <li>PS4 的 Didit 处理时间比前面问题集长，请尽早 push。</li>
+      <li>正确性完全由你自己负责。</li>
+    </ul>
+
+    <h2 id="grading">评分构成</h2>
+    <ul>
+      <li>~30% alpha 自动评分（含在线练习）</li>
+      <li>~20% alpha 人工评分</li>
+      <li>~25% beta 自动评分</li>
+      <li>~25% beta 人工评分（含代码审查）</li>
+    </ul>
+    <p>Alpha 自动评分侧重非并发场景；beta 覆盖完整并发情况。</p>
+
+    <h2 id="pitfalls">常见陷阱</h2>
+    <ul>
+      <li>忙等待（busy-wait）：必须用 Promise / <code>await</code>。</li>
+      <li><code>commands.ts</code> 函数超过 3 行：说明 <code>Board</code> 操作设计得不够强大。</li>
+      <li>在实现代码里放 <code>timeout()</code>：这是 race condition 的信号。</li>
+      <li>detached HEAD / 忘记 push。</li>
+      <li>并发测试用很长超时：会导致 Didit 测试超时，应使用很短超时。</li>
+    </ul>
+
+    <h2 id="spec-link">完整规格</h2>
+    <p>完整题目规格请查阅 <code>psets/ps4/index.md</code> 及 <a href="https://web.mit.edu/6.102/www/sp26/psets/" target="_blank" rel="noreferrer">官方 PS 页面 ↗</a>。</p>
+
+    
+</article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../../index.html">COURSE MAP →</a></footer></body></html>

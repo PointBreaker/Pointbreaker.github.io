@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Promise：用 Promise 表示尚未完成的并发计算，用 await 等待结果，用 Promise.all/any/race 聚合多个 Promise，并理解单线程事件循环模型。"><title>Promise — MIT 6.102 Software Construction</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../../../assets/vendor/prism.css">
+<script defer src="../../../assets/vendor/katex.min.js"></script>
+<script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#psets">作业</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/15-promises/" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 15 · 2026-04-06 · 并发</p><h1>Promise</h1><p class="lesson-title-en">Promises</p><p class="hero-lede">用 Promise 表示尚未完成的并发计算，用 await 等待结果，用 Promise.all/any/race 聚合多个 Promise，并理解 JavaScript 单线程事件循环下的并发模型。</p><div class="lesson-meta"><span>50 MIN</span><span>并发</span><span>01 SOURCE</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#promises"><span>01</span>Promise：表示尚未完成的计算</a><a href="#await"><span>02</span>await：把 Promise&lt;T&gt; 变成 T</a><a href="#async-fns"><span>03</span>异步函数</a><a href="#concurrency-model"><span>04</span>JavaScript 的并发模型：单线程</a><a href="#aggregating"><span>05</span>聚合 Promise</a><a href="#no-busy-wait"><span>06</span>永远不要忙等待</a><a href="#exceptions"><span>07</span>Promise 与异常处理</a><a href="#coverage-map"><span>08</span>教案覆盖地图</a><a href="#check"><span>09</span>纠错、测验与复盘</a><a href="#source-vault"><span>10</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已掌握并发基本概念与竞态条件</li><li>熟悉 TypeScript 函数与类型</li><li>了解回调函数的基本用法</li></ul></div><ol><li>理解 Promise 的三种状态及其作为"未来值"的含义</li><li>掌握 await 与 async 函数的用法</li><li>用 Promise.all/any/race 聚合多个 Promise</li><li>理解单线程事件循环下的并发模型与异常处理</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/15-promises/" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>classes/15-promises</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="promises"><div class="section-label">01 / PROBLEM</div><h2>Promise：表示尚未完成的计算</h2><p><strong>Promise</strong> 表示一个已经启动、但结果可能尚未准备好的并发计算。<code>Promise&lt;T&gt;</code> 是一个<strong>可变</strong>值（注意：这里的可变指状态变迁，不是指 Promise 对象本身被替换），有三种状态：</p><ul><li><strong>pending</strong>：计算还在进行中</li><li><strong>fulfilled</strong>：计算成功完成，附带一个 <code>T</code> 类型的值</li><li><strong>rejected</strong>：计算失败，附带一个错误</li></ul><p>Promise 一旦从 pending 变为 fulfilled 或 rejected，就<strong>不可再变</strong>——这正是"承诺"的含义：它最终会给出一个确定的交代。</p><aside class="field-callout"><span>FIELD TRACE</span><p>把 Promise 想成一张"取餐小票"：你点了餐（启动计算），拿到小票（Promise），此时餐还没好（pending）。等到厨房做好，小票对应的餐就确定了（fulfilled），或者卖完了（rejected）。小票本身不会再变成另一份餐。</p></aside></section><section class="reading-section" id="await"><div class="section-label">02 / DEEP READING</div><h2>await：把 Promise&lt;T&gt; 变成 T</h2><p><code>await</code> 关键字把一个 <code>Promise&lt;T&gt;类型的值"解开"成 <code>T</code>。如果 Promise 已经 fulfilled，<code>await</code> 立即返回其值；如果还在 pending，<code>await</code> 会让出控制权，等 Promise 就绪后再恢复执行。</p><pre><code class="language-ts">async function fetchUser(id: number): Promise&lt;User&gt; {
+  const response = await fetch(`/api/users/${id}`);
+  // await 让出控制权，等 fetch 的 Promise 完成
+  const user: User = await response.json();
+  return user;  // 返回值被包装成 Promise&lt;User&gt;
+}</code></pre><p><code>await</code> 只能在 <code>async</code> 函数内部使用。它的本质是"在这里暂停，等结果就绪后继续"。</p></section><section class="reading-section" id="async-fns"><div class="section-label">03 / DEEP READING</div><h2>异步函数</h2><p><strong>异步函数</strong>（asynchronous function）用 <code>async</code> 声明，它在计算完成前就把控制权交还给调用者。异步函数的返回值自动被包装成 Promise：</p><pre><code class="language-ts">async function greet(): Promise&lt;string&gt; {
+  return "hello";
+}
+// greet() 返回 Promise&lt;string&gt;，不是 string</code></pre><p>异步函数让异步代码看起来像同步代码——这是 <code>async/await</code> 最大的价值。但要注意：异步函数的"同步外表"下仍然是异步执行，调用者必须 <code>await</code> 才能拿到结果。</p></section><section class="reading-section" id="concurrency-model"><div class="section-label">04 / DEEP READING</div><h2>JavaScript 的并发模型：单线程</h2><p>JavaScript 在每个全局环境中只有<strong>一条控制线程</strong>。这意味着同一时刻只有一个函数在执行。<code>await</strong> 是唯一让出控制权的机制——当函数 <code>await</code> 一个 Promise 时，其他等待中的任务（定时器回调、事件处理等）才有机会执行。</p><p>这个模型消除了共享内存的竞态条件（因为同一时刻只有一个函数在跑），但也意味着：<strong>长时间同步计算会阻塞整个线程</strong>。所以异步函数不应包含耗时的同步操作。</p></section><section class="reading-section textbook-section" id="aggregating"><div class="section-label">05 / DERIVATION</div><h2>聚合 Promise</h2><p>实际程序常常需要同时处理多个 Promise。三个聚合方法对应三种逻辑组合：</p><ul><li><code>Promise.all(promises)</code>：等待<strong>所有</strong> Promise 完成（逻辑 AND）。任一失败则整体失败。</li><li><code>Promise.any(promises)</code>：等待<strong>任一</strong> Promise fulfill（逻辑 OR）。全部失败则整体失败。</li><li><code>Promise.race(promises)</code>：等待<strong>任一</strong> Promise fulfill 或 reject（最先出结果的）。</li></ul><pre><code class="language-ts">// 同时请求多个资源，等全部完成
+const [user, posts] = await Promise.all([
+  fetchUser(1),
+  fetchPosts(1)
+]);
+
+// 哪个快用哪个
+const fastest = await Promise.race([
+  fetchFromCache(key),
+  fetchFromServer(key)
+]);</code></pre><aside class="field-callout"><span>FIELD TRACE</span><p>把 Promise.all/any/race 想成"多人竞赛"的裁判：all 等所有人冲线（有人摔倒就全体失败），any 等第一个冲线（全部摔倒才失败），race 等第一个发生的结果（无论冲线还是摔倒）。根据业务语义选裁判。</p></aside></section><section class="reading-section" id="no-busy-wait"><div class="section-label">06 / DEEP READING</div><h2>永远不要忙等待</h2><p>Promise <strong>没有</strong>任何方法可以查询当前状态（没有 <code>isPending()</code>、<code>getValue()</code> 等）。你不能写这样的代码：</p><pre><code class="language-ts">// 错误示范：试图忙等待
+while (promise.isPending()) { /* 循环检查 */ }
+const value = promise.getValue();</code></pre><p>正确的做法永远是用 <code>await</code> 或 <code>.then(callback)</code>。这保证了单线程模型不被阻塞，也避免了竞态条件。</p></section><section class="reading-section" id="exceptions"><div class="section-label">07 / DEEP READING</div><h2>Promise 与异常处理</h2><p>Promise 的异常处理遵循两条规则：</p><ul><li>当 <code>async</code> 函数抛出异常时，返回的 Promise 变为 <strong>rejected</strong></li><li>对 rejected 的 Promise 执行 <code>await</code> 会抛出该异常</li></ul><pre><code class="language-ts">async function risky(): Promise&lt;string&gt; {
+  throw new Error("boom");  // Promise 变为 rejected
+}
+
+async function caller() {
+  try {
+    await risky();           // 这里会抛出 "boom"
+  } catch (e) {
+    console.log("caught:", e);
+  }
+}</code></pre><p>这使得 <code>try/catch</code> 能像处理同步异常一样处理异步异常，大幅简化异步代码的错误处理。</p></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">08 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>08</strong><span>中文教学单元</span></article><article><strong>01</strong><span>核心抽象</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师讲义原文逐行完整保留；中文教学单元覆盖 Promise、await、异步函数、单线程模型、聚合、忙等待禁忌与异常处理。覆盖不是用摘要替代原文，任何细节都可在页面末尾回查。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/15-promises/index.md</strong><p>49 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（8 项）</summary><ol><li><span>01</span>Promise：表示尚未完成的计算</li><li><span>02</span>await：把 Promise&lt;T&gt; 变成 T</li><li><span>03</span>异步函数</li><li><span>04</span>JavaScript 的并发模型：单线程</li><li><span>05</span>聚合 Promise</li><li><span>06</span>永远不要忙等待</li><li><span>07</span>Promise 与异常处理</li><li><span>08</span>教案覆盖地图</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">09 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>await 会阻塞线程。</h3><p>await 不会阻塞线程，而是让出控制权，让其他任务执行。这是单线程并发的核心。</p></article><article><span>误区</span><h3>可以查询 Promise 的当前状态。</h3><p>Promise 没有状态查询方法，只能用 await 或 .then() 获取结果。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。Promise 的三种状态：pending、fulfilled、rejected，且状态一旦改变就不可再变。" data-incorrect="回到 Promise 小节，理解三种状态与不可变性。" data-quiz="r15-q1"><p><strong>Promise 的三种状态是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>pending、fulfilled、rejected</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>waiting、running、done</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>open、closed、error</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。Promise.all 等待所有完成，是逻辑 AND。" data-incorrect="回到聚合小节，区分三种聚合方法的语义。" data-quiz="r15-q2"><p><strong>Promise.all() 的语义是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>等待所有 Promise 完成（逻辑 AND）</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>等待任一 Promise 完成（逻辑 OR）</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>返回第一个创建的 Promise</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。单线程 + await 让出控制权，消除了共享内存竞态。" data-incorrect="回到并发模型小节，理解单线程的含义。" data-quiz="r15-q3"><p><strong>为什么 JavaScript 单线程模型能避免共享内存的竞态条件？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>同一时刻只有一个函数在执行，await 才让出控制权</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>因为 Promise 不能被修改</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>因为所有操作都是同步的</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>Promise 表示尚未完成的计算，三种状态：pending/fulfilled/rejected。</li><li>await 解开 Promise，async 函数返回 Promise；单线程 + await 让出控制权。</li><li>Promise.all/any/race 聚合多个 Promise，永远不要用忙等待查询状态。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="classes/15-promises/index.md"><summary><span><b>课堂讲义</b>classes/15-promises/index.md</span><small>49 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/15-promises/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text"># Reading 15: Promises
+
+[6.102 — Software Construction](http://web.mit.edu/6.102/www/sp26/)
+Spring 2026
+
+## Objectives
+
+This reading discusses concurrent computation using *promises*.
+
+## Promises
+
+A *promise* represents a concurrent computation that has been started
+but whose result may not be ready yet.
+
+A `Promise&lt;T&gt;` is a mutable value with three states:
+*pending*, *fulfilled*, *rejected*.
+
+## Await
+
+The `await` keyword converts a value of type `Promise&lt;T&gt;`
+into a value of type `T`.
+
+## Asynchronous functions
+
+An *asynchronous function* returns control to its caller before its
+computation is done, declared with `async`.
+
+## Concurrency model
+
+JavaScript has only one thread of control per global environment.
+`await` gives up control.
+
+## Aggregating promises
+
+- `Promise.all()`: waits for all promises (logical AND)
+- `Promise.any()`: waits for any promise to fulfill (logical OR)
+- `Promise.race()`: waits for any promise to fulfill or reject
+
+## Never busy-wait
+
+There is no method to interrogate a promise's state. Use `await`.
+
+## Promises and exception handling
+
+- When an `async` function throws, the promise becomes *rejected*.
+- `await` on a rejected promise throws the exception.
+
+## Summary
+
+- A promise is a concurrent computation that might still be unfinished.
+- `await` waits for and accesses the value.
+- `Promise.all()`, `Promise.any()`, `Promise.race()` aggregate promises.
+- Functions that return a promise are *asynchronous*.</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0014-concurrency.html"><span>← 上一讲</span><strong>并发</strong></a><a href="0016-mutual-exclusion.html"><span>下一讲 →</span><strong>互斥</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>15 / 19</strong><p>先读中文精读，画出 Promise 状态机与 await 让出控制权的时刻；再展开资料附录逐条核对官方讲义。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../index.html">SOFTWARE CONSTRUCTION / COURSE MAP →</a></footer>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism.js"></script>
+</body></html>

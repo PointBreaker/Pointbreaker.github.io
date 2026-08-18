@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="抽象数据类型（ADT）用操作刻画类型，让客户端只依赖行为规范而非内部表示；表示独立性把“是什么”和“怎么做”分开，是模块化与封装的基石。"><title>抽象数据类型 — MIT 6.102 软件构建</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#psets">问题集</a><a href="../index.html#exams">考试</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/06-abstract-data-types/" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 06 · 2026-02-23 · 抽象</p><h1>抽象数据类型</h1><p class="lesson-title-en">Abstract Data Types</p><p class="hero-lede">抽象数据类型（Abstract Data Types）用“能对它做什么操作”来刻画一个类型。表示独立性（representation independence）把“是什么”和“怎么做”分开，让客户端只依赖行为规范，这是模块化与封装的基石。</p><div class="lesson-meta"><span>75 MIN</span><span>抽象</span><span>01 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#adt-problem"><span>01</span>客户端对表示做假设有多危险</a><a href="#what-abstraction-means"><span>02</span>抽象、封装与信息隐藏</a><a href="#user-defined-types"><span>03</span>类型由操作刻画</a><a href="#classifying-operations"><span>04</span>四类操作：创建者、生产者、观察者、变者</a><a href="#adt-defined-by-operations"><span>05</span>抽象类型由它的操作集定义</a><a href="#designing-adt"><span>06</span>怎样设计一个好的抽象类型</a><a href="#rep-independence"><span>07</span>表示独立性</a><a href="#adt-in-typescript"><span>08</span>在 TypeScript 中实现 ADT</a><a href="#testing-adt"><span>09</span>测试抽象数据类型</a><a href="#coverage-map"><span>10</span>教案覆盖地图</a><a href="#check"><span>11</span>纠错、测验与复盘</a><a href="#source-vault"><span>12</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已理解方法规格说明（specification）与前置/后置条件。</li><li>熟悉 TypeScript 的类、private 字段与只读属性。</li></ul></div><ol><li>解释抽象数据类型为什么能消除客户端对内部表示的假设。</li><li>用创建者、生产者、观察者、变者四类操作分析一个 ADT。</li><li>评估表示独立性带来的可替换实现与可维护性收益。</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/06-abstract-data-types/" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>classes/06-abstract-data-types/index.md</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="adt-problem"><div class="section-label">01 / PROBLEM</div><h2>客户端对表示做假设有多危险</h2><p>假设你实现了一个 <code>MyDate</code> 类型，内部用三个数字字段 <code>year</code>、<code>month</code>、<code>day</code> 表示日期。起初一切都好，直到某个客户端写下 <code>date.month = 13</code>，因为它“知道”月份就是一个公开字段；或者另一个客户端在比较两个日期时直接访问内部数组下标。这些代码一旦写出来，就和你的内部表示绑定死了。</p><p>现在你想把表示改成从纪元日起的天数、或改成一个字符串。所有直接触碰内部字段的客户端都会崩溃。<strong>抽象数据类型要解决的正是这个问题：阻止客户端对类型的内部表示（representation）做假设。</strong>如果客户端只能经由你公开的操作与类型交互，那么你随时可以替换表示，而客户端无需改动。</p><p>本讲的两个核心思想是：第一，用操作定义类型；第二，让类型的使用与表示无关。这两个思想合起来，构成整门课程“抽象”线索的枢纽。</p><aside class="field-callout"><span>FIELD TRACE</span><p>判断一段代码是否违反 ADT 哲学，最快的问题是：“如果实现者明天把内部字段换掉，这段客户端代码还能编译、还能跑吗？” 如果答案是否，说明客户端依赖了表示，而不是依赖操作。</p></aside></section><section class="reading-section" id="what-abstraction-means"><div class="section-label">02 / DEEP READING</div><h2>抽象、封装与信息隐藏</h2><p>建立 ADT 之前，先统一五个常被混用的术语。它们相关但并不相同：</p><ul><li><strong>抽象（abstraction）</strong>：省略或隐藏低层细节，只保留对当前目的重要的部分。</li><li><strong>模块化（modularity）</strong>：把系统拆成各自承担明确职责的组件。</li><li><strong>封装（encapsulation）</strong>：在模块周围筑起一道墙，外部只能通过墙上的窗口访问。</li><li><strong>信息隐藏（information hiding）</strong>：把模块实现的细节藏起来，只暴露最小接口。</li><li><strong>关注点分离（separation of concerns）</strong>：让每个功能只由单个模块负责。</li></ul><p>ADT 把这几条凝聚成一个可操作的设计规则：类型的意义完全来自它的操作，所有关于“怎么实现”的信息都被隐藏在墙后。客户端看到的是操作签名和规格说明，看不到字段、算法和数据结构。</p><aside class="field-callout"><span>FIELD TRACE</span><p>把这五个术语画成同心圆：抽象是最外层的意图，模块化是结构划分，封装是边界机制，信息隐藏是边界内的策略，关注点分离是分配职责的原则。ADT 同时触及每一层。</p></aside></section><section class="reading-section" id="user-defined-types"><div class="section-label">03 / DEEP READING</div><h2>类型由操作刻画</h2><p>数据抽象的关键思想是：<strong>一个类型由你能对它执行的操作来刻画。</strong>问“这是什么类型”等价于问“我能对它做什么”。整数之所以是整数，是因为能对它做加、减、乘、比较；栈之所以是栈，是因为能 <code>push</code>、<code>pop</code>、<code>peek</code>。</p><p>这意味着设计 ADT 的第一步不是选数据结构，而是选操作。先决定客户端需要哪些能力，再回头决定用什么数据结构实现这些能力。这个次序一旦颠倒，你就会把特定的数据结构（比如“我用数组实现的”）泄漏成类型的身份，从而失去替换实现的自由。</p><p>老师把这种思想概括为：类型 = 操作 + 操作的规格说明。下一节我们把操作进一步分类。</p></section><section class="reading-section" id="classifying-operations"><div class="section-label">04 / DEEP READING</div><h2>四类操作：创建者、生产者、观察者、变者</h2><p>抽象类型的操作可以分为四类，这是本讲最实用的分类工具：</p><ul><li><strong>创建者（creators）</strong>：创建该类型的新对象。构造函数和静态工厂方法都属此类。</li><li><strong>生产者（producers）</strong>：从该类型的现有对象创建新对象。例如 <code>concat</code> 从两个字符串产生一个新字符串。</li><li><strong>观察者（observers）</strong>：接受该类型的对象，返回另一种类型的值。例如 <code>size</code>、<code>toString</code>、<code>isEmpty</code>。</li><li><strong>变者（mutators）</strong>：改变对象的状态，也叫修改者。</li></ul><p>这个分类之所以重要，是因为它直接关系到可变性。<strong>变者越少，类型就越容易是不可变的（immutable）</strong>，而不可变类型在并发和复用场景下显著更安全。阅读本课后面“函数式编程”时，你会看到 map/filter/reduce 几乎只依赖生产者和观察者，刻意避开变者。</p><aside class="field-callout"><span>FIELD TRACE</span><p>拿一个你熟悉的类型——比如集合 <code>Set</code>——列出它的全部操作，再逐一归入四类。重点检查：是否真的需要变者？能不能把变者替换为生产者（返回新集合而非修改原集合）？这一步能把“抽象类型设计”变成可执行的清单。</p></aside></section><section class="reading-section" id="adt-defined-by-operations"><div class="section-label">05 / DERIVATION</div><h2>抽象类型由它的操作集定义</h2><p>类型 <em>T</em> 的全部操作，连同它们的规格说明，就完整地刻画了“<em>T</em> 是什么”。这句话是 ADT 哲学的浓缩：只要两个类型暴露同样的操作、满足同样的规格说明，客户端就无法也无须区分它们。</p><p>举例：一个 <code>ImmutableSet</code> 可以内部用有序数组实现，也可以用哈希表实现，还可以用平衡二叉搜索树实现。只要 <code>contains</code>、<code>insert</code>、<code>remove</code> 的规格说明一致，客户端代码就完全不需要知道背后是哪一种。</p><p>这同时给出了一种阅读代码的方式：看到一个类型时，先读它的操作和规格说明，建立对“它是什么”的理解；至于字段和算法，是实现细节，应当被信息隐藏隔开。下一节我们把“可替换实现”精确化为表示独立性。</p></section><section class="reading-section" id="designing-adt"><div class="section-label">06 / DEEP READING</div><h2>怎样设计一个好的抽象类型</h2><p>设计 ADT 有几条经验规则：</p><ul><li><strong>少而简单</strong>：操作数量尽量少，每个操作的语义尽量简单。复杂的操作应当拆解成简单操作的组合。</li><li><strong>目的明确</strong>：每个操作都应有清晰、单一的职责。</li><li><strong>充分（adequate）</strong>：操作集要足够表达客户端需要的能力，不能为了简洁而缺失关键操作。</li><li><strong>不混淆通用与领域特征</strong>：不要把通用工具逻辑和领域特定逻辑塞进同一个 ADT。</li></ul><p>这些规则看起来朴素，但它们指向一个共同目标：让 ADT 的抽象既不过薄（暴露太多细节，客户端仍要自己拼复杂逻辑），也不过厚（堆砌操作、混入不相关职责）。好的抽象类型读起来像一份精简的词典，每个词都不可或缺。</p></section><section class="reading-section" id="rep-independence"><div class="section-label">07 / DEEP READING</div><h2>表示独立性</h2><p><strong>表示独立性（representation independence）</strong> 指的是：抽象类型的使用与它的表示无关。换言之，你可以在不修改任何客户端代码的前提下，替换掉整个内部实现。</p><p>表示独立性带来的工程价值很直接：</p><ul><li><strong>可替换实现</strong>：先用简单但慢的实现跑通，再换成复杂但快的实现。</li><li><strong>局部化修改</strong>：修复实现中的 bug 或优化性能时，改动被限制在 ADT 内部。</li><li><strong>可测试性</strong>：客户端代码可以在测试中注入另一种实现（比如用假对象）。</li></ul><p>表示独立性依赖两个机制共同保障：把字段声明为 <code>private</code> 阻止直接访问，以及只通过规格说明精确的公开操作暴露行为。下一节看 TypeScript 如何落地这些机制。</p><aside class="field-callout"><span>FIELD TRACE</span><p>当你写完一个 ADT，做“表示独立性压测”：把实现从 A 换成 B，重新跑客户端测试。如果客户端测试全部通过，你才真正获得了表示独立性。任何因换实现而失败的测试，都暴露了一处客户端对表示的隐式依赖。</p></aside></section><section class="reading-section" id="adt-in-typescript"><div class="section-label">08 / DEEP READING</div><h2>在 TypeScript 中实现 ADT</h2><p>TypeScript 提供了几种实现 ADT 的方式，常见的有：</p><ul><li><strong>类（class）</strong>：用 <code>private</code> 字段隐藏表示，用公开方法暴露操作。最直接，但一个类只能绑定一种实现。</li><li><strong>接口 + 类（interface + class）</strong>：用接口定义操作契约，让多个类实现同一接口。这是获得表示独立性的标准方式——客户端依赖接口，而非具体类。</li><li><strong>枚举（enum）</strong>：当 ADT 只包含有限个固定值时（比如星期、方向），枚举天然表达“小有限集”抽象。</li></ul><p>这几种方式并不互斥。第 8 讲（接口与子类型）会系统展开接口与泛型；第 9 讲（枚举）会专门处理有限值域。本节只要建立直觉：<strong>接口定义契约，类实现契约，客户端只依赖契约</strong>。</p><pre><code class="language-ts">// 接口定义操作契约 —— 客户端只看到这段
+interface ImmutableSet&lt;T&gt; {
+  contains(item: T): boolean;
+  insert(item: T): ImmutableSet&lt;T&gt;;
+  remove(item: T): ImmutableSet&lt;T&gt;;
+  size(): number;
+}
+
+// 具体实现 A：用数组 —— 客户端完全不知道
+class ArraySet&lt;T&gt; implements ImmutableSet&lt;T&gt; {
+  private readonly items: T[];
+  // ...
+}</code></pre></section><section class="reading-section" id="testing-adt"><div class="section-label">09 / DEEP READING</div><h2>测试抽象数据类型</h2><p>测试 ADT 的方式很直接：<strong>为它的每个操作写测试</strong>。由于 ADT 的意义完全来自操作，覆盖操作就覆盖了整个抽象。</p><p>测试时要用规格说明驱动：每个测试只通过公开操作构造对象、触发行为、断言结果，绝不直接检查内部字段。这样即便将来替换实现，测试仍然有效——这正是表示独立性在测试上的体现。</p><p>创建者、生产者、观察者、变者四类操作都要覆盖，尤其注意边界：空集合、单元素、重复操作、连续变者调用后的状态。不可变类型因为没有变者，测试会更简单，这也是不可变性的工程优势之一。</p></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">10 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>10</strong><span>中文教学单元</span></article><article><strong>01</strong><span>机制 / 代码示例</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师讲义原文逐行完整保留；中文教学单元覆盖抽象定义、操作分类、表示独立性与 TypeScript 实现；代码示例已重写为与课堂一致的 TypeScript 风格；资料附录保留原始细节与例子。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/06-abstract-data-types/index.md</strong><p>66 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（10 项）</summary><ol><li><span>01</span>客户端对表示做假设有多危险</li><li><span>02</span>抽象、封装与信息隐藏</li><li><span>03</span>类型由操作刻画</li><li><span>04</span>四类操作：创建者、生产者、观察者、变者</li><li><span>05</span>抽象类型由它的操作集定义</li><li><span>06</span>怎样设计一个好的抽象类型</li><li><span>07</span>表示独立性</li><li><span>08</span>在 TypeScript 中实现 ADT</li><li><span>09</span>测试抽象数据类型</li><li><span>10</span>教案覆盖地图</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">11 / CALIBRATION</div><h2>把直觉校准成设计规则</h2><div class="misconception-grid"><article><span>误区</span><h3>ADT 设计就是选数据结构。</h3><p>ADT 设计首先是选操作、定规格说明；数据结构是实现细节，应当可以在不触碰客户端的情况下替换。</p></article><article><span>误区</span><h3>只要把字段改成 private 就实现了抽象。</h3><p>private 字段只是封装机制。真正的抽象还需要操作集充分、规格说明精确，并杜绝表示泄漏（representation exposure）。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。ADT 的身份完全来自公开操作与规格说明，内部表示是实现细节。" data-incorrect="回到“抽象类型由它的操作集定义”，重新思考类型身份由什么决定。" data-quiz="adt-q1"><p><strong>抽象数据类型的“身份”由什么决定？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>它的公开操作集及其规格说明</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>它的内部字段名和数据结构</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>它的类名</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="b" data-correct="正确。生产者从现有对象创建新对象，例如 concat、insert（不可变版本）都返回新实例。" data-incorrect="再读“四类操作”，特别区分创建者、生产者、观察者、变者。" data-quiz="adt-q2"><p><strong>下列哪项是“生产者（producer）”的典型例子？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>构造函数</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>concat：从两个字符串产生新字符串</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>toString：返回对象的字符串表示</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。表示独立性意味着可以在不修改客户端的前提下替换内部实现。" data-incorrect="表示独立性的核心正是实现可替换而不影响客户端。" data-quiz="adt-q3"><p><strong>表示独立性的主要工程收益是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>可以在不修改客户端代码的情况下替换实现</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>客户端可以直接访问内部字段以提升性能</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>所有操作都自动变成纯函数</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>抽象数据类型由它的操作集及其规格说明定义，而非由内部表示定义。</li><li>操作分为创建者、生产者、观察者、变者四类；变者越少，类型越容易是不可变的。</li><li>表示独立性让实现可替换、修改局部化，依赖 private 字段与精确规格说明共同保障。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与例子，不以摘要替代原文。</p><div class="source-search"><span>SEARCH</span><input type="text" data-source-search placeholder="搜索资料内容…" aria-label="搜索资料"></div><details class="archive" data-source-record data-source="classes/06-abstract-data-types/index.md"><summary><span><b>课堂讲义</b>classes/06-abstract-data-types/index.md</span><small>66 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/06-abstract-data-types/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.102 — Software Construction
+Spring 2026
+
+# Reading 6: Abstract Data Types
+
+## Objectives
+
+Today's class introduces two ideas:
+
+- Abstract data types
+- Representation independence
+
+## Introduction
+
+Abstract data types address a particularly dangerous problem: clients making assumptions about the type's internal representation.
+
+## What abstraction means
+
+- **Abstraction.** Omitting or hiding low-level details.
+- **Modularity.** Dividing a system into components.
+- **Encapsulation.** Building a wall around a module.
+- **Information hiding.** Hiding details of a module's implementation.
+- **Separation of concerns.** Making a feature the responsibility of a single module.
+
+## User-defined types
+
+The key idea of data abstraction is that a type is characterized by the operations you can perform on it.
+
+## Classifying types and operations
+
+Operations of an abstract type are classified as:
+
+- **Creators** create new objects of the type.
+- **Producers** create new objects from existing objects of the type.
+- **Observers** take objects of the abstract type and return objects of a different type.
+- **Mutators** change objects.
+
+## An abstract type is defined by its operations
+
+The set of operations for a type T, along with their specifications, fully characterize what we mean by T.
+
+## Designing an abstract type
+
+- A few, simple operations
+- Each operation should have a well-defined purpose
+- The set of operations should be adequate
+- It should not mix general-purpose and domain-specific features
+
+## Representation independence
+
+The use of an abstract type is independent of its representation.
+
+## Realizing ADT concepts in TypeScript
+
+Various ways to implement ADTs: classes, interfaces + classes, enums, etc.
+
+## Testing an abstract data type
+
+Build a test suite by creating tests for each of its operations.
+
+## Summary
+
+- Abstract data types are characterized by their operations.
+- Operations: creators, producers, observers, mutators.
+- A good ADT is simple, coherent, adequate, and representation independent.</code></pre></details></section></article></main><footer class="lesson-footer"><div><strong>MIT 6.102 · 抽象数据类型</strong><p>下一讲：抽象函数与表示不变量 —— 把“表示到抽象”的映射精确化。</p></div><div><a href="0005-designing-specs.html">← 设计规格说明</a><a href="0007-abstraction-functions-rep-invariants.html">抽象函数与表示不变量 →</a></div></footer></body></html>

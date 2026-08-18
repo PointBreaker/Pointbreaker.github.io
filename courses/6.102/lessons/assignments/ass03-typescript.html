@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="从 Python 过渡到 TypeScript：掌握快照图、可变性、const/let、Array/Map/Set、泛型与迭代，建立静态检查思维。"><title>Basic TypeScript — MIT 6.102</title>
+<link rel="stylesheet" href="../../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../../index.html#lectures">课程</a><a href="../../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">MIT 6.102 · Module 3 · 工具</p><h1>Basic TypeScript</h1><p class="hero-lede">从 Python 过渡到 TypeScript：掌握快照图、可变性、const/let、Array/Map/Set、泛型与迭代，建立静态检查思维。</p></div></header>
+<main class="reading-shell"><article class="reading-article page">
+
+
+    <h2 id="objectives">实验目标</h2>
+    <ul>
+      <li>掌握 TypeScript 基本语法，从 Python 迁移。</li>
+      <li>用快照图（snapshot diagram）刻画程序运行时的栈与堆状态。</li>
+      <li>区分可变（mutable）与不可变（immutable）、可重新赋值（reassignable）与不可重新赋值（unreassignable）。</li>
+      <li>熟练使用 Array、Map、Set、泛型（generics）与迭代。</li>
+    </ul>
+
+    <h2 id="snapshot">快照图</h2>
+    <p>快照图用于描绘程序某时刻的内部状态：栈（进行中的方法与局部变量）和堆（当前存在的对象）。</p>
+    <ul>
+      <li>变量名 + 箭头 → 值。</li>
+      <li>对象用圆圈标注类型，内部写字段名与箭头。</li>
+      <li>不可变值（如 string）用双边框；不可重新赋值引用用双箭头。</li>
+    </ul>
+
+    <h2 id="mutability">可变 vs 不可变，重新赋值 vs 重新绑定</h2>
+    <pre><code class="language-ts">let s: string = "a";
+s = s + "b";          // 重新赋值：s 指向新字符串 "ab"（string 不可变）
+
+const arr: Array&lt;string&gt; = ["a"];
+arr.push("b");        // 可变：同一个数组对象内容改变
+// arr = ["x"];        // 错误：const 禁止重新绑定</code></pre>
+    <ul>
+      <li><strong>不可变类型</strong>：string、number 等，值一旦创建不能改变。</li>
+      <li><strong>可变类型</strong>：Array、自定义对象，内容可以改变。</li>
+      <li><code>const</code> 让引用不可重新绑定，但不保证值不可变。</li>
+    </ul>
+
+    <h2 id="collections">Array / Map / Set</h2>
+    <pre><code class="language-ts">// Array 类似 Python list
+const cities: Array&lt;string&gt; = ["Boston", "Bogotá"];
+cities.push("Barcelona");
+console.log(cities[0]);     // Boston
+
+// Map 类似 Python dict
+const fruits: Map&lt;string, number&gt; = new Map([
+  ["apple", 5],
+  ["banana", 7],
+]);
+fruits.set("apple", fruits.size);
+console.log(fruits.get("apple"));   // 2
+
+// Set：无序唯一集合
+const nums: Set&lt;number&gt; = new Set();
+nums.add(42);
+console.log(nums.has(42));  // true</code></pre>
+
+    <h2 id="generics">泛型</h2>
+    <pre><code class="language-ts">let cities: Array&lt;string&gt;;
+let numbers: Set&lt;number&gt;;
+let turtles: Map&lt;string, Turtle&gt;;
+// 等价写法：let cities: string[];</code></pre>
+    <p>泛型让编译器在添加和取出时做静态类型检查。</p>
+
+    <h2 id="iteration">迭代</h2>
+    <pre><code class="language-ts">for (const city of cities) { console.log(city); }
+for (const num of numbers) { console.log(num); }
+for (const [key, value] of turtles.entries()) { console.log(key, value); }</code></pre>
+    <p><strong>警告</strong>：不要用 <code>for...in</code>，它遍历的是键/索引而非元素。避免在迭代时修改集合。</p>
+
+    <h2 id="missing">缺失值</h2>
+    <pre><code class="language-ts">prices.get("banana");  // undefined（键不存在）
+fruits[2];             // undefined（越界索引）</code></pre>
+    <p>注意：JavaScript 数组默认是稀疏（sparse）的，但 <code>Array&lt;T&gt;</code> 类型约定为稠密、从 0 开始连续索引。</p>
+
+    <h2 id="equality">相等性</h2>
+    <ul>
+      <li><code>===</code> 严格相等（比较值或引用身份）。</li>
+      <li><code>assert.deepStrictEqual</code> 比较数据结构内容。</li>
+      <li>不可变值用 <code>strictEqual</code>；对象内容用 <code>deepStrictEqual</code>。</li>
+    </ul>
+
+    <h2 id="pitfalls">常见陷阱</h2>
+    <ul>
+      <li><code>s.concat("x")</code> 不修改 s，而是返回新字符串——忘记赋值等于什么都没做。</li>
+      <li>函数内对参数 <code>n++</code> 不影响调用者的变量（基本类型按值传递）。</li>
+      <li><code>for...in</code> 与 <code>for...of</code> 行为完全不同。</li>
+      <li>空数组/Map/Set 在布尔上下文中仍为 truthy，不能用来判空。</li>
+    </ul>
+
+    <h2 id="toolchain">工具链速览</h2>
+    <ul>
+      <li><strong>VS Code</strong>：编辑器。</li>
+      <li><strong>tsc</strong>：TypeScript 编译器，静态检查并转译成 JavaScript。</li>
+      <li><strong>Node.js</strong>：JavaScript 运行时。</li>
+      <li><strong>npm</strong>：包管理器 + 脚本运行器（<code>npm install</code>、<code>npm test</code>）。</li>
+    </ul>
+
+    
+</article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../../index.html">COURSE MAP →</a></footer></body></html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="文法与解析：用语法规则定义字符串集合，从正则表达式到上下文无关文法，借助 ParserLib 生成解析器，并把解析树转换为抽象语法树。"><title>文法与分析 — MIT 6.102 Software Construction</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../../../assets/vendor/prism.css">
+<script defer src="../../../assets/vendor/katex.min.js"></script>
+<script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#psets">作业</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/12-grammars-parsing/" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 12 · 2026-03-16 · 递归与解析</p><h1>文法与分析</h1><p class="lesson-title-en">Grammars &amp; Parsing</p><p class="hero-lede">用语法规则（grammar）定义字符串集合，从正则表达式到上下文无关文法，借助 ParserLib 生成解析器，并把解析树（parse tree）转换为抽象语法树（AST）。</p><div class="lesson-meta"><span>50 MIN</span><span>递归与解析</span><span>01 SOURCE</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#grammars"><span>01</span>文法：产生式、非终结符与终结符</a><a href="#grammar-operators"><span>02</span>文法运算符：重复、连接、联合</a><a href="#parse-trees"><span>03</span>解析树</a><a href="#regex"><span>04</span>正则表达式：正则文法的紧凑形式</a><a href="#cfg"><span>05</span>上下文无关文法</a><a href="#parser-generators"><span>06</span>解析器生成器与 ParserLib</a><a href="#ast"><span>07</span>从解析树到抽象语法树</a><a href="#errors"><span>08</span>错误处理</a><a href="#left-recursion"><span>09</span>左递归与 ParserLib 限制</a><a href="#coverage-map"><span>10</span>教案覆盖地图</a><a href="#check"><span>11</span>纠错、测验与复盘</a><a href="#source-vault"><span>12</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已掌握递归数据类型与解释器模式</li><li>熟悉字符串操作与递归函数</li><li>了解 TypeScript 的类与接口</li></ul></div><ol><li>理解文法（grammar）与正则表达式如何定义字符串集合</li><li>读写文法规则，并用解析器生成器构造解析器</li><li>把解析树转换为有用的抽象语法树（AST）</li><li>理解左递归等 ParserLib 限制及其成因</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/12-grammars-parsing/" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>classes/12-grammars-parsing</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="grammars"><div class="section-label">01 / PROBLEM</div><h2>文法：产生式、非终结符与终结符</h2><p><strong>文法</strong>（grammar）定义一个字符串集合。它由一组<strong>产生式</strong>（production）组成，每个产生式把一个<strong>非终结符</strong>（nonterminal）展开为终结符和非终结符的组合。<strong>终结符</strong>（terminal）是字母表中的实际字符或 token，不能再展开。</p><p>例如，一个简单算术表达式的文法：</p><pre><code class="language-text">expr   = number '+' number
+       | number '-' number
+       | number
+number = digit number
+       | digit
+digit  = '0' | '1' | ... | '9'</code></pre><p>这里 <code>expr</code>、<code>number</code>、<code>digit</code> 是非终结符，<code>'0'</code>...<code>'9'</code>、<code>'+'</code>、<code>'-'</code> 是终结符。文法的起点通常是某个指定的非终结符（如 <code>expr</code>）。</p><aside class="field-callout"><span>FIELD TRACE</span><p>把文法想象成一组重写规则：从起始非终结符出发，反复用产生式替换非终结符，直到串中只有终结符。所有能这样得到的终结符串就是该文法描述的语言。读产生式时注意"能生成什么"，而不是"怎么生成"——文法只定义集合，不规定解析顺序。</p></aside></section><section class="reading-section" id="grammar-operators"><div class="section-label">02 / DEEP READING</div><h2>文法运算符：重复、连接、联合</h2><p>文法中常用的运算符让书写更紧凑：</p><ul><li><strong>重复</strong> <code>*</code>：前面的符号出现零次或多次</li><li><strong>连接</strong>（concatenation，用空格表示）：两个符号依次出现</li><li><strong>联合</strong> <code>|</code>：取其一</li></ul><p>此外还有：<code>?</code>（零次或一次）、<code>+</code>（一次或多次）、<code>{n}</code>（恰好 n 次）、<code>[...]</code>（字符类）、<code>[^...]</code>（否定字符类）。</p><pre><code class="language-text">// 用运算符重写 number 的产生式
+number = digit+        // 一个或多个 digit
+digit  = [0-9]         // 单个数字字符</code></pre><p>这些运算符本质上都是产生式的语法糖，但能让文法更接近我们描述语言时的直觉。</p></section><section class="reading-section" id="parse-trees"><div class="section-label">03 / DEEP READING</div><h2>解析树</h2><p>把文法应用于一个具体字符串，若该字符串属于文法描述的语言，就得到一棵<strong>解析树</strong>（parse tree，也叫具体语法树 concrete syntax tree）。树的内部节点是非终结符，叶子是终结符，每个内部节点的子节点对应一次产生式展开。</p><p>解析树记录了"这个字符串是怎样由文法生成的"。同一文法可能对同一字符串生成多棵不同的解析树（歧义文法），这是语言设计中要尽量避免的。</p></section><section class="reading-section" id="regex"><div class="section-label">04 / DEEP READING</div><h2>正则表达式：正则文法的紧凑形式</h2><p><strong>正则表达式</strong>（regular expression）是<strong>正则文法</strong>（regular grammar）的紧凑记法。它描述的语言可以用有限自动机识别。正则表达式在 6.102 中广泛用于词法分析（tokenization）和模式匹配。</p><p>需要注意的是，正则表达式不能描述所有文法——例如它无法匹配任意深度的嵌套括号，因为那需要更强的表达能力。</p></section><section class="reading-section" id="cfg"><div class="section-label">05 / DEEP READING</div><h2>上下文无关文法</h2><p>能用文法描述的语言称为<strong>上下文无关语言</strong>（context-free language），对应的文法是<strong>上下文无关文法</strong>（context-free grammar, CFG）。CFG 的产生式左侧必须是单个非终结符，右侧可以是任意终结符/非终结符串。</p><p>大多数编程语言的语法都用 CFG 描述。6.102 使用的 ParserLib 处理的正是这类文法。</p></section><section class="reading-section textbook-section" id="parser-generators"><div class="section-label">06 / DERIVATION</div><h2>解析器生成器与 ParserLib</h2><p><strong>解析器生成器</strong>（parser generator）接受一个文法，自动生成一个<strong>解析器</strong>（parser）。6.102 使用 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/" target="_blank" rel="noreferrer">ParserLib</a>。</p><p>使用流程分两步：</p><ol><li><strong>生成解析器</strong>：把文法字符串编译成 Parser 对象</li><li><strong>构造 AST</strong>：用 Parser 解析输入字符串，得到解析树，再转换为抽象语法树</li></ol><pre><code class="language-ts">import { Grammar, Parser } from "parserlib";
+
+// 定义文法
+const grammar: Grammar = Grammar.fromGrammar(`
+  expr = number '+' number | number ;
+  number = digit+ ;
+  digit = [0-9] ;
+`);
+
+// 生成解析器
+const parser: Parser = grammar.parser();
+
+// 解析字符串
+const parseTree = parser.parse("12+34");</code></pre><aside class="field-callout"><span>FIELD TRACE</span><p>把解析过程想成两步流水线：文法 → Parser（一次性编译），Parser → parse tree（每次输入）。文法是"语言的定义"，Parser 是"识别该语言的机器"，parse tree 是"一次具体识别的记录"。三者不要混淆。</p></aside></section><section class="reading-section" id="ast"><div class="section-label">07 / DEEP READING</div><h2>从解析树到抽象语法树</h2><p>解析树包含大量文法细节（每个非终结符、每个运算符都变成节点），对后续处理并不方便。我们需要把它翻译成<strong>抽象语法树</strong>（abstract syntax tree, AST）——一种递归数据类型，只保留程序的结构含义。</p><p>例如 <code>"12+34"</code> 的解析树会有 <code>expr → number '+' number</code>、<code>number → digit digit</code> 等多层节点；而 AST 可能只是一个 <code>BinaryExpr(left=12, op=+, right=34)</code>。AST 正是第 11 讲递归数据类型与解释器模式的用武之地。</p><pre><code class="language-ts">// AST 的递归数据类型定义（简化）
+type Expr = NumberLiteral(value: number)
+          | BinaryExpr(left: Expr, op: string, right: Expr);
+
+// 把 parse tree 翻译成 AST
+function toAST(tree: ParseTree): Expr { ... }</code></pre></section><section class="reading-section" id="errors"><div class="section-label">08 / DEEP READING</div><h2>错误处理</h2><p>文法本身的语法错误（如产生式写错）和无法解析的输入字符串都会让 ParserLib 抛出 <code>ParseError</code>。健壮的解析器需要捕获这些错误，并向用户报告有意义的提示（出错位置、期望的 token 等）。</p><p>设计文法时，应尽量让常见错误能产生清晰的 <code>ParseError</code>，而不是静默接受错误输入或给出误导性的 AST。</p></section><section class="reading-section" id="left-recursion"><div class="section-label">09 / DEEP READING</div><h2>左递归与 ParserLib 限制</h2><p>ParserLib 生成的是<strong>自顶向下递归下降解析器</strong>（top-down recursive descent parser）。这种解析器有一个重要限制：<strong>左递归</strong>（left recursion）会导致无限循环。</p><p>左递归指产生式右侧的第一个符号就是产生式左侧的非终结符，例如：</p><pre><code class="language-text">expr = expr '+' number | number;  // 左递归！</code></pre><p>递归下降解析器处理 <code>expr</code> 时会先调用 <code>expr</code>，于是无限递归。解决办法是把左递归改写为右递归或使用重复运算符：</p><pre><code class="language-text">expr = number ('+' number)*;  // 等价但无左递归</code></pre><aside class="field-callout"><span>FIELD TRACE</span><p>每次写 ParserLib 文法时，先扫描一遍所有产生式，检查是否有左递归。左递归是自顶向下解析器的经典陷阱，改写为右递归或重复运算符是标准做法。记住：递归下降 = 从左到右展开，左递归 = 展开的第一步就回到自身。</p></aside></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">10 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>10</strong><span>中文教学单元</span></article><article><strong>01</strong><span>工具链</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师讲义原文逐行完整保留；中文教学单元覆盖文法、解析树、正则表达式、上下文无关文法、ParserLib、AST、错误处理与左递归限制。覆盖不是用摘要替代原文，任何细节都可在页面末尾回查。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/12-grammars-parsing/index.md</strong><p>59 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（10 项）</summary><ol><li><span>01</span>文法：产生式、非终结符与终结符</li><li><span>02</span>文法运算符：重复、连接、联合</li><li><span>03</span>解析树</li><li><span>04</span>正则表达式：正则文法的紧凑形式</li><li><span>05</span>上下文无关文法</li><li><span>06</span>解析器生成器与 ParserLib</li><li><span>07</span>从解析树到抽象语法树</li><li><span>08</span>错误处理</li><li><span>09</span>左递归与 ParserLib 限制</li><li><span>10</span>教案覆盖地图</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">11 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>解析树和抽象语法树是一回事。</h3><p>解析树记录文法展开的每个细节（具体语法树），AST 只保留结构含义。AST 是递归数据类型，便于后续解释、求值与变换。</p></article><article><span>误区</span><h3>正则表达式能描述所有文法。</h3><p>正则表达式只能描述正则语言，无法处理任意嵌套结构。CFG 的表达能力更强。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。解析器生成器把文法编译成 Parser，Parser 再把输入字符串解析成解析树。" data-incorrect="回到 ParserLib 流程，区分文法、Parser 与解析树三者。" data-quiz="r12-q1"><p><strong>ParserLib 的使用流程是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>文法 → Parser → 解析树 → AST</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>直接写解析函数，不需要文法</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>文法 → AST，跳过解析树</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。左递归会让自顶向下解析器无限循环，必须改写。" data-incorrect="回到左递归小节，理解递归下降解析器的展开顺序。" data-quiz="r12-q2"><p><strong>为什么 ParserLib 不允许左递归？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>自顶向下递归下降解析器处理左递归会无限循环</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>左递归文法不符合 CFG 定义</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>左递归会让解析树变成 AST</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。AST 是递归数据类型，便于后续解释与变换。" data-incorrect="回到 AST 小节，理解解析树与 AST 的区别。" data-quiz="r12-q3"><p><strong>为什么需要把解析树转换为 AST？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>解析树包含大量文法细节，AST 只保留结构含义，便于后续处理</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>解析树不能表示嵌套结构</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>AST 比解析树更大</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>文法用产生式定义字符串集合，运算符（*、连接、|）让书写紧凑。</li><li>ParserLib 把文法编译成 Parser，Parser 生成解析树，再翻译为 AST。</li><li>左递归会导致自顶向下解析器无限循环，必须改写。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="classes/12-grammars-parsing/index.md"><summary><span><b>课堂讲义</b>classes/12-grammars-parsing/index.md</span><small>59 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/12-grammars-parsing/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text"># Reading 12: Grammars &amp; Parsing
+
+## Objectives
+
+- Understand grammars and regular expressions
+- Read and write grammars
+- Use a grammar with a parser generator
+- Convert a parse tree into a useful data type
+
+## Grammars
+
+A *grammar* defines a set of strings with productions, nonterminals,
+terminals, and operators.
+
+### Grammar operators
+
+- Repetition (`*`), Concatenation (space), Union (`|`)
+- Additional: `?`, `+`, `{n}`, `[...]`, `[^...]`
+
+## Parse trees
+
+Matching a grammar against a string generates a **parse tree**.
+
+## Regular expressions
+
+A **regular expression** is a compact form of a regular grammar.
+
+## Context-free grammars
+
+Languages expressible with grammars are **context-free**.
+
+## Parser generators
+
+A **parser generator** takes a grammar and generates a **parser**.
+
+6.102 uses [ParserLib](https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/).
+
+### Generating the parser
+
+Compile a grammar string into a Parser.
+
+### Constructing an abstract syntax tree
+
+Translate a **parse tree** (concrete syntax tree) into an
+**abstract syntax tree** (AST).
+
+## Handling errors
+
+Grammar syntax errors and unparseable strings throw `ParseError`.
+
+## Left recursion and other ParserLib limitations
+
+ParserLib generates a top-down recursive descent parser.
+Left recursion causes infinite loops.
+
+## Summary
+
+- **Grammars**: productions, operators
+- **Parse trees**: diagramming string matches
+- **Regular expressions**: compact form of regular grammars
+- **Parser generators**: automate parsing with grammars</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0011-recursive-data-types.html"><span>← 上一讲</span><strong>递归数据类型</strong></a><a href="0013-debugging.html"><span>下一讲 →</span><strong>调试</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>12 / 19</strong><p>先读中文精读，画出一条文法的解析树示例；再展开资料附录逐条核对官方讲义。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../index.html">SOFTWARE CONSTRUCTION / COURSE MAP →</a></footer>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism.js"></script>
+</body></html>

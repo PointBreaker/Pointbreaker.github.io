@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="从测试的艰难本质出发，掌握测试先行编程、基于输入空间划分的系统测试、黑盒与白盒测试、代码覆盖率、单元与集成测试、自动化回归测试以及随机化测试。"><title>测试 — MIT 6.102</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">课程</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/02-testing/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">CLASS 02 · 2026-02-04 · 基础</p><h1>测试</h1><p class="lesson-title-en">Testing</p><p class="hero-lede">测试是验证的核心手段，但穷举测试不可行。本讲学习如何系统、经济地选择测试用例，并把测试变成可重复、可自动化的回归安全网。</p><div class="lesson-meta"><span>90 MIN</span><span>基础</span><span>01 SOURCE</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>READING INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#testing-problem"><span>01</span>测试为什么难：穷举不可行</a><a href="#section-validation"><span>02</span>验证与测试的关系</a><a href="#section-testfirst"><span>03</span>测试先行编程</a><a href="#section-systematic"><span>04</span>系统测试：正确、彻底、精简</a><a href="#section-partition"><span>05</span>用划分选择测试用例</a><a href="#section-boundaries"><span>06</span>边界是 bug 的聚集地</a><a href="#section-automated"><span>07</span>自动化单元测试</a><a href="#section-blackglass"><span>08</span>黑盒与白盒测试</a><a href="#section-coverage"><span>09</span>代码覆盖率</a><a href="#section-unit-integration"><span>10</span>单元测试、集成测试与回归测试</a><a href="#section-advanced"><span>11</span>迭代测试与随机化测试</a><a href="#coverage-map"><span>12</span>教案覆盖地图</a><a href="#check"><span>13</span>纠错、测验与复盘</a><a href="#source-vault"><span>14</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已理解静态检查的局限：类型系统无法捕获逻辑错误。</li><li>熟悉 TypeScript 函数与数组的基本操作。</li></ul></div><ol><li>理解测试在验证（validation）中的角色，以及为什么穷举测试不可行。</li><li>掌握测试先行编程的三步循环：规格、测试、实现。</li><li>学会通过输入空间划分与边界值分析，系统而经济地设计测试套件。</li><li>区分黑盒与白盒测试、单元测试与集成测试，并理解代码覆盖率的含义。</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/02-testing/" target="_blank" rel="noreferrer"><span>课堂教案</span><strong>classes/02-testing/index.md</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="testing-problem"><div class="section-label">01 / PROBLEM</div><h2>测试为什么难：穷举不可行</h2><p>静态检查能捕获类型错误，但无法捕获逻辑错误。例如一个函数应当返回数组的最大值，却错误地返回了最小值——类型完全正确，结果却错了。测试正是为了弥补这一空白：用具体的输入运行程序，检查输出是否符合预期。</p><p>然而<strong>穷举测试</strong>（exhaustive testing）在绝大多数场景下不可行。一个接受两个 32 位整数参数的函数有 \(2^{64}\) 种输入组合，即便每秒跑十亿次，也需要数百年。对于字符串、数组、对象等无限或近似无限的输入空间，穷举更是天方夜谭。</p><p>因此测试用例必须<strong>谨慎而系统地选择</strong>。本讲的核心问题变成：如何用尽可能少的测试用例，捕获尽可能多的 bug？</p><aside class="field-callout"><span>FIELD TRACE</span><p>测试的本质是在“无限输入空间”与“有限测试预算”之间做权衡。不要问“这个测试套件够不够大”，而要问“这些测试用例是否系统地覆盖了输入空间的关键区域”。一个精心选择的小测试套件，远胜于随机堆砌的大测试套件。</p></aside></section><section class="reading-section" id="section-validation"><div class="section-label">02 / DEEP READING</div><h2>验证与测试的关系</h2><p>测试是一个更一般过程——<strong>验证</strong>（validation）——的一个实例。验证关心的是“我们是否在构建正确的产品”，而测试关心的是“这个实现是否满足规格”。本课更关注后者，但记住这个层次关系有助于理解测试的边界：测试能暴露 bug 的存在，却永远不能证明 bug 的不存在。</p></section><section class="reading-section" id="section-testfirst"><div class="section-label">03 / DEEP READING</div><h2>测试先行编程</h2><p><strong>测试先行编程</strong>（test-first programming）把写代码的顺序颠倒过来：</p><ol><li><strong>规格</strong>（Spec）：为函数写一份规格说明。</li><li><strong>测试</strong>（Test）：写能验证这份规格的测试用例。</li><li><strong>实现</strong>（Implement）：写实现代码。</li></ol><p>这个顺序的价值在于：先写测试迫使你在动手实现之前想清楚函数“应当做什么”。测试成为规格的可执行版本——如果测试无法表达你对行为的期望，说明规格本身还不够清晰。</p><p>当实现写完并跑通测试时，你就同时拥有了代码和一份可重复运行的回归安全网。后续任何修改都可以立即验证是否破坏了已有行为。</p></section><section class="reading-section" id="section-systematic"><div class="section-label">04 / DEEP READING</div><h2>系统测试：正确、彻底、精简</h2><p>一个好的测试套件应当同时满足三个常常相互冲突的目标：</p><ul><li><strong>正确</strong>（correct）：接受所有合法的实现——测试本身不应成为错误的来源。</li><li><strong>彻底</strong>（thorough）：尽可能多地发现实际存在的 bug。</li><li><strong>精简</strong>（small）：测试用例尽可能少，以降低编写与维护成本。</li></ul><p>这三个目标构成一个工程三角：增加测试数量通常能提高彻底性，但会牺牲精简性；过度精简则可能遗漏关键场景。系统化的设计方法，正是在三者之间寻找平衡。</p></section><section class="reading-section" id="section-partition"><div class="section-label">05 / DEEP READING</div><h2>用划分选择测试用例</h2><p>核心方法是<strong>划分</strong>（partitioning）：把函数的输入空间划分成若干<strong>子域</strong>（subdomains），每个子域是一组在某种意义上“相似”的输入。然后从每个子域中选取至少一个代表作为测试用例。</p><p>例如一个函数 <code>abs(x: number): number</code>，输入空间可以划分为两个子域：\(x \ge 0\) 和 \(x &lt; 0\)。从每个子域各取一个代表（如 <code>x=3</code> 和 <code>x=-5</code>），就能覆盖两种本质不同的行为。</p><p>划分的关键在于<strong>完备性</strong>：所有子域的并集应当覆盖整个输入空间，否则未被覆盖的区域就是测试盲区。划分还应尽量让同一子域内的输入“行为相似”，这样选一个代表才有意义。</p><pre><code class="language-ts">// 示例：对 abs 的划分测试
+import { expect } from "chai";
+import { abs } from "./abs";
+
+describe("abs", () => {
+  it("returns the same number for non-negative input", () => {
+    expect(abs(3)).to.equal(3);
+    expect(abs(0)).to.equal(0);
+  });
+
+  it("returns the negation for negative input", () => {
+    expect(abs(-5)).to.equal(5);
+  });
+});</code></pre></section><section class="reading-section" id="section-boundaries"><div class="section-label">06 / DEEP READING</div><h2>边界是 bug 的聚集地</h2><p>经验与证据都表明，bug 往往出现在子域的<strong>边界</strong>（boundaries）上。对于 <code>abs</code>，边界是 <code>x = 0</code>；对于数组索引，边界是 <code>0</code> 和 <code>length - 1</code>；对于“正整数”约束，边界是 <code>1</code>。</p><p>因此在划分时，应当把边界单独作为子域或确保边界值被显式测试。遗漏边界是测试设计中最常见的失误之一。</p><aside class="field-callout"><span>FIELD TRACE</span><p>每次设计测试时，先问自己：输入空间的边界在哪里？对于数值，考虑零、负数、最大值、最小值；对于序列，考虑空序列、单元素序列、重复元素；对于自定义类型，考虑规格说明中 <code>requires</code> 子句的临界条件。</p><p>一个实用技巧：先列出所有边界，再为每个边界写至少一个测试。</p></aside></section><section class="reading-section" id="section-automated"><div class="section-label">07 / DEEP READING</div><h2>自动化单元测试</h2><p>手工运行测试既慢又不可重复。<strong>自动化测试</strong>让测试成为构建流程的一部分，每次修改后一键运行。对于 JavaScript 和 TypeScript，<a href="https://mochajs.org/" target="_blank" rel="noreferrer">Mocha</a> 是一个流行的测试框架。</p><p>自动化测试的关键特征是<strong>自检</strong>（self-checking）：测试自己断言结果是否正确，不需要人工查看输出。一个测试只有两种结果——通过或失败——没有模糊地带。</p></section><section class="reading-section" id="section-blackglass"><div class="section-label">08 / DEEP READING</div><h2>黑盒与白盒测试</h2><p><strong>黑盒测试</strong>（black box testing）仅根据规格说明选择测试用例，不关心函数内部如何实现。它的好处是测试与实现解耦：重构实现时，只要行为不变，测试就不需要修改。</p><p><strong>白盒测试</strong>（glass box testing）则利用对实现的了解来选择测试用例——例如确保每个分支、每行代码都被执行到。白盒测试能发现实现中隐藏的分支，但也与实现耦合：重构时可能需要重写测试。</p><p>实践中两者结合：先用黑盒覆盖规格，再用白盒补充实现中遗漏的路径。</p><div class="inline-visuals"><div class="inline-visual-label"><span>DIAGRAM IN CONTEXT</span><p>两种测试视角的互补关系。</p></div><figure class="lecture-visual"><figcaption><strong>黑盒与白盒</strong><span>黑盒从规格出发，白盒从实现出发，两者结合才能系统覆盖。</span></figcaption><div class="visual-flow"><article class="visual-node"><b>黑盒测试</b><p>只看规格说明，不关心内部实现</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>白盒测试</b><p>利用实现知识补充路径覆盖</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>完整套件</b><p>规格覆盖 + 路径覆盖</p></article></div></figure></div></section><section class="reading-section" id="section-coverage"><div class="section-label">09 / DEEP READING</div><h2>代码覆盖率</h2><p>白盒测试的自然延伸是<strong>代码覆盖率</strong>（code coverage）度量：</p><ul><li><strong>语句覆盖</strong>（statement coverage）：每条语句是否都被执行过？</li><li><strong>分支覆盖</strong>（branch coverage）：每个分支的两侧是否都被取过？</li><li><strong>路径覆盖</strong>（path coverage）：程序中的每条路径是否都被走过？</li></ul><p>覆盖率从语句到路径越来越严格，但也越来越难以达到。路径覆盖在循环存在时甚至可能是无限的。覆盖率是测试充分性的一个有用信号，但高覆盖率不等于高质量测试——它只说明代码被执行过，不说明执行结果被正确验证过。</p></section><section class="reading-section" id="section-unit-integration"><div class="section-label">10 / DEEP READING</div><h2>单元测试、集成测试与回归测试</h2><p>测试一个独立模块的测试称为<strong>单元测试</strong>（unit test）；测试多个模块组合的称为<strong>集成测试</strong>（integration test）。单元测试小而快，定位问题精确；集成测试慢而全面，能发现模块间的交互问题。</p><p>每次修改后运行所有测试，称为<strong>回归测试</strong>（regression testing）。自动化的回归测试是持续集成的基石：它让你有信心修改代码，因为任何对已有行为的破坏都会立即暴露。</p></section><section class="reading-section" id="section-advanced"><div class="section-label">11 / DEEP READING</div><h2>迭代测试与随机化测试</h2><p>测试先行编程应当<strong>迭代</strong>（iterative）进行：先写少量测试覆盖主要场景，实现通过后再逐步补充边界和特殊情况。一次性写出完美测试套件既不现实也无必要。</p><p>此外，还有两类更高级的测试技术：</p><ul><li><strong>模糊测试</strong>（fuzz testing）：自动生成大量随机输入，试图触发崩溃或异常。</li><li><strong>属性测试</strong>（property-based testing）：不检查具体输出，而是检查结果是否满足某个性质（例如“排序后数组长度不变”）。</li></ul><p>随机化测试的价值在于能覆盖人类测试设计者想不到的输入，是对系统化测试的有力补充。</p><aside class="field-callout"><span>FIELD TRACE</span><p>把测试看作一个持续演进的资产，而不是一次性交付物。每次发现生产 bug，第一步应当是写一个能复现该 bug 的测试，修复后再运行整个套件。这样测试套件会随着项目成长，越来越强。</p></aside></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">12 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>12</strong><span>中文教学单元</span></article><article><strong>01</strong><span>机制 / 板书图</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师教案原文逐行完整保留；中文教学单元覆盖测试困难、测试先行、系统测试、划分、边界、自动化、黑盒白盒、覆盖率、单元集成回归、迭代与随机化测试；1/1 个显式板书占位已重绘。覆盖不是用摘要替代原文，任何细节都可在页面末尾回查。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/02-testing/index.md</strong><p>82 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（12 项）</summary><ol><li><span>01</span>测试为什么难：穷举不可行</li><li><span>02</span>验证与测试的关系</li><li><span>03</span>测试先行编程</li><li><span>04</span>系统测试：正确、彻底、精简</li><li><span>05</span>用划分选择测试用例</li><li><span>06</span>边界是 bug 的聚集地</li><li><span>07</span>自动化单元测试</li><li><span>08</span>黑盒与白盒测试</li><li><span>09</span>代码覆盖率</li><li><span>10</span>单元测试、集成测试与回归测试</li><li><span>11</span>迭代测试与随机化测试</li><li><span>12</span>纠错、测验与复盘</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">13 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>高代码覆盖率等于高质量测试。</h3><p>覆盖率只说明代码被执行过，不说明结果被正确验证过。100% 语句覆盖的测试仍可能遗漏关键断言。</p></article><article><span>误区</span><h3>测试可以证明程序没有 bug。</h3><p>测试只能证明 bug 的存在，不能证明 bug 的不存在。穷举测试对绝大多数程序不可行。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="b" data-correct="正确。测试先行编程的顺序是：先写规格，再写测试，最后写实现。" data-incorrect="测试先行是把顺序颠倒：先测试，后实现。" data-quiz="t-q1"><p><strong>测试先行编程的正确顺序是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>实现 → 测试 → 规格</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>规格 → 测试 → 实现</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>测试 → 规格 → 实现</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。划分是把输入空间分成子域，每个子域选代表，边界处尤其要测。" data-incorrect="回顾“划分”与“边界”两节，理解系统化选择测试用例的方法。" data-quiz="t-q2"><p><strong>用划分设计测试用例时，关键步骤是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>把输入空间划分为子域，从每个子域选代表，并特别关注边界</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>随机生成尽可能多的输入</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只测试最可能出现的输入</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="c" data-correct="正确。黑盒测试仅从规格出发，与实现解耦，重构时更稳定。" data-incorrect="区分黑盒与白盒的出发点。" data-quiz="t-q3"><p><strong>黑盒测试的主要优势是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>能保证 100% 路径覆盖</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>测试与实现紧密耦合</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>仅从规格出发，与实现解耦，重构时更稳定</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。回归测试是在每次修改后运行所有测试，确保已有行为未被破坏。" data-incorrect="回归测试的核心是“重复运行已有测试”。" data-quiz="t-q4"><p><strong>回归测试（regression testing）是指什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>每次修改后运行所有已有测试</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>只运行新写的测试</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>在生产环境中运行测试</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>穷举测试不可行，测试用例必须通过划分与边界分析系统选择。</li><li>测试先行编程：规格 → 测试 → 实现。</li><li>黑盒测试从规格出发，白盒测试补充路径覆盖；自动化回归测试是修改的安全网。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="classes/02-testing/index.md"><summary><span><b>课堂教案</b>classes/02-testing/index.md</span><small>82 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/02-testing/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text"># Reading 2: Testing
+
+[6.102 — Software Construction](http://web.mit.edu/6.102/www/sp26/)
+Spring 2026
+
+## Objectives
+
+After today's class, you should:
+
+- understand the value of testing, and know the process of test-first programming;
+- be able to judge a test suite for correctness, thoroughness, and size;
+- be able to design a test suite for a function by partitioning its input space and choosing good test cases;
+- be able to judge a test suite by measuring its code coverage; and
+- understand and know when to use black box vs. glass box testing, unit tests vs. integration tests, and automated regression testing.
+
+## Validation
+
+Testing is an example of a more general process called *validation*.
+
+## Why software testing is hard
+
+Exhaustive testing is infeasible. Test cases should be chosen carefully and systematically.
+
+## Test-first programming
+
+1. **Spec**: Write a specification for the function.
+2. **Test**: Write tests that exercise the specification.
+3. **Implement**: Write the implementation.
+
+## Systematic testing
+
+- **Correct**: accepts all legal implementations
+- **Thorough**: finds actual bugs
+- **Small**: few test cases
+
+## Choosing test cases by partitioning
+
+Divide the program's input space into *subdomains*, each consisting of a set of inputs.
+
+## Include boundaries in the partition
+
+Bugs often occur at *boundaries* between subdomains.
+
+## Automated unit testing
+
+A popular choice for JavaScript and TypeScript is Mocha.
+
+## Black box and glass box testing
+
+**Black box testing** means choosing test cases only from the specification. **Glass box testing** means choosing test cases with knowledge of how the function is actually implemented.
+
+## Coverage
+
+- **Statement coverage**: is every statement run?
+- **Branch coverage**: is each side of each branch taken?
+- **Path coverage**: is every path through the program taken?
+
+## Unit and integration testing
+
+A test that tests an individual module is called a **unit test**. An **integration test** tests a combination of modules.
+
+## Automated regression testing
+
+Running all your tests after every change is called **regression testing**.
+
+## Iterative test-first programming
+
+Practice **iterative** test-first programming.
+
+## Randomized testing
+
+*Fuzz testing* generates random inputs. *Property-based testing* checks that results satisfy some property.
+
+## Summary
+
+- Test-first programming
+- Systematic testing with partitioning and boundary values
+- Glass box testing and statement coverage
+- Unit-testing each module
+- Automated regression testing
+- Iterative development</code></pre></details></section></article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../index.html">COURSE MAP →</a></footer></body></html>

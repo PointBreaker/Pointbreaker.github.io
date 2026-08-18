@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="期中考试：抽象数据类型、rep 不变量、抽象函数、规格说明、rep 暴露与泛型。闭卷，80 分钟，5 道题。"><title>Exam 1 — MIT 6.102</title>
+<link rel="stylesheet" href="../../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../../index.html#lectures">课程</a><a href="../../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">MIT 6.102 · Exam 1 · Assignment 12</p><h1>Exam 1</h1><p class="hero-lede">期中考试：抽象数据类型、rep 不变量、抽象函数、规格说明、rep 暴露与泛型。闭卷，80 分钟，5 道题。</p></div></header>
+<main class="reading-shell"><article class="reading-article page">
+
+
+    <h2 id="format">考试形式</h2>
+    <ul>
+      <li>时间：80 分钟，共 5 道题。</li>
+      <li>闭卷、闭笔记，但允许携带一张 8.5×11″ 双面手写笔记（不得复印/打印）。</li>
+      <li>不得使用 6.102 网站、TypeScript 解释器/编程工具、网络搜索或与他人讨论。</li>
+      <li>官方 PDF：<a href="https://web.mit.edu/6.102/www/sp26/exams/archive/exam1.pdf">exam1.pdf</a>（题目）| <a href="https://web.mit.edu/6.102/www/sp26/exams/archive/exam1-solutions.pdf">exam1-solutions.pdf</a>（解答）</li>
+    </ul>
+
+    <h2 id="topics">主题覆盖</h2>
+    <ul>
+      <li>固定大小缓冲区（fixed-size buffer）ADT 的设计与分析</li>
+      <li>抽象函数（Abstraction Function）与 rep 不变量（Representation Invariant）</li>
+      <li>规格说明（TypeDoc 格式）、前置条件 / 后置条件</li>
+      <li>防 rep 暴露（Safety from Rep Exposure）论证</li>
+      <li>接口、结构子类型 vs 规格子类型</li>
+      <li>泛型与 <code>Equatable</code> 边界</li>
+    </ul>
+
+    <h2 id="problems">题型概览（练习问题，非原题逐字复述）</h2>
+
+    <h3>问题 1：为 BufferA / BufferB / BufferY 写规格、RI 与 AF</h3>
+    <p>给定三种固定大小缓冲区的实现（addLast 版、addFirst 版、双端版），要求：</p>
+    <ul>
+      <li>写适用于三个构造函数的 TypeDoc 规格。</li>
+      <li>写适用于 BufferA.addLast 与 BufferY.addLast 的规格。</li>
+      <li>写出 BufferA 的 rep 不变量 RI 与抽象函数 AF。</li>
+      <li>判断 BufferB 的 RI / AF 是否与 BufferA 相同，并解释。</li>
+    </ul>
+    <p><strong>要点：</strong>BufferA 与 BufferB 的 RI 相同（都用 count + 数组 + capacity），但 AF 不同——同一 rep 值在 BufferB 中代表元素顺序相反的缓冲区。</p>
+
+    <h3>问题 2：完成 BufferY 实现并论证防 rep 暴露</h3>
+    <p>补全 <code>at(idx)</code> 与 <code>toArray()</code>，并写防 rep 暴露论证。</p>
+    <pre><code class="language-ts">public at(idx: number): Element {
+    if (idx &lt; 0 || idx &gt;= this.buff.length) { throw new Error(); }
+    return this.buff[idx] ?? assert.fail();
+}
+public toArray(): Array&lt;Element&gt; {
+    return this.buff.slice();   // 返回副本，防 rep 暴露
+}</code></pre>
+    <p><strong>防 rep 暴露：</strong>capacity 不可重新赋值且不可变；buff 不可重新赋值；唯一返回 Array 的 <code>toArray</code> 做了拷贝；buff 中的 Element 即使可变也只依赖其对象身份。</p>
+
+    <h3>问题 3：BufferR 的 bug、修复与 AF</h3>
+    <p>BufferR 用 Map 记住插入顺序，但 <code>trim()</code> 有 bug：<code>forEach</code> 中的 <code>return</code> 只返回给 forEach 的回调，不会让 <code>trim()</code> 退出。效果是缓冲区满时再加元素会把整个缓冲区清空。</p>
+    <pre><code class="language-ts">private trim(): void {
+    if (this.buff.size &gt; this.capacity) {
+        for (const key of this.buff.keys()) {
+            this.buff.delete(key);
+            return;   // 在 for..of 里 return 会真正退出 trim()
+        }
+    }
+}</code></pre>
+    <p><code>toArray()</code> 补一行：<code>return entries.map(entry =&gt; entry[1]);</code></p>
+
+    <h3>问题 4：FixSizeBuffer 接口能包含什么</h3>
+    <p>接口只能包含<strong>规格</strong>（构造函数规格、<code>at</code> 与 <code>toArray</code> 的规格），不能包含 rep、AF、RI、SRE、实现代码或 <code>addLast</code>/<code>addFirst</code>（因为 BufferA/BufferB 没有实现二者）。接口的规格必须弱于或等于实现（实现规格更强才能成为子类型）。</p>
+
+    <h3>问题 5：LivePhoto 子类型问题与 Equatable 泛型</h3>
+    <ul>
+      <li>Photo 被声明为不可变，但 <code>LivePhoto.show(frame)</code> 是 mutator（改变 getPixels() 返回值），因此 LivePhoto 不是 Photo 的规格子类型。修复：把 <code>show</code> 改为返回像素的 <code>videoFrame(frame)</code> 操作。</li>
+      <li>用 <code>Equatable&lt;Other&gt;</code> 接口与 <code>FixSizeUniqBuffer&lt;Element extends Equatable&lt;Element&gt;&gt;</code> 实现去重缓冲区。<code>addLast</code> 签名：<code>public addLast(elt: Element): void;</code></li>
+    </ul>
+
+    <h2 id="study">备考建议</h2>
+    <ul>
+      <li>动手为每个 PS2 实现写出 RI 与 AF，用自然语言清晰表达。</li>
+      <li>练习在 10 分钟内为一个 ADT 写出 TypeDoc 规格。</li>
+      <li>理解结构子类型 ≠ 规格子类型：可变性会破坏规格子类型关系。</li>
+      <li>复习泛型边界 <code>extends</code> 的含义。</li>
+    </ul>
+
+    <h2 id="pitfalls">常见失分点</h2>
+    <ul>
+      <li>AF 没有描述"恰好一个"抽象值。</li>
+      <li>把 rep 细节（如 buff 字段）写进接口。</li>
+      <li>规格比实现还强：实现无法满足。</li>
+      <li>防 rep 暴露论证遗漏某个 rep 字段。</li>
+    </ul>
+
+    
+</article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../../index.html">COURSE MAP →</a></footer></body></html>
