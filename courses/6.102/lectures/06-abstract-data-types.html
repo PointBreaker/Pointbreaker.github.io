@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>抽象数据类型 — MIT 6.102</title>
+<meta name="description" content="抽象数据类型与表示独立性：类型由其操作定义，良好的 ADT 简单、连贯、完备且独立于表示。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html#lectures">课程</a><a href="index.html#psets">作业</a><a href="index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 06 · 2026-02-23 · 抽象</p>
+<h1>抽象数据类型</h1>
+<p class="lede">抽象数据类型（ADT）是「便于修改」这一品质的核心工具。本讲学习类型由其操作定义的思想，以及表示独立性如何让使用者不受内部实现变化的影响。</p>
+
+<h2>什么是抽象</h2>
+<p>抽象相关的几个核心概念：</p>
+<ul>
+<li><strong>抽象</strong>（Abstraction）：省略或隐藏低层细节。</li>
+<li><strong>模块化</strong>（Modularity）：把系统划分为组件。</li>
+<li><strong>封装</strong>（Encapsulation）：在模块周围建起一道墙。</li>
+<li><strong>信息隐藏</strong>（Information hiding）：隐藏模块的实现细节。</li>
+<li><strong>关注点分离</strong>（Separation of concerns）：让每个功能成为单一模块的职责。</li>
+</ul>
+
+<h2>用户自定义类型</h2>
+<blockquote>数据抽象的核心思想：一个类型由<strong>你能对它执行的操作</strong>来刻画。</blockquote>
+<p>使用者不需要知道一个类型「内部是什么」，只需要知道「它能做什么」。这就是抽象的力量。</p>
+
+<h2>操作的分类</h2>
+<p>抽象类型的操作可以分为四类：</p>
+<ul>
+<li><strong>创建者</strong>（Creator）：创建该类型的新对象。例如构造函数。</li>
+<li><strong>生产者</strong>（Producer）：从现有对象创建新对象。例如字符串的 <code>concat</code>。</li>
+<li><strong>观察者</strong>（Observer）：接受抽象类型对象，返回其他类型的值。例如 <code>size()</code>、<code>isEmpty()</code>。</li>
+<li><strong>修改者</strong>（Mutator）：改变对象。例如 <code>add()</code>、<code>remove()</code>。</li>
+</ul>
+
+<h2>抽象类型由其操作定义</h2>
+<p>类型 \(T\) 的操作集合及其规格，完全刻画了「\(T\) 是什么」。两个类型如果提供相同的操作且规格相同，则从使用者角度看它们就是相同的类型。</p>
+
+<pre><code class="language-ts">// 一个不可变整数集合的 ADT
+class ImmutableSet&lt;T&gt; {
+  // 创建者
+  constructor(elements: T[]) { /* ... */ }
+
+  // 生产者
+  add(elem: T): ImmutableSet&lt;T&gt; { /* 返回新集合 */ }
+  remove(elem: T): ImmutableSet&lt;T&gt; { /* 返回新集合 */ }
+
+  // 观察者
+  contains(elem: T): boolean { /* ... */ }
+  size(): number { /* ... */ }
+  isEmpty(): boolean { /* ... */ }
+}
+</code></pre>
+
+<h2>设计抽象类型</h2>
+<p>好的 ADT 应遵循以下原则：</p>
+<ul>
+<li><strong>少量简单的操作</strong>：API 应精简。</li>
+<li><strong>每个操作有明确目的</strong>：不做多余的事。</li>
+<li><strong>操作集合完备</strong>：能完成使用者需要的所有事。</li>
+<li><strong>不混用通用与领域特定功能</strong>：保持抽象纯粹。</li>
+</ul>
+
+<h2>表示独立性</h2>
+<blockquote><strong>表示独立性</strong>（Representation independence）：抽象类型的使用独立于其内部表示。</blockquote>
+<p>这意味着我们可以把一个 <code>ImmutableSet</code> 的内部实现从数组换成链表、从哈希表换成平衡树，而使用者代码完全不需要修改——只要操作的行为（规格）保持不变。</p>
+
+<pre><code class="language-ts">// 表示方式一：用数组存储
+class ImmutableSetArr&lt;T&gt; {
+  private readonly elements: T[];
+  // ...
+}
+
+// 表示方式二：用链表存储
+class ImmutableSetList&lt;T&gt; {
+  private readonly head: ListNode&lt;T&gt; | null;
+  // ...
+}
+
+// 两种实现满足同一 ADT 规格，使用者代码无需修改
+</code></pre>
+
+<h2>在 TypeScript 中实现 ADT</h2>
+<p>TypeScript 提供了多种实现 ADT 的方式：类、接口 + 类、枚举等。接口特别适合表达「操作集合」这一抽象，而类负责具体实现。</p>
+
+<h2>测试抽象数据类型</h2>
+<p>为 ADT 构建测试套件的方法：为它的每个操作编写测试。测试应验证每个操作是否满足其规格，并验证操作之间的交互是否正确。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">操作定义类型</span>ADT 由其操作集合及规格完全刻画。</p>
+<p style="margin-top:10px"><span class="tag">四类操作</span>创建者、生产者、观察者、修改者。</p>
+<p style="margin-top:10px"><span class="tag">表示独立</span>内部表示可自由更换，使用者代码不受影响。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

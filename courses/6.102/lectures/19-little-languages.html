@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小型语言 — MIT 6.102</title>
+<meta name="description" content="小型语言：把代码当作一等数据，用递归数据类型和组合子模式构建领域特定语言（DSL），在解释器模式与访问者模式之间取舍，并以音乐语言为例实现解析器与播放器。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html#lectures">课程</a><a href="index.html#psets">作业</a><a href="index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<div class="eyebrow">CLASS 19 · 2026-04-20 · 17-19 系统与界面</div>
+<h1>小型语言</h1>
+<p class="lede">小型语言（little language）是为特定领域设计的专用语言。通过把代码当作一等数据，用递归数据类型表达语法，再配合解析器与访问者模式，我们可以在宿主语言中嵌入一个优雅的子语言。</p>
+
+<h2>把代码当作数据</h2>
+<p>在 6.102 中，一个 <code>Formula</code> 值可以存入变量、传给函数、像普通数据一样操作。这种「代码即数据」的思想是构建语言抽象的基石。</p>
+<blockquote><strong>一等值</strong>（first-class value）：可以存入变量、作为参数传递、作为返回值、被函数操作的语言实体。</blockquote>
+
+<h2>用语言解决问题</h2>
+<p>一个<strong>语言</strong>比一个单纯的<strong>程序</strong>更灵活：它允许用户用领域术语描述问题，而不必关心实现细节。领域特定语言（DSL）分两类：</p>
+<ul>
+<li><strong>外部 DSL</strong>：自定义语法，如正则表达式、ParserLib 文法。</li>
+<li><strong>内部 DSL</strong>：嵌入在宿主语言中，利用一等函数等特性。</li>
+</ul>
+
+<h2>音乐语言</h2>
+<p>本课以一个<strong>音乐语言</strong>为例：设计一种能生成和播放音乐的 DSL。它展示了从数据类型定义到解析器再到播放器的完整流程。</p>
+
+<h3>播放 MIDI 音乐</h3>
+<p><code>SequencePlayer</code> 接口提供 <code>addNote</code> 和 <code>start</code>，<code>MidiSequencePlayer</code> 是它的一个实现，负责把音符变成真实的 MIDI 输出。</p>
+
+<h2>音乐数据类型</h2>
+<p>音乐由三种变体构成：</p>
+\[ \texttt{Music} \;=\; \texttt{Note}(\textit{duration}\!: \texttt{number},\ \textit{pitch}\!: \texttt{Pitch},\ \textit{instrument}\!: \texttt{Instrument}) \;+\; \texttt{Rest}(\textit{duration}\!: \texttt{number}) \;+\; \texttt{Concat}(\textit{first}\!: \texttt{Music},\ \textit{second}\!: \texttt{Music}) \]
+<pre><code class="language-ts">interface Music {
+  play(player: SequencePlayer, beat: number): number;
+}
+class Note implements Music { /* ... */ }
+class Rest implements Music { /* ... */ }
+class Concat implements Music { /* ... */ }</code></pre>
+
+<h3>组合子模式</h3>
+<p>基本对象（音符、休止）与组合体（拼接）属于同一类型，客户端可以用统一的方式处理它们。这就是<strong>组合子模式</strong>（composite pattern）。</p>
+
+<h2>音乐记谱法</h2>
+<p>为了让人能直接书写音乐，我们引入简化的 abc 记谱法。它把音符写成字母，用数字表示时值，用 <code>|</code> 表示小节。</p>
+
+<h2>实现解析器</h2>
+<p><code>notes</code> 函数把 abc 记谱字符串解析成 <code>Music</code> 对象。它使用递归下降：每个非终结符对应一个解析函数，彼此递归调用。</p>
+<pre><code class="language-ts">function notes(input: string): Music {
+  // 递归下降：解析音符序列，遇到 '|' 分段
+  // 返回 Concat(Note(...), Concat(...))
+}</code></pre>
+
+<h2>实现播放器</h2>
+<p><code>play</code> 函数把 <code>Music</code> 对象交给 <code>SequencePlayer</code>，按节拍依次播放每个音符。</p>
+
+<h2>递归类型上的函数：解释器模式</h2>
+<p>操作在接口上声明，在每个变体中实现——这正是我们熟悉的<strong>解释器模式</strong>。</p>
+<h3>解释器模式的缺点</h3>
+<ol>
+<li>代码分散在各个变体类中，难以一眼看到某个操作的完整逻辑。</li>
+<li>新增一个操作，必须修改所有变体类。</li>
+</ol>
+
+<h2>模式匹配</h2>
+<p>函数式语言中，递归类型的操作常写成<strong>模式匹配</strong>（pattern matching）：每个分支对应一种变体。TypeScript 没有原生模式匹配，但可辨识联合 + 条件判断可以模拟它。</p>
+
+<h2>访问者模式</h2>
+<p>为了克服解释器模式的缺点，我们引入<strong>访问者模式</strong>（visitor pattern）：</p>
+<ul>
+<li>访问者实现一个「按类型分派」的 <code>switch</code>。</li>
+<li>它通过<strong>双重分派</strong>（double dispatch）工作：每个变体调用访问者的 <code>onVariant</code> 方法。</li>
+<li>新增操作只需新增一个访问者，无需修改变体类。</li>
+</ul>
+<pre><code class="language-ts">interface MusicVisitor&lt;R&gt; {
+  onNote(n: Note): R;
+  onRest(r: Rest): R;
+  onConcat(c: Concat): R;
+}
+
+interface Music {
+  accept&lt;R&gt;(v: MusicVisitor&lt;R&gt;): R;
+}
+
+class DurationVisitor implements MusicVisitor&lt;number&gt; {
+  onNote(n: Note) { return n.duration; }
+  onRest(r: Rest) { return r.duration; }
+  onConcat(c: Concat) { return c.first.accept(this) + c.second.accept(this); }
+}</code></pre>
+
+<h2>为什么用访问者？</h2>
+<ul>
+<li><strong>解释器模式</strong>：代码按「变体」分组（列优先）。</li>
+<li><strong>访问者模式</strong>：代码按「操作」分组（行优先）。</li>
+</ul>
+<p>当操作频繁新增而变体相对稳定时，访问者模式更合适。</p>
+
+<div class="card">
+<h4>关键要点</h4>
+<ul>
+<li><span class="tag">DSL</span>小型语言为特定领域设计，分外部 DSL 与内部 DSL。</li>
+<li><span class="tag">组合子</span>基本对象与组合体属于同一类型，统一处理。</li>
+<li><span class="tag">解析</span>递归下降把记谱字符串翻译成 Music 对象。</li>
+<li><span class="tag">解释器</span>操作分散在变体中，新增操作需改所有类。</li>
+<li><span class="tag">访问者</span>双重分派按操作分组，新增操作更容易。</li>
+</ul>
+</div>
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>等价性 — MIT 6.102</title>
+<meta name="description" content="等价关系与相等性：理解等价关系的三条性质、引用相等与值相等、不可变类型与可变类型的相等性定义。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html#lectures">课程</a><a href="index.html#psets">作业</a><a href="index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 09 · 2026-03-04 · 类型与函数式</p>
+<h1>等价性</h1>
+<p class="lede">相等性看似简单，实则暗藏陷阱。本讲学习等价关系的三条性质，区分引用相等与值相等，理解不可变类型与可变类型在相等性上的本质差异。</p>
+
+<h2>等价关系</h2>
+<blockquote>相等性操作必须是一个<strong>等价关系</strong>（equivalence relation），满足三条性质：</blockquote>
+<ul>
+<li><strong>自反性</strong>（Reflexive）：\(a = a\)。</li>
+<li><strong>对称性</strong>（Symmetric）：若 \(a = b\)，则 \(b = a\)。</li>
+<li><strong>传递性</strong>（Transitive）：若 \(a = b\) 且 \(b = c\)，则 \(a = c\)。</li>
+</ul>
+<p>任何相等性定义如果违反了这三条中的任何一条，就会产生微妙的 bug。</p>
+
+<h2>不可变类型的相等性</h2>
+<p>对于不可变类型，有两种定义相等性的方式：</p>
+<ul>
+<li><strong>使用抽象函数</strong>：两个实例相等当且仅当 \(\text{AF}(a) = \text{AF}(b)\)。</li>
+<li><strong>使用观察</strong>：两个对象相等当且仅当无法通过任何观察（调用观察者操作）区分它们。</li>
+</ul>
+<p>对于不可变类型，这两种定义是等价的。</p>
+
+<h2>引用相等 vs. 值相等</h2>
+<ul>
+<li><strong>引用相等</strong>（Reference equality）：测试两个引用是否指向同一块存储。</li>
+<li><strong>值相等</strong>（Value equality）：测试两个对象是否表示同一个值。</li>
+</ul>
+<p>在 TypeScript 中，<code>===</code> 是引用相等。对于对象，<code>===</code> 只在两个引用指向同一对象时为 <code>true</code>。要实现值相等，需要自定义 <code>equalValue()</code> 方法。</p>
+<pre><code class="language-ts">class Rational {
+  constructor(
+    private readonly numer: number,
+    private readonly denom: number
+  ) {}
+
+  equalValue(other: Rational): boolean {
+    return this.numer === other.numer && this.denom === other.denom;
+  }
+}
+
+const a = new Rational(1, 2);
+const b = new Rational(1, 2);
+const c = a;
+
+console.log(a === b);        // false：不同对象（引用不等）
+console.log(a.equalValue(b)); // true：表示同一个值
+console.log(a === c);        // true：同一对象
+</code></pre>
+
+<h2>破坏等价关系</h2>
+<p>定义相等性时必须小心维护等价关系的三条性质。例如，如果相等性依赖于可变状态，传递性就可能被破坏：对象 A 和 B 此刻相等，B 和 C 此刻相等，但 A 和 C 可能不等。</p>
+
+<h2>可变类型的相等性</h2>
+<p>可变类型有两种不同的相等性概念：</p>
+<ul>
+<li><strong>观察相等</strong>（Observational equality）：此刻无法通过观察区分。</li>
+<li><strong>行为相等</strong>（Behavioral equality）：此刻和未来都无法区分。</li>
+</ul>
+<p>观察相等只关心当前状态；行为相等还要求未来所有操作都产生相同结果。对于可变类型，行为相等通常意味着它们是同一个对象（引用相等）。</p>
+
+<h2>集合上的「深度相等」</h2>
+<p>TypeScript 的 <code>assert.deepStrictEqual()</code> 为内置集合提供了观察相等：递归比较每个元素，而不要求是同一对象。</p>
+
+<h2>哈希函数</h2>
+<p>哈希函数必须与相等性一致：如果 <code>a.equals(b)</code> 为真，则 <code>a.hashCode() === b.hashCode()</code> 必须为真。否则，哈希表（Map/Set）会行为异常——相等的对象被放进不同的桶，导致查找失败。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">等价关系</span>自反、对称、传递——相等性必须满足这三条。</p>
+<p style="margin-top:10px"><span class="tag">引用 vs. 值</span><code>===</code> 是引用相等；值相等需自定义。</p>
+<p style="margin-top:10px"><span class="tag">可变类型</span>观察相等（此刻）vs. 行为相等（永远）。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

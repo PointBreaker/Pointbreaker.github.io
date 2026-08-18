@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>函数式编程 — MIT 6.102</title>
+<meta name="description" content="函数式编程：一等函数、迭代器、生成器与 map/filter/reduce。用不可变数据和纯函数建模问题，抽象掉控制流程。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html#lectures">课程</a><a href="index.html#psets">作业</a><a href="index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 10 · 2026-03-09 · 类型与函数式</p>
+<h1>函数式编程</h1>
+<p class="lede">函数式编程用不可变数据和纯函数建模问题。本讲学习一等函数、迭代器、生成器，以及 map/filter/reduce 如何抽象掉显式控制流程，让代码更简洁、更安全。</p>
+
+<h2>一等函数</h2>
+<blockquote><strong>一等函数</strong>（First-class functions）：函数可以作为数据值——存入变量、作为参数传递、动态创建。</blockquote>
+<p>在 TypeScript 中，函数是一等公民。我们可以把函数像普通值一样传来传去，这为「抽象控制流程」打开了大门。</p>
+
+<h2>函数表达式</h2>
+<p>TypeScript 提供两种定义匿名函数的方式：<code>function</code> 表达式和箭头函数。</p>
+<pre><code class="language-ts">// function 表达式
+const add = function(a: number, b: number): number {
+  return a + b;
+};
+
+// 箭头函数（更简洁）
+const add2 = (a: number, b: number): number => a + b;
+
+// 函数作为参数
+function applyTwice(x: number, f: (n: number) => number): number {
+  return f(f(x));
+}
+
+console.log(applyTwice(3, n => n * 2)); // 12
+</code></pre>
+
+<h2>抽象掉控制</h2>
+<p>命令式编程用 <code>for</code>、<code>while</code> 等控制语句描述「怎么做」；函数式编程用 <code>map</code>、<code>filter</code>、<code>reduce</code> 描述「做什么」，把控制流程交给库函数。</p>
+
+<h2>迭代器</h2>
+<blockquote><strong>迭代器</strong>（Iterator）：一个对象，它逐步遍历序列中的元素，每次返回一个。</blockquote>
+<p>迭代器提供统一的遍历接口，隐藏底层数据结构的差异。</p>
+
+<h2>生成器函数</h2>
+<p>TypeScript/JavaScript 的<strong>生成器</strong>（Generator）用 <code>yield</code> 逐个产生元素，是定义迭代器的简洁方式：</p>
+<pre><code class="language-ts">// 生成器：产生冰雹数列
+function* hailstone(n: number): Generator&lt;number&gt; {
+  let current = n;
+  while (current !== 1) {
+    yield current;
+    if (current % 2 === 0) {
+      current = current / 2;
+    } else {
+      current = 3 * current + 1;
+    }
+  }
+  yield 1;
+}
+
+// 使用生成器
+for (const x of hailstone(10)) {
+  console.log(x); // 10, 5, 16, 8, 4, 2, 1
+}
+</code></pre>
+
+<h2>Map / Filter / Reduce</h2>
+<p>三个核心的高阶操作：</p>
+<ul>
+<li><strong>Map</strong>：对每个元素应用一元函数，返回等长的新序列。</li>
+<li><strong>Filter</strong>：用谓词测试每个元素，保留满足条件的。</li>
+<li><strong>Reduce</strong>：用二元函数把序列归约为单个值。</li>
+</ul>
+<pre><code class="language-ts">const nums = [1, 2, 3, 4, 5, 6];
+
+// map：每个元素乘 2
+const doubled = nums.map(n => n * 2);
+// [2, 4, 6, 8, 10, 12]
+
+// filter：保留偶数
+const evens = nums.filter(n => n % 2 === 0);
+// [2, 4, 6]
+
+// reduce：求和
+const sum = nums.reduce((acc, n) => acc + n, 0);
+// 21
+
+// 链式组合：偶数的平方和
+const result = nums
+  .filter(n => n % 2 === 0)
+  .map(n => n * n)
+  .reduce((acc, n) => acc + n, 0);
+// 4 + 16 + 36 = 56
+</code></pre>
+
+<h2>抽象控制的好处</h2>
+<p>Map/filter/reduce 让代码更短、更简单、更安全：</p>
+<ul>
+<li>消除手动索引和边界错误。</li>
+<li>意图更清晰——「过滤偶数」比「for 循环 + if 判断」更直接。</li>
+<li>天然适合不可变数据——每次操作都返回新序列，不修改原数据。</li>
+</ul>
+
+<h2>在 TypeScript 中避免循环</h2>
+<p>惯用的 TypeScript 代码优先使用 <code>map</code> 和 <code>filter</code>，而不是手写循环。这不仅更简洁，也更不容易出错。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">一等函数</span>函数是值，可传递、可存储、可动态创建。</p>
+<p style="margin-top:10px"><span class="tag">生成器</span>用 <code>yield</code> 逐个产生元素，简洁定义迭代器。</p>
+<p style="margin-top:10px"><span class="tag">map/filter/reduce</span>抽象控制流程，让代码更简洁、更安全。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

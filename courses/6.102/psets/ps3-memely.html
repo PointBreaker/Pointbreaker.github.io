@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PS3 · Memely — MIT 6.102</title>
+<meta name="description" content="MIT 6.102 软件构建课程作业 3：Memely。探索解析器、递归数据类型与不可变类型的相等性，构建一个 meme 表达式语言。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="../index.html#lectures">课程</a><a href="../index.html#psets">作业</a><a href="../index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">PS3 · Memely</p>
+<h1>Memely：解析器、递归数据类型与相等性</h1>
+<p class="lede">本作业探索解析器、递归数据类型与不可变类型的相等性。相比之前的作业，<strong>对代码结构的限制很少</strong>，大量代码依赖于早期的实现决策。应先通读全文再编码，并准备迭代。</p>
+
+<div class="card">
+<h4>关键要求与截止时间</h4>
+<p><span class="tag">作业</span><span class="tag">PS3</span></p>
+<ul>
+<li>定义不可变的递归 ADT <code>MemeExpression</code> 表示 meme 表达式 AST</li>
+<li>使用 ParserLib 实现 <code>parse()</code> 解析器</li>
+<li>实现 <code>toString()</code>、<code>equalValue()</code>、<code>size</code> 操作与 <code>image</code> 生成</li>
+<li>先实现最小子集（文件名、<code>|</code>、数字 <code>@</code>），再扩展到完整语言</li>
+<li>测试仅针对你自己的实现运行</li>
+<li>评分比例：Alpha 自动 ~30% + Alpha 手动 ~20% + Beta 自动 ~25% + Beta 手动 ~25%</li>
+</ul>
+</div>
+
+<h2>设计自由与限制</h2>
+<ul>
+<li>类和方法由你自行规格化与创建，但必须遵循提供文档中的 <strong>PS3 指令</strong>。</li>
+<li>必须满足所提供接口和方法的规格，可强化规格或添加新方法。</li>
+<li>与之前作业不同，测试不会针对其他实现运行。</li>
+<li><strong>正确性完全由你负责。</strong></li>
+</ul>
+
+<h2>获取代码</h2>
+<ol>
+<li>在 Didit 上创建远程 <code>psets/ps3</code> 仓库。</li>
+<li>克隆仓库。</li>
+<li><code>cd ps3-«username»</code>，运行 <code>npm install</code>，在 VS Code 中打开。</li>
+</ol>
+
+<h2>概述：Meme 表达式语言</h2>
+<p>该语言中表达式的含义是生成的图像——具有特定宽高的二维像素数组。所有宽高为正整数。</p>
+
+<h3>原语</h3>
+<p><strong>文件名</strong>（图像文件），如 <code>myroom.jpg</code>、<code>portrait.png</code>、<code>image-file_3</code>。</p>
+<p><strong>标题</strong>（引号字符串），如 <code>"This is my room"</code>、<code>"~:┐)"</code>。</p>
+<ul>
+<li>文件名可包含字母、数字、点、连字符、下划线，但连字符/下划线不能为首字符。</li>
+<li>标题渲染为单行文本，不含换行符和双引号。背景应透明。</li>
+</ul>
+
+<h3>运算符</h3>
+<ul>
+<li><strong>并置粘合 <code>|</code></strong>：水平粘合图像。</li>
+<li><strong>上下粘合 <code>---</code></code></strong>：垂直粘合图像。至少 3 个连字符即视为 <code>---</code>。</li>
+<li><strong>覆盖 <code>^</code></strong>：顶部对齐覆盖。</li>
+<li><strong>覆盖 <code>_</code></strong>：底部对齐覆盖。</li>
+<li><strong>调整大小 <code>@</code></strong>：<code>red.jpg @ 300x200</code>，宽高可为正整数或 <code>?</code>（保持宽高比）。</li>
+</ul>
+
+<h3>运算符优先级（从高到低）</h3>
+<p><code>@</code> &gt; <code>^</code> &gt; <code>_</code> &gt; <code>|</code> &gt; <code>---</code>。括号可覆盖优先级。</p>
+
+<h3>粘合尺寸处理</h3>
+<ul>
+<li>并置：较矮图像垂直居中；结果高度等于较高图像。</li>
+<li>上下：较窄图像水平居中；结果宽度等于较宽图像。</li>
+<li>分数居中可偏移 ±1 像素。空白区域透明。</li>
+</ul>
+
+<h2>控制台用户界面</h2>
+<p>用户输入表达式成为<strong>当前表达式</strong>，回显（可能重新格式化）。</p>
+<pre><code class="language-ts">&gt; boromir.jpg ^ "One does not simply" _ "walk into Mordor"
+(boromir.jpg ^ "One does not simply") _ "walk into Mordor"</code></pre>
+<h3>命令（以 <code>!</code> 开头，操作当前表达式）</h3>
+<ul>
+<li><code>!size</code> — 打印最终尺寸 <code>WxH</code>。不更新当前表达式。</li>
+<li><code>!image</code> — 生成图像并显示。不更新当前表达式。</li>
+<li><code>!quit</code> — 退出程序。</li>
+</ul>
+
+<h2>Web 用户界面</h2>
+<p>用户输入表达式并点击 <strong>Generate</strong> 查看解析后的表达式、尺寸与生成图像。</p>
+<p>两个界面依赖三个已提供函数规格：<code>parse()</code>、<code>size()</code>、<code>image()</code>。还有两个必需规格：<code>toString()</code> 与 <code>equalValue()</code>。</p>
+
+<h2>迭代开发建议</h2>
+<p>首先为<strong>最小子集</strong>实现 Problem 1–4：文件名、并置粘合 <code>|</code>、调整大小 <code>@</code>（数字，非 <code>?</code>）。</p>
+<ul>
+<li>Didit 公共测试仅使用这些运算符。</li>
+<li>Alpha 自动评分对这些权重最大。</li>
+<li>完成最小子集后，扩展到：标题、上下粘合 <code>---</code>、覆盖 <code>^</code> 和 <code>_</code>、调整大小 <code>@</code> 使用 <code>?</code>。</li>
+</ul>
+
+<h2>Problem 1：表示表达式</h2>
+<p>定义不可变的递归抽象数据类型，将表达式表示为抽象语法树（AST）。</p>
+<ul>
+<li>在提供的 <code>MemeExpression</code> 接口中定义 AST，在 <code>expression-impls.ts</code> 中定义具体变体类。</li>
+<li>具体语法（括号、空白）不得出现在 AST 中。</li>
+<li>AST 必须可使用图像库中尚不存在的文件名合法创建。仅需要图像数据的操作（<code>size</code> 和 <code>image</code>）应读取文件数据。</li>
+</ul>
+
+<h3>1.1 MemeExpression</h3>
+<p>数据类型必须<strong>不可变</strong>且<strong>递归</strong>。遵循 ADT 配方：</p>
+<ul>
+<li><strong>规格</strong>：需要创建者/生产者操作加上 <code>toString()</code> 和 <code>equalValue()</code>。</li>
+<li><strong>测试</code></strong>：在 <code>expression.test.ts</code> 中划分并测试。</li>
+<li><strong>代码</strong>：在 <code>expression-impls.ts</code> 中写入表示作为数据类型定义，实现变体类。</li>
+</ul>
+<p>本问题的规格、测试或实现不得使用 <code>ImageLibrary</code>。</p>
+
+<h3>1.2 toString()</h3>
+<p>输出必须是有效表达式。可控制空白/括号格式，但表达式必须具有相同的图像含义。</p>
+<ul>
+<li>实现必须递归，不得使用 <code>instanceof</code>。</li>
+<li>测试必须遵守规格。</li>
+</ul>
+
+<h3>1.3 equalValue()</h3>
+<p>定义<strong>结构相等性</strong>。两个表达式相等当：
+<ol>
+<li>包含相同的文件名、标题、尺寸（数字和 <code>?</code>）和运算符。</li>
+<li>这些元素以相同的从左到右顺序出现。</li>
+<li>分组方式相同。</li>
+</ol>
+<pre><code class="language-ts">a.jpg ^ "title" ≠ "title" ^ a.jpg
+a.jpg ^ "title" == a.jpg^"title" == (a.jpg ^ "title") == (a.jpg) ^ ("title")
+(A | B) --- (C | D) ≠ (A --- C) | (B --- D)</code></pre>
+<ul>
+<li>具体语法（括号）不得在 AST 中表示；分组应反映在 AST 结构中。</li>
+<li><code>equalValue()</code> 必须递归，<strong>应</strong>使用 <code>instanceof</code> 测试变体类型。</li>
+</ul>
+
+<h2>Problem 2：解析表达式</h2>
+<p>创建将字符串转换为 <code>MemeExpression</code> 的解析器。入口：<code>expression.ts</code> 的 <code>parse()</code>。</p>
+
+<h3>有效输入示例</h3>
+<pre><code class="language-ts">A.jpg | B.jpg --- C.jpg | D.jpg
+A.jpg --- B.jpg --- C.jpg
+((A _ B)^C)---D
+base.jpg _ ("all your base"---"are belong to us")
+A@1x2@?x3@4x?</code></pre>
+
+<h3>无效输入示例</h3>
+<ul>
+<li><code>A - B - C</code> → "<code>---</code> 运算符必须至少有三个连字符"</li>
+<li><code>A --- --- B</code> → "<code>---</code> 运算符内不能有空格"</li>
+<li><code>|A|B|</code> → "<code>|</code> 运算符必须是二元的"</li>
+<li><code>"no</code> → "未终止的标题"</li>
+<li><code>A.jpg_"B"</code> → "文件名可以有连字符和下划线，故 <code>A.jpg_</code> 被解析为文件名"</li>
+<li><code>A.jpg@?x?</code> → "调整大小运算符必须指定至少一个维度"</li>
+</ul>
+
+<h3>2.1 编写语法</h3>
+<p>为表达式编写 ParserLib 语法。<code>expressionparser.ts</code> 中的起始语法识别文件名、并置粘合和数字 <code>@</code> 调整大小。</p>
+
+<h3>2.2 实现 parse()</h3>
+<p><code>parse()</code> 应是"粘合代码"——非常简单，调用 <code>expressionparser.ts</code> 中的函数。</p>
+
+<h3>2.3 运行控制台界面</h3>
+<p>使用 <code>npm start</code> 运行，尝试作业顶部的表达式。</p>
+
+<h2>Problem 3：尺寸</h2>
+<p><code>!size</code> 命令按概述中的尺寸计算规则打印宽度 <code>W</code> 和高度 <code>H</code>，格式为 <code>WxH</code>。</p>
+<pre><code class="language-ts">tech3.png --- tech4.png  →  200x310
+(tech3.png --- tech4.png)@1000x1000  →  1000x1000
+(tech3.png --- tech4.png) _ black.png  →  200x310</code></pre>
+
+<h3>3.1 为 MemeExpression 添加操作</h3>
+<p>将尺寸实现为 <code>MemeExpression</code> 上的方法，递归定义。</p>
+<ul>
+<li>返回比 <code>string</code> 更有用的内容——或许是简单记录类型。</li>
+<li>接受 <code>ImageLibrary</code> 参数，用于命名图像。</li>
+<li>尽可能不读取图像数据即可计算尺寸。</li>
+<li>实现必须递归，不得使用 <code>instanceof</code> 或任何等效类型检查操作。</li>
+</ul>
+
+<h3>3.2 实现 size 命令</h3>
+<p>在 <code>commands.ts</code> 中实现 <code>size()</code>。<code>size()</code> 主体必须至多 3 行。</p>
+
+<h3>3.3 运行控制台界面</h3>
+<p>运行 <code>npm start</code> 并尝试尺寸。</p>
+
+<h2>Problem 4：图像生成</h2>
+<p>图像操作接受表达式并从中生成图像。</p>
+
+<h3>4.1 为 MemeExpression 添加操作</h3>
+<p>将图像生成实现为 <code>MemeExpression</code> 上的方法，递归定义。</p>
+<ul>
+<li>接受 <code>ImageLibrary</code> 参数。</li>
+<li>不得转换为 <code>Image</code>。</li>
+<li>除 <code>getImage(..)</code> 返回的 <code>Image</code> 实例外，代码应完全使用 <code>Canvas</code> 实例工作。</li>
+</ul>
+
+<h3>4.2 实现 image 命令</h3>
+<p>在 <code>commands.ts</code> 中实现 <code>image()</code>。主体必须至多 3 行。</p>
+
+<h3>4.3 运行控制台界面</h3>
+<p>运行 <code>npm start</code> 并尝试命令。</p>
+
+<h3>4.4 运行 Web 界面</h3>
+<ol>
+<li>使用 <code>npm run web</code> 启动 Web 服务器。</li>
+<li>导航到 localhost:8080，输入表达式，点击 <strong>Generate</strong>。</li>
+<li>更改代码后重新编译（<code>npm run compile</code>）并重新加载页面。</li>
+</ol>
+
+<h2>完成前检查</h2>
+<ul>
+<li>为所有类型和操作记录规格（TypeDoc 格式）</li>
+<li>记录抽象函数与表示不变量，说明如何防止表示泄露</li>
+<li>所有类型使用 <code>checkRep()</code>，实现 <code>toString()</code></li>
+<li>为所有不可变类型规格化、测试并实现 <code>equalValue()</code></li>
+<li>使用 <code>@inheritdoc</code> 当类实现接口方法时</li>
+<li>为每个 ADT 提供彻底、有原则的测试套件</li>
+</ul>
+
+<h2>评分构成</h2>
+<ul>
+<li>Alpha 自动评分（含在线练习）：~30%</li>
+<li>Alpha 手动评分：~20%</li>
+<li>Beta 自动评分：~25%</li>
+<li>Beta 手动评分（含代码审查）：~25%</li>
+</ul>
+<p>Alpha 自动评分权重在仅使用文件名、<code>|</code> 和数字 <code>@</code> 的测试上最大；Beta 权重分布在整个语言上。</p>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>
