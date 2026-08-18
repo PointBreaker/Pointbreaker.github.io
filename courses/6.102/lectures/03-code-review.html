@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>代码审查 — MIT 6.102</title>
+<meta name="description" content="代码审查与良好编码实践：通过系统性阅读他人代码发现 bug、提升可读性，掌握 DRY、快速失败、避免魔术数字等核心原则。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html#lectures">课程</a><a href="index.html#psets">作业</a><a href="index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 03 · 2026-02-09 · 规格与设计</p>
+<h1>代码审查</h1>
+<p class="lede">代码审查是「易于理解」这一品质的直接实践。本讲通过三个「气味」示例，系统介绍良好编码的通用原则：不要重复自己、快速失败、使用好名字、避免全局变量等。</p>
+
+<h2>代码审查是什么</h2>
+<blockquote><strong>代码审查</strong>（Code review）是由代码原作者之外的人对源代码进行仔细、系统的研读。</blockquote>
+<p>代码审查有双重目的：</p>
+<ul>
+<li><strong>改进代码</strong>：发现 bug、预判潜在 bug、检查代码清晰度。</li>
+<li><strong>改进程序员</strong>：代码审查是程序员彼此学习和教学的重要方式。</li>
+</ul>
+<p>审查者不是挑刺的批评家，而是帮助代码变得更好的协作者。</p>
+
+<h2>气味示例一：重复、注释与魔术数字</h2>
+<p>先看一段有「气味」的代码：</p>
+<pre><code class="language-ts">// 不好的例子：重复、魔术数字、缺少注释
+function area(r: number): number {
+  return 3.14159265 * r * r;
+}
+
+function circumference(r: number): number {
+  return 2 * 3.14159265 * r;
+}
+</code></pre>
+
+<h3>不要重复自己（DRY）</h3>
+<blockquote><strong>DRY 原则</strong>：知识或逻辑只在一个地方表达，不要重复。</blockquote>
+<p>重复的代码是安全的隐患——一旦需要修改（例如提高 \(\pi\) 的精度），你必须记得修改每一处，漏改任何一处就会引入不一致的 bug。</p>
+
+<h3>在需要的地方写注释</h3>
+<p>好的开发者审慎地写注释。注释应解释「为什么」而非「是什么」——代码本身已经说明了它在做什么。</p>
+
+<h3>快速失败</h3>
+<blockquote><strong>快速失败</strong>（Fail fast）：代码应尽早暴露自己的 bug。</blockquote>
+<p>例如，如果半径不应为负数，应在函数入口处立即检查并抛出异常，而不是让错误悄悄传播到下游。</p>
+
+<h3>避免魔术数字</h3>
+<p>代码中直接出现的、没有名字的数字常量称为<strong>魔术数字</strong>（magic numbers）。应将其提取为命名常量：</p>
+<pre><code class="language-ts">const PI = 3.14159265;
+
+function area(r: number): number {
+  if (r &lt; 0) throw new Error("radius must be nonnegative");
+  return PI * r * r;
+}
+
+function circumference(r: number): number {
+  if (r &lt; 0) throw new Error("radius must be nonnegative");
+  return 2 * PI * r;
+}
+</code></pre>
+
+<h3>每个变量只承担一个职责</h3>
+<p>不要复用参数，也不要让一个变量在不同位置承担不同含义。变量复用会让读者困惑，也让修改更危险。</p>
+
+<h2>气味示例二：命名与排版</h2>
+<pre><code class="language-ts">// 不好的例子：命名含糊、排版混乱
+function f(a: number, b: number): number {
+  let c=a+b;let d=a-b;return c*d;
+}
+</code></pre>
+
+<h3>使用好名字</h3>
+<p>好的函数名和变量名应该<strong>长且能自我描述</strong>。<code>f</code>、<code>a</code>、<code>b</code> 这样的名字没有传达任何意图；<code>sumAndProductDifference</code>、<code>width</code>、<code>height</code> 则清晰得多。</p>
+
+<h3>用空白和标点帮助读者</h3>
+<p>一致的缩进、适当的空格和换行，让代码结构一目了然。代码首先是写给人看的，其次才是写给机器执行的。</p>
+
+<h2>气味示例三：全局变量与特殊逻辑</h2>
+
+<h3>不要使用全局变量</h3>
+<p>全局变量让函数的行为依赖于外部状态，破坏「易于理解」和「便于修改」。应通过参数传递所需数据。</p>
+
+<h3>函数应返回结果，而非打印</h3>
+<p>直接 <code>console.log</code> 的函数无法被其他代码复用。返回结果让调用者决定如何使用。</p>
+
+<h3>避免特殊情形代码</h3>
+<p>到处散布的 <code>if (x === specialCase)</code> 会让逻辑支离一律。好的设计用统一的抽象处理所有情形。</p>
+
+<h3>代码长度要合适</h3>
+<p>函数不应过长（难以理解），也不应过短（过度拆分导致逻辑碎片化）。每个函数做好一件事。</p>
+
+<h2>重构</h2>
+<blockquote><strong>重构</strong>（Refactoring）：改进代码的结构与可读性，而不改变代码的行为。</blockquote>
+<p>重构是持续改善代码品质的日常实践。在自动化测试的保护下，你可以放心地重构——测试会告诉你行为是否被意外改变。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">DRY</span>不要重复自己；重复是 bug 的温床。</p>
+<p style="margin-top:10px"><span class="tag">快速失败</span>尽早暴露错误，避免错误悄悄传播。</p>
+<p style="margin-top:10px"><span class="tag">好名字</span>长而自描述的名字胜过含糊的缩写。</p>
+<p style="margin-top:10px"><span class="tag">重构</span>不改行为，只改结构；测试是重构的安全网。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

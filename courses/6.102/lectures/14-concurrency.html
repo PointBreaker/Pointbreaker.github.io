@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>并发 — MIT 6.102</title>
+<meta name="description" content="并发：理解共享内存与消息传递两种并发模型，区分进程、线程与时间切片，认识竞态条件的危险，并了解并发程序为何难以测试和调试。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html#lectures">课程</a><a href="index.html#psets">作业</a><a href="index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<div class="eyebrow">CLASS 14 · 2026-04-01 · 14-16 并发</div>
+<h1>并发</h1>
+<p class="lede">并发意味着多个计算在同一时段内交替或并行执行。它带来性能与响应性的提升，也引入了竞态条件这类全新的 bug 类别。理解并发模型是写出可靠并行程序的前提。</p>
+
+<h2>什么是并发？</h2>
+<blockquote><strong>并发</strong>（concurrency）：多个计算在同一时段内发生。它们可能真正并行（多核），也可能通过快速交替模拟并行。</blockquote>
+<p>并发不同于<strong>并行</strong>（parallelism）：并行强调同时执行以加速，并发更关注程序的结构——多个独立的控制流需要协调。</p>
+
+<h2>两种并发模型</h2>
+<h3>共享内存</h3>
+<p>并发模块通过读写内存中的<strong>共享对象</strong>来交互。这是最直觉的模型，也是最容易出错的模型——多个线程同时修改同一数据时，就会产生竞态条件。</p>
+<h3>消息传递</h3>
+<p>并发模块通过<strong>通信信道</strong>互相发送消息来交互。每个模块持有自己的私有状态，不直接共享数据。这降低了同步的复杂度，但并不能消除所有 bug。</p>
+
+<h2>进程、线程与时间切片</h2>
+<ul>
+<li><strong>进程</strong>（process）：一个正在运行的程序实例，与其他进程相互隔离，拥有独立的地址空间。</li>
+<li><strong>线程</strong>（thread）：程序内部的一个控制流线索。同一进程的线程共享内存。</li>
+<li><strong>时间切片</strong>（time slicing）：当线程数超过处理器核心数时，操作系统让每个线程轮流执行一小段时间，模拟并发。</li>
+</ul>
+<pre><code class="language-ts">// TypeScript 中的 Worker（类似轻量进程）
+const worker = new Worker('./worker.js');
+worker.postMessage({ type: 'compute', data: [1, 2, 3] });
+worker.onmessage = (e) => console.log('结果', e.data);</code></pre>
+
+<h2>共享内存示例：银行账户</h2>
+<p>经典的银行账户例子：两个线程同时对一个余额做存取操作。如果「读取-修改-写入」三步不是原子的，就可能丢失更新。</p>
+<pre><code class="language-ts">// 危险：非原子操作
+async function withdraw(balance: { value: number }, amount: number) {
+  if (balance.value >= amount) {
+    // ← 另一个线程可能在这里修改 balance
+    balance.value -= amount;
+  }
+}</code></pre>
+
+<h2>交错执行</h2>
+<p>并发指令可以<strong>交错</strong>（interleave）——来自不同线程的操作以任意顺序穿插。即使每个线程自身逻辑正确，交错后的整体结果也可能出乎意料。</p>
+
+<h2>竞态条件</h2>
+<blockquote><strong>竞态条件</strong>（race condition）：程序的正确性取决于多个线程或进程操作的相对时序。</blockquote>
+<p>竞态条件是最棘手的并发 bug，因为它的出现是<strong>不确定</strong>的——同样的输入有时成功、有时失败。</p>
+
+<h2>消息传递示例</h2>
+<p>即便使用消息传递，竞态条件依然可能存在。比如两个客户端同时向服务器请求同一资源，服务器处理消息的顺序会影响最终结果。消息传递让状态管理更清晰，但时序问题并未消失。</p>
+
+<h2>并发难以测试和调试</h2>
+<p>并发 bug 常被称为 <strong>海森堡 bug</strong>（heisenberg bug）：它们是非确定性的，难以复现。当你试图用调试器或日志观察它时，时序可能就变了，bug 随之消失。这正是并发程序需要专门工具和设计原则的原因。</p>
+
+<div class="card">
+<h4>关键要点</h4>
+<ul>
+<li><span class="tag">模型</span>共享内存（读写共享对象）与消息传递（通过信道发送消息）。</li>
+<li><span class="tag">单位</span>进程是隔离的程序实例，线程是进程内的控制流。</li>
+<li><span class="tag">时间片</span>线程数超过核心数时，用时间切片模拟并发。</li>
+<li><span class="tag">竞态</span>正确性依赖于操作相对时序，是并发最典型的 bug。</li>
+<li><span class="tag">海森堡 bug</span>非确定、难复现，需要专门的设计与测试策略。</li>
+</ul>
+</div>
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

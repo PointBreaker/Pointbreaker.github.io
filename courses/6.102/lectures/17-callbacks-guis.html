@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>回调与图形用户界面 — MIT 6.102</title>
+<meta name="description" content="回调与 GUI：理解同步与异步回调、事件循环与事件队列，用 Promise.then 组合回调，拆解 async/await 的底层机制，并用 Listener 模式处理 DOM 事件。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html#lectures">课程</a><a href="index.html#psets">作业</a><a href="index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<div class="eyebrow">CLASS 17 · 2026-04-13 · 17-19 系统与界面</div>
+<h1>回调与图形用户界面</h1>
+<p class="lede">回调是「把函数交给别人，让别人到时候再调用」的编程手法。它驱动着异步操作、定时器和图形界面的事件处理，是理解事件循环与 Listener 模式的核心。</p>
+
+<h2>回调</h2>
+<blockquote><strong>回调</strong>（callback）：客户端提供给模块的一个函数，供模块在合适的时机调用。</blockquote>
+<p>回调让控制流发生「反转」：不是我们主动调用库，而是库在事件发生时调用我们提供的函数。</p>
+<h3>同步回调 vs. 异步回调</h3>
+<ul>
+<li><strong>同步回调</strong>：在调用方执行期间立即运行，比如数组的 <code>map</code>、<code>filter</code>。</li>
+<li><strong>异步回调</strong>：被保存起来，留到未来的某个事件发生时再运行，比如网络请求完成、按钮被点击。</li>
+</ul>
+<pre><code class="language-ts">// 同步回调
+[1, 2, 3].map(x => x * 2);
+
+// 异步回调：1 秒后运行
+setTimeout(() => console.log("hello"), 1000);</code></pre>
+
+<h2>定时器回调</h2>
+<p><code>setTimeout(callback, ms)</code> 是最简单的异步回调：它把回调放入队列，至少等到指定毫秒后才执行。注意「至少」——如果事件循环正忙，实际等待可能更久。</p>
+
+<h2>事件循环与事件队列</h2>
+<p>TypeScript/JavaScript 用<strong>事件循环</strong>（event loop）和<strong>事件队列</strong>（event queue）来执行异步回调。主线程不断从队列中取出任务执行；当任务发起异步操作时，它的回调被排入队列，等待下一轮处理。</p>
+<blockquote><strong>事件循环</strong>：不断从事件队列取出回调并执行的机制，保证了单线程下异步任务的有序调度。</blockquote>
+
+<h2>用 Promise 组合回调</h2>
+<p><code>Promise&lt;T&gt;.then(callback)</code> 把一个回调附加到 Promise 上，并在 Promise 完成时调用它，同时返回一个新的 Promise。这是把回调风格与 Promise 风格桥接起来的关键。</p>
+<pre><code class="language-ts">fetch("/api/user")
+  .then(res => res.json())        // 回调 1：解析 JSON
+  .then(user => user.name)        // 回调 2：取出名字
+  .then(name => console.log(name)); // 回调 3：打印</code></pre>
+
+<h2>拆解 async 函数</h2>
+<p><code>await</code> 并不是魔法——它的本质是：把 <code>await</code> 之后的剩余计算包装成一个 <code>then</code> 回调，附加到被等待的 Promise 上。理解这一点，就能在回调与 <code>async/await</code> 之间自由切换。</p>
+<pre><code class="language-ts">// 这两种写法在语义上等价：
+async function f() {
+  const x = await p;
+  console.log(x);
+}
+
+function f() {
+  return p.then(x => console.log(x));
+}</code></pre>
+
+<h2>HTML 与 DOM</h2>
+<p>HTML 元素构成一棵树，称为<strong>文档对象模型</strong>（Document Object Model, DOM）。JavaScript 可以读取和修改这棵树，从而动态改变页面内容和结构。</p>
+
+<h2>输入处理：Listener 模式</h2>
+<p>GUI 事件处理采用<strong>监听者模式</strong>（Listener pattern）：</p>
+<ul>
+<li><strong>事件源</strong>（event source）：产生事件的对象，比如按钮。</li>
+<li><strong>监听者</strong>（listener）：订阅事件并提供回调的模块。</li>
+</ul>
+<pre><code class="language-ts">const button = document.querySelector("#submit");
+button.addEventListener("click", (event) => {
+  console.log("按钮被点击了");
+});</code></pre>
+
+<h2>监听者的常见陷阱</h2>
+<ul>
+<li><strong>要快</strong>：监听者必须尽快返回，否则会阻塞事件循环，让界面卡顿。</li>
+<li><strong>警惕循环</strong>：监听者之间互相触发可能形成无限循环。</li>
+<li><strong>记得清理</strong>：不再需要的监听者要移除（<code>removeEventListener</code>），否则会造成内存泄漏和意外行为。</li>
+</ul>
+
+<div class="card">
+<h4>关键要点</h4>
+<ul>
+<li><span class="tag">回调</span>客户端提供给模块、由模块在适当时机调用的函数。</li>
+<li><span class="tag">同步/异步</span>同步回调立即执行，异步回调排入事件队列。</li>
+<li><span class="tag">事件循环</span>单线程下通过事件队列有序调度异步任务。</li>
+<li><span class="tag">then</span>Promise.then 把回调附加到完成时，返回新 Promise。</li>
+<li><span class="tag">拆解 await</span>await 等价于把剩余计算包装成 then 回调。</li>
+<li><span class="tag">Listener</span>GUI 用监听者模式处理事件，注意快执行、防循环、做清理。</li>
+</ul>
+</div>
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>
