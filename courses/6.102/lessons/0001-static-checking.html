@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="从冰雹序列出发理解静态类型与静态检查：在程序运行之前自动发现错误，区分静态检查、动态检查与无检查，并确立 6.102 三大目标——安全免于缺陷、易于理解、随时可变。"><title>静态检查 — MIT 6.102</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">课程</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/01-static-checking/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">CLASS 01 · 2026-02-04 · 基础</p><h1>静态检查</h1><p class="lesson-title-en">Static Checking</p><p class="hero-lede">从冰雹序列（hailstone sequence）出发，理解静态类型系统如何在程序运行之前就自动发现错误，并确立本课三大目标：安全免于缺陷、易于理解、随时可变。</p><div class="lesson-meta"><span>90 MIN</span><span>基础</span><span>01 SOURCE</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>READING INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#hailstone-problem"><span>01</span>先从一个具体问题开始：冰雹序列</a><a href="#section-types"><span>02</span>类型是什么</a><a href="#section-static-typing"><span>03</span>静态类型与三种检查</a><a href="#section-arrays-functions"><span>04</span>数组、函数与规格注释</a><a href="#section-mutation"><span>05</span>修改值 vs. 重新赋值</a><a href="#section-assumptions"><span>06</span>把假设写下来</a><a href="#section-goals"><span>07</span>黑客 vs. 工程师：6.102 的三大目标</a><a href="#coverage-map"><span>08</span>教案覆盖地图</a><a href="#check"><span>09</span>纠错、测验与复盘</a><a href="#source-vault"><span>10</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>熟悉基本编程概念：变量、函数、数组。</li><li>本课使用 TypeScript（<a href="https://www.typescriptlang.org/" target="_blank" rel="noreferrer">TypeScript</a>）作为教学语言。</li></ul></div><ol><li>理解类型（type）的概念以及静态类型（static typing）如何在编译期推断表达式类型。</li><li>区分静态检查、动态检查与无检查三种错误检测策略及其代价。</li><li>阐明 6.102 对好软件的三大目标：安全免于缺陷、易于理解、随时可变。</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/01-static-checking/" target="_blank" rel="noreferrer"><span>课堂教案</span><strong>classes/01-static-checking/index.md</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="hailstone-problem"><div class="section-label">01 / PROBLEM</div><h2>先从一个具体问题开始：冰雹序列</h2><p>本讲以一个贯穿始终的例子引入——<strong>冰雹序列</strong>（hailstone sequence）。规则如下：给定一个起始正整数 \(n\)，如果 \(n\) 是偶数则下一项是 \(n/2\)，如果 \(n\) 是奇数则下一项是 \(3n+1\)，序列在到达 1 时结束。</p><p>例如从 \(n=6\) 开始：\(6 \to 3 \to 10 \to 5 \to 16 \to 8 \to 4 \to 2 \to 1\)。这个序列的每一步都只依赖前一项，逻辑上非常简单，但当我们把它写成程序时，类型、边界和错误处理就会立刻浮现。</p><p>写这个序列时，你会自然产生一些假设：\(n\) 是整数、\(n>0\)、每一步的结果仍是整数。问题是，这些假设由谁来守护？是程序员自己记住、运行时崩溃时才发现，还是在写下来的那一刻就被检查？这正是静态检查要回答的问题。</p><aside class="field-callout"><span>FIELD TRACE</span><p>在动手编码之前，先把冰雹序列的假设列出来：输入是正整数、运算结果仍是整数、序列必然终止（这是著名的 Collatz 猜想，尚未被证明）。注意最后一条——程序无法保证数学上的终止，但类型系统可以保证“每一步产生整数”这类更基本的性质。</p><p>学习本讲时，反复问：哪些假设可以被类型系统静态捕获，哪些必须等到运行时？</p></aside></section><section class="reading-section" id="section-types"><div class="section-label">02 / DEEP READING</div><h2>类型是什么</h2><p><strong>类型</strong>（type）是一组值以及可对这些值执行的操作的集合。例如 TypeScript 中的 <code>number</code> 包含所有浮点数，并支持 <code>+</code>、<code>-</code>、<code>*</code>、<code>/</code> 等操作；<code>boolean</code> 包含 <code>true</code> 与 <code>false</code>，并支持逻辑运算。</p><p>类型的作用是约束操作：它告诉你哪些表达式有意义。写 <code>"hello" * 3</code> 在数学上没有意义，类型系统应当阻止它。当我们说“某个变量的类型是 <code>number</code>”，实际上是在承诺：这个变量只持有数字，因此可以安全地参与算术运算。</p></section><section class="reading-section" id="section-static-typing"><div class="section-label">03 / DEEP READING</div><h2>静态类型与三种检查</h2><p>TypeScript 是一门<strong>静态类型语言</strong>（statically-typed language）。变量可以在<strong>编译期</strong>（在程序运行之前）被赋予类型，编译器因此能推断出使用这些变量的表达式的类型。</p><p>错误检测的策略可以分为三类：</p><ul><li><strong>静态检查</strong>（static checking）：bug 在程序运行之前就被自动发现。</li><li><strong>动态检查</strong>（dynamic checking）：bug 在程序执行期间被自动发现。</li><li><strong>无检查</strong>（no checking）：语言根本无助于你发现这个错误。</li></ul><p>用一个典型例子说明：<code>int n = "hello"</code> 在 TypeScript 中会触发静态检查错误，因为类型不匹配在编译期就能确定；而数组越界访问只能在运行到那一行时才抛出异常，属于动态检查；至于“逻辑上应该用乘法却写成了加法”，语言通常完全无能为力。</p><aside class="field-callout"><span>FIELD TRACE</span><p>静态检查的核心收益是把错误发现的时间点尽量前移。一个在编译期被捕获的错误，成本远低于在测试期、生产期才暴露。但静态检查并非万能：它擅长捕获类型错误、签名不匹配等“形状”问题，却不擅长捕获业务逻辑错误。</p><p>判断一门语言在某个场景下属于哪种检查，不要看它的宣传，要看错误实际在哪个阶段暴露。</p></aside><div class="inline-visuals"><div class="inline-visual-label"><span>DIAGRAM IN CONTEXT</span><p>三种检查在程序生命周期中的位置。</p></div><figure class="lecture-visual"><figcaption><strong>错误检测的时间轴</strong><span>越早发现，修复成本越低；静态检查把大量“形状错误”拦在运行之前。</span></figcaption><div class="visual-flow"><article class="visual-node"><b>静态检查</b><p>编译期自动发现类型与签名错误</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>动态检查</b><p>运行时捕获越界、空值等错误</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>无检查</b><p>逻辑错误沉默地产生错误结果</p></article></div></figure></div></section><section class="reading-section" id="section-arrays-functions"><div class="section-label">04 / DEEP READING</div><h2>数组、函数与规格注释</h2><p><strong>数组</strong>（array）是另一种类型的可变长序列，类似 Python 的 list。在 TypeScript 中，<code>number[]</code> 表示由数字组成的数组，其长度在运行时可变，但元素类型固定。</p><p>当我们想把一段代码封装成可复用的模块时，可以写一个函数并附上<strong>规格注释</strong>（specification comment）。例如一个计算冰雹序列长度的函数：</p><pre><code class="language-ts">/**
+ * @param n 起始正整数，要求 n > 0
+ * @returns 冰雹序列到达 1 之前的步数
+ */
+function hailstoneLength(n: number): number {
+  let steps = 0;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    steps++;
+  }
+  return steps;
+}</code></pre><p>注意这里 <code>n: number</code> 和 <code>: number</code>（返回值类型）都是静态类型注解。如果调用者传入 <code>string</code>，TypeScript 编译器会立即报错，而不必等到运行。</p></section><section class="reading-section" id="section-mutation"><div class="section-label">05 / DEEP READING</div><h2>修改值 vs. 重新赋值</h2><p>这两个概念在后续课程里至关重要，这里先做区分：</p><ul><li><strong>修改</strong>（mutation）：改变某个值的内容。例如 <code>arr.push(3)</code> 修改了数组 <code>arr</code> 的内容。</li><li><strong>重新赋值</strong>（reassignment）：改变变量指向哪个值。例如 <code>x = x + 1</code> 让变量 <code>x</code> 指向一个新的数字。</li></ul><p>在冰雹序列的例子中，<code>n = n / 2</code> 是重新赋值——变量 <code>n</code> 指向了新的数值，原来的数值本身并没有被改变（数字在 TypeScript 中是不可变的）。理解这一区别，对后续学习可变性（mutability）与别名（aliasing）至关重要。</p></section><section class="reading-section" id="section-assumptions"><div class="section-label">06 / DEEP READING</div><h2>把假设写下来</h2><p>写下变量的类型，就是在记录关于它的一个假设。<code>n: number</code> 不仅告诉编译器“这里是数字”，也告诉未来的读者“这里应当是数字”。类型注解是一种最低成本、最高回报的文档。</p><p>但类型注解只能表达“形状”层面的假设。<code>hailstoneLength</code> 要求 <code>n > 0</code>，而 <code>number</code> 类型无法表达“正数”这一约束。这类更精细的假设需要借助<strong>规格说明</strong>（specification）来表达，这是后续几讲的核心主题。</p><aside class="field-callout"><span>FIELD TRACE</span><p>把类型注解看作“可执行的文档”。普通注释可能过时，但类型注解会被编译器持续验证。当你修改代码后编译器报类型错误，那不仅是编译失败，更是文档与实现之间出现了分歧——这往往意味着设计需要重新审视。</p></aside></section><section class="reading-section textbook-section" id="section-goals"><div class="section-label">07 / EVIDENCE</div><h2>黑客 vs. 工程师：6.102 的三大目标</h2><p>软件构建不是黑客式的即兴编码。工程师是悲观主义者：他们假设自己会犯错、假设未来会修改代码、假设读者并不了解所有上下文。6.102 围绕好软件的三大目标展开：</p><ul><li><strong>安全免于缺陷</strong>（Safe from bugs）：现在正确，在未知的未来也正确。</li><li><strong>易于理解</strong>（Easy to understand）：与未来的程序员——包括未来的自己——清晰地沟通。</li><li><strong>随时可变</strong>（Ready for change）：设计时容纳变化，而不是每次变化都推倒重来。</li></ul><p>静态检查直接服务于“安全免于缺陷”：它在运行前自动捕获类型错误。类型注解同时服务于“易于理解”：读者无需阅读实现就能知道变量应当持有什么。而一个被类型系统良好约束的模块，往往也更“随时可变”，因为修改的影响范围被类型边界清晰地限制住了。</p><p>这三大目标贯穿整个课程：后续的规格说明、抽象数据类型、函数式编程、并发，都可以看作在不同维度上推进这同一个目标集合。</p><div class="inline-visuals"><div class="inline-visual-label"><span>DIAGRAM IN CONTEXT</span><p>三大目标如何贯穿课程。</p></div><figure class="lecture-visual"><figcaption><strong>6.102 的三大目标</strong><span>安全免于缺陷、易于理解、随时可变——每个后续主题都在推进这三者。</span></figcaption><div class="visual-flow"><article class="visual-node"><b>安全免于缺陷</b><p>静态检查、测试、规格说明</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>易于理解</b><p>命名、注释、模块化</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>随时可变</b><p>抽象、不可变类型、封装</p></article></div></figure></div></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">08 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>08</strong><span>中文教学单元</span></article><article><strong>01</strong><span>机制 / 板书图</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师教案原文逐行完整保留；中文教学单元覆盖类型、静态检查、数组、函数、修改与重新赋值、假设文档化、三大目标；1/1 个显式板书占位已重绘。覆盖不是用摘要替代原文，任何细节都可在页面末尾回查。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/01-static-checking/index.md</strong><p>61 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（8 项）</summary><ol><li><span>01</span>先从一个具体问题开始：冰雹序列</li><li><span>02</span>类型是什么</li><li><span>03</span>静态类型与三种检查</li><li><span>04</span>数组、函数与规格注释</li><li><span>05</span>修改值 vs. 重新赋值</li><li><span>06</span>把假设写下来</li><li><span>07</span>黑客 vs. 工程师：6.102 的三大目标</li><li><span>08</span>纠错、测验与复盘</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">09 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>静态检查能捕获所有错误。</h3><p>静态检查只擅长“形状”错误——类型不匹配、签名错误。逻辑错误（如该乘却加）和许多业务约束（如“正数”）无法被类型系统表达。</p></article><article><span>误区</span><h3>修改值和重新赋值是一回事。</h3><p>修改变变值是改变某个值的内容（<code>arr.push(3)</code>）；重新赋值是让变量指向新值（<code>x = x + 1</code>）。两者在别名存在时行为截然不同。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。静态检查的定义就是 bug 在程序运行之前被自动发现。" data-incorrect="回到“三种检查”，区分静态、动态与无检查的发生阶段。" data-quiz="sc-q1"><p><strong>静态检查的核心特征是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>bug 在程序运行之前被自动发现</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>bug 在程序执行期间被自动发现</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>语言完全无助于发现错误</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="c" data-correct="正确。类型是一组值及其上可执行操作的集合，它约束哪些表达式有意义。" data-incorrect="类型不是值的“名字”或“内存大小”，而是值与操作的集合。" data-quiz="sc-q2"><p><strong>下列哪项最准确地定义了“类型”？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>变量的名字</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>值在内存中的大小</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>一组值及其上可执行操作的集合</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="b" data-correct="正确。类型注解既是给编译器的约束，也是给未来读者的文档。" data-incorrect="类型注解的作用不止是“让编译器通过”。" data-quiz="sc-q3"><p><strong>写下变量类型（如 n: number）的主要价值是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>让编译器不再报错</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>记录关于变量的假设，同时服务于静态检查与文档化</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>提高程序运行速度</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。6.102 三大目标正是安全免于缺陷、易于理解、随时可变。" data-incorrect="回顾“黑客 vs. 工程师”一节，确认三大目标。" data-quiz="sc-q4"><p><strong>6.102 对好软件的三大目标是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>安全免于缺陷、易于理解、随时可变</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>运行快、内存少、界面美观</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>静态检查、动态检查、无检查</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>类型是一组值及其上可执行操作的集合；静态类型在编译期推断表达式类型。</li><li>静态检查在运行前自动发现错误，动态检查在执行期发现，无检查则完全无助。</li><li>6.102 三大目标：安全免于缺陷、易于理解、随时可变。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="classes/01-static-checking/index.md"><summary><span><b>课堂教案</b>classes/01-static-checking/index.md</span><small>61 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/01-static-checking/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text"># Reading 1: Static Checking
+
+[6.102 — Software Construction](http://web.mit.edu/6.102/www/sp26/)
+
+Spring 2026
+
+## Objectives
+
+Today's class has two topics:
+
+* static typing
+* the big three properties of good software
+
+## Hailstone sequence
+
+As a running example, we're going to explore the hailstone sequence, which is defined as follows: Starting with a number *n*, the next number in the sequence is *n/2* if *n* is even, or *3n+1* if *n* is odd. The sequence ends when it reaches 1.
+
+## Types
+
+A **type** is a set of values along with operations that can be performed on those values.
+
+## Static typing
+
+TypeScript is a **statically-typed language**. Variables can be assigned a type at **compile time** (before the program runs), and the compiler can therefore deduce the types of expressions using those variables.
+
+## Static checking, dynamic checking, no checking
+
+- **Static checking**: the bug is found automatically before the program even runs.
+- **Dynamic checking**: the bug is found automatically during execution.
+- **No checking**: the language doesn't help you find the error at all.
+
+## Arrays
+
+Arrays are variable-length sequences of another type, similar to Python lists.
+
+## Functions
+
+If we want to wrap this code into a reusable module, we can write a function with a specification comment.
+
+## Mutating values vs. reassigning variables
+
+**Mutation** refers to changing the content of a value. **Reassignment** means changing where a variable points.
+
+## Documenting assumptions
+
+Writing the type of a variable down documents an assumption about it.
+
+## Hacking vs. engineering
+
+Software engineering is not hacking. Engineers are pessimists.
+
+## The goals of 6.102
+
+- **Safe from bugs**
+- **Easy to understand**
+- **Ready for change**
+
+## Summary
+
+The main idea we introduced today is **static checking**.</code></pre></details></section></article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../index.html">COURSE MAP →</a></footer></body></html>

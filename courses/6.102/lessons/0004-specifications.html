@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="规格说明是实现者与客户端之间的契约：理解前置条件与后置条件、行为等价性、null 的危害、空值的默认允许、异常的使用，以及针对突变函数的规格。"><title>规格说明 — MIT 6.102</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">课程</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/04-specifications/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">CLASS 04 · 2026-02-11 · 规格与设计</p><h1>规格说明</h1><p class="lesson-title-en">Specifications</p><p class="hero-lede">规格说明（specification）是团队协作的枢纽，是实现者与客户端之间的契约。本讲学习如何用前置条件和后置条件精确描述函数行为。</p><div class="lesson-meta"><span>90 MIN</span><span>规格与设计</span><span>01 SOURCE</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>READING INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#spec-problem"><span>01</span>规格说明：团队协作的契约</a><a href="#section-equivalence"><span>02</span>行为等价性</a><a href="#section-whyspec"><span>03</span>为什么需要规格说明</a><a href="#section-structure"><span>04</span>规格说明的结构</a><a href="#section-tsspec"><span>05</span>TypeScript 中的规格说明</a><a href="#section-talkabout"><span>06</span>规格能谈论什么</a><a href="#section-null"><span>07</span>避免 null，包含空值</a><a href="#section-testspec"><span>08</span>测试与规格的关系</a><a href="#section-mutation"><span>09</span>突变函数的规格</a><a href="#section-exceptions"><span>10</span>异常与特殊结果</a><a href="#coverage-map"><span>11</span>教案覆盖地图</a><a href="#check"><span>12</span>纠错、测验与复盘</a><a href="#source-vault"><span>13</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已掌握静态检查、测试与代码审查的基本概念。</li><li>熟悉 TypeScript 函数、类型注解与数组。</li></ul></div><ol><li>理解规格说明作为契约的角色，以及行为等价性的含义。</li><li>掌握规格说明的三部分结构：签名、前置条件（requires）与后置条件（effects）。</li><li>理解 null 的危害、空值的默认允许、异常的使用场景，以及突变函数的规格原则。</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/04-specifications/" target="_blank" rel="noreferrer"><span>课堂教案</span><strong>classes/04-specifications/index.md</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="spec-problem"><div class="section-label">01 / PROBLEM</div><h2>规格说明：团队协作的契约</h2><p>在大型软件中，实现者（implementer）与客户端（client）往往不是同一个人，甚至不在同一个时区。他们之间需要一份精确的协议，规定“这个函数做什么、需要什么前提、保证什么结果”。这份协议就是<strong>规格说明</strong>（specification）。</p><p>规格说明是团队协作的枢纽（linchpin）。它像一份契约：客户端同意满足前置条件，实现者同意交付符合后置条件的结果。有了这份契约，双方可以独立工作、独立测试、独立替换——只要契约不变，整个系统就保持正确。</p><p>本讲的核心思想：规格说明是模块实现者与客户端之间的<strong>防火墙</strong>（firewall）。它把“做什么”与“怎么做”隔离开来，让修改实现不影响客户端，也让客户端的需求变化被契约精确捕获。</p><aside class="field-callout"><span>FIELD TRACE</span><p>写规格时，始终从两个角度审视：客户端能依赖什么？实现者被允许做什么？一份好的规格应当让客户端写得安心（行为有保证），也让实现者有自由（内部可优化）。如果规格太弱，客户端不敢用；如果太强，实现者无法优化。</p></aside></section><section class="reading-section" id="section-equivalence"><div class="section-label">02 / DEEP READING</div><h2>行为等价性</h2><p>如何判断两个函数做的是“同一件事”？我们引入<strong>行为等价</strong>（behavioral equivalence）的概念：如果能把一个实现替换为另一个，而不影响任何客户端的正确性，那么这两个实现就是行为等价的。</p><p>注意，行为等价不要求代码相同、算法相同、甚至性能相同——只要求从外部可观察的行为一致。规格说明正是定义“什么算行为等价”的工具：所有满足同一规格的实现，在客户端看来都是等价的。</p></section><section class="reading-section" id="section-whyspec"><div class="section-label">03 / DEEP READING</div><h2>为什么需要规格说明</h2><p>代码中的精确规格说明让你能够<strong>分摊责任</strong>（apportion blame）。当程序出错时，规格说明是判断“谁违反了契约”的依据：</p><ul><li>如果客户端没有满足前置条件（例如传入了负数给要求正数的函数），责任在客户端。</li><li>如果客户端满足了前置条件，但结果不符合后置条件，责任在实现者。</li></ul><p>没有规格说明，错误就是一笔糊涂账。有了它，调试就变成了“对照契约检查哪一方违约”。</p></section><section class="reading-section" id="section-structure"><div class="section-label">04 / DEEP READING</div><h2>规格说明的结构</h2><p>一份完整的规格说明包含三个部分：</p><ol><li><strong>函数签名</strong>（function signature）：函数名、参数类型与返回类型。</li><li><strong>前置条件</strong>（precondition）：用 <code>requires</code> 子句描述函数被调用时必须满足的约束。</li><li><strong>后置条件</strong>（postcondition）：用 <code>effects</code> 子句描述函数成功执行后必须满足的性质。</li></ol><p>前置条件是客户端的义务，后置条件是保证给客户端的回报。只有当前置条件满足时，后置条件才生效。</p><pre><code class="language-ts">/**
+ * @param n 起始正整数 — requires: n > 0
+ * @returns 冰雹序列到达 1 前的步数 — effects: 返回值 >= 0
+ */
+function hailstoneLength(n: number): number {
+  // ...
+}</code></pre></section><section class="reading-section" id="section-tsspec"><div class="section-label">05 / DEEP READING</div><h2>TypeScript 中的规格说明</h2><p>在 TypeScript 中，常见的约定是在函数前放置文档注释，使用 <code>@param</code> 描述参数约束，使用 <code>@returns</code> 描述返回值性质。虽然这些注释本身不会被编译器检查，但它们是与团队沟通契约的标准格式，也能被文档工具提取。</p><p>类型注解是规格的一部分（它约束了参数和返回值的“形状”），但规格说明通常还包含类型无法表达的约束——例如“正数”“非空数组”“排序后”等。这些需要文字描述。</p></section><section class="reading-section" id="section-talkabout"><div class="section-label">06 / DEEP READING</div><h2>规格能谈论什么</h2><p>函数的规格说明可以谈论参数和返回值，但<strong>绝不能谈论局部变量</strong>。局部变量是实现细节，规格说明只描述外部可观察的行为。一旦规格提及了内部状态，实现者的自由就被不当地限制了，客户端也可能依赖本不应暴露的细节。</p></section><section class="reading-section" id="section-null"><div class="section-label">07 / DEEP READING</div><h2>避免 null，包含空值</h2><p><strong>Null 值是麻烦且不安全的</strong>。Tony Hoare 曾称 null 引用为他的“十亿美元错误”：它能在编译期通过，却在运行期以 <code>TypeError</code> 的形式突然爆发。在 TypeScript 中，应当尽量避免返回或接受 <code>null</code>，除非规格明确允许。</p><p>与 null 相对，<strong>空值</strong>（empty values）——空字符串、空数组、空集合——是始终被允许的，除非规格明确禁止。空值是安全的、有意义的值，而 null 代表“不存在”，需要特殊处理。</p><div class="inline-visuals"><div class="inline-visual-label"><span>DIAGRAM IN CONTEXT</span><p>null 与空值的区别。</p></div><figure class="lecture-visual"><figcaption><strong>null vs. 空值</strong><p>空值是合法的值，null 是“不存在”的哨兵，容易引发运行期错误。</p></figcaption><div class="visual-flow"><article class="visual-node"><b>空字符串 / 空数组</b><p>合法值，可直接使用</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>null</b><p>“不存在”，使用前必须检查</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>TypeError</b><p>忘记检查时的运行期崩溃</p></article></div></figure></div></section><section class="reading-section" id="section-testspec"><div class="section-label">08 / DEEP READING</div><h2>测试与规格的关系</h2><p>即便是白盒测试也必须遵循规格说明。测试是对规格的验证，而不是对实现的验证。如果测试断言了规格未保证的性质，那么当实现者合法地修改实现时，测试会错误地失败。</p><p>因此，设计测试时应当从规格出发：每个测试用例都应对应规格中的某个前置条件与后置条件的组合。</p></section><section class="reading-section" id="section-mutation"><div class="section-label">09 / DEEP READING</div><h2>突变函数的规格</h2><p>程序员默认假设<strong>突变是不被允许的</strong>，除非规格明确说明。如果一个函数会修改传入的参数或对象的状态，这必须在后置条件中明确写出。</p><p>例如 <code>sort(arr)</code> 的规格应当说明“效果：arr 被原地排序”。如果规格没有提到突变，客户端就有理由相信参数不会被修改。这是后续课程中不可变类型与别名问题的先声。</p></section><section class="reading-section" id="section-exceptions"><div class="section-label">10 / DEEP READING</div><h2>异常与特殊结果</h2><p>异常有两类用途：</p><ul><li><strong>信号 bug</strong>：当违反前置条件时抛出异常，表示客户端犯了错误。</li><li><strong>预期失败</strong>（anticipated failures）：用 <code>@throws</code> 文档化那些规格预期可能发生的失败场景（如文件不存在、网络超时）。</li></ul><p>对于特殊-case 的结果，可以使用<strong>联合类型</strong>（union types）来信号。例如 <code>find(index: number): string | NotFound</code>，比返回 null 更安全、更明确。</p><p>在现代 TypeScript/JavaScript 中，每个文件是一个模块（module）。规格说明是模块对外暴露的接口契约，模块内部的所有实现细节都被隐藏起来。</p><aside class="field-callout"><span>FIELD TRACE</span><p>写规格时的检查清单：签名是否清晰？前置条件是否完整（包括边界和约束）？后置条件是否精确（包括突变和返回值）？是否避免了 null？异常是否文档化？逐项检查，就能写出可靠的契约。</p></aside></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">11 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>11</strong><span>中文教学单元</span></article><article><strong>01</strong><span>机制 / 板书图</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师教案原文逐行完整保留；中文教学单元覆盖规格契约、行为等价、分摊责任、结构、TypeScript 规格、null 与空值、测试与规格、突变函数、异常与特殊结果；1/1 个显式板书占位已重绘。覆盖不是用摘要替代原文，任何细节都可在页面末尾回查。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/04-specifications/index.md</strong><p>78 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（11 项）</summary><ol><li><span>01</span>规格说明：团队协作的契约</li><li><span>02</span>行为等价性</li><li><span>03</span>为什么需要规格说明</li><li><span>04</span>规格说明的结构</li><li><span>05</span>TypeScript 中的规格说明</li><li><span>06</span>规格能谈论什么</li><li><span>07</span>避免 null，包含空值</li><li><span>08</span>测试与规格的关系</li><li><span>09</span>突变函数的函数</li><li><span>10</span>异常与特殊结果</li><li><span>11</span>纠错、测验与复盘</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">12 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>规格说明就是注释。</h3><p>规格说明是精确的契约，包含签名、前置条件和后置条件。普通注释可能模糊、过时；规格应当可被测试验证。</p></article><article><span>误区</span><h3>空值和 null 是一回事。</h3><p>空值（空字符串、空数组）是合法的值，可以直接使用；null 是“不存在”的哨兵，使用前必须检查，否则会引发运行期错误。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。规格说明是模块实现者与客户端之间的防火墙/契约。" data-incorrect="回顾“规格说明：团队协作的契约”一节。" data-quiz="sp-q1"><p><strong>规格说明在软件构建中的核心角色是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>实现者与客户端之间的契约</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>实现代码的替代品</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>运行期性能优化的工具</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="b" data-correct="正确。规格的三部分是签名、前置条件（requires）和后置条件（effects）。" data-incorrect="回顾“规格说明的结构”。" data-quiz="sp-q2"><p><strong>一份完整的规格说明包含哪三个部分？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>函数名、局部变量、返回值</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>函数签名、前置条件（requires）、后置条件（effects）</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>参数、异常、注释</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="c" data-correct="正确。规格可以谈论参数和返回值，但不能谈论局部变量。" data-incorrect="规格说明只描述外部可观察的行为。" data-quiz="sp-q3"><p><strong>规格说明可以谈论什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>局部变量和实现细节</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>私有方法的内部逻辑</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>参数和返回值</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。突变默认不被允许，除非规格明确说明。" data-incorrect="回顾“突变函数的规格”一节。" data-quiz="sp-q4"><p><strong>关于突变函数，程序员默认的假设是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>突变默认不被允许，除非规格明确说明</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>突变总是被允许</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>突变由编译器自动检测</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>规格说明是实现者与客户端之间的契约，包含签名、前置条件和后置条件。</li><li>规格让你能够分摊责任：违反前置条件是客户端的错，违反后置条件是实现者的错。</li><li>避免 null，空值默认允许；突变默认禁止，除非规格明确说明。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="classes/04-specifications/index.md"><summary><span><b>课堂教案</b>classes/04-specifications/index.md</span><small>78 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/04-specifications/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text"># Reading 4: Specifications
+
+[6.102 — Software Construction](http://web.mit.edu/6.102/www/sp26/)
+Spring 2026
+
+## Objectives
+
+- Understand preconditions and postconditions in function specifications
+- Be able to write tests against a specification
+- Understand how to use exceptions
+
+## Introduction
+
+Specifications are the linchpin of teamwork. The specification acts as a contract.
+
+## Behavioral equivalence
+
+To determine *behavioral equivalence*, we ask whether we could substitute one implementation for the other without affecting correctness.
+
+## Why specifications?
+
+Precise specifications in the code let you apportion blame.
+
+## Specification structure
+
+- a function signature
+- a *requires* clause (precondition)
+- an *effects* clause (postcondition)
+
+## Specifications in TypeScript
+
+A common convention is to put a documentation comment before the function using `@param` and `@returns`.
+
+## What a spec may talk about
+
+The specification of a function can talk about the parameters and return value, but never about local variables.
+
+## Avoid null
+
+Null values are troublesome and unsafe.
+
+## Include emptiness
+
+Empty values are always allowed unless a spec explicitly disallows them.
+
+## Testing and specifications
+
+Even glass box tests must follow the specification.
+
+## Specifications for mutating functions
+
+Programmers assume that **mutation is disallowed unless stated otherwise**.
+
+## Exceptions
+
+- Exceptions for signaling bugs
+- Exceptions for anticipated failures (documented with `@throws`)
+
+## Special results
+
+Use union types to signal special-case results.
+
+## Modules
+
+In modern TypeScript/JavaScript, each file is a module.
+
+## Summary
+
+A specification acts as a crucial firewall between the implementer of a module and its client.</code></pre></details></section></article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../index.html">COURSE MAP →</a></footer></body></html>

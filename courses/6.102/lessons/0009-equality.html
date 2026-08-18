@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="相等必须是等价关系：自反、对称、传递。用抽象函数定义不可变类型的相等，用观察/行为相等区分可变类型，并让哈希函数与相等保持一致。"><title>等价性 — MIT 6.102 软件构建</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+</head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#psets">问题集</a><a href="../index.html#exams">考试</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/09-equality/" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 09 · 2026-03-04 · 类型与函数式</p><h1>等价性</h1><p class="lesson-title-en">Equality</p><p class="hero-lede">相等操作必须是等价关系：自反、对称、传递。不可变类型用抽象函数定义相等，可变类型区分观察相等与行为相等，哈希函数必须与相等保持一致。</p><div class="lesson-meta"><span>75 MIN</span><span>类型与函数式</span><span>01 SOURCES</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#equiv-relation"><span>01</span>相等必须是等价关系</a><a href="#equality-immutable"><span>02</span>不可变类型的相等：抽象函数与观察</a><a href="#ref-vs-value"><span>03</span>引用相等 vs. 值相等</a><a href="#breaking-equiv"><span>04</span>破坏等价关系的常见方式</a><a href="#equality-mutable"><span>05</span>可变类型的相等：观察相等与行为相等</a><a href="#deep-equality"><span>06</span>集合上的“深度相等”</a><a href="#hash-functions"><span>07</span>哈希函数必须与相等一致</a><a href="#coverage-map"><span>08</span>教案覆盖地图</a><a href="#check"><span>09</span>纠错、测验与复盘</a><a href="#source-vault"><span>10</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已掌握抽象函数 AF 如何定义“两个表示对应同一抽象值”。</li><li>熟悉 TypeScript 的 <code>===</code> 与对象比较语义。</li></ul></div><ol><li>解释为什么相等必须是自反、对称、传递的等价关系。</li><li>用抽象函数定义不可变类型的相等，区分引用相等与值相等。</li><li>为可变类型区分观察相等与行为相等，并保持哈希函数与相等一致。</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/09-equality/" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>classes/09-equality/index.md</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="equiv-relation"><div class="section-label">01 / PROBLEM</div><h2>相等必须是等价关系</h2><p>相等操作看似简单，但要作为可靠的程序基础，它必须是一个<strong>等价关系（equivalence relation）</strong>，即同时满足三条性质：</p><ul><li><strong>自反（reflexive）</strong>：对任意 <code>a</code>，有 <code>a.equals(a) == true</code>。</li><li><strong>对称（symmetric）</strong>：若 <code>a.equals(b)</code>，则 <code>b.equals(a)</code>。</li><li><strong>传递（transitive）</strong>：若 <code>a.equals(b)</code> 且 <code>b.equals(c)</code>，则 <code>a.equals(c)</code>。</li></ul>
+<p>这三条是相等操作的“安全门槛”。一旦被破坏，依赖相等的代码——排序、去重、哈希表查找——都会出现不可预测的错误。例如若相等不对称，把对象放进哈希表后再用“相等的”另一个键去查找，可能找不到原本存在的值。</p><aside class="field-callout"><span>FIELD TRACE</span><p>每次实现 <code>equals</code> 后，用“自反—对称—传递”三问自检。只要有一条不成立，相等就是不可靠的，所有依赖它的数据结构都会遭殃。</p></aside></section><section class="reading-section" id="equality-immutable"><div class="section-label">02 / DEEP READING</div><h2>不可变类型的相等：抽象函数与观察</h2><p>对不可变类型，相等有两种等价定义方式：</p><ul><li><strong>使用抽象函数</strong>：两个实例相等当且仅当 <code>AF(a) == AF(b)</code>。由于不可变对象的表示与抽象值一一对应，这一定义简洁且自然。</li><li><strong>使用观察</strong>：两个对象相等，当它们无法通过任何观察（observer）区分。换句话说，对它们调用任何公开操作都得到相同结果。</li></ul>
+<p>对不可变类型，这两种定义通常等价：抽象值相同 ↔ 无法通过观察区分。这给了实现者自由——既可以从表示入手写相等，也可以从规格说明入手验证相等。</p></section><section class="reading-section" id="ref-vs-value"><div class="section-label">03 / DEEP READING</div><h2>引用相等 vs. 值相等</h2><p>相等有两个层次，必须严格区分：</p><ul><li><strong>引用相等（reference equality）</strong>：测试两个引用是否指向同一块存储。TypeScript 的 <code>===</code> 对对象做的就是引用相等。</li><li><strong>值相等（value equality）</strong>：测试两个对象是否代表同一个抽象值。</li></ul>
+<p>问题在于：<strong><code>===</code> 不是值相等</code></strong>。两个内容完全相同的对象，用 <code>===</code> 比较会返回 <code>false</code>，因为它们位于不同内存位置。因此要实现值相等，必须提供专门的 <code>equalValue()</code> 方法，按抽象值或观察结果比较。</p><pre><code class="language-ts">const a = new MyDate(2026, 2, 25);
+const b = new MyDate(2026, 2, 25);
+console.log(a === b);        // false —— 引用相等
+console.log(a.equalValue(b)); // true  —— 值相等</code></pre></section><section class="reading-section" id="breaking-equiv"><div class="section-label">04 / DEEP READING</div><h2>破坏等价关系的常见方式</h2><p>实现相等时，有几类常见错误会打破等价关系：</p><ul><li><strong>把“类型标签”混进相等</strong>：子类与超类比较时返回 <code>false</code>，可能破坏对称性。</li><li><strong>依赖可变状态</strong>：若相等依赖一个可变字段，对象在不同时刻的“相等关系”会变，破坏传递性。</li><li><strong>把浮点近似当相等</strong>：用 <code>==</code> 比较浮点数会因舍入误差破坏对称与传递。</li></ul>
+<p>本课的结论很明确：<strong>相等的定义必须是一个干净的等价关系</strong>，任何让相等“偶尔成立”的捷径都会反过来伤害你。</p></section><section class="reading-section" id="equality-mutable"><div class="section-label">05 / DEEP READING</div><h2>可变类型的相等：观察相等与行为相等</h2><p>可变类型让相等变得更微妙，因为它要回答“相等到底比的是什么”：</p><ul><li><strong>观察相等（observational equality）</strong>：两个对象此刻无法通过观察区分。</li><li><strong>行为相等（behavioral equality）</strong>：两个对象此刻无法区分，且在任意未来操作序列下都保持不可区分。</li></ul>
+<p>观察相等较弱：两个可变对象此刻内容相同，但其中一个持有可变的内部状态，未来修改后就会暴露差异。行为相等更强：它要求对象在所有可能的未来演化中都保持一致。</p><p>对可变类型，<code>===</code>（引用相等）实际上是行为相等的一个近似：同一块存储的对象当然在未来也保持一致。这解释了为什么 TypeScript 不轻易给对象赋予值相等——可变对象的值相等本身就含糊。</p><aside class="field-callout"><span>FIELD TRACE</span><p>判断该用哪种相等，问自己：“我关心的是‘现在看起来一样’，还是‘以后也一直一样’？” 前者是观察相等，后者是行为相等。不可变类型因为不会变，两者重合。</p></aside></section><section class="reading-section" id="deep-equality"><div class="section-label">06 / DEEP READING</div><h2>集合上的“深度相等”</h2><p>对内置集合（数组、对象），简单的 <code>===</code> 几乎总是引用相等。Node.js 的 <code>assert.deepStrictEqual()</code> 提供了一种<strong>观察相等</strong>：它递归比较集合的每个元素与嵌套结构，只要当前结构一致就认为相等。</p><p>测试 ADT 时，<code>deepStrictEqual</code> 非常有用，但它仍是观察相等——如果集合持有可变对象，未来修改后“已相等”的判断可能失效。理解这一边界，才能正确选择测试断言。</p></section><section class="reading-section" id="hash-functions"><div class="section-label">07 / DEEP READING</div><h2>哈希函数必须与相等一致</h2><p>只要实现相等，就必须同时实现哈希函数，并遵守一条铁律：<strong>若 <code>a.equals(b)</code>，则 <code>hashCode(a) == hashCode(b)</code>。</strong>这是哈希表、哈希集合等数据结构正确工作的前提。</p><p>违反这条规则的后果很直接：把对象放进哈希表，再用一个“相等的”对象去查找，可能落到不同的桶里，导致查找失败。因此哈希函数必须基于相等所依赖的同一组字段来计算。</p><p>对不可变类型，哈希值还可以缓存（因为对象不变，哈希值也不会变），这是不可变性的又一个性能优势。</p></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">08 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>09</strong><span>中文教学单元</span></article><article><strong>01</strong><span>机制 / 代码示例</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师讲义原文逐行完整保留；中文教学单元覆盖等价关系、不可变/可变类型的相等、引用与值相等、深度相等与哈希一致性；示例用 TypeScript 重写以匹配课堂风格。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/09-equality/index.md</strong><p>49 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（9 项）</summary><ol><li><span>01</span>相等必须是等价关系</li><li><span>02</span>不可变类型的相等：抽象函数与观察</li><li><span>03</span>引用相等 vs. 值相等</li><li><span>04</span>破坏等价关系的常见方式</li><li><span>05</span>可变类型的相等：观察相等与行为相等</li><li><span>06</span>集合上的“深度相等”</li><li><span>07</span>哈希函数必须与相等一致</li><li><span>08</span>教案覆盖地图</li><li><span>09</span>纠错、测验与复盘</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">09 / CALIBRATION</div><h2>把直觉校准成等价关系</h2><div class="misconception-grid"><article><span>误区</span><h3><code>===</code> 就是对象相等。</h3><p><code>===</code> 对对象做的是引用相等，不是值相等。内容相同的两个对象用 <code>===</code> 比较返回 <code>false</code>。</p></article><article><span>误区</span><h3>可变类型和不可变类型用同一种相等就行。</h3><p>可变类型需要区分观察相等与行为相等；不可变类型因为不会变，两者重合，可用抽象函数简洁定义。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="c" data-correct="正确。等价关系必须同时满足自反、对称、传递，缺一不可。" data-incorrect="相等作为等价关系，三条性质必须全部满足。" data-quiz="eq-q1"><p><strong>相等操作必须满足等价关系。下列哪项不是等价关系的要求？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>自反性</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>对称性</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>反对称性</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。不可变类型可用 AF(a)==AF(b) 定义相等，抽象值相同则相等。" data-incorrect="回顾“不可变类型的相等”，抽象函数是定义相等的自然方式。" data-quiz="eq-q2"><p><strong>对不可变类型，最自然的相等定义方式是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>两个实例的抽象函数值相等：AF(a) == AF(b)</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>两个实例的引用相等</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>两个实例的类名相同</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="b" data-correct="正确。行为相等要求对象在任何未来操作下都保持不可区分，比观察相等更强。" data-incorrect="行为相等不只看“现在”，还要求“未来一直不可区分”。" data-quiz="eq-q3"><p><strong>可变类型的“行为相等”比“观察相等”强在哪？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>只比较引用地址</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>在任何未来操作序列下都保持不可区分</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>忽略所有可变字段</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。哈希函数必须与相等一致：相等的对象必须有相等的哈希值。" data-incorrect="哈希与相等不一致会破坏哈希表的正确性。" data-quiz="eq-q4"><p><strong>实现相等时，哈希函数必须满足什么条件？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>相等的对象必须有相等的哈希值</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>哈希值永远不等于 0</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>哈希值必须唯一，不相等的对象哈希值必不同</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>相等必须是自反、对称、传递的等价关系，否则依赖它的数据结构都会出错。</li><li>不可变类型用抽象函数定义相等（AF(a)==AF(b)）；<code>===</code> 是引用相等，不是值相等。</li><li>可变类型区分观察相等与行为相等；哈希函数必须与相等保持一致。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与例子，不以摘要替代原文。</p><div class="source-search"><span>SEARCH</span><input type="text" data-source-search placeholder="搜索资料内容…" aria-label="搜索资料"></div><details class="archive" data-source-record data-source="classes/09-equality/index.md"><summary><span><b>课堂讲义</b>classes/09-equality/index.md</span><small>49 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/09-equality/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text">6.102 — Software Construction
+Spring 2026
+
+# Reading 9: Equality
+
+## Objectives
+
+- Understand the properties of an equivalence relation.
+- Understand equality for immutable types.
+- Differentiate between reference equality and object equality.
+- Differentiate between observational and behavioral equality for mutable types.
+
+## Equivalence relation
+
+An equality operation must be an **equivalence relation**: reflexive, symmetric, and transitive.
+
+## Equality of immutable types
+
+**Using the abstraction function**: two instances are equal iff AF(a) = AF(b).
+
+**Using observation**: two objects are equal when they cannot be distinguished by observation.
+
+## Reference equality vs. value equality
+
+- *reference* equality tests whether two references point to the same storage.
+- *value* equality tests whether two objects represent the same value.
+
+In TypeScript, `===` is reference equality. Use `equalValue()` for value equality.
+
+## Breaking the equivalence relation
+
+The definition of equality must be an equivalence relation.
+
+## Equality of mutable types
+
+- *observational equality*: cannot be distinguished now
+- *behavioral equality*: cannot be distinguished now or in the future
+
+## "Deep equality" on collections
+
+`assert.deepStrictEqual()` provides observational equality for built-in collections.
+
+## Hash functions
+
+Always implement hashing consistent with equality.
+
+## Summary
+
+- Equality should be an equivalence relation.
+- The abstraction function is the basis for equality in immutable data types.
+- Mutable data types have two notions: behavioral equality and observational equality.</code></pre></details></section></article></main><footer class="lesson-footer"><div><strong>MIT 6.102 · 等价性</strong><p>下一讲：函数式编程 —— 用不可变数据与纯函数建模问题。</p></div><div><a href="0008-interfaces-subtyping.html">← 接口与子类型</a><a href="0010-functional-programming.html">函数式编程 →</a></div></footer></body></html>

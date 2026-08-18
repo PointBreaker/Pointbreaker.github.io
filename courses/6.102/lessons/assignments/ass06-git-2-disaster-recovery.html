@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="用 Git 命令查看与找回旧版本代码：git show、git revert、git checkout，从灾难中恢复。"><title>Git 2: Disaster Recovery — MIT 6.102</title>
+<link rel="stylesheet" href="../../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../../index.html#lectures">课程</a><a href="../../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">MIT 6.102 · Module 6 · 工具</p><h1>Git 2：Disaster Recovery</h1><p class="hero-lede">用 Git 命令查看与找回旧版本代码：git show、git revert、git checkout，从灾难中恢复。</p></div></header>
+<main class="reading-shell"><article class="reading-article page">
+
+
+    <h2 id="objectives">实验目标</h2>
+    <ul>
+      <li>用 Git 命令查看与检索旧版本。</li>
+      <li>理解 commit 在 Git 内部以 diff 形式呈现、但本质是完整快照。</li>
+      <li>掌握 <code>git show</code>、<code>git revert</code>、<code>git checkout</code> 恢复旧版本的方式。</li>
+      <li>区分"撤销整次提交"与"把单个文件恢复到某个旧版本"。</li>
+    </ul>
+
+    <h2 id="snapshot-vs-diff">为什么 commit 看起来像 diff</h2>
+    <p>Git 定义上把每次 commit 存为完整快照，但 <code>git show</code> 默认只显示 diff，因为大多数 commit 只改动项目的一小部分，diff 更实用。我们也可以让 Git 展示某个 commit 时的完整状态：</p>
+    <pre><code class="language-bash">git show 3e62e60:hello.scm       # 某次 commit 时某文件的内容
+git show 3e62e60:                # 空路径 = 根目录，列出该 commit 所有文件</code></pre>
+
+    <h2 id="recovery">分步指引：三种恢复手段</h2>
+
+    <h3>1. 用 git clone 预防灾难</h3>
+    <p>只要定期 add / commit / push，远程仓库就有完整备份。在新机器上 <code>git clone</code> 即可恢复。</p>
+
+    <h3>2. 用 git revert 撤销整次提交</h3>
+    <pre><code class="language-bash">git revert &lt;commit-id&gt;    # 新增一次提交，抵消旧提交的改动</code></pre>
+    <p><code>git revert</code> <strong>不会</strong>删除旧提交，而是在 HEAD 上新增一个反向提交。安全、可共享。</p>
+
+    <h3>3. 用 git show + git checkout 恢复单个文件</h3>
+    <pre><code class="language-bash">git show 1255f4e:hello.txt        # 查看旧版本内容，手动复制
+git checkout 41c4b8f -- hello.txt  # 把文件恢复到某次 commit 的状态（并暂存）</code></pre>
+    <p>注意 <code>--</code> 与路径必不可少。<code>git checkout</code> 的 <code>revision</code> 是你希望恢复到的版本（包含该版本及之前的所有改动）。</p>
+
+    <h2 id="commands">关键命令速查</h2>
+    <table style="width:100%; border-collapse:collapse;">
+      <tr><th>命令</th><th>作用</th></tr>
+      <tr><td><code>git show &lt;id&gt;</code></td><td>查看某次提交的 diff</td></tr>
+      <tr><td><code>git show &lt;id&gt;:&lt;path&gt;</code></td><td>查看某次提交时某文件的内容</td></tr>
+      <tr><td><code>git revert &lt;id&gt;</code></td><td>新增反向提交，撤销旧提交</td></tr>
+      <tr><td><code>git checkout &lt;id&gt; -- &lt;file&gt;</code></td><td>把某文件恢复到某次提交的状态（并暂存）</td></tr>
+    </table>
+
+    <h2 id="pitfalls">常见陷阱</h2>
+    <ul>
+      <li><code>git checkout &lt;id&gt;</code>（不带 <code>-- &lt;file&gt;</code>）：会让 HEAD 指向旧 commit，进入 <strong>detached HEAD</strong> 状态，可能导致工作丢失。</li>
+      <li>误以为 <code>git revert</code> 会删除历史——它只是新增反向提交。</li>
+      <li>在 <code>git show</code> 的长输出里：空格翻页，<code>q</code> 退出。</li>
+    </ul>
+
+    
+</article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../../index.html">COURSE MAP →</a></footer></body></html>

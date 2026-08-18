@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="回调与图形用户界面：理解同步与异步回调、事件循环与事件队列，用 Promise.then 组合异步操作，并用 Listener 模式处理 GUI 事件。"><title>回调与图形用户界面 — MIT 6.102 Software Construction</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
+<link rel="stylesheet" href="../../../assets/vendor/prism.css">
+<script defer src="../../../assets/vendor/katex.min.js"></script>
+<script defer src="../../../assets/vendor/katex-auto-render.min.js"></script>
+<script defer src="../../../assets/course/math-render.js"></script>
+</head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">全部课程</a><a href="../index.html#psets">作业</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/17-callbacks-guis/" target="_blank" rel="noreferrer">官方讲义 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">LECTURE 17 · 2026-04-13 · 系统与界面</p><h1>回调与图形用户界面</h1><p class="lesson-title-en">Callbacks and Graphical User Interfaces</p><p class="hero-lede">理解同步与异步回调、事件循环与事件队列，用 Promise.then 组合异步操作，并用 Listener 模式处理 GUI 事件——同时避开监听器中的常见陷阱。</p><div class="lesson-meta"><span>50 MIN</span><span>系统与界面</span><span>01 SOURCE</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>FIELD INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#callbacks"><span>01</span>回调：客户端提供的函数</a><a href="#sync-async-callbacks"><span>02</span>同步回调 vs. 异步回调</a><a href="#timers-event-loop"><span>03</span>定时器回调与事件循环</a><a href="#callbacks-promises"><span>04</span>用回调组合 Promise</a><a href="#unpacking-async"><span>05</span>解构异步函数</a><a href="#html-dom"><span>06</span>HTML 与文档对象模型</a><a href="#input-handling"><span>07</span>输入处理：Listener 模式</a><a href="#listener-pitfalls"><span>08</span>监听器中的陷阱</a><a href="#coverage-map"><span>09</span>教案覆盖地图</a><a href="#check"><span>10</span>纠错、测验与复盘</a><a href="#source-vault"><span>11</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已掌握 Promise、await 与异步函数</li><li>理解函数作为一等公民的概念</li><li>了解基本的 HTML 结构</li></ul></div><ol><li>理解回调（callback）作为"客户端提供的函数"的含义</li><li>区分同步回调与异步回调</li><li>掌握事件循环与事件队列的执行机制</li><li>用 Listener 模式处理 GUI 事件，并避开常见陷阱</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/17-callbacks-guis/" target="_blank" rel="noreferrer"><span>课堂讲义</span><strong>classes/17-callbacks-guis</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="callbacks"><div class="section-label">01 / PROBLEM</div><h2>回调：客户端提供的函数</h2><p><strong>回调</strong>（callback）是一个函数，由客户端提供给模块，供模块在适当时机调用。回调是"控制反转"（inversion of control）的典型体现：不是客户端主动轮询模块，而是模块在事件发生时主动通知客户端。</p><p>回调让模块保持通用性：模块只负责"何时调用"，客户端决定"做什么"。</p></section><section class="reading-section" id="sync-async-callbacks"><div class="section-label">02 / DEEP READING</div><h2>同步回调 vs. 异步回调</h2><p>回调有两种风格：</p><ul><li><strong>同步回调</strong>（synchronous callback）：在调用模块的函数期间立即执行。例如 <code>Array.map(fn)</code> 中的 <code>fn</code>。</li><li><strong>异步回调</strong>（asynchronous callback）：被保存起来，在未来某个时刻调用。例如事件处理函数、<code>setTimeout</code> 的回调。</li></ul><p>区分两者很关键：同步回调在调用栈中直接返回，异步回调则要等事件循环调度。</p></section><section class="reading-section" id="timers-event-loop"><div class="section-label">03 / DEEP READING</div><h2>定时器回调与事件循环</h2><p><code>setTimeout(callback, ms)</code> 接受一个回调和一个毫秒延迟，在延迟到期后把回调放入<strong>事件队列</strong>（event queue）。</p><p>TypeScript/JavaScript 使用<strong>事件循环</strong>（event loop）模型：主线程执行完当前任务后，从事件队列取出下一个回调执行。这意味着：</p><ul><li><code>setTimeout(cb, 0)</code> 不会立即执行，而是等当前任务完成后才执行</li><li>长时间同步代码会阻塞事件队列中的所有回调</li><li>多个回调按入队顺序依次执行（FIFO）</li></ul><aside class="field-callout"><span>FIELD TRACE</span><p>把事件循环想成"前台 + 等候室"：主线程是前台，一次接待一位顾客（执行一个任务）。setTimeout 的回调在等候室（事件队列）排队，等前台空闲才进入。同步代码太长，等候室的顾客就永远进不来——这就是"阻塞"。</p></aside></section><section class="reading-section" id="callbacks-promises"><div class="section-label">04 / DEEP READING</div><h2>用回调组合 Promise</h2><p><code>Promise&lt;T&gt;.then(callback)</code> 附加一个回调，当 Promise fulfill 时调用它，并返回一个新的 Promise（其值是回调的返回值）。这是组合异步操作的基础：</p><pre><code class="language-ts">fetchUser(1)
+  .then(user => fetchPosts(user.id))   // 返回 Promise&lt;Post[]&gt;
+  .then(posts => console.log(posts));  // 当 posts 就绪时执行</code></pre><p><code>.then</code> 让 Promise 链可以一步步传递结果，避免"回调地狱"。配合 <code>async/await</code>，异步代码的可读性进一步提升。</p></section><section class="reading-section" id="unpacking-async"><div class="section-label">05 / DEEP READING</div><h2>解构异步函数</h2><p><code>await</code> 的本质是什么？它把函数中<strong>剩余的计算</strong>包装成一个 <code>then</code> 回调，附加到被 await 的 Promise 上。换句话说：</p><pre><code class="language-ts">// 写法 A：async/await
+async function f() {
+  const x = await promise;
+  console.log(x);
+}
+
+// 写法 B：等价的手动 .then
+function f() {
+  return promise.then(x => {
+    console.log(x);
+  });
+}</code></pre><p>两种写法等价，但 async/await 让异步代码看起来像同步代码，大幅降低认知负担。理解这个等价关系，是调试异步代码的关键。</p></section><section class="reading-section" id="html-dom"><div class="section-label">06 / DEEP READING</div><h2>HTML 与文档对象模型</h2><p>HTML 元素形成一棵树，称为<strong>文档对象模型</strong>（Document Object Model, DOM）。DOM 是 JavaScript 操作网页内容的接口：可以读取元素、修改内容、添加或删除节点、注册事件监听器。</p><pre><code class="language-ts">// 通过 DOM 访问元素
+const button = document.getElementById("myButton");
+button.textContent = "Clicked!";</code></pre></section><section class="reading-section" id="input-handling"><div class="section-label">07 / DEEP READING</div><h2>输入处理：Listener 模式</h2><p>GUI 事件处理使用<strong>监听器模式</strong>（Listener pattern）：</p><ul><li><strong>事件源</strong>（event source）：生成事件的对象（如按钮）</li><li><strong>监听器</strong>（listener）：客户端提供的回调函数</li><li>模块（GUI 框架）负责在事件发生时调用监听器</li></ul><pre><code class="language-ts">// 注册监听器
+button.addEventListener("click", (event) => {
+  console.log("button clicked!");
+});</code></pre><p>监听器模式是回调在 GUI 中的具体应用。事件源不知道监听器会做什么，它只负责在事件发生时调用。</p></section><section class="reading-section" id="listener-pitfalls"><div class="section-label">08 / DEEP READING</div><h2>监听器中的陷阱</h2><p>使用监听器时有三类常见陷阱：</p><ul><li><strong>运行太久</strong>：监听器在主线程执行，长时间运行会阻塞所有后续事件。应快速返回，把重活交给 Worker 或分批处理。</li><strong>循环引用</strong>：监听器持有对事件源的引用，事件源又持有监听器，导致内存泄漏。</li><li><strong>忘记清理</strong>：模块销毁时必须移除监听器，否则已销毁的模块仍会被调用。</li></ul><aside class="field-callout"><span>FIELD TRACE</span><p>把监听器想象成"订阅报纸"：订阅（addEventListener）后，每期都会送来。如果你搬家了（模块销毁）没退订（removeEventListener），报纸仍会寄到旧地址——在程序里就是内存泄漏或调用已销毁对象。</p></aside></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">09 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>09</strong><span>中文教学单元</span></article><article><strong>01</strong><span>设计模式</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师讲义原文逐行完整保留；中文教学单元覆盖回调、同步/异步回调、事件循环、Promise.then、async 解构、HTML/DOM、Listener 模式与陷阱。覆盖不是用摘要替代原文，任何细节都可在页面末尾回查。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/17-callbacks-guis/index.md</strong><p>49 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（9 项）</summary><ol><li><span>01</span>回调：客户端提供的函数</li><li><span>02</span>同步回调 vs. 异步回调</li><li><span>03</span>定时器回调与事件循环</li><li><span>04</span>用回调组合 Promise</li><li><span>05</span>解构异步函数</li><li><span>06</span>HTML 与文档对象模型</li><li><span>07</span>输入处理：Listener 模式</li><li><span>08</span>监听器中的陷阱</li><li><span>09</span>教案覆盖地图</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">10 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>setTimeout(cb, 0) 会立即执行。</h3><p>它只是把回调放入事件队列，等当前任务完成后才执行。</p></article><article><span>误区</span><h3>监听器注册后不需要清理。</h3><p>不清理会导致内存泄漏或调用已销毁对象。模块销毁时必须移除监听器。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="a" data-correct="正确。回调是控制反转：客户端提供函数，模块在适当时机调用。" data-incorrect="回到回调小节，理解其本质。" data-quiz="r17-q1"><p><strong>回调（callback）的本质是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>客户端提供给模块、供模块在适当时机调用的函数</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>模块内部定义的私有函数</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>只能用于 GUI 的函数</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。await 把函数剩余部分包装成 then 回调。" data-incorrect="回到解构异步函数小节，理解 await 与 .then 的等价关系。" data-quiz="r17-q2"><p><strong>await 的本质是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>把函数剩余计算包装成 then 回调，附加到被 await 的 Promise</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>阻塞线程等待结果</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>创建一个新的线程</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。GUI 事件处理使用 Listener 模式：事件源生成事件，模块调用监听器。" data-incorrect="回到 Listener 模式小节，理解事件处理的机制。" data-quiz="r17-q3"><p><strong>GUI 事件处理使用什么模式？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>Listener 模式：事件源生成事件，模块调用客户端提供的监听器</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>客户端轮询事件源</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>事件源直接修改客户端状态</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>回调是客户端提供的函数，同步回调立即执行，异步回调由事件循环调度。</li><li>await 等价于把剩余计算包装成 .then 回调。</li><li>GUI 用 Listener 模式处理事件，监听器要快速返回、注意循环引用、及时清理。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="classes/17-callbacks-guis/index.md"><summary><span><b>课堂讲义</b>classes/17-callbacks-guis/index.md</span><small>49 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/17-callbacks-guis/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text"># Reading 17: Callbacks and Graphical User Interfaces
+
+## Objectives
+
+This reading covers **callbacks**, promises/`await` with callbacks,
+and GUI **listener** functions.
+
+## Callbacks
+
+A **callback** is a function that a client provides to a module
+for the module to call.
+
+### Synchronous vs. Asynchronous
+
+Synchronous callbacks execute during the enclosing call.
+Asynchronous callbacks are saved for a future call.
+
+## Timer callbacks
+
+`setTimeout` takes a callback and a millisecond delay.
+
+## Event loop
+
+TypeScript/JavaScript uses an **event loop** and **event queue**.
+
+## Using callbacks with promises
+
+`Promise&lt;T&gt;.then(callback)` attaches a callback and returns a new promise.
+
+## Unpacking an asynchronous function
+
+`await` takes the remainder of the function's computation and wraps
+it into a `then` callback.
+
+## HTML and the Document Object Model
+
+HTML elements form a tree called the **Document Object Model (DOM)**.
+
+## Input handling
+
+GUI event handling uses the **Listener pattern**: event sources generate
+events; modules subscribe with callbacks.
+
+## Pitfalls in listeners
+
+- Listeners should run quickly and return quickly
+- Be careful about cycles
+- Don't forget to clean up
+
+## Summary
+
+- Callbacks are first-class functions (synchronous or asynchronous)
+- Event loop and event queue execute asynchronous callbacks
+- GUI event handling uses the Listener pattern</code></pre></details></section><nav class="lesson-pager" aria-label="讲次导航"><a href="0016-mutual-exclusion.html"><span>← 上一讲</span><strong>互斥</strong></a><a href="0018-message-passing-networking.html"><span>下一讲 →</span><strong>消息传递与网络</strong></a></nav></article><aside class="reading-note"><span>FIELD MEMO</span><strong>17 / 19</strong><p>先读中文精读，画出事件循环与回调队列；再展开资料附录逐条核对官方讲义。</p><a href="#source-vault">跳到完整资料 ↓</a></aside></main><footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../index.html">SOFTWARE CONSTRUCTION / COURSE MAP →</a></footer>
+<script src="../../../assets/vendor/prism.js"></script>
+<script src="../../../assets/vendor/prism.js"></script>
+</body></html>

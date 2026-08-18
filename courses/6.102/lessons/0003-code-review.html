@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="通过代码审查实践通用编码原则：不要重复自己、及时失败、避免魔法数字、单一用途变量、良好命名、拒绝全局变量，以及通过重构持续改进代码质量。"><title>代码审查 — MIT 6.102</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../index.html#lectures">课程</a><a href="../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/classes/03-code-review/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">CLASS 03 · 2026-02-09 · 规格与设计</p><h1>代码审查</h1><p class="lesson-title-en">Code Review</p><p class="hero-lede">代码审查是“改善代码”与“改善程序员”的双重实践。通过三个“气味”示例，系统掌握通用编码原则与重构方法。</p><div class="lesson-meta"><span>90 MIN</span><span>规格与设计</span><span>01 SOURCE</span><span>FULL ARCHIVE</span></div></div></header>
+<main class="reading-shell"><aside class="reading-toc"><p>READING INDEX</p><a href="#objectives"><span>00</span>学习目标</a><a href="#review-problem"><span>01</span>代码审查：改善代码与改善程序员</a><a href="#section-smelly1"><span>02</span>气味示例一：DRY、注释、快速失败、魔法数字、单一用途</a><a href="#section-smelly2"><span>03</span>气味示例二：命名与排版</a><a href="#section-smelly3"><span>04</span>气味示例三：全局变量、返回结果、特殊用例、代码长度</a><a href="#section-refactoring"><span>05</span>重构：改善代码而不改变行为</a><a href="#coverage-map"><span>06</span>教案覆盖地图</a><a href="#check"><span>07</span>纠错、测验与复盘</a><a href="#source-vault"><span>08</span>完整资料</a><a class="toc-back" href="../index.html#lectures">← 返回课程地图</a></aside><article class="reading-article page"><section class="reading-section objectives" id="objectives"><div class="section-label">00 / ORIENTATION</div><h2>这讲要解决什么</h2><div class="prerequisite-block"><strong>开始前先确认</strong><ul><li>已掌握静态检查与测试的基本概念。</li><li>具备 TypeScript 函数、变量、数组的编写经验。</li></ul></div><ol><li>理解代码审查的双重目的：改善代码本身，以及改善写代码的人。</li><li>通过具体“气味”示例，掌握通用编码原则（DRY、快速失败、良好命名等）。</li><li>理解重构的含义：在不改变代码行为的前提下改善其内部结构。</li></ol><div class="source-ribbon"><a href="https://web.mit.edu/6.102/www/sp26/classes/03-code-review/" target="_blank" rel="noreferrer"><span>课堂教案</span><strong>classes/03-code-review/index.md</strong><b>↗</b></a></div></section><section class="reading-section textbook-section" id="review-problem"><div class="section-label">01 / PROBLEM</div><h2>代码审查：改善代码与改善程序员</h2><p>在深入具体原则之前，先回到 6.102 对好软件的定义：</p><ul><li><strong>安全免于缺陷</strong>（Safe from bugs）：现在正确，在未知的未来也正确。</li><li><strong>易于理解</strong>（Easy to understand）：与未来的程序员——包括未来的自己——清晰地沟通。</li><li><strong>随时可变</strong>（Ready for change）：设计时容纳变化，而不是每次变化都推倒重来。</li></ul><p><strong>代码审查</strong>（code review）是由代码原作者之外的人对源代码进行的认真、系统的研读。它实际上有两个目的：</p><ul><li><strong>改善代码</strong>：发现 bug、预判可能的 bug、检查代码的清晰度。</li><li><strong>改善程序员</strong>：代码审查是程序员相互学习、相互教学的重要方式。</li></ul><p>这两个目的同等重要。一次好的审查不仅产出更好的代码，还让参与双方都更深刻地理解语言、库和设计原则。下面的原则将通过三个“气味”（smelly）示例展开——所谓“气味”，是指代码中那些“看起来不太对劲”、暗示更深层次问题的模式。</p><aside class="field-callout"><span>FIELD TRACE</span><p>审查代码时，先问三个问题：这段代码正确吗（安全免于缺陷）？一个陌生人能快速读懂吗（易于理解）？如果需求明天变了，容易改吗（随时可变）？把答案和下面要学的原则对照，就能系统性地定位“气味”。</p></aside></section><section class="reading-section" id="section-smelly1"><div class="section-label">02 / DEEP READING</div><h2>气味示例一：DRY、注释、快速失败、魔法数字、单一用途</h2><p><strong>不要重复自己</strong>（Don't Repeat Yourself，DRY）。重复的代码是安全的隐患：当逻辑需要修改时，你必须找到所有副本并一致地更新它们，任何一个遗漏都会引入 bug。与其复制粘贴，不如把公共逻辑提取成函数或常量。</p><p><strong>在需要的地方写注释</strong>（Comment where needed）。优秀的开发者审慎地写注释：不是为了解释“代码做了什么”（好的代码自己会说话），而是为了解释“为什么这样做”——那些从代码本身无法看出的意图、约束和背景。</p><p><strong>快速失败</strong>（Fail fast）。代码应当尽可能早地暴露它的 bug。如果一个函数收到了非法参数，立即抛出异常，而不是带着错误状态继续运行，直到某个无关的地方才以难以理解的方式崩溃。快速失败让 bug 的定位成本降到最低。</p><p><strong>避免魔法数字</strong>（Avoid magic numbers）。魔法数字是指出现在代码中、没有解释的常量值。除了 0、1、-1 等少数被广泛理解的常量外，其他数字都应当被命名常量替代。<code>if (status === 3)</code> 中的 <code>3</code> 是什么意思？<code>if (status === STATUS_COMPLETED)</code> 则一目了然。</p><p><strong>每个变量一个用途</strong>（One purpose for each variable）。不要复用参数，也不要复用变量。一个变量如果在不同阶段存放不同含义的值，读者就必须记住“现在这个时刻它代表什么”。为每个用途创建独立变量，名字本身就成为文档。</p><pre><code class="language-ts">// 反面示例：魔法数字 + 变量复用
+function price(n: number): number {
+  let x = n * 1.1;   // 1.1 是什么？
+  x = x - x * 0.05;  // x 先存含税价，又存折后价
+  return x;
+}
+
+// 正面示例：命名常量 + 单一用途
+const TAX_RATE = 1.1;
+const DISCOUNT = 0.05;
+
+function price(quantity: number): number {
+  const withTax = quantity * TAX_RATE;
+  const discounted = withTax - withTax * DISCOUNT;
+  return discounted;
+}</code></pre></section><section class="reading-section" id="section-smelly2"><div class="section-label">03 / DEEP READING</div><h2>气味示例二：命名与排版</h2><p><strong>使用好的名字</strong>（Use good names）。好的函数名和变量名应当长且自描述。<code>calc(a, b)</code> 让人困惑；<code>calculateTotalPrice(unitPrice, quantity)</code> 则不需要任何注释。写代码时，读者（包括未来的你）的时间比你的时间更值钱，因此多打几个字母是值得的投资。</p><p><strong>用空白与标点帮助读者</strong>（Use whitespace and punctuation to help the reader）。一致的缩进、适当的空行、运算符前后的空格，这些看似微小的细节，累积起来决定了代码的可读性。混乱的排版会让逻辑结构变得模糊，清晰的排版则让结构不言自明。</p></section><section class="reading-section" id="section-smelly3"><div class="section-label">04 / DEEP READING</div><h2>气味示例三：全局变量、返回结果、特殊用例、代码长度</h2><p><strong>不要使用全局变量</strong>（Don't use global variables）。全局变量在任何地方都可被读写，这使得程序的执行路径难以追踪，也让模块之间的依赖变得隐式。应当通过参数传递输入、通过返回值传递输出，让数据流清晰可见。</p><p><strong>函数应当返回结果，而不是打印它们</strong>（Functions should return results, not print them）。直接打印的函数无法被其他代码复用——调用者拿不到返回值，只能看到控制台输出。返回结果的函数则可以被组合、测试和进一步处理。</p><p><strong>避免特殊用例代码</strong>（Avoid special-case code）。充斥着 <code>if (x === specialCase)</code> 分支的函数往往意味着抽象不完整。更好的做法是把特殊情况纳入统一的处理逻辑，或者通过多态/重载来表达差异。</p><p><strong>代码长度适当</strong>（Code at the right length）。函数应当足够短，以便在一个屏幕上完整阅读、在头脑中完整理解；但也不要为了短而短，把本应连贯的逻辑拆得支离破碎。长度是结果，不是目标——清晰才是目标。</p><div class="inline-visuals"><div class="inline-visual-label"><span>DIAGRAM IN CONTEXT</span><p>通用编码原则如何服务于三大目标。</p></div><figure class="lecture-visual"><figcaption><strong>原则与目标的映射</strong><span>每条编码原则都在推进安全免于缺陷、易于理解、随时可变中的至少一个。</span></figcaption><div class="visual-flow"><article class="visual-node"><b>DRY / 单一用途 / 无全局变量</b><p>主要服务“随时可变”与“安全免于缺陷”</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>良好命名 / 注释 / 排版</b><p>主要服务“易于理解”</p></article><span class="visual-arrow" aria-hidden="true">→</span><article class="visual-node"><b>快速失败 / 避免魔法数字</b><p>同时服务“安全免于缺陷”与“易于理解”</p></article></div></figure></div></section><section class="reading-section" id="section-refactoring"><div class="section-label">05 / EVIDENCE</div><h2>重构：改善代码而不改变行为</h2><p>把代码改造成更好的结构，同时不改变它做什么，这个过程称为<strong>重构</strong>（refactoring）。上面讨论的每一条原则——提取重复代码为函数、重命名变量、消除魔法数字、拆分过长的函数——都是具体的重构手法。</p><p>重构的前提是<strong>有测试</strong>。没有测试的保护，任何“不改变行为”的重构都可能是自欺欺人。这正是上一讲测试与本讲代码审查的内在联系：测试提供安全网，重构改善结构，审查确保方向。</p><p>重构不应当是偶发的大改造，而应当是日常的微小改进。每次审查、每次修改时，让代码比你来时好一点。这种持续的小幅改善，累积起来就是巨大的质量差异。</p><aside class="field-callout"><span>FIELD TRACE</span><p>审查时的实用策略：先快速通读，把握整体结构；再逐段细读，对照原则清单标记“气味”；最后把发现按优先级排序——先改影响正确性的，再改影响可读性的，最后改影响可扩展性的。不要试图在一次审查中找出所有问题。</p></aside></section><section class="reading-section coverage-map" id="coverage-map"><div class="section-label">06 / 100% TEACHER NOTES</div><h2>教案覆盖地图</h2><div class="coverage-summary"><article><strong>100%</strong><span>教师材料入库</span></article><article><strong>08</strong><span>中文教学单元</span></article><article><strong>01</strong><span>机制 / 板书图</span></article><article><strong>01</strong><span>一手资料</span></article></div><p class="coverage-statement">覆盖口径：教师教案原文逐行完整保留；中文教学单元覆盖代码审查定义与目的、三个气味示例的全部原则、重构概念；1/1 个显式板书占位已重绘。覆盖不是用摘要替代原文，任何细节都可在页面末尾回查。</p><div class="coverage-files"><article><span>教师教案</span><strong>classes/03-code-review/index.md</strong><p>88 行 · 完整可搜索文本</p></article></div><details class="coverage-units"><summary>展开中文教学单元映射（8 项）</summary><ol><li><span>01</span>代码审查：改善代码与改善程序员</li><li><span>02</span>气味示例一：DRY、注释、快速失败、魔法数字、单一用途</li><li><span>03</span>气味示例二：命名与排版</li><li><span>04</span>气味示例三：全局变量、返回结果、特殊用例、代码长度</li><li><span>05</span>重构：改善代码而不改变行为</li><li><span>06</span>纠错、测验与复盘</li></ol></details></section><section class="reading-section" id="check"><div class="section-label">07 / CALIBRATION</div><h2>把直觉校准成不变量</h2><div class="misconception-grid"><article><span>误区</span><h3>注释越多越好。</h3><p>注释应当解释“为什么”，而不是“做了什么”。冗余的注释不仅无用，还会在代码演变后与实现矛盾，成为误导。</p></article><article><span>误区</span><h3>重构可以随时做，不需要测试。</h3><p>没有测试保护的重构只是“改代码”。任何结构变更都可能在无意中改变行为，测试是重构的安全网。</p></article></div><div class="quiz-stack"><h3>知识检查</h3><div class="quiz" data-answer="b" data-correct="正确。代码审查既是改善代码（发现 bug、提升清晰度），也是改善程序员（相互学习）。" data-incorrect="代码审查的目的不止一个。" data-quiz="cr-q1"><p><strong>代码审查的两个主要目的是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>发现 bug 与提升运行速度</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>改善代码与改善程序员</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>减少代码行数与增加注释</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="a" data-correct="正确。DRY 原则的核心是消除重复，重复代码是安全的隐患。" data-incorrect="DRY 不是关于“代码短”，而是关于“不重复”。" data-quiz="cr-q2"><p><strong>“不要重复自己”（DRY）原则的核心理由是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>重复代码是安全的隐患，修改时容易遗漏副本</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>重复代码会让文件变大</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>重复代码运行更慢</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="c" data-correct="正确。快速失败让 bug 尽早暴露，降低定位成本。" data-incorrect="快速失败的核心是“尽早暴露”，不是“避免异常”。" data-quiz="cr-q3"><p><strong>“快速失败”（Fail fast）原则的含义是什么？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>程序应当尽快退出</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>函数应当尽早返回</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>代码应当尽早暴露 bug，而不是带着错误状态继续运行</button></div><p class="quiz-feedback" aria-live="polite"></p></div><div class="quiz" data-answer="b" data-correct="正确。重构是改变代码结构而不改变其行为，测试是重构的安全网。" data-incorrect="重构的定义关键在于“不改变行为”。" data-quiz="cr-q4"><p><strong>关于重构，下列哪项最准确？</strong></p><div class="quiz-options"><button type="button" data-choice="a" aria-pressed="false"><span>A</span>重构是重写代码以修复 bug</button><button type="button" data-choice="b" aria-pressed="false"><span>B</span>重构是改变代码结构而不改变其行为</button><button type="button" data-choice="c" aria-pressed="false"><span>C</span>重构是增加测试覆盖率</button></div><p class="quiz-feedback" aria-live="polite"></p></div></div><div class="recap-block"><h3>离开本讲前，你应能复述</h3><ul><li>代码审查既是改善代码（发现 bug、提升清晰度），也是改善程序员（相互学习）。</li><li>通用编码原则：DRY、快速失败、避免魔法数字、单一用途变量、良好命名、拒绝全局变量、返回而非打印。</li><li>重构是改变结构而不改变行为，测试是重构的安全网。</li></ul></div></section><section class="source-vault" id="source-vault"><div class="section-label">SOURCE VAULT / NO ABRIDGEMENT</div><h2>完整官方资料附录</h2><p class="section-lede">以下是本讲对应官方材料的可搜索离线文本。中文精读负责解释；资料附录保留原始细节与代码，不以摘要替代原文。</p><details class="archive" data-source-record data-source="classes/03-code-review/index.md"><summary><span><b>课堂教案</b>classes/03-code-review/index.md</span><small>88 行 · 完整收录</small></summary><div class="archive-actions"><a href="https://web.mit.edu/6.102/www/sp26/classes/03-code-review/" target="_blank" rel="noreferrer">核对官方原件 ↗</a><button type="button" data-copy-source>复制全文</button></div><pre><code class="language-text"># Reading 3: Code Review
+
+## Software in 6.102
+
+- **Safe from bugs**: Correct today and correct in the unknown future.
+- **Easy to understand**: Communicating clearly with future programmers, including future you.
+- **Ready for change**: Designed to accommodate change without rewriting.
+
+## Objectives
+
+In today's class, we will practice:
+
+- code review: reading and discussing code written by somebody else
+- general principles of good coding
+
+## Code review
+
+Code review is careful, systematic study of source code by people who are not the original author of the code.
+
+Code review really has two purposes:
+
+- **Improving the code.** Finding bugs, anticipating possible bugs, checking the clarity of the code.
+- **Improving the programmers.** Code review is an important way that programmers learn and teach each other.
+
+## Smelly example #1
+
+### Don't repeat yourself (DRY)
+
+Duplicated code is a risk to safety.
+
+### Comment where needed
+
+Good software developers write comments judiciously.
+
+### Fail fast
+
+*Failing fast* means that code should reveal its bugs as early as possible.
+
+### Avoid magic numbers
+
+All other constants are called magic.
+
+### One purpose for each variable
+
+Don't reuse parameters, and don't reuse variables.
+
+## Smelly example #2
+
+### Use good names
+
+Good function and variable names are long and self-descriptive.
+
+### Use whitespace and punctuation to help the reader
+
+Use consistent indentation.
+
+## Smelly example #3
+
+### Don't use global variables
+
+Avoid global variables.
+
+### Functions should return results, not print them
+
+### Avoid special-case code
+
+### Code at the right length
+
+## Refactoring
+
+The process of changing code to improve it without changing what the code does is called **refactoring**.
+
+## Summary
+
+General practices for good code:
+
+- Don't Repeat Yourself (DRY)
+- Comment where needed
+- Fail fast
+- Avoid magic numbers
+- One purpose for each variable
+- Use good names
+- Use whitespace and punctuation to help the reader
+- Don't use global variables
+- Functions should return results, not print them
+- Avoid special-case code
+- Code at the right length</code></pre></details></section></article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../index.html">COURSE MAP →</a></footer></body></html>

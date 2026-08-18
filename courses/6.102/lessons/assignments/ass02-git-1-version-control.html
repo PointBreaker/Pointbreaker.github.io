@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="理解 Git 的对象图模型，掌握 clone / add / commit / push / pull 工作流，作为单人开发者管理代码版本。"><title>Git 1: Version Control — MIT 6.102</title>
+<link rel="stylesheet" href="../../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+<link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+<script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+<script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script></head>
+<body class="lesson-page"><div class="reading-progress" aria-hidden="true"><span></span></div><header class="lesson-hero"><div class="hero-grid" aria-hidden="true"></div><nav class="nav shell"><a class="brand" href="../../index.html"><span class="brand-mark">6</span><span>102<br><small>SOFTWARE CONSTRUCTION</small></span></a><div class="nav-links"><a href="../../index.html#lectures">课程</a><a href="../../resources.html">资源</a></div><a class="official-button" href="https://web.mit.edu/6.102/www/sp26/" target="_blank" rel="noreferrer">官方页面 ↗</a></nav><div class="lesson-hero-content shell"><p class="eyebrow">MIT 6.102 · Module 2 · 工具</p><h1>Git 1：版本控制</h1><p class="hero-lede">理解 Git 的对象图模型，掌握 clone / add / commit / push / pull 工作流，作为单人开发者管理代码版本。</p></div></header>
+<main class="reading-shell"><article class="reading-article page">
+
+
+    <h2 id="objectives">实验目标</h2>
+    <ul>
+      <li>解释版本控制（version control）的核心需求：回退、比较、备份、合并。</li>
+      <li>理解 Git 把版本历史存储为有向无环图（DAG, directed acyclic graph）。</li>
+      <li>掌握工作目录、暂存区（staging area）与 HEAD 三者的关系。</li>
+      <li>熟练使用 <code>git clone</code>、<code>add</code>、<code>commit</code>、<code>push</code>、<code>pull</code>、<code>status</code>、<code>diff</code>、<code>log</code>。</li>
+    </ul>
+
+    <h2 id="why-vc">为什么需要版本控制</h2>
+    <p>没有版本控制时，我们常靠复制文件加版本号来保存历史。这带来三个问题：难以比较版本差异、容易覆盖他人的改动、无法回到某个稳定节点。Git 通过对象图（object graph）记录每次提交的完整快照与父子关系，使回退、比较、合并和协作成为可能。</p>
+
+    <h2 id="git-model">Git 对象图模型</h2>
+    <p>Git 仓库由三部分组成：</p>
+    <ul>
+      <li><strong>.git 目录</strong>：存储对象图（所有版本与日志）。</li>
+      <li><strong>工作目录（working directory）</strong>：你编辑的文件副本。</li>
+      <li><strong>暂存区（staging area / index）</strong>：下一次提交的原型。</li>
+    </ul>
+    <p>每次提交是一个项目快照，用 commit ID（SHA 哈希）唯一标识。提交之间通过父指针连成一条有向无环图。<code>HEAD</code> 指向当前分支（如 <code>main</code>），分支再指向当前提交。</p>
+
+    <h2 id="workflow">分步指引：基础工作流</h2>
+
+    <h3>克隆仓库</h3>
+    <pre><code class="language-bash">git clone ssh://github.mit.edu/.../ps0-username.git ps0
+cd ps0</code></pre>
+
+    <h3>查看历史</h3>
+    <pre><code class="language-bash">git lol          # 图形化历史（log --graph --oneline --decorate --all）
+git show         # 查看最近一次提交
+git show &lt;commit-id&gt;   # 查看指定提交</code></pre>
+
+    <h3>修改、暂存、提交</h3>
+    <pre><code class="language-bash">git status                  # 查看工作目录与暂存区状态
+git diff                    # 查看未暂存的改动
+git add src/turtlesoup.ts   # 把改动加入暂存区
+git diff --staged           # 查看已暂存的改动
+git commit                  # 打开编辑器写提交信息后提交</code></pre>
+
+    <h3>推送到远程</h3>
+    <pre><code class="language-bash">git push origin main        # 把本地 main 分支推到 origin 远程</code></pre>
+
+    <h3>拉取远程更新</h3>
+    <pre><code class="language-bash">git pull                    # 拉取并合并远程最新改动</code></pre>
+
+    <h2 id="status-states">理解 git status 的四种状态</h2>
+    <ul>
+      <li><strong>Untracked</strong>：全新文件，从未被 Git 跟踪。</li>
+      <li><strong>Modified (unstaged)</strong>：已跟踪文件被修改，但未 <code>git add</code>。</li>
+      <li><strong>Staged</strong>：改动已加入暂存区，下次提交会包含。</li>
+      <li><strong>Committed</strong>：改动已安全保存在本地仓库。</li>
+    </ul>
+    <p>注意：同一个文件可以同时拥有已暂存和未暂存的改动——<code>git add</code> 后再修改就会出现这种情况。</p>
+
+    <h2 id="key-commands">关键命令速查</h2>
+    <table style="width:100%; border-collapse:collapse;">
+      <tr><th>命令</th><th>作用</th></tr>
+      <tr><td><code>git clone &lt;url&gt;</code></td><td>复制远程仓库到本地</td></tr>
+      <tr><td><code>git status</code></td><td>查看工作目录与暂存区状态</td></tr>
+      <tr><td><code>git add &lt;file&gt;</code></td><td>把改动加入暂存区</td></tr>
+      <tr><td><code>git commit</code></td><td>把暂存区快照提交到本地仓库</td></tr>
+      <tr><td><code>git push origin main</code></td><td>把本地提交推送到远程</td></tr>
+      <tr><td><code>git pull</code></td><td>拉取远程更新并合并</td></tr>
+      <tr><td><code>git log</code> / <code>git lol</code></td><td>查看提交历史</td></tr>
+      <tr><td><code>git diff</code></td><td>比较工作目录与暂存区</td></tr>
+      <tr><td><code>git show &lt;id&gt;</code></td><td>查看某次提交的内容</td></tr>
+    </table>
+
+    <h2 id="pitfalls">常见陷阱</h2>
+    <ul>
+      <li>忘记 <code>git push</code>：6.102 评分以 github.mit.edu 上的历史为准，本地提交不会自动上传。</li>
+      <li>用 VS Code / GitHub Desktop 执行 add/commit：课程推荐命令行，出问题时助教才能帮你。</li>
+      <li>提交信息空洞：应写清"改了什么"和"为什么"，方便未来的自己。</li>
+      <li>把编译产物（<code>.js</code>、<code>node_modules</code>）提交进仓库：这些应由构建生成，不该入库。</li>
+    </ul>
+
+    <h2 id="reading">阅读练习要点</h2>
+    <ul>
+      <li>Git 历史是 DAG：分叉表示并行开发，合并（merge）把分叉重新接回。</li>
+      <li>循环在历史图中不可能出现——提交不可能是自己的祖先。</li>
+      <li>commit ID 是内容的全局哈希，几乎不会碰撞。</li>
+    </ul>
+
+    
+</article></main>
+<footer class="lesson-footer"><div><strong>MIT 6.102</strong><p>Software Construction · Spring 2026</p></div><a href="../../index.html">COURSE MAP →</a></footer></body></html>
