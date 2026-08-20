@@ -1,0 +1,961 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>阅读 16：互斥</title>
+
+
+<style>
+.handout-javadoc-comment ~ .hljs-comment,
+.handout-javadoc-comment ~ * .hljs-comment { color: rgb(63,95,191); }
+
+table.interleaving {
+    width: 100%;
+}
+table.interleaving td {
+    vertical-align: top;
+    padding-left: 1em;
+}
+table.interleaving._2 td {
+    width: 49%;
+}
+table.interleaving._3 td {
+    padding-left: 1em;
+    width: 32%;
+}
+
+ol.interleaving {
+}
+ol.interleaving._2 li {
+    width: 48%;
+}
+ol.interleaving._3 li {
+    width: 32%;
+}
+ol.interleaving li._0 {
+}
+ol.interleaving._2 li._1 {
+    margin-left: 50%;
+}
+ol.interleaving._3 li._1 {
+    margin-left: 33%;
+}
+ol.interleaving._3 li._2 {
+    margin-left: 68%;
+}
+</style>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_16_mutual_exclusion">阅读 16：互斥</a></li><li><a href="index.html#library_example">图书馆示例</a></li><li><a href="index.html#synchronous_adt">同步 ADT</a></li><li><a href="index.html#asynchronous_methods">异步方法</a></li><li><a href="index.html#making_and_keeping_a_promise">做出并遵守承诺</a></li><li><a href="index.html#asynchronous_method_making_a_promise">异步方法做出承诺</a></li><li><a href="index.html#race_conditions">竞态条件</a></li><li><a href="index.html#fixing_the_race">修复竞态</a></li><li><a href="index.html#deadlock">死锁</a></li><li><a href="index.html#interleaving_and_mutual_exclusion">交错与互斥</a></li><li><a href="index.html#redesigning_checkout">重新设计 checkout</a></li><li><a href="index.html#other_techniques_for_mutual_exclusion">互斥的其他技术</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_16_mutual_exclusion"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-16-mutual-exclusion"></iframe><a class="jump" href="index.html#reading_16_mutual_exclusion"></a>阅读 16：互斥</h1><div data-outline="reading_16_mutual_exclusion">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>6.102 中的软件</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>免受 Bug 侵害</th><th>易于理解</th><th>适应变化</th></tr>
+<tr><td>
+  今天正确，在未来未知的情况下也正确。
+</td><td>
+  与未来的程序员清晰地沟通，包括未来的你自己。
+</td><td>
+  设计为无需重写即可适应变化。
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<p id="@reading_brings_together"><a class="jump" href="index.html#@reading_brings_together"></a>本阅读将并发和 Promise 的概念结合在一起，在异步抽象数据类型的语境下——一种具有异步操作的 ADT，这些操作可能彼此并发运行，访问相同的共享（可变）表示。</p>
+
+<p id="@see_raises_risk"><a class="jump" href="index.html#@see_raises_risk"></a>我们将看到这如何增加并发 Bug 的风险，例如竞态条件和死锁，它们威胁着 ADT 努力保证的不变量和规约。</p>
+
+<p id="@reasoning_about_interleaving"><a class="jump" href="index.html#@reasoning_about_interleaving"></a>通过推理并发代码的交错，并利用互斥（代码独自运行而不交错的时间段），我们可以防御这些 Bug。</p>
+
+<h2 id="library_example"><a class="jump" href="index.html#library_example"></a>图书馆示例</h2><div data-outline="library_example">
+
+<p id="@running_example_think"><a class="jump" href="index.html#@running_example_think"></a>作为一个贯穿始终的示例，让我们思考一个允许用户借书和还书的图书馆。首先，我们需要的类型来表示书籍和用户：</p>
+
+<pre id="@book_represents_physical"><a class="jump" href="index.html#@book_represents_physical"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// Book represents a physical copy of a book.</span>
+<span class="hljs-comment">// Equality operation is ===, safe for use in sets and maps.</span>
+<span class="hljs-keyword">class</span> Book { ... }
+
+<span class="hljs-comment">// User represents a human patron of the library.</span>
+<span class="hljs-comment">// Equality operation is ===, safe for use in sets and maps.</span>
+<span class="hljs-keyword">class</span> User { ... }</code></pre>
+
+<p id="@operations_been_omitted"><a class="jump" href="index.html#@operations_been_omitted"></a>操作已被省略，因为我们不会在用户或书籍上调用任何操作，只是将它们用于身份标识。</p>
+
+<p id="@here_library_two"><a class="jump" href="index.html#@here_library_two"></a>这是图书馆，及其两个关键操作 <code>checkout</code> 和 <code>checkin</code>：</p>
+
+<pre id="@library_represents_mutable"><a class="jump" href="index.html#@library_represents_mutable"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// Library represents a mutable collection of books that can be borrowed by users.</span>
+<span class="hljs-comment">// At any time, there is a set of books physically present at the library,</span>
+<span class="hljs-comment">// and for each user, a set of books borrowed by that user.</span>
+<span class="hljs-comment">// These sets are all disjoint because a book can't be in two places at once.</span>
+<span class="hljs-keyword">interface</span> Library {
+
+    <span class="hljs-comment">/**
+     * Check out every book in `books` so that `user` is now borrowing it.
+     * Requires every book in `books` to be physically present at the library.
+     */</span>
+    checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">void</span>;
+
+    <span class="hljs-comment">/**
+     * Check in every book in `books` so that it is physically in the library.
+     * If any such book was previously borrowed by a user, it is now back in the library.
+     */</span>
+    checkin(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;): <span class="hljs-built_in">void</span>;
+
+}</code></pre>
+
+<p id="@initial_spec_checkout"><a class="jump" href="index.html#@initial_spec_checkout"></a><code>checkout</code> 的这个初始规约相当薄弱，我们将对其进行迭代改进。
+这个操作的设计在其他方面也有问题，这将揭示我们在并发编程世界中面临的一些挑战。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-library_example"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-library_example-using_the_library" data-target="#ex-library_example-using_the_library" data-toggle="collapse"><a class="jump" href="index.html#@ex-library_example-using_the_library"></a><span class="panel-title">使用图书馆</span></div><div class="panel-collapse collapse exercise-panel" id="ex-library_example-using_the_library" data-outline="using_the_library" data-ex-id="library_example/using_the_library" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@given_spec_library"><a class="jump" href="index.html#@given_spec_library"></a>给定上面所示的 <code>Library</code> 规约，以及以下声明：</p>
+
+<pre id="@const_library_library"><a class="jump" href="index.html#@const_library_library"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> library: Library = <span class="hljs-keyword">new</span> MITLibrary();
+
+<span class="hljs-keyword">const</span> frodo = <span class="hljs-keyword">new</span> User(<span class="hljs-string">'Frodo Baggins'</span>);
+<span class="hljs-keyword">const</span> bilbo = <span class="hljs-keyword">new</span> User(<span class="hljs-string">'Bilbo Baggins'</span>);
+<span class="hljs-keyword">const</span> gandalf = <span class="hljs-keyword">new</span> User(<span class="hljs-string">'Gandalf the Grey'</span>);
+
+<span class="hljs-keyword">const</span> hobbit = <span class="hljs-keyword">new</span> Book(<span class="hljs-string">'The Hobbit'</span>);
+<span class="hljs-keyword">const</span> fellowship = <span class="hljs-keyword">new</span> Book(<span class="hljs-string">'The Fellowship of the Ring'</span>);
+<span class="hljs-keyword">const</span> twoTowers = <span class="hljs-keyword">new</span> Book(<span class="hljs-string">'The Two Towers'</span>);
+<span class="hljs-keyword">const</span> returnOfKing = <span class="hljs-keyword">new</span> Book(<span class="hljs-string">'The Return of the King'</span>);</code></pre>
+
+<p id="@assume"><a class="jump" href="index.html#@assume"></a>假设：</p>
+
+<ul id="@hobbit_physically_present">
+<li><a class="jump" href="index.html#@hobbit_physically_present"></a><code>hobbit</code> 实体存在于图书馆中</li>
+<li>没有其他书实体存在或被借出。</li>
+</ul>
+
+<p id="@which_following_true"><a class="jump" href="index.html#@which_following_true"></a>以下哪些关于 <code>Library</code> 规约的陈述是正确的？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="library.checkin([fellowship]) is not legal because that book wasn't previously checked out"><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0"><code>library.checkin([fellowship])</code> 是非法的，因为那本书之前没有被借出</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="library.checkin([hobbit]) is not legal because hobbit is already in the library"><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1"><code>library.checkin([hobbit])</code> 是非法的，因为 <code>hobbit</code> 已经在图书馆中</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="library.checkin([hobbit, hobbit]) is not legal because hobbit is being checked in twice"><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2"><code>library.checkin([hobbit, hobbit])</code> 是非法的，因为 <code>hobbit</code> 被归还了两次</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="library.checkout([], gandalf) is legal"><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3"><code>library.checkout([], gandalf)</code> 是合法的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="library.checkout([hobbit, hobbit], gandalf) is legal"><label for="md_converted_choice_1_4"><input type="checkbox" id="md_converted_choice_1_4"><code>library.checkout([hobbit, hobbit], gandalf)</code> 是合法的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="library.checkout([hobbit], gandalf); library.checkout([hobbit], gandalf) is legal"><label for="md_converted_choice_1_5"><input type="checkbox" id="md_converted_choice_1_5"><code>library.checkout([hobbit], gandalf); library.checkout([hobbit], gandalf)</code> 是合法的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="synchronous_adt"><a class="jump" href="index.html#synchronous_adt"></a>同步 ADT</h2><div data-outline="synchronous_adt">
+
+<p id="@get_started_implementing"><a class="jump" href="index.html#@get_started_implementing"></a>让我们开始实现这个薄弱的规约，使用一个直接表示抽象中提到的集合的简单表示：</p>
+
+<pre id="@class_mitlibrary_implements"><a class="jump" href="index.html#@class_mitlibrary_implements"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> MITLibrary <span class="hljs-keyword">implements</span> Library {
+
+    <span class="hljs-keyword">private</span> inLibrary: Set&lt;Book&gt; = <span class="hljs-keyword">new</span> Set();
+    <span class="hljs-keyword">private</span> borrowed: Map&lt;User, Set&lt;Book&gt;&gt; = <span class="hljs-keyword">new</span> Map();
+
+    <span class="hljs-comment">// AF(inLibrary, borrowed) = the library such that </span>
+    <span class="hljs-comment">//    the books physically present is the set `inLibrary`,</span>
+    <span class="hljs-comment">//    and the books borrowed by user u are borrowed.get(u)</span>
+
+    <span class="hljs-comment">// Rep invariant:</span>
+    <span class="hljs-comment">//   the sets of books of `inLibrary` and `borrowed` are all disjoint</span>
+
+    <span class="hljs-comment">// Safety from rep exposure: </span>
+    <span class="hljs-comment">//   - all rep fields are private; </span>
+    <span class="hljs-comment">//   - the mutable Set and Map types in the rep are not taken </span>
+    <span class="hljs-comment">//     or returned by any of the public methods;</span>
+    <span class="hljs-comment">//   - Book and User are aliased with clients, but are used</span>
+    <span class="hljs-comment">//     only for their equality operation (which they specify </span>
+    <span class="hljs-comment">//     as safe for use in sets and maps).</span>
+
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        <span class="hljs-comment">// assert that every book in the rep appears exactly once</span>
+        <span class="hljs-keyword">const</span> allBooks: Set&lt;Book&gt; = <span class="hljs-keyword">new</span> Set(<span class="hljs-keyword">this</span>.inLibrary);
+        <span class="hljs-keyword">this</span>.borrowed.values().forEach(<span class="hljs-function">(<span class="hljs-params">borrowedBooks:Set&lt;Book&gt;</span>) =&gt;</span> {
+            borrowedBooks.forEach(<span class="hljs-function">(<span class="hljs-params">book: Book</span>)=&gt;</span> {
+                assert( ! allBooks.has(book) );
+                allBooks.add(book);
+            });
+        });
+    }
+
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params"></span>) {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/** @inheritdoc */</span>
+    <span class="hljs-keyword">public</span> checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">void</span> {
+        <span class="hljs-comment">// borrow the books</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+            <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+            <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+        }
+
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/** @inheritdoc */</span>
+    <span class="hljs-keyword">public</span> checkin(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+            <span class="hljs-comment">// book is no longer borrowed, so remove it from all borrowed sets</span>
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> borrowedBooks of <span class="hljs-keyword">this</span>.borrowed.values()) {
+                borrowedBooks.delete(book); <span class="hljs-comment">// at most one of these sets has the book</span>
+            }
+
+            <span class="hljs-comment">// book is back in the library</span>
+            <span class="hljs-keyword">this</span>.inLibrary.add(book);
+        }
+
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/**
+     * @returns mutable set of books borrowed by `user`,
+     * creating the set if `user` hasn't borrowed before
+     */</span>
+    <span class="hljs-keyword">private</span> borrowedByUser(user: User): Set&lt;Book&gt; {
+        <span class="hljs-keyword">let</span> books = <span class="hljs-keyword">this</span>.borrowed.get(user);
+        <span class="hljs-keyword">if</span> (books === <span class="hljs-literal">undefined</span>) {
+            books = <span class="hljs-keyword">new</span> Set();
+            <span class="hljs-keyword">this</span>.borrowed.set(user, books);
+        }
+        <span class="hljs-keyword">return</span> books;
+    }
+}</code></pre>
+
+<div class="handout-solo alert alert-warning"><p id="@you_can_look_download_code_library"><a class="jump" href="index.html#@you_can_look_download_code_library"></a>你可以查看和下载 <a href="code.html" class="alert-link"><code>Library</code> 的代码</a>。</p></div>
+
+</div><h2 id="asynchronous_methods"><a class="jump" href="index.html#asynchronous_methods"></a>异步方法</h2><div data-outline="asynchronous_methods">
+
+<p id="@one_problem_checkout"><a class="jump" href="index.html#@one_problem_checkout"></a><code>checkout</code> 有一个问题，图书馆的读者很快就会发现：如果一本书目前不在图书馆怎么办？例如：</p>
+
+<pre id="@library-checkout-fellowship_bilbo_sometime"><a class="jump" href="index.html#@library-checkout-fellowship_bilbo_sometime"></a><code class="language-ts hljs typescript">library.checkout([fellowship], bilbo);
+<span class="hljs-comment">// ... sometime later, Frodo comes along:</span>
+library.checkout([fellowship], frodo);</code></pre>
+
+<p id="@first_bilbo_checks"><a class="jump" href="index.html#@first_bilbo_checks"></a>先是 Bilbo 借了《魔戒同盟》，现在 Frodo 也要借。按照当前的规约，这第二次调用实际上是非法的，因为它违反了所有请求的书必须实体存在于图书馆中的前置条件。但 Frodo 怎么会知道呢？即使我们给 Frodo 一个观察者操作来检查他想要的书是否在图书馆中从而避免违反前置条件，他仍然需要以某种方式等待，直到所有的书都归还。<code>checkout</code> 对客户来说是一个难以使用的操作。</p>
+
+<p id="@tackle_problem_making"><a class="jump" href="index.html#@tackle_problem_making"></a>让我们通过将 <code>checkout</code> 改为异步来解决这个问题。<code>checkout</code> 不会要求在调用时所有书都在图书馆中，而是等待它们被归还，然后借出。等待将通过返回一个 Promise 来实现：</p>
+
+<pre id="@check_out_every"><a class="jump" href="index.html#@check_out_every"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Check out every book in `books` so that `user` is now borrowing it.
+ * If any of them is not in the library, waits until it is checked in,
+ * resolving the promise only when all the books have been successfully borrowed by `user`.
+ */</span>
+checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt;;</code></pre>
+
+<p id="@now_can_think"><a class="jump" href="index.html#@now_can_think"></a>现在我们可以设想 Frodo 和 Bilbo 各自运行在独立的异步函数中，与图书馆交互并等待 Promise：</p>
+
+<table class="interleaving _2"><tbody><tr><td><pre id="@await_library-checkout-fellowship_bilbo_bilbo_spends_some_time_reading_book_library-checkin-fellowship_0"><a class="jump" href="index.html#@await_library-checkout-fellowship_bilbo_bilbo_spends_some_time_reading_book_library-checkin-fellowship_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([fellowship], bilbo);
+... <span class="hljs-comment">// Bilbo spends some time reading the book</span>
+library.checkin([fellowship]);</code></pre></td><td><pre id="@await_library-checkout-fellowship_frodo_frodo_spends_some_time_reading_book_library-checkin-fellowship_0"><a class="jump" href="index.html#@await_library-checkout-fellowship_frodo_frodo_spends_some_time_reading_book_library-checkin-fellowship_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([fellowship], frodo);
+... <span class="hljs-comment">// Frodo spends some time reading the book</span>
+library.checkin([fellowship]);</code></pre></td></tr></tbody></table>
+
+<p id="@do_implement_asynchronous"><a class="jump" href="index.html#@do_implement_asynchronous"></a>我们如何实现异步的 <code>checkout</code>？这是我们可能尝试的草图：</p>
+
+<pre id="@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_if_this-inlibrary-has-book_book_checked_out_right_now_todo_wait"><a class="jump" href="index.html#@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_if_this-inlibrary-has-book_book_checked_out_right_now_todo_wait"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">public</span> <span class="hljs-keyword">async</span> checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; {
+    <span class="hljs-comment">// wait for all the books to be returned</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-keyword">if</span> ( ! <span class="hljs-keyword">this</span>.inLibrary.has(book) ) {
+            <span class="hljs-comment">// book is checked out right now</span>
+            <span class="hljs-comment">// TODO -- wait somehow</span>
+        }
+    }
+
+    <span class="hljs-comment">// borrow the books</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+        <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+    }
+
+    <span class="hljs-keyword">this</span>.checkRep();
+}</code></pre>
+
+<p id="@first_part_operation"><a class="jump" href="index.html#@first_part_operation"></a>操作的第一部分检查每本书是否在图书馆中。如果是，则立即进入第二部分，将它们全部借出并返回。</p>
+
+<p id="@but_if_one"><a class="jump" href="index.html#@but_if_one"></a>但如果其中一本当前已被借出，我们就会到达 TODO 部分。我们需要想办法等到那本书被归还。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-asynchronous_methods"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-asynchronous_methods-how_not_to_wait" data-target="#ex-asynchronous_methods-how_not_to_wait" data-toggle="collapse"><a class="jump" href="index.html#@ex-asynchronous_methods-how_not_to_wait"></a><span class="panel-title">不应该等待的方式</span></div><div class="panel-collapse collapse exercise-panel" id="ex-asynchronous_methods-how_not_to_wait" data-outline="how_not_to_wait" data-ex-id="asynchronous_methods/how_not_to_wait" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@look_one_bad"><a class="jump" href="index.html#@look_one_bad"></a>让我们看一种<em>不好的</em>方式来填充 TODO：</p>
+
+<pre class="no-markdown" id="@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_while_this-inlibrary-has-book_book_checked_out_right_now_so_loop"><a class="jump" href="index.html#@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_while_this-inlibrary-has-book_book_checked_out_right_now_so_loop"></a><code class="typescript hljs"><span class="hljs-keyword">public</span> <span class="hljs-keyword">async</span> checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; {
+    <span class="hljs-comment">// wait for all the books to be returned</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+<span class="highlighted">        <span class="hljs-keyword">while</span> ( ! <span class="hljs-keyword">this</span>.inLibrary.has(book) ) {
+            <span class="hljs-comment">// book is checked out right now, so loop until the book comes back</span>
+        }
+</span>    }
+
+    <span class="hljs-comment">// borrow the books</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+        <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+    }
+
+    <span class="hljs-keyword">this</span>.checkRep();
+}
+</code></pre>
+
+<p id="@happens_reach_highlighted"><a class="jump" href="index.html#@happens_reach_highlighted"></a>当我们到达高亮代码时会发生什么？选择所有适用的选项。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="the JavaScript runtime system never gets control back"><label for="md_converted_choice_2_0"><input type="checkbox" id="md_converted_choice_2_0">JavaScript 运行时系统再也无法获得控制权</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="a race condition occurs that may corrupt the inLibrary set"><label for="md_converted_choice_2_1"><input type="checkbox" id="md_converted_choice_2_1">发生竞态条件，可能破坏 <code>inLibrary</code> 集合</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="the user that has the book we're waiting for can eventually call checkin"><label for="md_converted_choice_2_2"><input type="checkbox" id="md_converted_choice_2_2">持有我们正在等待的书的用户<strong>可以</strong>最终调用 <code>checkin</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="busy-waiting"><label for="md_converted_choice_2_3"><input type="checkbox" id="md_converted_choice_2_3">忙等待</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-asynchronous_methods-another_way_not_to_wait" data-target="#ex-asynchronous_methods-another_way_not_to_wait" data-toggle="collapse"><a class="jump" href="index.html#@ex-asynchronous_methods-another_way_not_to_wait"></a><span class="panel-title">另一种不应该等待的方式</span></div><div class="panel-collapse collapse exercise-panel" id="ex-asynchronous_methods-another_way_not_to_wait" data-outline="another_way_not_to_wait" data-ex-id="asynchronous_methods/another_way_not_to_wait" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@look_another_bad"><a class="jump" href="index.html#@look_another_bad"></a>让我们看另一种<em>不好的</em>方式来填充 TODO：</p>
+
+<pre class="no-markdown" id="@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_while_this-inlibrary-has-book_book_checked_out_right_now_so_wait"><a class="jump" href="index.html#@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_while_this-inlibrary-has-book_book_checked_out_right_now_so_wait"></a><code class="typescript hljs"><span class="hljs-keyword">public</span> <span class="hljs-keyword">async</span> checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; {
+    <span class="hljs-comment">// wait for all the books to be returned</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+<span class="highlighted">        <span class="hljs-keyword">while</span> ( ! <span class="hljs-keyword">this</span>.inLibrary.has(book) ) {
+            <span class="hljs-comment">// book is checked out right now,</span>
+            <span class="hljs-comment">// so wait 100 milliseconds to see if it comes back</span>
+            <span class="hljs-keyword">await</span> timeout(<span class="hljs-number">100</span>);
+        }
+</span>    }
+
+    <span class="hljs-comment">// borrow the books</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+        <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+    }
+
+    <span class="hljs-keyword">this</span>.checkRep();
+}
+</code></pre>
+
+<p id="@least_code_doesn-t"><a class="jump" href="index.html#@least_code_doesn-t"></a>至少这段代码不会卡死——<code>await</code> 会返回到 JavaScript 运行时系统并允许其他异步函数继续执行，这样希望书最终能被归还。但这种代码在实践中很少被使用，因为它的并发性能很差。</p>
+
+<p id="@suppose_book_returned_quickly_only_1"><a class="jump" href="index.html#@suppose_book_returned_quickly_only_1"></a>假设书很快被归还：在 <code>while</code> 循环开始后仅 1 毫秒。那么这段代码在那之后（以毫秒为单位）会延迟多长时间才能继续？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div></div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@suppose_book_returned_slowly_about_10-01"><a class="jump" href="index.html#@suppose_book_returned_slowly_about_10-01"></a>假设书被缓慢归还：在 <code>while</code> 循环开始后约 10.01 秒。在整个循环中，我们总共调用了多少次 <code>this.inLibrary.has(book)</code>？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div></div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="making_and_keeping_a_promise"><a class="jump" href="index.html#making_and_keeping_a_promise"></a>做出并遵守承诺</h2><div data-outline="making_and_keeping_a_promise">
+
+<p id="@book_missing_need"><a class="jump" href="index.html#@book_missing_need"></a>当一本书缺失时，我们需要等待它被归还到图书馆。让我们创建一个代表该事件的 Promise。然后 <code>checkout</code> 可以 <code>await</code> 该 Promise，这就是它实现等待的方式。谁将 resolve 这个 Promise，向 <code>checkout</code> 发出可以继续的信号？这将发生在 <code>checkin</code> 操作体中，在书被归还的那一刻。</p>
+
+<p id="@before_get_into"><a class="jump" href="index.html#@before_get_into"></a>在我们深入之前，我们需要再次审视 Promise ADT。<a href="../06-abstract-data-types/index.html#an_abstract_type_is_defined_by_its_operations">ADT 由其操作定义</a>，那么 Promise 有哪些操作？到目前为止我们只见过 <code>await</code>，它充当观察者。</p>
+
+<p id="@but_about_creator"><a class="jump" href="index.html##@but_about_creator"></a>但创建者呢？我们目前使用的所有 Promise（用于定时器、文件 I/O 和网页加载）都是由底层库为我们创建的。现在我们处于一种情况，即我们自己的代码需要创建一个 Promise，该 Promise 将由我们自己代码内部的事件 resolve。不涉及时钟或 I/O 系统等外部设备。所以我们也需要能够创建 Promise。</p>
+
+<p id="@promise_mutable_thing"><a class="jump" href="index.html#@promise_mutable_thing"></a>Promise 是一个可变的东西——它的修改者操作在哪里？它的状态如何从 pending 变为 fulfilled 或 rejected？</p>
+
+<p id="@answer_question_lies"><a class="jump" href="index.html#@answer_question_lies"></a>这个问题的答案在于 <code>Promise</code> 有两个不同的客户端：Promise 的<em>消费者</em>，使用 <code>await</code> 来获取其值；以及<em>承诺者</em>，即为 Promise 计算值的代码。Promise 的设计使得只有承诺者应该能够访问改变 Promise 状态的 <code>resolve()</code> 和 <code>reject()</code> 修改者。</p>
+
+<p id="@promiser_needs_new"><a class="jump" href="index.html#@promiser_needs_new"></a>承诺者需要一个新的 <code>Promise&lt;T&gt;</code> 对象，加上其关联的修改者操作 <code>resolve</code> 和 <code>reject</code>。这可以通过工厂函数 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/withResolvers"><code>Promise.withResolvers()</code></a> 来实现，它返回一个包含三个属性的 <a href="../../tools/typescript/index.html#%5Erecord_type">记录类型</a>：</p>
+
+<ul id="@promise-promise-t_new_promise">
+<li><a class="jump" href="index.html#@promise-promise-t_new_promise"></a><code>promise:Promise&lt;T&gt;</code> 是新的 Promise</li>
+<li><code>resolve:(t:T)-&gt;void</code> 是用值 <code>t</code> resolve Promise 的修改者</li>
+<li><code>reject:(err:Error)-&gt;void</code> 是用给定错误 reject Promise 的修改者</li>
+</ul>
+
+<p id="@important_consequence_design"><a class="jump" href="index.html#@important_consequence_design"></a>这种设计的一个重要结果是，只有承诺者——创建 Promise 的代码——才能访问 <code>resolve</code> 和 <code>reject</code> 修改者。这些修改者<em>不是</em> <code>Promise</code> 对象上的公共实例方法。（<code>Promise</code> 类确实有名称诱人的 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/resolve"><code>resolve()</code></a> 和 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/reject"><code>reject()</code></a> 方法，但事实证明这些是静态工厂方法，用于创建已经 resolve 或已经 reject 的 Promise——而不是 resolve 或 reject 现有 Promise 的修改者。）</p>
+
+<p id="@more_convenient_way"><a class="jump" href="index.html#@more_convenient_way"></a>更方便的管理方式是创建一个抽象数据类型 <code>Deferred&lt;T&gt;</code>，它将 <code>Promise&lt;T&gt;</code> 与其修改者捆绑在一起：</p>
+
+<ul id="@new_deferred-t_makes">
+<li><a class="jump" href="index.html#@new_deferred-t_makes"></a><code>new Deferred&lt;T&gt;()</code> 创建一个新的 <code>Deferred&lt;T&gt;</code> 对象</li>
+<li><code>deferred.promise</code> 是与 <code>Deferred</code> 对象关联的 <code>Promise&lt;T&gt;</code></li>
+<li><code>deferred.resolve(t:T)</code> 用值 <code>t</code> resolve 关联的 Promise</li>
+<li><code>deferred.reject(err:Error)</code> 用给定错误 reject 关联的 Promise</li>
+</ul>
+
+<p id="@so_deferred_necessary"><a class="jump" href="index.html#@so_deferred_necessary"></a>所以 <code>Deferred</code> 具有承诺者所需的必要修改者。承诺者持有此对象以便稍后修改 Promise。承诺者将关联的 <code>Promise</code> 值传递给 Promise 的消费者，用于 <code>await</code>。</p>
+
+<p id="@deferred_does_not"><a class="jump" href="index.html#@deferred_does_not"></a><code>Deferred</code> 不存在于标准的 Node 或 JavaScript 库中，但可以使用 <code>Promise.withResolvers()</code> 轻松实现。</p>
+
+<div class="handout-solo alert alert-warning"><p id="@you_can_look_example_code_deferred"><a class="jump" href="index.html#@you_can_look_example_code_deferred"></a>你可以查看 <a href="code.html#deferredts" class="alert-link"><code>Deferred</code> 的示例代码</a>。</p></div>
+
+<span id="timeout-function"></span>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-making_and_keeping_a_promise"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-making_and_keeping_a_promise-timeout_using_promise" data-target="#ex-making_and_keeping_a_promise-timeout_using_promise" data-toggle="collapse"><a class="jump" href="index.html#@ex-making_and_keeping_a_promise-timeout_using_promise"></a><span class="panel-title">使用 Promise 实现超时</span></div><div class="panel-collapse collapse exercise-panel" id="ex-making_and_keeping_a_promise-timeout_using_promise" data-outline="timeout_using_promise" data-ex-id="making_and_keeping_a_promise/timeout_using_promise" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@timeout_function_we-ve"><a class="jump" href="index.html#@timeout_function_we-ve"></a>我们一直在使用的 <code>timeout</code> 函数也不存在于标准 JavaScript 或 Node 库中。让我们使用 <code>Promise.withResolvers()</code> 和内置的 JavaScript 函数 <a href="https://developer.mozilla.org/en-US/docs/Web/API/setTimeout"><code>setTimeout</code></a> 来实现它，该函数接受两个参数：一个函数和执行该函数前等待的毫秒数。</p>
+
+<pre id="@param_milliseconds_duration_wait_returns_promise_fulfills_milliseconds_after_timeout_called_function_timeout-milliseconds-number-promise-void_const_promise"><a class="jump" href="index.html#@param_milliseconds_duration_wait_returns_promise_fulfills_milliseconds_after_timeout_called_function_timeout-milliseconds-number-promise-void_const_promise"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param milliseconds duration to wait
+ * @returns a promise that fulfills `milliseconds` after timeout() was called
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">timeout</span>(<span class="hljs-params">milliseconds:<span class="hljs-built_in">number</span></span>):<span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> { promise, resolve, reject } = <span class="hljs-built_in">Promise</span>.withResolvers&lt;<span class="hljs-built_in">void</span>&gt;();
+    ___A___;
+    <span class="hljs-keyword">return</span> ___B___;
+}</code></pre>
+
+<p id="@which_following_expressions_can_fill____a____blank_0"><a class="jump" href="index.html#@which_following_expressions_can_fill____a____blank_0"></a>以下哪些表达式可以填充 <code>___A___</code> 空白？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="() => resolve()"><label for="md_converted_choice_3_0"><input type="checkbox" id="md_converted_choice_3_0"><code>() =&gt; resolve()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="setTimeout = resolve"><label for="md_converted_choice_3_1"><input type="checkbox" id="md_converted_choice_3_1"><code>setTimeout = resolve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="setTimeout(() => resolve(), milliseconds)"><label for="md_converted_choice_3_2"><input type="checkbox" id="md_converted_choice_3_2"><code>setTimeout(() =&gt; resolve(), milliseconds)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="setTimeout(resolve(), milliseconds)"><label for="md_converted_choice_3_3"><input type="checkbox" id="md_converted_choice_3_3"><code>setTimeout(resolve(), milliseconds)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="setTimeout(resolve, milliseconds)"><label for="md_converted_choice_3_4"><input type="checkbox" id="md_converted_choice_3_4"><code>setTimeout(resolve, milliseconds)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_following_expressions_can_fill____b____blank_0"><a class="jump" href="index.html#@which_following_expressions_can_fill____b____blank_0"></a>以下哪些表达式可以填充 <code>___B___</code> 空白？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="new Promise<void>()"><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0"><code>new Promise&lt;void&gt;()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="promise"><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1"><code>promise</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="resolve()"><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2"><code>resolve()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="reject()"><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3"><code>reject()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-making_and_keeping_a_promise-timeout_using_deferred" data-target="#ex-making_and_keeping_a_promise-timeout_using_deferred" data-toggle="collapse"><a class="jump" href="index.html#@ex-making_and_keeping_a_promise-timeout_using_deferred"></a><span class="panel-title">使用 Deferred 实现超时</span></div><div class="panel-collapse collapse exercise-panel" id="ex-making_and_keeping_a_promise-timeout_using_deferred" data-outline="timeout_using_deferred" data-ex-id="making_and_keeping_a_promise/timeout_using_deferred" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@implement_timeout_using"><a class="jump" href="index.html#@implement_timeout_using"></a>让我们使用 <code>Deferred</code> 来实现 <code>timeout</code>。</p>
+
+<pre id="@param_milliseconds_duration_wait_returns_promise_fulfills_milliseconds_after_timeout_called_function_timeout-milliseconds-number-promise-void_const_deferred"><a class="jump" href="index.html#@param_milliseconds_duration_wait_returns_promise_fulfills_milliseconds_after_timeout_called_function_timeout-milliseconds-number-promise-void_const_deferred"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param milliseconds duration to wait
+ * @returns a promise that fulfills `milliseconds` after timeout() was called
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">timeout</span>(<span class="hljs-params">milliseconds:<span class="hljs-built_in">number</span></span>):<span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> deferred = <span class="hljs-keyword">new</span> Deferred&lt;<span class="hljs-built_in">void</span>&gt;();
+    setTimeout(___A___, milliseconds);
+    <span class="hljs-keyword">return</span> ___B___;
+}</code></pre>
+
+<p id="@which_following_expressions_can_fill____a____blank_1"><a class="jump" href="index.html#@which_following_expressions_can_fill____a____blank_1"></a>以下哪些表达式可以填充 <code>___A___</code> 空白？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="new Promise<void>()"><label for="md_converted_choice_5_0"><input type="checkbox" id="md_converted_choice_5_0"><code>new Promise&lt;void&gt;()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Promise.withResolvers<void>().promise"><label for="md_converted_choice_5_1"><input type="checkbox" id="md_converted_choice_5_1"><code>Promise.withResolvers&lt;void&gt;().promise</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="() => deferred.resolve"><label for="md_converted_choice_5_2"><input type="checkbox" id="md_converted_choice_5_2"><code>() =&gt; deferred.resolve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="() => deferred.resolve()"><label for="md_converted_choice_5_3"><input type="checkbox" id="md_converted_choice_5_3"><code>() =&gt; deferred.resolve()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_following_expressions_can_fill____b____blank_1"><a class="jump" href="index.html#@which_following_expressions_can_fill____b____blank_1"></a>以下哪些表达式可以填充 <code>___B___</code> 空白？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="new Promise<void>()"><label for="md_converted_choice_6_0"><input type="checkbox" id="md_converted_choice_6_0"><code>new Promise&lt;void&gt;()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="deferred.promise"><label for="md_converted_choice_6_1"><input type="checkbox" id="md_converted_choice_6_1"><code>deferred.promise</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="deferred"><label for="md_converted_choice_6_2"><input type="checkbox" id="md_converted_choice_6_2"><code>deferred</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="asynchronous_method_making_a_promise"><a class="jump" href="index.html#asynchronous_method_making_a_promise"></a>异步方法做出承诺</h2><div data-outline="asynchronous_method_making_a_promise">
+
+<p id="@use_deferred_approach"><a class="jump" href="index.html#@use_deferred_approach"></a>让我们使用 <code>Deferred</code> 方法来做出承诺，因为它有一个很好的特性，即将 resolve/reject 修改者与 Promise 一起包装在单个对象中。这个 <code>Deferred</code> 对象将代表现实图书馆中一个熟悉的概念：预约一本书。当 <code>checkin</code> 最终看到书归还到图书馆时，它会查找该书的预约并调用 <code>resolve()</code> 来 resolve Promise，从而使等待中的 <code>checkout</code> 能够恢复。</p>
+
+<p id="@multiple_users_may"><a class="jump" href="index.html#@multiple_users_may"></a>多个用户可能同时等待预约同一本书，所以每本书需要一个预约队列，我们将用数组来表示：</p>
+
+<pre id="@private_holds_map-book"><a class="jump" href="index.html#@private_holds_map-book"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">private</span> holds: Map&lt;Book, <span class="hljs-built_in">Array</span>&lt;Deferred&lt;<span class="hljs-built_in">void</span>&gt;&gt;&gt;;</code></pre>
+
+<p id="@checkout_wants_wait"><a class="jump" href="index.html#@checkout_wants_wait"></a>当 <code>checkout</code> 想要等待一本书时，它创建一个 <code>Deferred</code> 对象，将其放入预约队列，并等待其 Promise。新代码以黄色高亮显示：</p>
+
+<pre class="no-markdown" id="@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_if_this-inlibrary-has-book_book_checked_out_right_now_so_put"><a class="jump" href="index.html#@public_async_checkout-books_array-book_user_user_promise-void_wait_all_books_be_returned_const_book_books_if_this-inlibrary-has-book_book_checked_out_right_now_so_put"></a><code class="typescript hljs"><span class="hljs-keyword">public</span> <span class="hljs-keyword">async</span> checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; {
+    <span class="hljs-comment">// wait for all the books to be returned</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-keyword">if</span> ( ! <span class="hljs-keyword">this</span>.inLibrary.has(book) ) {
+<span class="highlighted">            <span class="hljs-comment">// book is checked out right now, so</span>
+            <span class="hljs-comment">// put ourselves on the hold queue and wait</span>
+            <span class="hljs-keyword">const</span> hold = <span class="hljs-keyword">new</span> Deferred&lt;<span class="hljs-built_in">void</span>&gt;();
+            <span class="hljs-keyword">this</span>.holdsForBook(book).push(hold);
+            <span class="hljs-keyword">await</span> hold.promise;
+</span>        }
+    }
+
+    <span class="hljs-comment">// borrow the books</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+        <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+    }
+
+    <span class="hljs-keyword">this</span>.checkRep();
+}
+
+<span class="hljs-comment">/**
+ * @returns mutable hold queue for `book`,
+ * creating the hold queue if it doesn't already exist
+ */</span>
+<span class="hljs-keyword">private</span> holdsForBook(book: Book): <span class="hljs-built_in">Array</span>&lt;Deferred&lt;<span class="hljs-built_in">void</span>&gt;&gt; {
+    ... <span class="hljs-comment">// similar to borrowedByUser() helper method</span>
+}
+</code></pre>
+
+<p id="@later_checkin_sees"><a class="jump" href="index.html#@later_checkin_sees"></a>之后，当 <code>checkin</code> 看到书归还时，它找到预约并 resolve 它：</p>
+
+<pre class="no-markdown" id="@public_checkin-books_array-book"><a class="jump" href="index.html#@public_checkin-books_array-book"></a><code class="typescript hljs"><span class="hljs-keyword">public</span> checkin(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;): <span class="hljs-built_in">void</span> {
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-comment">// book is no longer borrowed, so remove it from all borrowed sets</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> borrowedBooks of <span class="hljs-keyword">this</span>.borrowed.values()) {
+            borrowedBooks.delete(book); <span class="hljs-comment">// at most one of these sets has the book</span>
+        }
+
+        <span class="hljs-comment">// book is back in the library</span>
+        <span class="hljs-keyword">this</span>.inLibrary.add(book);
+
+<span class="highlighted">        <span class="hljs-comment">// wake up the first person on the hold queue for this book (if any)</span>
+        <span class="hljs-keyword">const</span> holds = <span class="hljs-keyword">this</span>.holds.get(book);
+        <span class="hljs-keyword">if</span> (holds !== <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">const</span> deferred = holds.shift();
+            <span class="hljs-keyword">if</span> (deferred !== <span class="hljs-literal">undefined</span>) {
+                deferred.resolve();
+            }
+        }
+</span>    }
+
+    <span class="hljs-keyword">this</span>.checkRep();
+}
+</code></pre>
+
+<p id="@see_works_one"><a class="jump" href="index.html#@see_works_one"></a>让我们看看这在我们两个并发读书者 Bilbo 和 Frodo 的一种可能<a href="../14-concurrency/index.html#interleaving">交错</a>下是如何工作的：</p>
+
+<table class="interleaving _2"><tbody><tr><td><pre id="@await_library-checkout-fellowship_bilbo_bilbo_spends_some_time_reading_book_library-checkin-fellowship_1"><a class="jump" href="index.html#@await_library-checkout-fellowship_bilbo_bilbo_spends_some_time_reading_book_library-checkin-fellowship_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([fellowship], bilbo);
+... <span class="hljs-comment">// Bilbo spends some time reading the book</span>
+library.checkin([fellowship]);</code></pre></td><td><pre id="@await_library-checkout-fellowship_frodo_frodo_spends_some_time_reading_book_library-checkin-fellowship_1"><a class="jump" href="index.html#@await_library-checkout-fellowship_frodo_frodo_spends_some_time_reading_book_library-checkin-fellowship_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([fellowship], frodo);
+... <span class="hljs-comment">// Frodo spends some time reading the book</span>
+library.checkin([fellowship]);</code></pre></td></tr></tbody></table>
+
+<ol class="interleaving _2"><li class="_0"><p id="@suppose_bilbo_calls"><a class="jump" href="index.html#@suppose_bilbo_calls"></a>假设 Bilbo 先调用 <code>checkout</code>。他拿到了书，<code>checkout</code> 立即返回，其 Promise 已 fulfilled，Bilbo 开始愉快地阅读。</p></li><li class="_1"><p id="@now_frodo_calls"><a class="jump" href="index.html#@now_frodo_calls"></a>现在 Frodo 调用 <code>checkout</code>，发现书不在图书馆，于是预约了它。Frodo 对 <code>checkout</code> 的调用返回了一个 <code>Promise</code>，Frodo 现在正在等待它（并且该 Promise 与预约的 Promise 绑定，因为这次 <code>checkout</code> 调用正在等待 <code>await hold.promise</code> 之后恢复）。</p></li><li class="_0"><p id="@eventually_bilbo_calls"><a class="jump" href="index.html#@eventually_bilbo_calls"></a>最终 Bilbo 调用 <code>checkin</code>，它首先将书放回图书馆，然后找到预约并 resolve 与该预约关联的 Promise。</p></li><li class="_1"><p id="@allows_frodo-s_checkout"><a class="jump" href="index.html#@allows_frodo-s_checkout"></a>这使得 Frodo 的 <code>checkout</code> 可以越过 <code>await</code> 完成将书借给 Frodo。</p></li><li class="_1"><p id="@frodo_reads_book"><a class="jump" href="index.html#@frodo_reads_book"></a>Frodo 读完书，然后调用 <code>checkin</code> 将书归还到图书馆。</p></li></ol>
+
+<p id="@if_frodo_instead"><a class="jump" href="index.html#@if_frodo_instead"></a>如果 Frodo 在借书竞赛中胜出，计算将以同样的方式演变，只是 Frodo 和 Bilbo 的角色互换：</p>
+
+<ol class="interleaving _2"><li class="_1"><p id="@frodo_checks_out"><a class="jump" href="index.html#@frodo_checks_out"></a>Frodo 借了书。</p></li><li class="_0"><p id="@bilbo_puts_hold"><a class="jump" href="index.html#@bilbo_puts_hold"></a>Bilbo 预约了书并等待。</p></li><li class="_1"><p id="@frodo_returns_book"><a class="jump" href="index.html#@frodo_returns_book"></a>Frodo 归还了书。</p></li><li class="_0"><p id="@bilbo_finishes_checking"><a class="jump" href="index.html#@bilbo_finishes_checking"></a>Bilbo 完成了借书。</p></li><li class="_0"><p id="@bilbo_returns_book"><a class="jump" href="index.html#@bilbo_returns_book"></a>Bilbo 归还了书。</p></li></ol>
+
+</div><h2 id="race_conditions"><a class="jump" href="index.html#race_conditions"></a>竞态条件</h2><div data-outline="race_conditions">
+
+<p id="@but_all_not"><a class="jump" href="index.html#@but_all_not"></a>但我们的图书馆并非一切安好。让我们看看这三个借书者会发生什么：</p>
+
+<table class="interleaving _3"><tbody><tr><td><pre id="@await_library-checkout_twotowers_bilbo_reading_library-checkin_twotowers_0"><a class="jump" href="index.html#@await_library-checkout_twotowers_bilbo_reading_library-checkin_twotowers_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([
+    twoTowers
+], bilbo);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    twoTowers
+]);</code></pre></td><td><pre id="@await_library-checkout_fellowship_twotowers_frodo_reading_library-checkin_fellowship_twotowers_0"><a class="jump" href="index.html#@await_library-checkout_fellowship_twotowers_frodo_reading_library-checkin_fellowship_twotowers_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([
+    fellowship, twoTowers
+], frodo);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    fellowship, twoTowers
+]);</code></pre></td><td><pre id="@await_library-checkout_fellowship_gandalf_reading_library-checkin_fellowship_0"><a class="jump" href="index.html#@await_library-checkout_fellowship_gandalf_reading_library-checkin_fellowship_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([
+    fellowship
+], gandalf);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    fellowship
+]);</code></pre></td></tr></tbody></table>
+
+<p id="@here_one_possible_interleaving_which_fine"><a class="jump" href="index.html#@here_one_possible_interleaving_which_fine"></a>这里是一种可能的交错，没有问题：</p>
+
+<ol class="interleaving _3"><li class="_0"><p id="@bilbo_checks_out_two_towers_0"><a class="jump" href="index.html#@bilbo_checks_out_two_towers_0"></a>Bilbo 借了《双塔奇兵》。</p></li><li class="_1"><p id="@frodo_sees_fellowship_still_library_puts_hold_two_towers_waits_0"><a class="jump" href="index.html#@frodo_sees_fellowship_still_library_puts_hold_two_towers_waits_0"></a>Frodo 看到《魔戒同盟》还在图书馆，预约了《双塔奇兵》，然后等待。</p></li><li class="_0"><p id="@bilbo_returns_two_towers_releases_hold_frodo_0"><a class="jump" href="index.html#@bilbo_returns_two_towers_releases_hold_frodo_0"></a>Bilbo 归还了《双塔奇兵》并为 Frodo 释放了预约。</p></li><li class="_1"><p id="@frodo_resumes_finishes_checking_out_both_books"><a class="jump" href="index.html#@frodo_resumes_finishes_checking_out_both_books"></a>Frodo 恢复执行，完成了两本书的借出。</p></li><li class="_2"><p id="@gandalf_tries_check_out_fellowship_puts"><a class="jump" href="index.html#@gandalf_tries_check_out_fellowship_puts"></a>Gandalf 尝试借《魔戒同盟》，并预约了它。</p></li><li class="_1"><p id="@frodo_returns_both_books_releases_hold"><a class="jump" href="index.html#@frodo_returns_both_books_releases_hold"></a>Frodo 归还了两本书，并为 Gandalf 释放了《魔戒同盟》的预约。</p></li><li class="_2"><p id="@gandalf_finishes_checking"><a class="jump" href="index.html#@gandalf_finishes_checking"></a>Gandalf 完成了《魔戒同盟》的借出，阅读后归还。</p></li></ol>
+
+<p id="@but_here_another"><a class="jump" href="index.html#@but_here_another"></a>但这里是另一种交错，结果就不那么好了（不同的步骤以黄色高亮显示）：</p>
+
+<ol class="interleaving _3"><li class="_0"><p id="@bilbo_checks_out_two_towers_1"><a class="jump" href="index.html#@bilbo_checks_out_two_towers_1"></a>Bilbo 借了《双塔奇兵》。</p></li><li class="_1"><p id="@frodo_sees_fellowship_still_library_puts_hold_two_towers_waits_1"><a class="jump" href="index.html#@frodo_sees_fellowship_still_library_puts_hold_two_towers_waits_1"></a>Frodo 看到《魔戒同盟》还在图书馆，预约了《双塔奇兵》，然后等待。</p></li><li class="_2 highlighted"><p id="@gandalf_checks_out"><a class="jump" href="index.html#@gandalf_checks_out"></a>Gandalf 借了《魔戒同盟》。</p></li><li class="_0"><p id="@bilbo_returns_two_towers_releases_hold_frodo_1"><a class="jump" href="index.html#@bilbo_returns_two_towers_releases_hold_frodo_1"></a>Bilbo 归还了《双塔奇兵》并为 Frodo 释放了预约。</p></li><li class="_1 highlighted"><p id="@frodo_resumes_having"><a class="jump" href="index.html#@frodo_resumes_having"></a>Frodo 恢复执行，在等待了两本书之后，完成了《魔戒同盟》和《双塔奇兵》的借出。</p></li></ol>
+
+<p id="@unfortunately_frodo_wrong"><a class="jump" href="index.html#@unfortunately_frodo_wrong"></a>不幸的是，Frodo 在最后一步是错误的！当 Frodo 等待《双塔奇兵》时，Gandalf 趁机抢走了《魔戒同盟》。《魔戒同盟》已经不在图书馆了。</p>
+
+<p id="@implementation_checkout_race"><a class="jump" href="index.html#@implementation_checkout_race"></a>这个 <code>checkout</code> 实现有一个<a href="../14-concurrency/index.html#race_condition">竞态条件</a>，因为它对某些交错能正确工作，但对另一些则不行。如果 Gandalf 恰好在 Frodo 等待《双塔奇兵》期间借走了《魔戒同盟》，那么程序就会失败。<strong>并发程序的正确性不应取决于时间上的偶然性。</strong>这就是为什么调试竞态条件可能具有挑战性，因为只有某些交错可能暴露 Bug，这使得发现和复现变得困难。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-race_conditions"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-race_conditions-racing_to_a_crash" data-target="#ex-race_conditions-racing_to_a_crash" data-toggle="collapse"><a class="jump" href="index.html#@ex-race_conditions-racing_to_a_crash"></a><span class="panel-title">竞速到崩溃</span></div><div class="panel-collapse collapse exercise-panel" id="ex-race_conditions-racing_to_a_crash" data-outline="racing_to_a_crash" data-ex-id="race_conditions/racing_to_a_crash" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@result_bad_interleaving"><a class="jump" href="index.html#@result_bad_interleaving"></a>上面那种坏交错的结果是什么？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="a book disappears from the library's rep"><label for="md_converted_choice_7_0"><input type="checkbox" id="md_converted_choice_7_0">一本书从图书馆的表示中消失</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="a book is duplicated in the library's rep"><label for="md_converted_choice_7_1"><input type="checkbox" id="md_converted_choice_7_1">一本书在图书馆的表示中被复制</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="static error"><label for="md_converted_choice_7_2"><input type="checkbox" id="md_converted_choice_7_2">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_7_3"><input type="checkbox" id="md_converted_choice_7_3">动态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="no error but wrong result"><label for="md_converted_choice_7_4"><input type="checkbox" id="md_converted_choice_7_4">没有错误但结果错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="fixing_the_race"><a class="jump" href="index.html#fixing_the_race"></a>修复竞态</h2><div data-outline="fixing_the_race">
+
+<p id="@here-s_natural_way"><a class="jump" href="index.html#@here-s_natural_way"></a>这是修复我们刚才发现的竞态条件的一种自然方式：<code>checkout</code> 可以尽快借出每本书，而不是等到方法末尾。</p>
+
+<pre class="no-markdown" id="@public_async_checkout-books_array-book_user_user_promise-void_const_book"><a class="jump" href="index.html#@public_async_checkout-books_array-book_user_user_promise-void_const_book"></a><code class="typescript hljs"><span class="hljs-keyword">public</span> <span class="hljs-keyword">async</span> checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; {
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        <span class="hljs-keyword">if</span> ( ! <span class="hljs-keyword">this</span>.inLibrary.has(book) ) {
+            <span class="hljs-comment">// book is checked out right now, so</span>
+            <span class="hljs-comment">// put ourselves on the hold queue and wait</span>
+            <span class="hljs-keyword">const</span> hold = <span class="hljs-keyword">new</span> Deferred&lt;<span class="hljs-built_in">void</span>&gt;();
+            <span class="hljs-keyword">this</span>.holdsForBook(book).push(hold);
+            <span class="hljs-keyword">await</span> hold.promise;
+        }
+<span class="highlighted">        <span class="hljs-comment">// borrow the book right away</span>
+        assert(<span class="hljs-keyword">this</span>.inLibrary.has(book));
+        <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+        <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+</span>    }
+
+    <span class="hljs-keyword">this</span>.checkRep();
+}
+</code></pre>
+
+<p id="@see_fixes_bad"><a class="jump" href="index.html#@see_fixes_bad"></a>让我们看看这如何修复坏的交错：</p>
+
+<table class="interleaving _3"><tbody><tr><td><pre id="@await_library-checkout_twotowers_bilbo_reading_library-checkin_twotowers_1"><a class="jump" href="index.html#@await_library-checkout_twotowers_bilbo_reading_library-checkin_twotowers_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([
+    twoTowers
+], bilbo);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    twoTowers
+]);</code></pre></td><td><pre id="@await_library-checkout_fellowship_twotowers_frodo_reading_library-checkin_fellowship_twotowers_1"><a class="jump" href="index.html#@await_library-checkout_fellowship_twotowers_frodo_reading_library-checkin_fellowship_twotowers_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([
+    fellowship, twoTowers
+], frodo);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    fellowship, twoTowers
+]);</code></pre></td><td><pre id="@await_library-checkout_fellowship_gandalf_reading_library-checkin_fellowship_1"><a class="jump" href="index.html#@await_library-checkout_fellowship_gandalf_reading_library-checkin_fellowship_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([
+    fellowship
+], gandalf);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    fellowship
+]);</code></pre></td></tr></tbody></table>
+
+<ol class="interleaving _3"><li class="_0"><p id="@bilbo_checks_out_two_towers_2"><a class="jump" href="index.html#@bilbo_checks_out_two_towers_2"></a>Bilbo 借了《双塔奇兵》</p></li><li class="_1 highlighted"><p id="@frodo_sees_fellowship_still_library_immediately_marks_checked_out_himself_0"><a class="jump" href="index.html#@frodo_sees_fellowship_still_library_immediately_marks_checked_out_himself_0"></a>Frodo 看到《魔戒同盟》还在图书馆，立即将它标记为已借给自己。</p></li><li class="_1"><p id="@frodo_puts_hold_two_towers_waits_0"><a class="jump" href="index.html#@frodo_puts_hold_two_towers_waits_0"></a>Frodo 预约了《双塔奇兵》，然后等待。</p></li><li class="_2 highlighted"><p id="@gandalf_tries_check_out_fellowship_now"><a class="jump" href="index.html#@gandalf_tries_check_out_fellowship_now"></a>Gandalf 尝试借《魔戒同盟》，现在发现它已借给 Frodo，于是等待。</p></li><li class="_0"><p id="@bilbo_returns_two_towers_releases_hold_frodo_2"><a class="jump" href="index.html#@bilbo_returns_two_towers_releases_hold_frodo_2"></a>Bilbo 归还了《双塔奇兵》并为 Frodo 释放了预约。</p></li><li class="_1 highlighted"><p id="@frodo_resumes_finishes_checking_out_both_fellowship_two_towers"><a class="jump" href="index.html#@frodo_resumes_finishes_checking_out_both_fellowship_two_towers"></a>Frodo 恢复执行，完成了《魔戒同盟》和《双塔奇兵》的借出。</p></li><li class="_1"><p id="@frodo_returns_both_books_1"><a class="jump" href="index.html#@frodo_returns_both_books_1"></a>Frodo 归还了两本书。</p></li><li class="_2"><p id="@gandalf_resumes_finishes"><a class="jump" href="index.html#@gandalf_resumes_finishes"></a>Gandalf 恢复执行，完成了《魔戒同盟》的借出。</p></li></ol>
+
+<p id="@success"><a class="jump" href="index.html#@success"></a>成功！</p>
+
+</div><h2 id="deadlock"><a class="jump" href="index.html#deadlock"></a>死锁</h2><div data-outline="deadlock">
+
+<p id="@unfortunately_revised_implementation"><a class="jump" href="index.html#@unfortunately_revised_implementation"></a>不幸的是，修改后的 <code>checkout</code> 实现现在可能以新的方式失败。Bilbo 正在读《双塔奇兵》，和之前一样。但现在 Frodo 和 Gandalf 都在请求系列中的全部三本书，而且他们在调用 <code>checkout</code> 时碰巧以相反的顺序列出它们：</p>
+
+<table class="interleaving _3"><tbody><tr><td><pre id="@await_library-checkout_twotowers_bilbo_reading_library-checkin_twotowers_2"><a class="jump" href="index.html#@await_library-checkout_twotowers_bilbo_reading_library-checkin_twotowers_2"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([
+    twoTowers
+], bilbo);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    twoTowers
+]);</code></pre></td><td><pre class="no-markdown" id="@await_library-checkout_fellowship_twotowers_returnofking_frodo"><a class="jump" href="index.html#@await_library-checkout_fellowship_twotowers_returnofking_frodo"></a><code class="typescript hljs"><span class="hljs-keyword">await</span> library.checkout([
+    <span class="highlighted">fellowship, twoTowers, returnOfKing</span>
+], frodo);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    fellowship, twoTowers, returnOfKing
+]);
+</code></pre></td><td><pre class="no-markdown" id="@await_library-checkout_returnofking"><a class="jump" href="index.html#@await_library-checkout_returnofking"></a><code class="typescript hljs"><span class="hljs-keyword">await</span> library.checkout([
+    <span class="highlighted">returnOfKing, twoTowers, fellowship</span>
+], gandalf);
+... <span class="hljs-comment">// reading</span>
+library.checkin([
+    returnOfKing, twoTowers, fellowship
+]);
+</code></pre></td></tr></tbody></table>
+
+<p id="@here_one_possible_interleaving_1"><a class="jump" href="index.html#@here_one_possible_interleaving_1"></a>这里是一种可能的交错：</p>
+
+<ol class="interleaving _3"><li class="_0"><p id="@bilbo_checks_out_two_towers_3"><a class="jump" href="index.html#@bilbo_checks_out_two_towers_3"></a>Bilbo 借了《双塔奇兵》</p></li><li class="_1"><p id="@frodo_sees_fellowship_still_library_immediately_marks_checked_out_himself_1"><a class="jump" href="index.html#@frodo_sees_fellowship_still_library_immediately_marks_checked_out_himself_1"></a>Frodo 看到《魔戒同盟》还在图书馆，立即将它标记为已借给自己。</p></li><li class="_1"><p id="@frodo_puts_hold_two_towers_waits_1"><a class="jump" href="index.html#@frodo_puts_hold_two_towers_waits_1"></a>Frodo 预约了《双塔奇兵》，然后等待。</p></li><li class="_2"><p id="@gandalf_immediately_checks"><a class="jump" href="index.html#@gandalf_immediately_checks"></a>Gandalf 立即将《王者归来》借给自己。</p></li><li class="_2 highlighted"><p id="@gandalf_puts_hold"><a class="jump" href="index.html#@gandalf_puts_hold"></a>Gandalf 预约了《双塔奇兵》，然后等待。</p></li><li class="_0"><p id="@bilbo_returns_two_towers_releases_hold_frodo_first_person"><a class="jump" href="index.html#@bilbo_returns_two_towers_releases_hold_frodo_first_person"></a>Bilbo 归还了《双塔奇兵》并为 Frodo（预约队列中的第一个人）释放了预约。</p></li><li class="_1"><p id="@frodo_resumes_immediately"><a class="jump" href="index.html#@frodo_resumes_immediately"></a>Frodo 恢复执行，立即将《双塔奇兵》借出。</p></li><li class="_1 highlighted"><p id="@frodo_puts_hold_return_king_waits"><a class="jump" href="index.html#@frodo_puts_hold_return_king_waits"></a>Frodo 预约了《王者归来》，然后等待。</p></li></ol>
+
+<p id="@now_stuck_frodo"><a class="jump" href="index.html#@now_stuck_frodo"></a>现在我们卡住了。Frodo 在等待《王者归来》，这本书目前在 Gandalf 手中。但 Gandalf 在等待《双塔奇兵》，这本书在 Frodo 手中。他们都无法取得进展，直到对方释放预约。Frodo 和 Gandalf 陷入了"死亡拥抱"，它们将永远无法完成等待。</p>
+
+<p id="@deadlock_occurs_concurrent"><a class="jump" href="index.html#@deadlock_occurs_concurrent"></a><mark data-structure-text="deadlock" id="^deadlock"><strong>死锁</strong></mark>发生在并发模块互相等待对方做某事时。死锁可能涉及两个以上的模块，例如 A 可能在等待 B，B 在等待 C，C 在等待 A。它们都无法取得进展。死锁的本质特征是这样的<strong>依赖循环</strong>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-deadlock"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-deadlock-sets_of_books" data-target="#ex-deadlock-sets_of_books" data-toggle="collapse"><a class="jump" href="index.html#@ex-deadlock-sets_of_books"></a><span class="panel-title">书籍集合</span></div><div class="panel-collapse collapse exercise-panel" id="ex-deadlock-sets_of_books" data-outline="sets_of_books" data-ex-id="deadlock/sets_of_books" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@if_change_type"><a class="jump" href="index.html#@if_change_type"></a>如果我们将 <code>books</code> 的类型从 <code>Array</code> 改为 <code>Set</code> 会怎样：</p>
+
+<pre id="@checkout-books_set-book_user"><a class="jump" href="index.html#@checkout-books_set-book_user"></a><code class="language-ts hljs typescript">checkout(books: Set&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt;;</code></pre>
+
+<p id="@so_frodo_gandalf"><a class="jump" href="index.html#@so_frodo_gandalf"></a>这样 Frodo 和 Gandalf 现在传递的是集合：</p>
+
+<table class="interleaving _2"><tbody><tr><td><pre class="no-markdown" id="@await_library-checkout_new_set_fellowship_twotowers"><a class="jump" href="index.html#@await_library-checkout_new_set_fellowship_twotowers"></a><code class="typescript hljs"><span class="hljs-keyword">await</span> library.checkout( <span class="highlighted"><span class="hljs-keyword">new</span> Set(</span> [
+    fellowship, twoTowers, returnOfKing
+]), frodo);
+...
+</code></pre></td><td><pre class="no-markdown" id="@await_library-checkout_new_set_returnofking_twotowers"><a class="jump" href="index.html#@await_library-checkout_new_set_returnofking_twotowers"></a><code class="typescript hljs"><span class="hljs-keyword">await</span> library.checkout( <span class="highlighted"><span class="hljs-keyword">new</span> Set(</span> [
+    returnOfKing, twoTowers, fellowship
+]), gandalf);
+...
+</code></pre></td></tr></tbody></table>
+
+<p id="@implementation_checkout_still"><a class="jump" href="index.html#@implementation_checkout_still"></a><code>checkout</code> 的实现保持不变，因为 <code>for-of</code> 循环对集合和数组同样有效。</p>
+
+<p id="@can_code_still"><a class="jump" href="index.html#@can_code_still"></a>这段代码还能到达死锁吗？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="yes, although Set iteration has a well-defined order, it may still deadlock"><label for="md_converted_choice_8_0"><input type="radio" id="md_converted_choice_8_0" name="md_converted_radio_8">是的，虽然 <code>Set</code> 迭代有定义的顺序，但仍可能死锁</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="yes, if the Set iteration happens to be unlucky, it may still deadlock"><label for="md_converted_choice_8_1"><input type="radio" id="md_converted_choice_8_1" name="md_converted_radio_8">是的，如果 <code>Set</code> 迭代碰巧不走运，仍可能死锁</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="no, it will never deadlock, because sets are unordered"><label for="md_converted_choice_8_2"><input type="radio" id="md_converted_choice_8_2" name="md_converted_radio_8">不会，永远不会死锁，因为集合是无序的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="interleaving_and_mutual_exclusion"><a class="jump" href="index.html#interleaving_and_mutual_exclusion"></a>交错与互斥</h2><div data-outline="interleaving_and_mutual_exclusion">
+
+<p id="@order_address_races"><a class="jump" href="index.html#@order_address_races"></a>为了应对 <code>checkout</code> 中的竞态和死锁，我们需要更加悲观地思考。每次我们 <code>await</code> 一个 Promise，我们就放弃了控制权。其他异步代码可能在此期间交错。可能出什么问题？我们依赖什么？当我们重新获得控制权时，可能需要再次检查一些事情。</p>
+
+<p id="@second_need_delay"><a class="jump" href="index.html#@second_need_delay"></a>其次，我们需要延迟进行变更，直到一切就绪，然后一次性完成所有变更，而不会在变更进行到一半时失去控制权。</p>
+
+<p id="@leads_two_important"><a class="jump" href="index.html#@leads_two_important"></a>这引出了并发编程的两个重要思维习惯：</p>
+
+<ul>
+<li><p id="@might_risky_interleaving"><a class="jump" href="index.html#@might_risky_interleaving"></a><strong>危险的交错可能在哪里发生？</strong> 在我的代码中，哪些地方其他并发运行的代码可能引起问题？</p></li>
+<li><p id="@must_interleaving_definitely"><a class="jump" href="index.html#@must_interleaving_definitely"></a><strong>交错绝对<em>不能</em>在哪里发生？</strong> 我的代码中哪个部分需要运行而不被任何并发代码中断？</p></li>
+</ul>
+
+<p id="@first_question_helps"><a class="jump" href="index.html#@first_question_helps"></a>第一个问题帮助我们识别潜在的竞态条件，即我们需要防御并发 Bug 的地方。</p>
+
+<p id="@second_question_asks"><a class="jump" href="index.html#@second_question_asks"></a>第二个问题问的是我们应该在哪里建立一道墙来防御这些 Bug，通过利用或创建我们可以安全、独立地访问共享可变数据而不被其他并发代码干扰的时间段。</p>
+
+<p id="@single-threaded_ts-js_programming"><a class="jump" href="index.html#@single-threaded_ts-js_programming"></a>在单线程 TS/JS 编程模型中，交错问题实际上比其他并发模型更容易回答。任何 <code>await</code> 都是你的代码放弃控制权并允许并发代码运行的地方。在此期间，JS 运行时系统可能允许另一个 <code>async</code> 函数从其 <code>await</code> 处恢复。对于像 <code>Library</code> 这样的 ADT，这可能意味着已经在进行的异步操作可能恢复执行（例如 <code>checkout</code> 从 await 处恢复），或者异步客户端可能调用一个新的 ADT 操作（<code>checkout</code> 或 <code>checkin</code>）。</p>
+
+<p id="@however_code_between"><a class="jump" href="index.html#@however_code_between"></a>然而，<em>在</em>那些 <code>await</em> 点之间的代码是连续执行的，不会放弃控制权。如果你有一段完全不包含 <code>await</code> 的代码，那么你可以确信没有其他异步代码会与它交错。代码可能提前结束（返回或抛出异常），但如果没有，如果控制权从另一端干净地出来，那么你就知道它是在没有中断的情况下运行的。</p>
+
+<p id="@property_called_mutual"><a class="jump" href="index.html#@property_called_mutual"></a>这种性质被称为<mark data-structure-text="mutual_exclusion" id="^mutual_exclusion"><strong>互斥</strong></mark>，指的是一个代码区域中同一时间只有一个计算在运行，而其他可能访问相同共享数据的并发计算被<em>排除</em>在运行之外。互斥是防止竞态条件的基本思想。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-interleaving_and_mutual_exclusion"><h4 class="text-danger" id="@reading_exercises_5"><a class="jump" href="index.html#@reading_exercises_5"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-interleaving_and_mutual_exclusion-losing_control" data-target="#ex-interleaving_and_mutual_exclusion-losing_control" data-toggle="collapse"><a class="jump" href="index.html#@ex-interleaving_and_mutual_exclusion-losing_control"></a><span class="panel-title">失去控制权</span></div><div class="panel-collapse collapse exercise-panel" id="ex-interleaving_and_mutual_exclusion-losing_control" data-outline="losing_control" data-ex-id="interleaving_and_mutual_exclusion/losing_control" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@each_short_block"><a class="jump" href="index.html#@each_short_block"></a>对于下面的每个短代码块，在哪些点可能失去控制权，允许其他异步函数交错？</p>
+
+<pre id="@1_const_answer"><a class="jump" href="index.html#@1_const_answer"></a><code class="language-ts hljs typescript"><span class="hljs-number">1</span>     <span class="hljs-keyword">const</span> answer = <span class="hljs-number">3</span>**<span class="hljs-number">23</span> + <span class="hljs-number">29</span>;
+<span class="hljs-number">2</span>     <span class="hljs-built_in">console</span>.log(answer);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="during line 1"><label for="md_converted_choice_9_0"><input type="checkbox" id="md_converted_choice_9_0">在第 1 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="during line 2"><label for="md_converted_choice_9_1"><input type="checkbox" id="md_converted_choice_9_1">在第 2 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="never"><label for="md_converted_choice_9_2"><input type="checkbox" id="md_converted_choice_9_2">永远不会</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@1_await_timeout-1000"><a class="jump" href="index.html#@1_await_timeout-1000"></a><code class="language-ts hljs typescript"><span class="hljs-number">1</span>     <span class="hljs-keyword">await</span> timeout(<span class="hljs-number">1000</span>);
+<span class="hljs-number">2</span>     <span class="hljs-keyword">await</span> timeout(<span class="hljs-number">2000</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="during line 1"><label for="md_converted_choice_10_0"><input type="checkbox" id="md_converted_choice_10_0">在第 1 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="during line 2"><label for="md_converted_choice_10_1"><input type="checkbox" id="md_converted_choice_10_1">在第 2 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="never"><label for="md_converted_choice_10_2"><input type="checkbox" id="md_converted_choice_10_2">永远不会</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@1_timeout-4000_2"><a class="jump" href="index.html#@1_timeout-4000_2"></a><code class="language-ts hljs typescript"><span class="hljs-number">1</span>     timeout(<span class="hljs-number">4000</span>);
+<span class="hljs-number">2</span>     <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"done"</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="during line 1"><label for="md_converted_choice_11_0"><input type="checkbox" id="md_converted_choice_11_0">在第 1 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="during line 2"><label for="md_converted_choice_11_1"><input type="checkbox" id="md_converted_choice_11_1">在第 2 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="never"><label for="md_converted_choice_11_2"><input type="checkbox" id="md_converted_choice_11_2">永远不会</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@async_function_f"><a class="jump" href="index.html#@async_function_f"></a><code class="language-ts hljs typescript">  <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">f</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+<span class="hljs-number">1</span>    <span class="hljs-keyword">return</span> <span class="hljs-number">5</span>;
+  }
+<span class="hljs-number">2</span> <span class="hljs-keyword">const</span> promise = f();
+<span class="hljs-number">3</span> <span class="hljs-keyword">await</span> promise;</code></pre>
+
+<div class="form-group exercise-part" data-outline="d"><div class="checkbox exercise-choice" data-outline="during line 1"><label for="md_converted_choice_12_0"><input type="checkbox" id="md_converted_choice_12_0">在第 1 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="during line 2"><label for="md_converted_choice_12_1"><input type="checkbox" id="md_converted_choice_12_1">在第 2 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="during line 3"><label for="md_converted_choice_12_2"><input type="checkbox" id="md_converted_choice_12_2">在第 3 行期间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="never"><label for="md_converted_choice_12_3"><input type="checkbox" id="md_converted_choice_12_3">永远不会</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-interleaving_and_mutual_exclusion-its_awaits_all_the_way_down" data-target="#ex-interleaving_and_mutual_exclusion-its_awaits_all_the_way_down" data-toggle="collapse"><a class="jump" href="index.html#@ex-interleaving_and_mutual_exclusion-its_awaits_all_the_way_down"></a><span class="panel-title">一路 await 到底</span></div><div class="panel-collapse collapse exercise-panel" id="ex-interleaving_and_mutual_exclusion-its_awaits_all_the_way_down" data-outline="its_awaits_all_the_way_down" data-ex-id="interleaving_and_mutual_exclusion/its_awaits_all_the_way_down" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@these_two_asynchronous"><a class="jump" href="index.html#@these_two_asynchronous"></a>对于这两个异步函数：</p>
+
+<pre id="@async_function_totalbalance_promise-number_1_const_checkingpromise_getbalance-checking_2_const_savingspromise_getbalance-savings_3_return_await_checkingpromise_await_savingspromise_async_function_getbalance-account_string_promise-number_4_const_data_string_await_fs-promises-readfile-account_encoding_utf-8_5_return_parseint-data_0"><a class="jump" href="index.html#@async_function_totalbalance_promise-number_1_const_checkingpromise_getbalance-checking_2_const_savingspromise_getbalance-savings_3_return_await_checkingpromise_await_savingspromise_async_function_getbalance-account_string_promise-number_4_const_data_string_await_fs-promises-readfile-account_encoding_utf-8_5_return_parseint-data_0"></a><code class="language-ts hljs typescript">    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">totalBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+<span class="hljs-number">1</span>       <span class="hljs-keyword">const</span> checkingPromise = getBalance(<span class="hljs-string">'checking'</span>);
+<span class="hljs-number">2</span>       <span class="hljs-keyword">const</span> savingsPromise = getBalance(<span class="hljs-string">'savings'</span>);
+<span class="hljs-number">3</span>       <span class="hljs-keyword">return</span> (<span class="hljs-keyword">await</span> checkingPromise) + (<span class="hljs-keyword">await</span> savingsPromise);
+    }
+
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params">account: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+<span class="hljs-number">4</span>       <span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> fs.promises.readFile(account, { encoding: <span class="hljs-string">'utf-8'</span> });
+<span class="hljs-number">5</span>       <span class="hljs-keyword">return</span> <span class="hljs-built_in">parseInt</span>(data);
+    }</code></pre>
+
+<p id="@suppose_some_function"><a class="jump" href="index.html#@suppose_some_function"></a>假设某个函数 <code>main()</code>（未显示）调用了 <code>totalBalance()</code>，而 <code>totalBalance()</code> 又调用了 <code>getBalance()</code> 两次。</p>
+
+<p id="@control_lost_await"><a class="jump" href="index.html#@control_lost_await"></a>当在第 4 行的 <code>await</code> 处失去控制权时，控制权会去哪里？谁的代码会接下来执行？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="the other call to getBalance()"><label for="md_converted_choice_14_0"><input type="radio" id="md_converted_choice_14_0" name="md_converted_radio_14">对 <code>getBalance()</code> 的另一次调用</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="totalBalance()"><label for="md_converted_choice_14_1"><input type="radio" id="md_converted_choice_14_1" name="md_converted_radio_14"><code>totalBalance()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="main()"><label for="md_converted_choice_14_2"><input type="radio" id="md_converted_choice_14_2" name="md_converted_radio_14"><code>main()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="the JavaScript runtime system"><label for="md_converted_choice_14_3"><input type="radio" id="md_converted_choice_14_3" name="md_converted_radio_14">JavaScript 运行时系统</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@control_lost_first"><a class="jump" href="index.html#@control_lost_first"></a>当在第 3 行的第一个 <code>await</code> 处失去控制权时，控制权会去哪里？什么会接下来执行？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="one of the calls to getBalance()"><label for="md_converted_choice_15_0"><input type="radio" id="md_converted_choice_15_0" name="md_converted_radio_15">对 <code>getBalance()</code> 的某次调用</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="totalBalance()"><label for="md_converted_choice_15_1"><input type="radio" id="md_converted_choice_15_1" name="md_converted_radio_15"><code>totalBalance()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="main()"><label for="md_converted_choice_15_2"><input type="radio" id="md_converted_choice_15_2" name="md_converted_radio_15"><code>main()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="the JavaScript runtime system"><label for="md_converted_choice_15_3"><input type="radio" id="md_converted_choice_15_3" name="md_converted_radio_15">JavaScript 运行时系统</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@control_lost_second"><a class="jump" href="index.html#@control_lost_second"></a>当在第 3 行的第二个 <code>await</code> 处失去控制权时，控制权会去哪里？什么会接下来执行？</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="one of the calls to getBalance()"><label for="md_converted_choice_16_0"><input type="radio" id="md_converted_choice_16_0" name="md_converted_radio_16">对 <code>getBalance()</code> 的某次调用</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="totalBalance()"><label for="md_converted_choice_16_1"><input type="radio" id="md_converted_choice_16_1" name="md_converted_radio_16"><code>totalBalance()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="main()"><label for="md_converted_choice_16_2"><input type="radio" id="md_converted_choice_16_2" name="md_converted_radio_16"><code>main()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="the JavaScript runtime system"><label for="md_converted_choice_16_3"><input type="radio" id="md_converted_choice_16_3" name="md_converted_radio_16">JavaScript 运行时系统</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-interleaving_and_mutual_exclusion-find_the_awaits" data-target="#ex-interleaving_and_mutual_exclusion-find_the_awaits" data-toggle="collapse"><a class="jump" href="index.html#@ex-interleaving_and_mutual_exclusion-find_the_awaits"></a><span class="panel-title">找到 await</span></div><div class="panel-collapse collapse exercise-panel" id="ex-interleaving_and_mutual_exclusion-find_the_awaits" data-outline="find_the_awaits" data-ex-id="interleaving_and_mutual_exclusion/find_the_awaits" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@again_these_two"><a class="jump" href="index.html#@again_these_two"></a>同样对于这两个异步函数：</p>
+
+<pre id="@async_function_totalbalance_promise-number_1_const_checkingpromise_getbalance-checking_2_const_savingspromise_getbalance-savings_3_return_await_checkingpromise_await_savingspromise_async_function_getbalance-account_string_promise-number_4_const_data_string_await_fs-promises-readfile-account_encoding_utf-8_5_return_parseint-data_1"><a class="jump" href="index.html#@async_function_totalbalance_promise-number_1_const_checkingpromise_getbalance-checking_2_const_savingspromise_getbalance-savings_3_return_await_checkingpromise_await_savingspromise_async_function_getbalance-account_string_promise-number_4_const_data_string_await_fs-promises-readfile-account_encoding_utf-8_5_return_parseint-data_1"></a><code class="language-ts hljs typescript">    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">totalBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+<span class="hljs-number">1</span>       <span class="hljs-keyword">const</span> checkingPromise = getBalance(<span class="hljs-string">'checking'</span>);
+<span class="hljs-number">2</span>       <span class="hljs-keyword">const</span> savingsPromise = getBalance(<span class="hljs-string">'savings'</span>);
+<span class="hljs-number">3</span>       <span class="hljs-keyword">return</span> (<span class="hljs-keyword">await</span> checkingPromise) + (<span class="hljs-keyword">await</span> savingsPromise);
+    }
+
+    <span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params">account: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+<span class="hljs-number">4</span>       <span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> fs.promises.readFile(account, { encoding: <span class="hljs-string">'utf-8'</span> });
+<span class="hljs-number">5</span>       <span class="hljs-keyword">return</span> <span class="hljs-built_in">parseInt</span>(data);
+    }</code></pre>
+
+<p id="@which_lines_run"><a class="jump" href="index.html#@which_lines_run"></a>哪些行在互斥下运行——即你能保证在执行该行的同时没有其他异步函数交错？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="line 1"><label for="md_converted_choice_13_0"><input type="checkbox" id="md_converted_choice_13_0">第 1 行</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="line 2"><label for="md_converted_choice_13_1"><input type="checkbox" id="md_converted_choice_13_1">第 2 行</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="line 3"><label for="md_converted_choice_13_2"><input type="checkbox" id="md_converted_choice_13_2">第 3 行</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="line 4"><label for="md_converted_choice_13_3"><input type="checkbox" id="md_converted_choice_13_3">第 4 行</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="line 5"><label for="md_converted_choice_13_4"><input type="checkbox" id="md_converted_choice_13_4">第 5 行</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="redesigning_checkout"><a class="jump" href="index.html#redesigning_checkout"></a>重新设计 <code>checkout</code></h2><div data-outline="redesigning_checkout">
+
+<p id="@use_idea_redesign"><a class="jump" href="index.html#@use_idea_redesign"></a>让我们用这个想法来重新设计 <code>checkout</code> 的实现。该函数将有两个部分：</p>
+
+<ul>
+<li><p id="@first_use_hold"><a class="jump" href="index.html#@first_use_hold"></a>首先，它将使用预约队列和 <code>await</code> 来确保所有书都在图书馆中。由于我们需要等待一个复杂条件满足（多本书同时归还），我们需要保守处理，可能需要反复运行此部分。</p></li>
+<li><p id="@having_established_all"><a class class="jump" href="index.html#@having_established_all"></a>在确认所有书都已归还后，我们将一次性全部借出，在一个精心编写以保证互斥的部分中完成，这样在我们完成之前没有书会消失。</p></li>
+</ul>
+
+<p id="@also_change_loops"><a class="jump" href="index.html#@also_change_loops"></a>让我们也将遍历书籍的 <code>for</code> 循环改为 <a href="../10-functional-programming/index.html">map/filter 操作</a>，这将允许我们使用 <a href="../15-promises/index.html#aggregating_promises"><code>Promise.all()</code></a> 等操作来同时等待多个 Promise。作为起点，让我们命名一些有用的谓词函数，使代码更具可读性和 DRY：</p>
+
+<pre id="@const_isinlibrary_book"><a class="jump" href="index.html#@const_isinlibrary_book"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> isInLibrary = <span class="hljs-function">(<span class="hljs-params">book: Book</span>) =&gt;</span> <span class="hljs-keyword">this</span>.inLibrary.has(book);
+<span class="hljs-keyword">const</span> notInLibrary = <span class="hljs-function">(<span class="hljs-params">book: Book</span>) =&gt;</span> ! isInLibrary(book);</code></pre>
+
+<p id="@now_can_say"><a class="jump" href="index.html#@now_can_say"></a>现在我们可以说我们正在尝试建立的条件是 <code>books.every(isInLibrary)</code>，而尚未可用的书列表可以通过 <code>books.filter(notInLibrary)</code> 计算。</p>
+
+<p id="@also_define_function"><a class="jump" href="index.html#@also_define_function"></a>让我们还定义一个函数来等待缺失的书，通过像之前一样预约它：</p>
+
+<pre id="@const_waitforbook_book"><a class="jump" href="index.html#@const_waitforbook_book"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> waitForBook = <span class="hljs-function">(<span class="hljs-params">book: Book</span>) =&gt;</span> { <span class="hljs-comment">// requires notInLibrary(book)</span>
+    <span class="hljs-keyword">const</span> hold = <span class="hljs-keyword">new</span> Deferred&lt;<span class="hljs-built_in">void</span>&gt;();
+    <span class="hljs-keyword">this</span>.holdsForBook(book).push(hold);
+    <span class="hljs-keyword">return</span> hold.promise;
+};</code></pre>
+
+<p id="@now_can_collect"><a class="jump" href="index.html#@now_can_collect"></a>现在我们可以用单个表达式收集所有需要的 Promise，并同时等待它们：</p>
+
+<pre id="@await_promise-all-books-filter-notinlibrary-map-waitforbook"><a class="jump" href="index.html#@await_promise-all-books-filter-notinlibrary-map-waitforbook"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> <span class="hljs-built_in">Promise</span>.all(books.filter(notInLibrary).map(waitForBook));</code></pre>
+
+<p id="@example_line_code"><a class="jump" href="index.html#@example_line_code"></a>例如，这行代码可能会预约《魔戒同盟》和《双塔奇兵》（目前从图书馆借出），直到两本书都在某个时刻被归还到图书馆之前不会恢复。但它<em>不</em>能保证当 await 最终恢复时两本书仍在图书馆中。正如我们在上面的竞态条件中看到的，可能《魔戒同盟》先被归还，然后在我们还在等待《双塔奇兵》时又被借出了。</p>
+
+<p id="@so_need_be"><a class="jump" href="index.html#@so_need_be"></a>所以我们需要保守处理，再次检查期望的条件，可能还需要等待更多时间，也许是为一组新的缺失书籍。让我们将所有这些代码组合到一个循环中：</p>
+
+<pre id="@wait_all_books"><a class="jump" href="index.html#@wait_all_books"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// wait for all the books to be returned</span>
+<span class="hljs-keyword">while</span> ( ! books.every(isInLibrary)) {
+    <span class="hljs-keyword">await</span> <span class="hljs-built_in">Promise</span>.all(books.filter(notInLibrary).map(waitForBook));
+}</code></pre>
+
+<p id="@once_get_past"><a class="jump" href="index.html#@once_get_past"></a>一旦我们通过这个循环，我们就知道所有想要的书现在都已归还到图书馆，所以我们可以一次性完成借出。这是完整的代码：</p>
+
+<pre id="@public_async_checkout-books_array-book_user_user_promise-void_const_isinlibrary"><a class="jump" href="index.html#@public_async_checkout-books_array-book_user_user_promise-void_const_isinlibrary"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">public</span> <span class="hljs-keyword">async</span> checkout(books: <span class="hljs-built_in">Array</span>&lt;Book&gt;, user: User): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; {
+    <span class="hljs-keyword">const</span> isInLibrary = <span class="hljs-function">(<span class="hljs-params">book: Book</span>) =&gt;</span> <span class="hljs-keyword">this</span>.inLibrary.has(book);
+    <span class="hljs-keyword">const</span> notInLibrary = <span class="hljs-function">(<span class="hljs-params">book: Book</span>) =&gt;</span> ! isInLibrary(book);
+    <span class="hljs-keyword">const</span> waitForBook = <span class="hljs-function">(<span class="hljs-params">book: Book</span>) =&gt;</span> { <span class="hljs-comment">// requires notInLibrary(book)</span>
+        <span class="hljs-keyword">const</span> hold = <span class="hljs-keyword">new</span> Deferred&lt;<span class="hljs-built_in">void</span>&gt;();
+        <span class="hljs-keyword">this</span>.holdsForBook(book).push(hold);
+        <span class="hljs-keyword">return</span> hold.promise;
+    };
+
+    <span class="hljs-comment">// wait for all the books to be returned</span>
+    <span class="hljs-keyword">while</span> ( ! books.every(isInLibrary) ) {
+        <span class="hljs-keyword">await</span> <span class="hljs-built_in">Promise</span>.all(books.filter(notInLibrary).map(waitForBook));
+    }
+
+    <span class="hljs-comment">// borrow the books:</span>
+    <span class="hljs-comment">// this section must be mutually exclusive, because its correctness depends</span>
+    <span class="hljs-comment">// on this property that we just established:</span>
+    assert(books.every(isInLibrary));
+    <span class="hljs-comment">// ... and those books have to stay until we've borrowed them all, so</span>
+    <span class="hljs-comment">// no awaits allowed here!</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+        assert(isInLibrary(book));
+        <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+        <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+    }
+    <span class="hljs-comment">// we've finished borrowing all the books, so end of mutual exclusion;</span>
+    <span class="hljs-comment">// we can now await again.</span>
+
+    <span class="hljs-keyword">this</span>.checkRep();
+}</code></pre>
+
+<p id="@done_careful_design"><a class="jump" href="index.html#@done_careful_design"></a>我们通过这个精心设计所做的，是使 <code>checkout</code> 的借出部分相对于 <code>Library</code> 的其他方法具有<em>原子性</em>。一个<mark data-structure-text="atomic" id="^atomic"><em>原子</em></mark>操作实际上是立即发生的——它不会将其内部步骤与其他操作的步骤交错，并且在整个操作完成之前，操作的效果对其他异步函数不可见，所以它永远不会看起来是半完成的。</p>
+
+<p id="@look_back_race"><a class="jump" href="index.html#@look_back_race"></a>回顾一下我们在本阅读前面看到的<a href="index.html#race_conditions">竞态条件</a>和<a href="index.html#deadlock">死锁</a>——它们现在被修复了吗？</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-redesigning_checkout"><h4 class="text-danger" id="@reading_exercises_6"><a class="jump" href="index.html#@reading_exercises_6"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-redesigning_checkout-but_is_it_safe" data-target="#ex-redesigning_checkout-but_is_it_safe" data-toggle="collapse"><a class="jump" href="index.html#@ex-redesigning_checkout-but_is_it_safe"></a><span class="panel-title">但它安全吗</span></div><div class="panel-collapse collapse exercise-panel" id="ex-redesigning_checkout-but_is_it_safe" data-outline="but_is_it_safe" data-ex-id="redesigning_checkout/but_is_it_safe" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@safety_code_race"><a class="jump" href="index.html#@safety_code_race"></a>这段代码免受竞态条件的安全性强烈依赖于我们在这里写的注释：</p>
+
+<pre id="@section_must_be"><a class="jump" href="index.html#@section_must_be"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// this section must be mutually exclusive, because its correctness depends</span>
+<span class="hljs-comment">// on this property that we just established:</span>
+assert(books.every(isInLibrary));
+<span class="hljs-comment">// ... and those books have to stay until we've borrowed them all, so</span>
+<span class="hljs-comment">// no awaits allowed here!</span>
+<span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> book of books) {
+  assert(isInLibrary(book));
+  <span class="hljs-keyword">this</span>.inLibrary.delete(book);
+  <span class="hljs-keyword">this</span>.borrowedByUser(user).add(book);
+}
+<span class="hljs-comment">// we've finished borrowing all the books, so end of mutual exclusion;</span>
+<span class="hljs-comment">// we can now await again.</span></code></pre>
+
+<p id="@particularly_part_says"><a class="jump" href="index.html#@particularly_part_says"></a>特别是这样说的那部分：<code>no awaits allowed here!</code></p>
+
+<p id="@section_code_short"><a class="jump" href="index.html#@section_code_short"></a>这段代码足够短，我们可以快速检查并确信它不使用 <code>await</code>。但它调用的函数呢——例如最后一行的 <code>this.borrowedByUser()</code>？我们也可以检查那个方法的主体——你可以在本阅读的前面找到它，它现在没有 <code>await</code>。</p>
+
+<p id="@but_method_written"><a class="jump" href="index.html#@but_method_written"></a>但那个方法是在其他地方编写的，远离这些注释。另一个程序员可能无辜地在 <code>borrowedByUser()</code> 中引入一个 <code>await</code>，而没有意识到这对我们在这里声称的互斥以及整个函数免受竞态条件的安全性有多关键。那么我们声称的互斥<em>免受 Bug 侵害</em>的程度如何？</p>
+
+<p id="@specifically_returning_our"><a class="jump" href="index.html#@specifically_returning_our"></a>具体来说，回到我们第一次阅读中的<a href="../01-static-checking/index.html#static_checking_dynamic_checking_no_checking">快速失败层次结构</a>：如果另一个程序员试图将 <code>await</code> 放入 <code>borrowedByUser()</code> 的主体会发生什么？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="static error"><label for="md_converted_choice_17_0"><input type="checkbox" id="md_converted_choice_17_0">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_17_1"><input type="checkbox" id="md_converted_choice_17_1">动态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="no error, and a race condition becomes possible"><label for="md_converted_choice_17_2"><input type="checkbox" id="md_converted_choice_17_2">没有错误，但竞态条件变得可能</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-redesigning_checkout-singleton_books" data-target="#ex-redesigning_checkout-singleton_books" data-toggle="collapse"><a class="jump" href="index.html#@ex-redesigning_checkout-singleton_books"></a><span class="panel-title">单本书</span></div><div class="panel-collapse collapse exercise-panel" id="ex-redesigning_checkout-singleton_books" data-outline="singleton_books" data-ex-id="redesigning_checkout/singleton_books" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-16-mutual-exclusion"><div class="panel-body">
+
+<p id="@if_frodo_gandalf"><a class="jump" href="index.html#@if_frodo_gandalf"></a>如果 Frodo 和 Gandalf 每次只调用 <code>checkout</code> 借<em>一本书</em>，像这样：</p>
+
+<table class="interleaving _2"><tbody><tr><td><pre id="@await_library-checkout-fellowship_frodo_await_library-checkout-twotowers_frodo"><a class="jump" href="index.html#@await_library-checkout-fellowship_frodo_await_library-checkout-twotowers_frodo"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([fellowship], frodo);
+<span class="hljs-keyword">await</span> library.checkout([twoTowers], frodo);
+<span class="hljs-keyword">await</span> library.checkout([returnOfKing], frodo);
+...</code></pre></td><td><pre id="@await_library-checkout-returnofking_gandalf"><a class="jump" href="index.html#@await_library-checkout-returnofking_gandalf"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">await</span> library.checkout([returnOfKing], gandalf);
+<span class="hljs-keyword">await</span> library.checkout([twoTowers], gandalf);
+<span class="hljs-keyword">await</span> library.checkout([fellowship], gandalf);
+...</code></pre></td></tr></tbody></table>
+
+<p id="@does_still_reach"><a class="jump" href="index.html#@does_still_reach"></a>它还能到达死锁吗？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="yes, now it always deadlocks"><label for="md_converted_choice_18_0"><input type="radio" id="md_converted_choice_18_0" name="md_converted_radio_18">是的，现在它<em>总是</em>死锁</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="yes, it might sometimes deadlock"><label for="md_converted_choice_18_1"><input type="radio" id="md_converted_choice_18_1" name="md_converted_radio_18">是的，它可能有时会死锁</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="no, it will never deadlock"><label for="md_converted_choice_18_2"><input type="radio" id="md_converted_choice_18_2" name="md_converted_radio_18">不会，永远不会死锁</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="other_techniques_for_mutual_exclusion"><a class="jump" href="index.html#other_techniques_for_mutual_exclusion"></a>互斥的其他技术</h2><div data-outline="other_techniques_for_mutual_exclusion">
+
+<p id="@typescript-javascript_programs_run"><a class="jump" href="index.html#@typescript-javascript_programs_run"></a>TypeScript/JavaScript 程序在单进程单线程中运行，使用<a href="../15-promises/index.html#^cooperative_concurrency">协作式（非抢占式）</a>并发在并发模块之间传递控制权。在这种背景下，我们可以通过观察 <code>await</code> 点来推理交错并保证互斥。</p>
+
+<p id="@contrast_lower-level_systems"><a class="jump" href="index.html#@contrast_lower-level_systems"></a>相比之下，在具有多个线程共享相同可变数据的低级系统中，情况要复杂得多。线程使用<em>抢占式</em>并发，意味着一个线程可以在计算的任意点中断另一个线程，而不仅仅是在 <code>await</em> 这样的几个特定位置。当你<em>在任何地方</em>都可能被中断时，推理交错就变得更加复杂，使用<a href="https://en.wikipedia.org/wiki/Lock_(computer_science)">锁、互斥锁</a>或<a href="https://en.wikipedia.org/wiki/Semaphore_(programming)">信号量</a>等技术来<em>创建</em>互斥是必不可少的。抢占式并发不在 6.102 的范围内，但你可以在 6.180 [原 6.033] 计算机系统工程和 6.181 [原 6.039] 操作系统工程中学习。</p>
+
+<p id="@another_common_approach"><a class="jump" href="index.html#@another_common_approach"></a>另一种常见的并发访问可变共享数据的方法值得一提：<strong>数据库</strong>。数据库系统广泛用于 Web 应用程序等分布式客户端/服务器系统。数据库通过使用<em>事务</em>来避免竞态条件，事务为对数据库的一系列读写提供互斥。你可以在 6.583 [原 6.814] 数据库系统中了解更多关于事务的信息。</p>
+
+<p id="@typescript-javascript_not_only"><a class="jump" href="index.html#@typescript-javascript_not_only"></a>顺便说一下，TypeScript/JavaScript 并不是唯一支持通过 <code>async</code> 和 <code>await</code> 实现协作式并发的语言。这种方法也存在于 <a href="https://docs.python.org/3/library/asyncio-task.html">Python</a>、<a href="https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html">Swift</a>、<a href="https://rust-lang.github.io/async-book/01_getting_started/04_async_await_primer.html">Rust</a> 和 <a href="https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/concepts/async/">C#</a> 中。</p>
+
+<h3 id="summary"><a class="jump" href="index.html#summary"></a>总结</h3><div data-outline="summary">
+
+<ul id="@designing_asynchronous_adts">
+<li><a class="jump" href="index.html#@designing_asynchronous_adts"></a>设计异步 ADT 需要防范竞态条件和死锁</li>
+<li>实现像 <code>Deferred&lt;T&gt;</code> 这样的类型允许承诺者将 Promise 和修改者操作作为单个对象创建，这对实现异步方法很有用</li>
+<li>利用 <code>await</code> 表达式之间代码中的互斥简化了交错推理
+
+<ul><li>在 <code>await</code> 处，控制权总是会失去，其他异步 ADT 操作可能恢复，或者异步客户端可能调用 ADT 操作</li></ul></li>
+</ul>
+
+<p id="@producing_concurrent_program"><a class="jump" href="index.html#@producing_concurrent_program"></a>生产一个免受 Bug 侵害、易于理解并适应变化的并发程序需要仔细思考。构建并发软件显然对这三个目标都是挑战。我们可以将问题分为两大类。当我们问一个并发程序是否<em>免受 Bug 侵害</em>时，我们关心两个性质：</p>
+
+<ul>
+<li><p id="@safety_does_concurrent"><a class="jump" href="index.html#@safety_does_concurrent"></a><strong>安全性。</strong>并发程序是否满足其不变量和规约？安全性问的是：你能证明<strong>某些坏事永远不会发生</strong>吗？竞态条件威胁安全性。</p></li>
+<li><p id="@liveness_does_program"><a class="jump" href="index.html#@liveness_does_program"></a><strong>活性。</strong>程序是否持续运行并最终做你想做的事，还是卡在某处永远等待永远不会发生的事件？你能证明<strong>某些好事最终会发生</strong>吗？死锁威胁活性。</p></li>
+</ul>
+
+<p id="@single-threaded_typescript-javascript_async"><a class="jump" href="index.html#@single-threaded_typescript-javascript_async"></a>在单线程 TypeScript/JavaScript 中，使用 <code>async</code> 和 <code>await</code>，仔细推理交错（其他并发代码可以夺取控制权的地点）和互斥（没有其他并发代码可以干扰的地方）对于保证这两个性质是必要的。</p></div></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-16-mutual-exclusion"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:31:42 GMT+0000 (Coordinated Universal Time)
+--></html>

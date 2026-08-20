@@ -1,0 +1,430 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+
+<title>使用 Git 进行团队版本控制</title>
+
+<link href="../../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../../index.html">6.102</a></header><header><a href="../../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#team_version_control_with_git">使用 Git 进行团队版本控制</a></li><li><a href="index.html#git_workflow">Git 工作流</a></li><li><a href="index.html#viewing_commit_history">查看提交历史</a></li><li><a href="index.html#graph_of_commits">提交图</a></li><li><a href="index.html#merging">合并</a></li><li><a href="index.html#automatic_merging">自动合并</a></li><li><a href="index.html#merge_conflicts">合并冲突</a></li><li><a href="index.html#using_version_control_in_a_team">在团队中使用版本控制</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="team_version_control_with_git"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?tools-git-3-team-version-control"></iframe><a class="jump" href="index.html#team_version_control_with_git"></a>使用 Git 进行团队版本控制</h1><div data-outline="team_version_control_with_git">
+
+<style>
+object[data*="figures/octicon"] {
+  vertical-align: middle;
+}
+</style>
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<ul id="@understand_merging_git">
+<li><a class="jump" href="index.html#@understand_merging_git"></a>理解 Git 中的合并</li>
+<li>练习在多人编程场景中使用 Git</li>
+</ul>
+
+<h2 id="git_workflow"><a class="jump" href="index.html#git_workflow"></a>Git 工作流</h2><div data-outline="git_workflow">
+
+<p id="@you-ve_been_using"><a class="jump" href="index.html#@you-ve_been_using"></a>你已经在习题集和课堂练习中使用 Git 一段时间了。
+大多数时候，你不需要与其他人协调同时推送到和拉取同一个仓库。
+对于小组项目，这种情况将发生改变。</p>
+
+<p id="@now_you-re_more"><a class="jump" href="index.html#@now_you-re_more"></a>现在你对 Git 基础知识更加熟悉了，是时候回顾一下学期初的一些资源了。</p>
+
+<div class="handout-solo alert alert-warning"><p id="@review_our_introduction"><a class="jump" href="index.html#@review_our_introduction"></a>回顾我们的<a href="../../git-1-version-control/index.html#version_control" class="alert-link">版本控制入门</a>：单人开发、多人开发和分支。</p></div>
+
+</div><h2 id="viewing_commit_history"><a class="jump" href="index.html#viewing_commit_history"></a>查看提交历史</h2><div data-outline="viewing_commit_history">
+
+<div class="handout-solo alert alert-warning"><p id="@review_2-3_viewing"><a class="jump" href="index.html#@review_2-3_viewing"></a>回顾 <em>Pro Git</em> 中的<strong><a href="http://git-scm.com/book/en/Git-Basics-Viewing-the-Commit-History" class="alert-link">2.3 查看提交历史</a></strong>。</p>
+
+<p id="@you_don-t_need"><a class="jump" href="index.html#@you_don-t_need"></a>你不需要记住书中介绍的所有命令行选项！
+取而代之的是，了解有哪些可能的功能，以便在需要时知道要搜索什么。</p></div>
+
+<div class="handout-solo alert alert-warning"><p id="@clone_example_repo"><a class="jump" href="index.html#@clone_example_repo"></a>克隆示例仓库：<br>
+<strong><code>https://github.com/6031/ex05-hello-git.git</code></strong></p>
+
+<p id="@use_log_commands"><a class="jump" href="index.html#@use_log_commands"></a>使用 <code>log</code> 命令确保你了解仓库的历史。</p></div>
+
+</div><h2 id="graph_of_commits"><a class="jump" href="index.html#graph_of_commits"></a>提交图</h2><div data-outline="graph_of_commits">
+
+<p id="@recall_history_recorded"><a class="jump" href="index.html#@recall_history_recorded"></a>回顾一下，Git 仓库中记录的历史是一个有向无环图（DAG）。</p>
+
+<p id="@you-re_working_independently"><a class="jump" href="index.html#@you-re_working_independently"></a>当你独立工作时，在单台机器上，你的版本历史的 DAG 通常看起来像一个序列：提交1是提交2的父提交，提交2是提交3的父提交……</p>
+
+<p id="@there_three_programmers"><a class="jump" href="index.html#@there_three_programmers"></a>示例仓库的历史涉及三位程序员。
+其中两位——Alyssa 和 Ben——"同时"进行了修改。
+在这种情况下，"同时"并不意味着精确的同一时刻。
+相反，它意味着他们基于同一个<em>前一个</em>版本创建了两个不同的<em>新</em>版本，就像<a href="../../git-1-version-control/index.html#version_5L_5D">Alice 在她的笔记本电脑和台式机上创建了版本"5L"和"5D"</a>一样。</p>
+
+<p id="@multiple_commits_share"><a class="jump" href="index.html#@multiple_commits_share"></a>当多个提交共享同一个父提交时，我们的历史 DAG 从序列变成了树形：它分叉开来。
+请注意，项目历史中的分支不需要任何人创建新的 Git 分支，只需从同一个提交开始并在仓库的不同副本上并行工作即可：</p>
+
+<pre class="terminal-dark no-markdown" id="@commit_82e049e248c63289b8a935ce71b130a74dc04152_author"><a class="jump" href="index.html#@commit_82e049e248c63289b8a935ce71b130a74dc04152_author"></a><span class="yellow ">⋮</span>
+*   <span class="yellow ">commit 82e049e248c63289b8a935ce71b130a74dc04152</span>
+<span class="yellow ">|</span>   Author: Ben Bitdiddle &lt;ben.bitdiddle@example.com&gt;
+<span class="yellow ">|</span>   Greeting in Ruby
+<span class="yellow ">|</span>
+<span class="yellow ">|</span> * <span class="yellow ">commit 64009369c5ab93492931ad07962ee81bda921ded</span>
+<span class="yellow ">|</span><span class="yellow ">/</span>  Author: Alyssa P. Hacker &lt;alyssa.p.hacker@example.com&gt;
+<span class="yellow ">|</span>   Greeting in Scheme
+<span class="yellow ">|</span>
+* <span class="yellow ">commit 1255f4e4a5836501c022deb337fda3f8800b02e4</span>
+<span class="yellow ">|</span> Author: Max Goldman &lt;maxg@mit.edu&gt;
+<span class="yellow ">|</span> Change the greeting
+<span class="yellow ">⋮</span>
+</pre>
+
+<p id="@finally_history_dag"><a class="jump" href="index.html#@finally_history_dag"></a>最后，当分叉的修改被合并在一起时，历史 DAG 从树形变成了图形：</p>
+
+<pre class="terminal-dark no-markdown" id="@commit_3e62e60a7b4a0c262cd8eb4308ac3e5a1e94d839_author"><a class="jump" href="index.html#@commit_3e62e60a7b4a0c262cd8eb4308ac3e5a1e94d839_author"></a><span class="green ">⋮</span>
+*   <span class="yellow ">commit 3e62e60a7b4a0c262cd8eb4308ac3e5a1e94d839</span>
+<span class="green ">|</span><span class="yellow ">\</span>  Author: Max Goldman &lt;maxg@mit.edu&gt;
+<span class="green ">|</span> <span class="yellow ">|</span> Merge
+<span class="green ">|</span> <span class="yellow ">|</span>
+* <span class="yellow ">|</span> <span class="yellow ">commit 82e049e248c63289b8a935ce71b130a74dc04152</span>
+<span class="green ">|</span> <span class="yellow ">|</span> Author: Ben Bitdiddle &lt;ben.bitdiddle@example.com&gt;
+<span class="green ">|</span> <span class="yellow ">|</span> Greeting in Ruby
+<span class="green ">|</span> <span class="yellow ">|</span>
+<span class="green ">|</span> * <span class="yellow ">commit 64009369c5ab93492931ad07962ee81bda921ded</span>
+<span class="green ">|</span><span class="yellow ">/</span>  Author: Alyssa P. Hacker &lt;alyssa.p.hacker@example.com&gt;
+<span class="green ">|</span>   Greeting in Scheme
+<span class="green ">|</span>
+* <span class="yellow ">commit 1255f4e4a5836501c022deb337fda3f8800b02e4</span>
+<span class="yellow ">|</span> Author: Max Goldman &lt;maxg@mit.edu&gt;
+<span class="yellow ">|</span> Change the greeting
+<span class="yellow ">⋮</span>
+</pre>
+
+</div><h2 id="merging"><a class="jump" href="index.html#merging"></a>合并</h2><div data-outline="merging">
+
+<p id="@sometimes_you_try"><a class="jump" href="index.html#@sometimes_you_try"></a>有时候，当你尝试推送时，会出现问题。
+你可能会得到这样的输出：</p>
+
+<pre id="@rejected_main_main"><a class="jump" href="index.html#@rejected_main_main"></a><code class="hljs less">! <span class="hljs-selector-attr">[rejected]</span>      <span class="hljs-selector-tag">main</span> <span class="hljs-selector-tag">-</span>&gt; <span class="hljs-selector-tag">main</span> (non-fast-forward)
+</code></pre>
+
+<p id="@what-s_going_here"><a class="jump" href="index.html#@what-s_going_here"></a>这里发生的情况是，Git 不允许你推送提交到仓库，除非你的所有提交都排在远程仓库中已有提交之后。
+如果你收到这样的错误消息，意味着远程仓库中有你本地仓库中没有的提交（在项目中，可能是因为队友在你之前推送了）。
+如果你遇到了这种情况，你必须先拉取再推送。</p>
+
+<p id="@examine_happens_changes"><a class="jump" href="index.html#@examine_happens_changes"></a>让我们看看当并行更改发生时会发生什么：</p>
+
+<div class="panel panel-default"><div class="panel-heading"><p id="@create_commit_hello-scm"><a class="jump" href="index.html#@create_commit_hello-scm"></a>并行创建并提交 <code>hello.scm</code> 和 <code>hello.rb</code></p></div>
+<div class="panel-body" id="hello-git-merge"><p id="@hover_tap_each"><a class="jump" href="index.html#@hover_tap_each"></a>将鼠标悬停或点击每个步骤以更新图示：</p>
+
+<ol id="@both_alyssa_ben">
+<li class="hover-figure-select highlighted"><a class="jump" href="index.html#@both_alyssa_ben"></a>Alyssa 和 Ben 都<strong>克隆</strong>了包含两个提交（<code>41c4b8f</code> 和 <code>1255f4e</code>）的仓库。</li>
+<li class="hover-figure-select">Alyssa 创建 <code>hello.scm</code> 并将她的修改<strong>提交</strong>为 <code>6400936</code>。</li>
+<li class="hover-figure-select">与此同时，Ben 创建 <code>hello.rb</code> 并将他的修改<strong>提交</strong>为 <code>82e049e</code>。<br>
+此时，他们两人的修改都只存在于各自的本地仓库中。
+在每个仓库中，<code>main</code> 现在指向不同的提交。</li>
+<li class="hover-figure-select">假设 Alyssa 是第一个<strong>推送</strong>她的修改到远程的人。</li>
+<li class="hover-figure-select">如果 Ben 现在尝试推送会发生什么？
+推送将被拒绝：如果服务器将 <code>main</code> 更新为指向 Ben 的提交，Alyssa 的提交将从项目历史中消失！</li>
+<li class="hover-figure-select">Ben 必须将他的修改与 Alyssa 的<strong>合并</strong>。<br>
+为了执行合并，他从远程<strong>拉取</strong>她的提交，这做了两件事：<br>
+(a) 将新提交下载到 Ben 仓库的对象图中</li>
+<li class="hover-figure-select">(b) 将 Ben 的历史与 Alyssa 的历史合并，创建一个新提交（<code>3e62e60</code>），将两个历史连接在一起。
+这个提交就像其他提交一样是一个快照：应用了两人修改后的仓库快照。</li>
+<li class="hover-figure-select">现在 Ben 可以 <code>git push</code> 了，因为这样做不会丢失任何历史。</li>
+<li class="hover-figure-select">Alyssa 可以 <code>git pull</code> 来获取 Ben 的工作。</li>
+</ol>
+
+<div class="hover-figure no-markdown" data-selector="#hello-git-merge li" data-target="img" data-attr="src" data-template="figures/hello-git-merge-{index}.png"><img style="max-width:567px" src="figures/hello-git-merge-0.png"></div></div></div>
+
+<p id="@example_git_able"><a class="jump" href="index.html#@example_git_able"></a>在这个例子中，Git 能够自动合并 Alyssa 和 Ben 的修改，因为他们各自修改了不同的文件。
+如果他们两人编辑了<em>相同文件的相同部分</em>，Git 将报告一个<mark data-structure-text="merge conflict" id="^merge_conflict"><strong>合并冲突</strong></mark>。
+Ben 将不得不手动将他们的修改交织在一起，然后再提交合并。</p>
+
+</div><h2 id="automatic_merging"><a class="jump" href="index.html#automatic_merging"></a>自动合并</h2><div data-outline="automatic_merging">
+
+<p id="@if_you_made"><a class="jump" href="index.html#@if_you_made"></a>如果你对你的仓库做了一些修改，并且你正在尝试合并来自另一个仓库的修改，你需要以某种方式将它们合并在一起。
+从提交的角度来看，实际发生的是你需要创建一个特殊的<em>合并提交</em>来组合双方的修改。
+这个过程实际如何发生取决于具体的修改内容。</p>
+
+<p id="@if_you-re_lucky"><a class="jump" href="index.html#@if_you-re_lucky"></a>如果你幸运的话（像上面例子中的 Alyssa 和 Ben），你做的修改和你从远程仓库下载的修改不会冲突。
+例如，也许你修改了一个文件，而你的项目伙伴修改了另一个文件。
+在这种情况下，包含双方的修改是安全的。
+同样，也许你修改了同一个文件的不同部分。
+在这些情况下，Git 可以自动合并。
+当你运行 <code>git pull</code> 时，它会弹出一个编辑器，就像你在创建提交一样：这是 Git 自动生成的合并提交的提交消息。
+一旦你保存并关闭这个编辑器，合并提交就会被创建，你将已经合并了双方的修改。
+此时，你应该编译代码并运行测试（以确保合并确实有效），然后再尝试 <code>git push</code>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-automatic_merging"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automatic_merging-merge" data-target="#ex-automatic_merging-merge" data-toggle="collapse"><a class="jump" href="index.html#@ex-automatic_merging-merge"></a><span class="panel-title">合并</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automatic_merging-merge" data-outline="merge" data-ex-id="automatic_merging/merge" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-3-team-version-control"><div class="panel-body">
+
+<p id="@alice_bob_both"><a class="jump" href="index.html#@alice_bob_both"></a>Alice 和 Bob 都以相同的 TypeScript 文件 <code>hello.ts</code> 开始：</p>
+
+<pre id="@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_function_greeting_string_return_hello_0"><a class="jump" href="index.html#@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_function_greeting_string_return_hello_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** prints a greeting to the console */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greet</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-built_in">console</span>.log(greeting() + <span class="hljs-string">", "</span> + name);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greeting</span>(<span class="hljs-params"></span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-string">"Hello"</span>;
+}</code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@alice_changes_greet_0"><a class="jump" href="index.html#@alice_changes_greet_0"></a>Alice 修改了 <code>greet(..)</code>：</p>
+
+<pre id="@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_1"><a class="jump" href="index.html#@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** prints a greeting to the console */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greet</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-built_in">console</span>.log(greeting() + <span class="hljs-string">", "</span> + name + <span class="hljs-string">"!"</span>);
+}</code></pre></td>
+<td><p id="@bob_changes_greeting"><a class="jump" href="index.html#@bob_changes_greeting"></a>Bob 修改了 <code>greeting()</code>：</p>
+
+<pre id="@function_greeting_string_return_ciao_0"><a class="jump" href="index.html#@function_greeting_string_return_ciao_0"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greeting</span>(<span class="hljs-params"></span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-string">"Ciao"</span>;
+}</code></pre></td></tr></tbody></table>
+
+<label class="exercise-part-heading" id="@if_git_merges_changes_alice_bob_result_greet-eve_0"><a class="jump" href="index.html#@if_git_merges_changes_alice_bob_result_greet-eve_0"></a>如果 Git 合并了 Alice 和 Bob 的修改，<code>greet("Eve")</code> 的结果是什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Hello, Eve"><label for="md_converted_choice_1_0"><input type="radio" id="md_converted_choice_1_0" name="md_converted_radio_1"><code>Hello, Eve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="Hello, Eve!"><label for="md_converted_choice_1_1"><input type="radio" id="md_converted_choice_1_1" name="md_converted_radio_1"><code>Hello, Eve!</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="Ciao, Eve"><label for="md_converted_choice_1_2"><input type="radio" id="md_converted_choice_1_2" name="md_converted_radio_1"><code>Ciao, Eve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="Ciao, Eve!"><label for="md_converted_choice_1_3"><input type="radio" id="md_converted_choice_1_3" name="md_converted_radio_1"><code>Ciao, Eve!</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (static error)"><label for="md_converted_choice_1_4"><input type="radio" id="md_converted_choice_1_4" name="md_converted_radio_1">我们可以自动合并，但生成的代码是错误的（静态错误）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (dynamic error)"><label for="md_converted_choice_1_5"><input type="radio" id="md_converted_choice_1_5" name="md_converted_radio_1">我们可以自动合并，但生成的代码是错误的（动态错误）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (no error, wrong behavior)"><label for="md_converted_choice_1_6"><input type="radio" id="md_converted_choice_1_6" name="md_converted_radio_1">我们可以自动合并，但生成的代码是错误的（无错误，行为不正确）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we cannot automatically merge the changes"><label for="md_converted_choice_1_7"><input type="radio" id="md_converted_choice_1_7" name="md_converted_radio_1">我们无法自动合并这些修改</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automatic_merging-dangerous_merge_ahead" data-target="#ex-automatic_merging-dangerous_merge_ahead" data-toggle="collapse"><a class="jump" href="index.html#@ex-automatic_merging-dangerous_merge_ahead"></a><span class="panel-title">前方危险合并</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automatic_merging-dangerous_merge_ahead" data-outline="dangerous_merge_ahead" data-ex-id="automatic_merging/dangerous_merge_ahead" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-3-team-version-control"><div class="panel-body">
+
+<p id="@same_starting_program_0"><a class="jump" href="index.html#@same_starting_program_0"></a>相同的起始程序：</p>
+
+<pre id="@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_function_greeting_string_return_hello_1"><a class="jump" href="index.html#@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_function_greeting_string_return_hello_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** prints a greeting to the console */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greet</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-built_in">console</span>.log(greeting() + <span class="hljs-string">", "</span> + name);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greeting</span>(<span class="hljs-params"></span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-string">"Hello"</span>;
+}</code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@alice_changes_greeting"><a class="jump" href="index.html#@alice_changes_greeting"></a>Alice 修改了 <code>greeting()</code>：</p>
+
+<pre id="@function_greeting_string_return_ciao_1"><a class="jump" href="index.html#@function_greeting_string_return_ciao_1"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greeting</span>(<span class="hljs-params"></span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-string">"Ciao"</span>;
+}</code></pre></td>
+<td><p id="@bob_changes_comma"><a class="jump" href="index.html#@bob_changes_comma"></a>Bob 修改了逗号出现的位置：</p>
+
+<pre id="@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_function_greeting_string_return_hello_2"><a class="jump" href="index.html#@prints_greeting_console_export_default_function_greet-name_string_void_console-log-greeting_name_function_greeting_string_return_hello_2"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** prints a greeting to the console */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greet</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-built_in">console</span>.log(greeting() + name);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greeting</span>(<span class="hljs-params"></span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-string">"Hello, "</span>;
+}</code></pre></td></tr></tbody></table>
+
+<label class="exercise-part-heading" id="@if_git_merges_changes_alice_bob_result_greet-eve_1"><a class="jump" href="index.html#@if_git_merges_changes_alice_bob_result_greet-eve_1"></a>如果 Git 合并了 Alice 和 Bob 的修改，<code>greet("Eve")</code> 的结果是什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Hello, Eve"><label for="md_converted_choice_2_0"><input type="radio" id="md_converted_choice_2_0" name="md_converted_radio_2"><code>Hello, Eve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="HelloEve"><label for="md_converted_choice_2_1"><input type="radio" id="md_converted_choice_2_1" name="md_converted_radio_2"><code>HelloEve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="Ciao, Eve"><label for="md_converted_choice_2_2"><input type="radio" id="md_converted_choice_2_2" name="md_converted_radio_2"><code>Ciao, Eve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="CiaoEve"><label for="md_converted_choice_2_3"><input type="radio" id="md_converted_choice_2_3" name="md_converted_radio_2"><code>CiaoEve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (static error)"><label for="md_converted_choice_2_4"><input type="radio" id="md_converted_choice_2_4" name="md_converted_radio_2">我们可以自动合并，但生成的代码是错误的（静态错误）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (dynamic error)"><label for="md_converted_choice_2_5"><input type="radio" id="md_converted_choice_2_5" name="md_converted_radio_2">我们可以自动合并，但生成的代码是错误的（动态错误）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (no error, wrong behavior)"><label for="md_converted_choice_2_6"><input type="radio" id="md_converted_choice_2_6" name="md_converted_radio_2">我们可以自动合并，但生成的代码是错误的（无错误，行为不正确）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we cannot automatically merge the changes"><label for="md_converted_choice_2_7"><input type="radio" id="md_converted_choice_2_7" name="md_converted_radio_2">我们无法自动合并这些修改</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automatic_merging-continue_merging" data-target="#ex-automatic_merging-continue_merging" data-toggle="collapse"><a class="jump" href="index.html#@ex-automatic_merging-continue_merging"></a><span class="panel-title">继续合并</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automatic_merging-continue_merging" data-outline="continue_merging" data-ex-id="automatic_merging/continue_merging" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-3-team-version-control"><div class="panel-body">
+
+<p id="@same_starting_program_1"><a class="jump" href="index.html#@same_starting_program_1"></a>相同的起始程序：</p>
+
+<pre id="@export_default_function_greet-name_string_void"><a class="jump" href="index.html#@export_default_function_greet-name_string_void"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greet</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-built_in">console</span>.log(greeting() + <span class="hljs-string">", "</span> + name);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greeting</span>(<span class="hljs-params"></span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-string">"Hello"</span>;
+}</code></pre>
+
+<p id="@alice_changes_greet_return_instead_print"><a class="jump" href="index.html#@alice_changes_greet_return_instead_print"></a>Alice 修改了 <code>greet(..)</code> 使其返回而不是打印：</p>
+
+<pre id="@export_default_function_greet-name_string_string"><a class="jump" href="index.html#@export_default_function_greet-name_string_string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">export</span> <span class="hljs-keyword">default</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">greet</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">return</span> greeting() + <span class="hljs-string">", "</span> + name;
+}</code></pre>
+
+<p id="@bob_creates_new"><a class="jump" href="index.html#@bob_creates_new"></a>Bob 创建了一个新文件 <code>main.ts</code>：</p>
+
+<pre id="@import_greet_hello"><a class="jump" href="index.html#@import_greet_hello"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">import</span> greet <span class="hljs-keyword">from</span> <span class="hljs-string">'./hello'</span>;
+
+greet(<span class="hljs-string">"Eve"</span>);</code></pre>
+
+<label class="exercise-part-heading" id="@if_git_merges_changes_alice_bob_result_running_main"><a class="jump" href="index.html#@if_git_merges_changes_alice_bob_result_running_main"></a>如果 Git 合并了 Alice 和 Bob 的修改，运行 <code>main</code> 的结果是什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Hello, Eve"><label for="md_converted_choice_3_0"><input type="radio" id="md_converted_choice_3_0" name="md_converted_radio_3"><code>Hello, Eve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="Hello, Eve!"><label for="md_converted_choice_3_1"><input type="radio" id="md_converted_choice_3_1" name="md_converted_radio_3"><code>Hello, Eve!</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="Ciao, Eve"><label for="md_converted_choice_3_2"><input type="radio" id="md_converted_choice_3_2" name="md_converted_radio_3"><code>Ciao, Eve</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="Ciao, Eve!"><label for="md_converted_choice_3_3"><input type="radio" id="md_converted_choice_3_3" name="md_converted_radio_3"><code>Ciao, Eve!</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (static error)"><label for="md_converted_choice_3_4"><input type="radio" id="md_converted_choice_3_4" name="md_converted_radio_3">我们可以自动合并，但生成的代码是错误的（静态错误）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (dynamic error)"><label for="md_converted_choice_3_5"><input type="radio" id="md_converted_choice_3_5" name="md_converted_radio_3">我们可以自动合并，但生成的代码是错误的（动态错误）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we can automatically merge, but the resulting code is broken (no error, wrong behavior)"><label for="md_converted_choice_3_6"><input type="radio" id="md_converted_choice_3_6" name="md_converted_radio_3">我们可以自动合并，但生成的代码是错误的（无错误，行为不正确）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="we cannot automatically merge the changes"><label for="md_converted_choice_3_7"><input type="radio" id="md_converted_choice_3_7" name="md_converted_radio_3">我们无法自动合并这些修改</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="practice_with_gitstream"><a class="jump" href="index.html#practice_with_gitstream"></a>使用 GitStream 练习</h3><div data-outline="practice_with_gitstream">
+
+<p id="@git_does_merge"><a class="jump" href="index.html#@git_does_merge"></a>当 Git 执行合并时，它可能需要你提供提交消息。它会通过打开一个文编辑器来实现。如果你一直没有使用文本编辑器来写提交消息，让我们确保你的 Git 仍然配置为弹出一个你能找到并使用的编辑器。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-automatic_merging_2"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automatic_merging_2-check_your_commit_message_editor" data-target="#ex-automatic_merging_2-check_your_commit_message_editor" data-toggle="collapse"><a class="jump" href="index.html#@ex-automatic_merging_2-check_your_commit_message_editor"></a><span class="panel-title">检查你的提交消息编辑器</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automatic_merging_2-check_your_commit_message_editor" data-outline="check_your_commit_message_editor" data-ex-id="practice_with_gitstream/check_your_commit_message_editor" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-3-team-version-control"><div class="panel-body">
+
+<p id="@run_0"><a class="jump" href="index.html#@run_0"></a>运行：</p>
+
+<pre id="@git_config_core-editor"><a class="jump" href="index.html#@git_config_core-editor"></a><code class="hljs css"><span class="hljs-selector-tag">git</span> <span class="hljs-selector-tag">config</span> <span class="hljs-selector-tag">core</span><span class="hljs-selector-class">.editor</span></code></pre>
+
+<p id="@see_text_editor"><a class="jump" href="index.html#@see_text_editor"></a>查看 Git 将使用什么文编辑器来编写合并提交消息。
+将其复制到此处，包括其命令行参数（如果有的话）：</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automatic_merging_2-and_use_it" data-target="#ex-automatic_merging_2-and_use_it" data-toggle="collapse"><a class="jump" href="index.html#@ex-automatic_merging_2-and_use_it"></a><span class="panel-title">并使用它</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automatic_merging_2-and_use_it" data-outline="and_use_it" data-ex-id="practice_with_gitstream/and_use_it" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-3-team-version-control"><div class="panel-body">
+
+<p id="@assuming_your_git"><a class="jump" href="index.html#@assuming_your_git"></a>假设你的 Git 现在已配置为使用你熟悉的编辑器，尝试通过运行以下命令让 Git 打开编辑器：</p>
+
+<pre id="@git_config_global_edit"><a class="jump" href="index.html#@git_config_global_edit"></a><code class="hljs lua">git <span class="hljs-built_in">config</span> <span class="hljs-comment">--global --edit</span></code></pre>
+
+<p id="@open_your_git"><a class="jump" href="index.html#@open_your_git"></a>这将在编辑器中打开你的 Git 配置文件。如果编辑器是 VS Code 或其他图形文本编辑器，Git 会显示"hint: Waiting for your editor to close the file…"这是一个信号，提示你去 VS Code 找到 Git 刚刚在那里打开的标签页。</p>
+
+<p id="@if_merge_commit"><a class="jump" href="index.html#@if_merge_commit"></a>如果这是一个合并提交，那么你应该继续编辑文件以添加你的提交消息。
+但对于这个测试，<strong>不要更改你的配置文件。</strong> 如果你不小心输入了内容，请确保撤销并不保存。</p>
+
+<p id="@instead_just_close"><a class="jump" href="index.html#@instead_just_close"></a>相反，只需关闭标签页。
+然后回到你运行 <code>git</code> 命令的提示符处，你应该会看到命令现在已经回到了提示符。</p>
+
+<p id="@git_pops_up"><a class="jump" href="index.html#@git_pops_up"></a>当 Git 在 VS Code 中弹出标签页时，你总是需要关闭标签页才能让 Git 继续执行。</p>
+
+<p id="@did_work"><a class="jump" href="index.html#@did_work"></a>成功了吗？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; Yes; No"><select class="form-control"><option selected="selected"></option><option>Yes</option>,<option>No</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<p id="@now_try_merge"><a class="jump" href="index.html#@now_try_merge"></a>现在尝试在 GitStream 中进行这个合并练习。</p>
+
+<div class="handout-solo alert alert-warning"><p id="@gitstream_not_work"><a class="jump" href="index.html#@gitstream_not_work"></a><strong><em>GitStream 在多个练习页面同时打开时无法工作</em></strong>。</p>
+
+<p id="@don-t_open_exercises"><a class="jump" href="index.html#@don-t_open_exercises"></a>不要在多个标签页中打开练习。
+如果练习无法工作，请关闭所有打开的 GitStream 页面然后重试。</p>
+
+<p id="@if_you_encounter"><a class="jump" href="index.html#@if_you_encounter"></a>如果遇到问题，请<a href="../../../general/index.html#who-to-ask" class="alert-link">寻求帮助</a>。</p></div>
+
+<div class="no-markdown handout-due alert alert-danger"><i>GitStream</i> → <a href="https://gitstream.mit.edu/?cleanMerge" target="gitstream" class="alert-link">干净地合并协作者的工作</a></div>
+
+<div class="handout-solo alert alert-warning"><p id="@note_gitstream_doesn-t"><a class="jump" href="index.html#@note_gitstream_doesn-t"></a>请注意，GitStream 不会跟踪你是否已经完成了这个练习。
+要查看你已经完成了哪些 GitStream 练习，请查看<a href="https://omni.mit.edu/6.102/sp26/user/tools/git-3-team-version-control/gitstream-exercises" class="alert-link">Omnivore</a>。</p></div>
+
+</div></div><h2 id="merge_conflicts"><a class="jump" href="index.html#merge_conflicts"></a>合并冲突</h2><div data-outline="merge_conflicts">
+
+<p id="@sometimes_you-re_not"><a class="jump" href="index.html#@sometimes_you-re_not"></a>有时候，你没有那么幸运。
+如果你做的修改和你拉取的修改编辑了同一个文件的同一部分，Git 将不知道如何解决。
+这被称为<em>合并冲突</em>。
+在这种情况下，你会得到一个大写字母显示 <code>CONFLICT</code> 的输出。
+如果你运行 <code>git status</code>，它会用 <code>Both modified</code> 标签显示冲突的文件。
+你现在需要编辑这些文件并手动解决冲突。</p>
+
+<p id="@first_open_files"><a class="jump" href="index.html#@first_open_files"></a>首先，在 Visual Studio Code 中打开文件。
+冲突的部分会用醒目的 <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code>、<code>==================</code> 和 <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> 行标记。
+<code>&lt;&lt;&lt;&lt;</code> 和 <code>====</code> 行之间的所有内容是你做的修改。
+<code>====</code> 和 <code>&gt;&gt;&gt;&gt;</code> 行之间的所有内容是你拉取的修改。
+你的任务是弄清楚如何组合这些修改。
+答案当然取决于具体情况。
+也许一个修改在逻辑上取代另一个，或者它们可以以某种方式合并。
+你应该将文件编辑到满意的状态，并在完成后删除 <code>&lt;&lt;&lt;&lt;</code>/<code>====</code>/<code>&gt;&gt;&gt;&gt;</code> 标记。</p>
+
+<div class="handout-solo alert alert-warning"><p id="@just_described_git-s"><a class="jump" href="index.html#@just_described_git-s"></a>如刚才所述，Git 的默认行为是在你遇到合并冲突时显示<em>双向</em>差异——你做的修改和你拉取的修改。</p>
+
+<p id="@make_easier_understand"><a class="jump" href="index.html#@make_easier_understand"></a>为了更容易理解合并冲突，让 Git 改为显示<strong>三向</strong>差异会有所帮助，其中还包括代码的原始版本，即在你或你的队友修改之前的版本。
+三向差异在代码文件中看起来像这样：</p>
+
+<pre class="no-markdown" id="@your_version_code"><a class="jump" href="index.html#@your_version_code"></a>&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+.
+. 你的代码版本，包含你的修改
+.
+|||||||||||||||||||
+.
+. 代码的原始版本
+.       （你的修改和传入修改的共同祖先）
+.
+==================
+.
+. 传入的代码版本
+.       （包含你刚拉取的修改）
+.
+&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;
+</pre>
+
+<p id="@enable_three-way_differencing"><a class="jump" href="index.html#@enable_three-way_differencing"></a><strong>立即启用三向差异</strong>，因为它对即将到来的 GitStream 练习以及你将遇到的任何合并冲突都有帮助：</p>
+
+<pre id="@git_config_global_merge-conflictstyle_diff3"><a class="jump" href="index.html#@git_config_global_merge-conflictstyle_diff3"></a><code class="language-sh hljs bash">git config --global merge.conflictstyle diff3</code></pre></div>
+
+<p id="@once_you_resolved"><a class="jump" href="index.html#@once_you_resolved"></a>一旦你解决了所有冲突（注意可能有多个冲突文件，每个文件中也可能有多个冲突），你应该编译代码并运行测试。
+然后 <code>git add</code> 所有受影响的文件，再执行 <code>git commit</code>。
+你将有机会编写合并提交消息（你应该在其中描述你是如何执行合并的）。
+现在你应该可以推送了。</p>
+
+<div class="no-markdown handout-due alert alert-danger"><i>GitStream</i> → <a href="https://gitstream.mit.edu/?mergeConflict" target="gitstream" class="alert-link">解决合并冲突 1</a>
+<br><i>GitStream</i> → <a href="https://gitstream.mit.edu/?mergeConflictJSON" target="gitstream" class="alert-link">解决合并冲突 2</a></div>
+
+<div class="panel panel-default"><div class="panel-body"><p id="@avoid_merges_merge"><a class="jump" href="index.html#@avoid_merges_merge"></a>避免合并和合并冲突：</p>
+
+<h3 id="pull_before_you_start_working"><a class="jump" href="index.html#pull_before_you_start_working"></a><em>开始工作前先拉取</em></h3><div data-outline="pull_before_you_start_working">
+
+<p id="@before_you_start"><a class="jump" href="index.html#@before_you_start"></a>在你开始工作之前，<strong>务必先 <code>git pull</code></strong>。
+这样，你将基于最新版本的代码进行工作，并且不太需要在之后执行合并。</p></div></div></div>
+
+</div><h2 id="using_version_control_in_a_team"><a class="jump" href="index.html#using_version_control_in_a_team"></a>在团队中使用版本控制</h2><div data-outline="using_version_control_in_a_team">
+
+<p id="@every_team_develops"><a class="jump" href="index.html#@every_team_develops"></a>每个团队都会制定自己的版本控制标准，团队规模和项目大小是主要因素。
+以下是一些针对你在6.102中将进行的小规模团队项目的指导方针：</p>
+
+<ul>
+<li><p id="@communicate_tell_your"><a class="jump" href="index.html#@communicate_tell_your"></a><strong>沟通。</strong>
+告诉你的队友你打算做什么。
+告诉他们你正在做。
+并告诉他们你做完了。
+编写有用的、描述性的提交消息。
+沟通是避免浪费时间和精力清理错误代码的最佳方式。</p></li>
+<li><p id="@write_specs_necessary"><a class="jump" href="index.html#@write_specs_necessary"></a><strong>编写规格说明。</strong>
+对于我们在6.102中关注的内容来说必不可少，也是良好沟通的一部分。</p></li>
+<li><p id="@write_tests_don-t"><a class="jump" href="index.html#@write_tests_don-t"></a><strong>编写测试。</strong>
+不要等到积累了大量代码后才尝试测试。
+避免让一个人写测试而另一个人写实现（除非实现是你打算丢弃的原型）。
+先写测试以确保你们对规格说明达成一致。
+每个人都应该对自己代码的正确性负责。</p></li>
+<li><p id="@run_tests_tests"><a class="jump" href="index.html#@run_tests_tests"></a><strong>运行测试。</strong>
+如果你不运行测试，测试就无法帮助你。
+在开始工作前运行测试，在提交前再次运行。</p></li>
+<li><p id="@automate_you-ve_already"><a class="jump" href="index.html#@automate_you-ve_already"></a><strong>自动化。</strong>
+你已经使用 Mocha 等工具自动化了测试，但你现在想在项目每次变更时自动运行这些测试。
+对于6.102的小组项目，我们提供 Didit 作为每次团队成员推送到 github.mit.edu 时自动运行测试的方式。
+这也消除了"在我的机器上能运行"的借口：要么在自动化构建中运行正常，要么需要修复。</p></li>
+<li><p id="@review_you_commit"><a class="jump" href="index.html#@review_you_commit"></a><strong>审查你的提交。</strong>
+使用 <code>git diff --staged</code> 或 GUI 程序查看你即将提交的内容。
+运行测试。
+不要使用 <code>commit -a</code>，这是用调试打印语句和其他你无意提交的内容填满仓库的好方法。
+不要通过提交无法编译的代码、输出调试信息、实际未使用的代码等来烦扰你的队友。</p></li>
+<li><p id="@pull_before_you_start_working_otherwise"><a class="jump" href="index.html#@pull_before_you_start_working_otherwise"></a><strong>开始工作前先拉取。</strong>
+否则，你可能没有以最新版本作为起点——你正在编辑旧版本的代码！
+你肯定需要在之后合并修改，并且面临浪费时间解决合并冲突的风险。</p></li>
+<li><p id="@sync_up_end"><a class="jump" href="index.html#@sync_up_end"></a><strong>同步。</strong>
+在一天结束时或工作会话结束时，确保每个人都已推送和拉取所有修改，你们都在同一个提交上，并且每个人都对项目状态感到满意。</p></li>
+</ul>
+
+<p id="@don-t_necessarily_recommend"><a class="jump" href="index.html#@don-t_necessarily_recommend"></a>我们不一定要为6.102规模的项目推荐使用分支或变基等功能。
+当项目规模、时间长度或人数远大于本课程中1-2周的3人期末项目时，在单独的分支上工作才显得极为重要。
+对于6.102，专注于<em>清晰的沟通</em>和整个团队的<em>频繁同步</em>。</p>
+
+<style id="last-reading-exercises" class="no-markdown">
+#last-reading-exercises + .reading-exercises iframe.exercises-status { margin-top: -150px; }
+</style>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-using_version_control_in_a_team"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-using_version_control_in_a_team-team_version_control" data-target="#ex-using_version_control_in_a_team-team_version_control" data-toggle="collapse"><a class="jump" href="index.html#@ex-using_version_control_in_a_team-team_version_control"></a><span class="panel-title">团队版本控制</span></div><div class="panel-collapse collapse exercise-panel" id="ex-using_version_control_in_a_team-team_version_control" data-outline="team_version_control" data-ex-id="using_version_control_in_a_team/team_version_control" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-3-team-version-control"><div class="panel-body">
+
+<p id="@which_these_demonstrate"><a class="jump" href="index.html#@which_these_demonstrate"></a>以下哪些展示了良好的团队软件开发实践？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Pushing small commits, one for each file changed during some work"><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0">推送小提交，每次工作中每修改一个文件推送一次</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Pushing small commits, one for each step in the project"><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1">推送小提交，项目中每个步骤推送一次</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Pushing small commits, including intermediate work that doesn’t compile"><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2">推送小提交，包括无法编译的中间工作</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Always committing all changes (for example, git commit -a)"><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3">始终提交所有修改（例如，<code>git commit -a</code>）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Always reformatting any file you edit (indentation, braces, etc.)"><label for="md_converted_choice_4_4"><input type="checkbox" id="md_converted_choice_4_4">始终重新格式化你编辑的任何文件（缩进、大括号等）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Always pulling changes from the remote repo before working on the project"><label for="md_converted_choice_4_5"><input type="checkbox" id="md_converted_choice_4_5">在处理项目之前始终从远程仓库拉取修改</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div></div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A1.75 1.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 年春季课程网站存档  |  最新网站地址：<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍访问</a></footer><script type="text/javascript" charset="utf-8" src="../../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="tools-git-3-team-version-control"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:35:40 GMT+0000 (Coordinated Universal Time)
+--></html>

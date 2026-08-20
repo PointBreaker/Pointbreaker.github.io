@@ -1,0 +1,1774 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>阅读 13:（避免）调试</title>
+
+
+
+
+<link href="../../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../../index.html">6.102</a></header><header><a href="../../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li class="active"><a href="index.html#reading_13_avoiding_debugging">阅读 13:（避免）调试</a></li><li><a href="index.html#a_rogues_gallery_of_bugs">常见 bug 集锦</a></li><li><a href="index.html#first_defense_make_bugs_impossible">第一道防线：让 bug 不可能发生</a></li><li><a href="index.html#second_defense_make_bugs_easy_to_find">第二道防线：让 bug 易于发现</a></li><li><a href="index.html#reproduce_the_bug">复现 bug</a></li><li><a href="index.html#find_the_bug_using_the_scientific_method">使用科学方法定位 bug</a></li><li><a href="index.html#fix_the_bug">修复 bug</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_13_avoiding_debugging"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-13-debugging"></iframe><a class="jump" href="index.html#reading_13_avoiding_debugging"></a>阅读 13:（避免）调试</h1><div data-outline="reading_13_avoiding_debugging">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>6.102 中的软件</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>免受 bug 侵害</th><th>易于理解</th><th>适应变化</th></tr>
+<tr><td>
+  现在正确，在未来未知的情况下也正确。
+</td><td>
+  与未来的程序员（包括未来的你自己）清晰地沟通。
+</td><td>
+  设计时考虑到适应性，无需重写即可容纳变化。</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<p id="@topic_today-s_class"><a class="jump" href="index.html#@topic_today-s_class"></a>今天课程的主题是调试。</p>
+
+<p id="@first_going_look"><a class="jump" href="index.html#@first_going_look"></a>首先，我们将探讨如何<em>避免调试</em>——即如何编写代码来完全避免调试，或者至少让调试变得更容易。</p>
+
+<p id="@but_sometimes_you"><a class="jump" href="index.html#@but_sometimes_you"></a>但有时你别无选择，只能进行调试——尤其是当 bug 只有在整个系统集成在一起时才会被发现，或者是在系统部署后由用户报告的情况下，这时可能很难将其定位到特定的模块。
+对于这些情况，我们可以提出一个系统化的策略来进行更有效的调试。</p>
+
+<p id="@good_book_about"><a class="jump" href="index.html#@good_book_about"></a>一本关于系统化调试的好书是 Andreas Zeller 所著的 <a href="https://mit.primo.exlibrisgroup.com/view/action/uresolver.do?operation=resolveService&amp;package_service_id=24907349790006761&amp;institutionId=6761&amp;customerId=6760&amp;VE=true"><em>Why Programs Fail</em></a>。
+本次阅读的很多内容都受到那本书的启发。</p>
+
+<p id="@also_related_debug"><a class="jump" href="index.html#@also_related_debug"></a>另一篇相关的文章是 John Regehr 的 <a href="https://blog.regehr.org/archives/199">"How to Debug"</a>，这是一门嵌入式系统课程的讲座，内容比 6.102 更底层，但系统化调试的一般原则是相同的。</p>
+
+<p id="@finally_debugging_nine"><a class="jump" href="index.html#@finally_debugging_nine"></a>最后，David Agans 所著的 <a href="https://mit.primo.exlibrisgroup.com/view/action/uresolver.do?operation=resolveService&amp;package_service_id=24907348700006761&amp;institutionId=6761&amp;customerId=6760&amp;VE=true"><em>Debugging: The Nine Indispensable Rules for Finding Even the Most Elusive Software and Hardware Problems</em></a> 是一本通俗易懂、极具实用性的调试指南，涵盖了从软件到硬件再到汽车和管道等各种技术场景。
+我们在本次阅读中引用了其中几条 <a href="http://www.debuggingrules.com/Debugging_CH2.PDF#page=2">九条规则</a>。</p>
+
+<h2 id="a_rogues_gallery_of_bugs"><a class="jump" href="index.html#a_rogues_gallery_of_bugs"></a>常见 bug 集锦</h2><div data-outline="a_rogues_gallery_of_bugs">
+
+<p id="@before_begin_review"><a class="jump" href="index.html#@before_begin_review"></a>在我们开始之前，让我们先回顾一下我们要解决的问题，列出一些常见的 bug 类别。你们应该已经在本次课程的前几篇阅读中或在自己的编程经验中遇到过其中的大部分。</p>
+
+<p id="@aliasing_bug_bug"><a class="jump" href="index.html#@aliasing_bug_bug"></a><mark data-structure-text="aliasing bug" id="^aliasing_bug"><strong>别名 bug</strong></mark>。当同一个可变对象有两个或多个别名，而其他别名需要它保持不变时，其中一个别名对其进行了修改，就会产生这种 bug。我们在<a href="../../05-designing-specs/index.html#aliasing_is_what_makes_mutable_types_risky">设计规格说明</a>以及<a href="../../07-abstraction-functions-rep-invariants/index.html#immutability">抽象函数和表示不变量</a>中看到过例子，因为不可变类型的表示暴露所导致的别名可能是一种特别出人意料且隐蔽的 bug。</p>
+
+<p id="@off-by-one_bug_examples"><a class="jump" href="index.html#@off-by-one_bug_examples"></a><mark data-structure-text="off-by-one bug" id="^off-by-one_bug"><strong>差一 bug</strong></mark>。此类 bug 的例子包括：</p>
+
+<ul id="@confusion_between_0-based">
+<li><a class="jump" href="index.html#@confusion_between_0-based"></a>0 基索引与 1 基索引之间的混淆。在你使用的日期处理函数中，月份是从 0 到 11 编号，还是从 1 到 12 编号？</li>
+<li>循环的终止条件。当<em>逆向</em>遍历数组时，终止条件应该是 <code>i &gt; 0</code> 还是 <code>i &gt;= 0</code>？或者当你处理数组中相邻的元素对 <code>a[i]</code> 和 <code>a[i+1]</code> 时，终止条件应该是 <code>i &lt; a.length</code> 还是 <code>i &lt; a.length-1</code>？</li>
+<li><a href="https://en.wikipedia.org/wiki/Off-by-one_error#Fencepost_error">栅栏柱 bug</a>：如果你有 <code>n</code> 根横杆的栅栏，需要多少根栅栏柱？</li>
+</ul>
+
+<p id="@ordering_bug_unlike"><a class="jump" href="index.html#@ordering_bug_unlike"></a><strong>顺序 bug</strong>。与别名 bug 和差一 bug 不同，这种 bug 没有常规的名称。但当不同的群体或上下文对顺序做出了任意的不同选择，或者取决于你对情境的心智模型时，就会出现这种 bug。例如，你是靠右行驶还是靠左行驶？即使你不开车，你走人行道的哪一侧？双开门的哪一侧？搞错了就会导致碰撞。编程中常见的顺序混淆包括：</p>
+
+<ul id="@origin_orientation_y">
+<li><a class="jump" href="index.html#@origin_orientation_y"></a>原点和 y 轴方向。在二维坐标系中，有时原点在左下角，y 轴向上增加（如大多数数学课堂中）；有时原点在<em>左上</em>角，y 轴向下增加（如几乎所有计算机图形学中）。</li>
+<li>坐标顺序。一个相关的二维混淆是：坐标是按 x,y 顺序指定（如几何学中，水平坐标在前），还是按行、列顺序指定（如矩阵索引中，水平坐标在<em>后</em>面！）</li>
+<li>复制。在复制或数据转移的修改器中，哪个应该是第一个参数，源还是目标？你应该写 <code>copy(from,to)</code> 还是 <code>copy(to,from)</code>？（在你觉得 <code>copy(to,from)</code> 毫无意义之前，赋值语句传统上使用什么顺序？<code>to = from</code>！所以确实存在这样的心智模型让它讲得通，两种顺序都出现在真实的 API 中。）</li>
+</ul>
+
+<p id="@code-clone_bug_discussed"><a class="jump" href="index.html#@code-clone_bug_discussed"></a><mark data-structure-text="code-clone bug" id="^code-clone_bug"><strong>代码克隆 bug</strong></mark>。正如我们在<a href="../../03-code-review/index.html#dont_repeat_yourself_dry">不要重复你自己</a>中讨论过的那样，被克隆（复制粘贴）并改编到新位置的代码块是另一个 bug 的来源，因为改编可能不完整，对一个克隆的修改或修复可能无法传播到其他克隆。<a href="https://www.usenix.org/legacy/publications/library/proceedings/osdi04/tech/full_papers/li_z/li_z.pdf">一项工具研究</a>在 Linux 内核中发现了 28 个代码克隆 bug。</p>
+
+<p id="@mutating-while-iterating_bug_category"><a class="jump" href="index.html#@mutating-while-iterating_bug_category"></a><mark data-structure-text="mutating-while-iterating bug" id="^mutating-while-iterating_bug"><strong>迭代时修改 bug</strong></mark>。当你想要在遍历列表、映射或集合等数据结构的同时添加或删除元素时，就会出现这类 bug。我们在<a href="../../10-functional-programming/index.html#mutation_undermines_an_iterator">函数式编程</a>阅读中见过这种 bug。</p>
+
+<p id="@actual_insect_rare"><a class="jump" href="index.html#@actual_insect_rare"></a><strong>真正的昆虫</strong>。罕见，但有<a href="https://lunduke.substack.com/p/the-story-of-the-first-computer-bug">一个著名的故事</a>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-a_rogues_gallery_of_bugs"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-a_rogues_gallery_of_bugs-month_of_the_year" data-target="#ex-a_rogues_gallery_of_bugs-month_of_the_year" data-toggle="collapse"><a class="jump" href="index.html#@ex-a_rogues_gallery_of_bugs-month_of_the_year"></a><span class="panel-title">一年中的月份</span></div><div class="panel-collapse collapse exercise-panel" id="ex-a_rogues_gallery_of_bugs-month_of_the_year" data-outline="month_of_the_year" data-ex-id="a_rogues_gallery_of_bugs/month_of_the_year" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@months_numbered_standard"><a class="jump" href="index.html#@months_numbered_standard"></a>以下语言的标准库 API 中，月份是如何编号的？是 0-11（即一月为 0），还是 1-12（一月为 1）？</p>
+
+<p id="@use_language-s_official"><a class="jump" href="index.html#@use_language-s_official"></a>使用网络上的该语言官方文档来查找权威规格说明。从下面指定的包或类开始，查找创建操作的 <code>month</code> 参数，或者月份的观察操作（希望它们彼此一致）。</p>
+
+<p id="@python_date"><a class="jump" href="index.html#@python_date"></a>Python <code>date</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; 0-11; 1-12"><select class="form-control"><option selected="selected"></option><option>0-11</option>,<option>1-12</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@javascript_date"><a class="jump" href="index.html#@javascript_date"></a>JavaScript <code>Date</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; 0-11; 1-12"><select class="form-control"><option selected="selected"></option><option>0-11</option>,<option>1-12</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@java_calendar"><a class="jump" href="index.html#@java_calendar"></a>Java <code>Calendar</code></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; 0-11; 1-12"><select class="form-control"><option selected="selected"></option><option>0-11</option>,<option>1-12</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@java_localdate"><a class="jump" href="index.html#@java_localdate"></a>Java <code>LocalDate</code></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; 0-11; 1-12"><select class="form-control"><option selected="selected"></option><option>0-11</option>,<option>1-12</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-a_rogues_gallery_of_bugs-is_your_peanut_butter_in_my_chocolate_or_vice_versa" data-target="#ex-a_rogues_gallery_of_bugs-is_your_peanut_butter_in_my_chocolate_or_vice_versa" data-toggle="collapse"><a class="jump" href="index.html#@ex-a_rogues_gallery_of_bugs-is_your_peanut_butter_in_my_chocolate_or_vice_versa"></a><span class="panel-title">是你的花生酱进了我的巧克力？还是反过来</span></div><div class="panel-collapse collapse exercise-panel" id="ex-a_rogues_gallery_of_bugs-is_your_peanut_butter_in_my_chocolate_or_vice_versa" data-outline="is_your_peanut_butter_in_my_chocolate_or_vice_versa" data-ex-id="a_rogues_gallery_of_bugs/is_your_peanut_butter_in_my_chocolate_or_vice_versa" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@each_these_api"><a class="jump" href="index.html#@each_these_api"></a>对于这些复制或传输数据的 API 函数中的每一个，它是将 <code>a</code> 复制到 <code>b</code>，还是反过来？请在网络上查找权威规格说明来回答这个问题。</p>
+
+<p id="@bcopy-a-b_c"><a class="jump" href="index.html#@bcopy-a-b_c"></a>C 语言中的 <code>bcopy(a,b)</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; a is copied to b; b is copied to a"><select class="form-control"><option selected="selected"></option><option>a 被复制到 b</option>,<option>b 被复制到 a</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@memmove-a-b_c"><a class="jump" href="index.html#@memmove-a-b_c"></a>C 语言中的 <code>memmove(a,b)</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; a is copied to b; b is copied to a"><select class="form-control"><option selected="selected"></option><option>a 被复制到 b</option>,<option>b 被复制到 a</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@system-arraycopy-a-b_java"><a class="jump" href="index.html#@system-arraycopy-a-b_java"></a>Java 中的 <code>System.arraycopy(a,b)</code></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; a is copied to b; b is copied to a"><select class="form-control"><option selected="selected"></option><option>a 被复制到 b</option>,<option>b 被复制到 a</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@a-paste-b_b_image"><a class="jump" href="index.html#@a-paste-b_b_image"></a>Python Pillow 图像处理库中 <code>a</code> 和 <code>b</code> 为 <code>Image</code> 对象的 <code>a.paste(b)</code></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; a is copied to b; b is copied to a"><select class="form-control"><option selected="selected"></option><option>a 被复制到 b</option>,<option>b 被复制到 a</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<p id="@these_exercises_inspire"><a class="jump" href="index.html#@these_exercises_inspire"></a>这些练习启发了一条关于调试的建议：阅读你正在使用的 API 的规格说明！该函数或类型的行为是否符合你的预期？是否有你忽略的前置条件或后置条件？</p>
+
+</div><h2 id="first_defense_make_bugs_impossible"><a class="jump" href="index.html#first_defense_make_bugs_impossible"></a>第一道防线：让 bug 不可能发生</h2><div data-outline="first_defense_make_bugs_impossible">
+
+<div class="handout-aside-group handout-aside panel-success panel panel-default pull-right"><div class="panel-heading"><strong>"犯错难以避免，但不重视预防错误是不可接受的。"</strong></div><div class="panel-body">
+
+<p>Zeller，《Why Programs Fail》，第 3 章</p></div></div>
+
+<p id="@best_defense_against"><a class="jump" href="index.html#@best_defense_against"></a>抵御 bug 最好的方法是从设计上让它们不可能发生。</p>
+
+<p id="@one_way_we-ve"><a class="jump" href="index.html#@one_way_we-ve"></a>我们已经讨论过的一种方式是<strong><a href="../../01-static-checking/index.html#static_checking_dynamic_checking_no_checking">静态检查</a></strong>。
+静态检查通过在编译时捕获 bug 来消除许多 bug。</p>
+
+<p id="@also_saw_some"><a class="jump" href="index.html#@also_saw_some"></a>我们在前面的阅读中也看到了一些<strong>动态检查</strong>的例子。
+例如，Python 通过动态捕获数组越界错误，使其不可能发生。
+如果你试图使用列表边界之外的索引，Python 会自动产生错误。
+JavaScript 就没那么好了，因为它对错误的读取会静默返回 <code>undefined</code>。
+在 C 和 C++ 等更古老的语言中，情况更糟，它们会静默允许超出<em>固定大小</em>数组边界的错误写入，从而导致 bug 和<a href="http://en.wikipedia.org/wiki/Buffer_overflow">安全漏洞</a>。
+事实上，在 2024 年 2 月，国家网络总监办公室发布了一份<a href="https://bidenwhitehouse.archives.gov/oncd/briefing-room/2024/02/26/press-release-technical-report/">报告</a>，详细说明了改善网络安全实践的多种方法，包括远离 C 和 C++ 等不内存安全的语言。</p>
+
+<p id="@immutability_another_design"><a class="jump" href="index.html#@immutability_another_design"></a><strong><a href="../../07-abstraction-functions-rep-invariants/index.html#immutability">不可变性</a></strong>是另一种防止 bug 的设计原则，它有两种形式：不可变类型和不可重新赋值的引用（常量）。</p>
+
+<p id="@string_immutable_type"><a class="jump" href="index.html#@string_immutable_type"></a><code>String</code> 是一种不可变类型。
+没有任何方法可以在字符串上调用以改变它所代表的字符序列。
+字符串可以安全地传递和共享，不用担心被其他代码修改。</p>
+
+<p id="@typescript_also_gives"><a class="jump" href="index.html#@typescript_also_gives"></a>TypeScript 还为我们提供了不可重新赋值的引用：使用 <code>const</code> 关键字声明的变量，它们只能被赋值一次，之后不能再被重新赋值。
+在声明局部变量时，尽可能使用 <code>const</code> 是一个好习惯。
+像变量的类型一样，这些声明是重要的文档，对代码读者很有用，并由编译器进行静态检查。</p>
+
+<p id="@consider_example"><a class="jump" href="index.html#@consider_example"></a>考虑这个例子：</p>
+
+<pre id="@const_letters_array-string"><a class="jump" href="index.html#@const_letters_array-string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> letters: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = [<span class="hljs-string">'a'</span>, <span class="hljs-string">'e'</span>, <span class="hljs-string">'i'</span>, <span class="hljs-string">'o'</span>, <span class="hljs-string">'u'</span>];</code></pre>
+
+<p id="@letters_variable_declared"><a class="jump" href="index.html#@letters_variable_declared"></a><code>letters</code> 变量被声明为 <code>const</code>，但它真的不可变吗？以下哪些语句是非法的（会被编译器静态捕获），哪些是允许的？</p>
+
+<pre id="@letters_x_y"><a class="jump" href="index.html#@letters_x_y"></a><code class="language-ts hljs typescript">letters = [<span class="hljs-string">'x'</span>, <span class="hljs-string">'y'</span>, <span class="hljs-string">'z'</span>];
+letters[<span class="hljs-number">0</span>] = <span class="hljs-string">'z'</span>;</code></pre>
+
+<p id="@you-ll_find_answers"><a class="jump" href="index.html#@you-ll_find_answers"></a>你会在下面的练习中找到答案。注意 <code>const</code> 的含义！它只是让引用不可重新赋值，但引用指向的对象可能是可变的。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-first_defense_make_bugs_impossible"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-first_defense_make_bugs_impossible-unreassignable_variables_immutable_objects" data-target="#ex-first_defense_make_bugs_impossible-unreassignable_variables_immutable_objects" data-toggle="collapse"><a class="jump" href="index.html#@ex-first_defense_make_bugs_impossible-unreassignable_variables_immutable_objects"></a><span class="panel-title">不可重新赋值的变量，不可变的对象</span></div><div class="panel-collapse collapse exercise-panel" id="ex-first_defense_make_bugs_impossible-unreassignable_variables_immutable_objects" data-outline="unreassignable_variables_immutable_objects" data-ex-id="first_defense_make_bugs_impossible/unreassignable_variables_immutable_objects" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@consider_legal_typescript"><a class="jump" href="index.html#@consider_legal_typescript"></a>考虑这段（合法的）TypeScript 代码，按顺序执行：</p>
+
+<pre id="@let_text0_string_const_text1_string_text0_let_text2_string_text1_eiou_const_text3_string_text2_let_text4_array-string_text0_e_i_o_u_const_text5_array-string_text4_0"><a class="jump" href="index.html#@let_text0_string_const_text1_string_text0_let_text2_string_text1_eiou_const_text3_string_text2_let_text4_array-string_text0_e_i_o_u_const_text5_array-string_text4_0"></a><code class="hljs typescript"><span class="hljs-keyword">let</span> text0: <span class="hljs-built_in">string</span> = <span class="hljs-string">'a'</span>;
+<span class="hljs-keyword">const</span> text1: <span class="hljs-built_in">string</span> = text0;
+
+<span class="hljs-keyword">let</span> text2: <span class="hljs-built_in">string</span> = text1 + <span class="hljs-string">'eiou'</span>;
+<span class="hljs-keyword">const</span> text3: <span class="hljs-built_in">string</span> = text2;
+
+<span class="hljs-keyword">let</span> text4: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = [text0, <span class="hljs-string">'e'</span>, <span class="hljs-string">'i'</span>, <span class="hljs-string">'o'</span>, <span class="hljs-string">'u'</span>];
+<span class="hljs-keyword">const</span> text5: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = text4;</code></pre>
+
+<label class="exercise-part-heading" id="@which_following_statements"><a class="jump" href="index.html#@which_following_statements"></a>以下哪些语句也是合法的 TypeScript（即放在上面的代码之后不会产生编译器错误）？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="text0 = 'y';"><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0"><code>text0 = 'y';</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text1 = text0;"><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1"><code>text1 = text0;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text2 = &quot;uoie&quot; + text1;"><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2"><code>text2 = "uoie" + text1;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text3 = text2;"><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3"><code>text3 = text2;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text2[0] = 'x';"><label for="md_converted_choice_1_4"><input type="checkbox" id="md_converted_choice_1_4"><code>text2[0] = 'x';</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text3[0] = 'x';"><label for="md_converted_choice_1_5"><input type="checkbox" id="md_converted_choice_1_5"><code>text3[0] = 'x';</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text4 = text5;"><label for="md_converted_choice_1_6"><input type="checkbox" id="md_converted_choice_1_6"><code>text4 = text5;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text5 = text4;"><label for="md_converted_choice_1_7"><input type="checkbox" id="md_converted_choice_1_7"><code>text5 = text4;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text4[0] = 'x';"><label for="md_converted_choice_1_8"><input type="checkbox" id="md_converted_choice_1_8"><code>text4[0] = 'x';</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="text5[0] = 'z';"><label for="md_converted_choice_1_9"><input type="checkbox" id="md_converted_choice_1_9"><code>text5[0] = 'z';</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-first_defense_make_bugs_impossible-afterwards" data-target="#ex-first_defense_make_bugs_impossible-afterwards" data-toggle="collapse"><a class="jump" href="index.html#@ex-first_defense_make_bugs_impossible-afterwards"></a><span class="panel-title">之后</span></div><div class="panel-collapse collapse exercise-panel" id="ex-first_defense_make_bugs_impossible-afterwards" data-outline="afterwards" data-ex-id="first_defense_make_bugs_impossible/afterwards" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@after_all_legal"><a class="jump" href="index.html#@after_all_legal"></a>在前一个练习中所有合法的语句被执行完毕之后：</p>
+
+<pre id="@let_text0_string_const_text1_string_text0_let_text2_string_text1_eiou_const_text3_string_text2_let_text4_array-string_text0_e_i_o_u_const_text5_array-string_text4_text0_y"><a class="jump" href="index.html#@let_text0_string_const_text1_string_text0_let_text2_string_text1_eiou_const_text3_string_text2_let_text4_array-string_text0_e_i_o_u_const_text5_array-string_text4_text0_y"></a><code class="hljs typescript"><span class="hljs-keyword">let</span> text0: <span class="hljs-built_in">string</span> = <span class="hljs-string">'a'</span>;
+<span class="hljs-keyword">const</span> text1: <span class="hljs-built_in">string</span> = text0;
+
+<span class="hljs-keyword">let</span> text2: <span class="hljs-built_in">string</span> = text1 + <span class="hljs-string">'eiou'</span>;
+<span class="hljs-keyword">const</span> text3: <span class="hljs-built_in">string</span> = text2;
+
+<span class="hljs-keyword">let</span> text4: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = [text0, <span class="hljs-string">'e'</span>, <span class="hljs-string">'i'</span>, <span class="hljs-string">'o'</span>, <span class="hljs-string">'u'</span>];
+<span class="hljs-keyword">const</span> text5: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = text4;
+
+text0 = <span class="hljs-string">'y'</span>;
+text2 = <span class="hljs-string">'uoie'</span> + text1;
+text4 = text5;
+text4[<span class="hljs-number">0</span>] = <span class="hljs-string">'x'</span>;
+text5[<span class="hljs-number">0</span>] = <span class="hljs-string">'z'</span>;</code></pre>
+
+<p id="@resulting_value_each"><a class="jump" href="index.html#@resulting_value_each"></a>……每个变量的结果值是什么？只写出变量值中的字母序列，不加标点符号或空格。例如：</p>
+
+<p id="@text0"><a class="jump" href="index.html#@text0"></a><code>text0</code></p>
+
+<div class="indented"><p id="@y"><a class="jump" href="index.html#@y"></a>y</p></div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@text1"><a class="jump" href="index.html#@text1"></a><code>text1</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@text2"><a class="jump" href="index.html#@text2"></a><code>text2</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@text3"><a class="jump" href="index.html#@text3"></a><code>text3</code></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@text4"><a class="jump" href="index.html#@text4"></a><code>text4</code></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@text5"><a class="jump" href="index.html#@text5"></a><code>text5</code></p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="second_defense_make_bugs_easy_to_find"><a class="jump" href="index.html#second_defense_make_bugs_easy_to_find"></a>第二道防线：让 bug 易于发现</h2><div data-outline="second_defense_make_bugs_easy_to_find">
+
+<div class="handout-aside-group handout-aside panel-success panel panel-default pull-right"><div class="panel-heading"><strong>"我想说我是某种<em>超级程序员</em>——我从不犯错——但我只是普通人，和其他人一样。"</strong></div><div class="panel-body">
+
+<p>Zeller，《Why Programs Fail》，前言</p></div></div>
+
+<p id="@static_checking_dynamic"><a class="jump" href="index.html#@static_checking_dynamic"></a>静态检查、动态检查和不可变性在防止 bug 方面只能起到有限的作用，所以我们的下一个设计策略是在 bug 不可避免地出现时让它们更容易被发现。
+我们可以将 bug <mark data-mark-text="localization" data-structure-text="localization" id="^localization">定位</mark>到程序的一小部分，这样就不需要大范围地搜索就能找到它们的原因。
+当 bug 被定位到单个方法或小模块时，可能只需研究程序文本就能发现。</p>
+
+<p id="@already_talked_about"><a class="jump" href="index.html#@already_talked_about"></a>我们已经讨论过<strong><mark data-structure-text="fail fast" id="^fail_fast"><a href="../../03-code-review/index.html#fail_fast">快速失败</a></mark></strong>：问题被观察到的时间越早（越接近其原因），就越容易修复。</p>
+
+<p id="@begin_simple_example"><a class="jump" href="index.html#@begin_simple_example"></a>让我们从一个简单的例子开始：</p>
+
+<pre id="@param_x_requires_x_0_returns_approximation_square_root_x_function_sqrt-x_number_number_0"><a class="jump" href="index.html#@param_x_requires_x_0_returns_approximation_square_root_x_function_sqrt-x_number_number_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param x  requires x &gt;= 0
+ * @returns approximation to square root of x
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">sqrt</span>(<span class="hljs-params">x: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">number</span> </span>{ ... }</code></pre>
+
+<p id="@now_suppose_somebody"><a class="jump" href="index.html#@now_suppose_somebody"></a>现在假设有人用负数参数调用 <code>sqrt</code>。
+<code>sqrt</code> 的最佳行为是什么？
+由于调用者未能满足 <code>x</code> 应为非负数的要求，<code>sqrt</code> 不再受其合同条款的约束，所以从技术上讲它可以为所欲为：返回任意值、进入无限循环、或者让 CPU 过热。
+然而，由于错误的调用表明调用者存在 bug，最有用的行为应该是尽早指出这个 bug。
+我们通过对前置条件进行运行时检查来实现这一点。
+以下是我们可能编写该检查的一种方式：</p>
+
+<pre id="@param_x_requires_x_0_returns_approximation_square_root_x_function_sqrt-x_number_number_if"><a class="jump" href="index.html#@param_x_requires_x_0_returns_approximation_square_root_x_function_sqrt-x_number_number_if"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param x  requires x &gt;= 0
+ * @returns approximation to square root of x
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">sqrt</span>(<span class="hljs-params">x: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">number</span> </span>{
+    <span class="hljs-keyword">if</span> ( ! (x &gt;= <span class="hljs-number">0</span>)) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"required x &gt;= 0, but was: "</span> + x);
+    ...
+}</code></pre>
+
+<p id="@precondition_not_satisfied"><a class="jump" href="index.html#@precondition_not_satisfied"></a>当前置条件不满足时，这段代码通过抛出一个包含调用者传入值的信息性错误来终止程序。
+调用者的 bug 的影响被阻止传播，调用者收到了关于其前置条件违反的有用信息。</p>
+
+<p id="@checking_preconditions_example"><a class="jump" href="index.html#@checking_preconditions_example"></a>检查前置条件是<strong><mark data-structure-text="defensive programming" id="^defensive_programming">防御性编程</mark></strong>的一个例子。
+真正的程序很少是没有 bug 的。
+防御性编程提供了一种即使你不知道 bug 在哪里，也能减轻 bug 影响的方法。</p>
+
+<h3 id="assertions"><a class="jump" href="index.html#assertions"></a>断言</h3><div data-outline="assertions">
+
+<p id="@common_practice_define"><a class="jump" href="index.html#@common_practice_define"></a>为这类防御性检查定义一个函数是常见的做法，通常称为 <code>assert</code>。
+这种方式将断言失败时具体发生什么进行了抽象。
+失败的断言可能会退出程序；可能会在日志文件中记录一个事件；可能会向维护者发送电子邮件报告。</p>
+
+<p id="@javascript-typescript_does_not"><a class="jump" href="index.html#@javascript-typescript_does_not"></a>JavaScript/TypeScript 没有内置的 <code>assert</code>，但我们将在 6.102 中使用 <a href="https://nodejs.org/api/assert.html">Node 的 assert 包</a>。
+<mark data-structure-text="assertion" id="^assertion">断言</mark>最简单的形式接受一个布尔表达式，如果布尔表达式计算为 false，则抛出 <code>AssertionError</code>：</p>
+
+<pre id="@assert-x_0_0"><a class="jump" href="index.html#@assert-x_0_0"></a><code class="language-ts hljs typescript">assert(x &gt;= <span class="hljs-number">0</span>);</code></pre>
+
+<p id="@assertions_added_benefit"><a class="jump" href="index.html#@assertions_added_benefit"></a>断言还有一个额外的好处，就是记录了程序在该点关于状态的假设。
+对于阅读你代码的人来说，<code>assert(x &gt;= 0)</code> 表示"在这一点上，x &gt;= 0 应该始终成立。"
+然而，与注释不同，断言是可执行的代码，在运行时强制执行该假设。</p>
+
+<p id="@assertion_may_also"><a class="jump" href="index.html#@assertion_may_also"></a>断言还可以包含一个字符串消息，在断言失败时打印。这可以用来向程序员提供关于失败原因的额外细节。例如：</p>
+
+<pre id="@assert-x_0_x"><a class="jump" href="index.html#@assert-x_0_x"></a><code class="language-ts hljs typescript">assert(x &gt;= <span class="hljs-number">0</span>, <span class="hljs-string">"x is "</span> + x);</code></pre>
+
+<p id="@if_x_1"><a class="jump" href="index.html#@if_x_1"></a>如果 <code>x === -1</code>，那么这个断言会以错误消息失败：</p>
+
+<blockquote>
+  <p id="@x_1"><a class="jump" href="index.html#@x_1"></a><code>x is -1</code></p>
+</blockquote>
+
+<p id="@along_stack_trace"><a class="jump" href="index.html#@along_stack_trace"></a>以及一个<a href="https://en.wikipedia.org/wiki/Stack_trace">堆栈跟踪</a>，它告诉你断言在代码中的哪个位置被发现，以及将程序带到该点的调用序列。
+这些信息通常足以让你开始定位 bug。</p>
+
+<p id="@one_thing_note"><a class="jump" href="index.html#@one_thing_note"></a>关于断言需要注意的一点是，在许多语言（如 Java）中，它们默认是关闭的。
+这意味着如果你像平常一样运行程序，你的所有断言都不会被检查！
+语言设计者可能选择这样做的一个原因是，检查断言有时对性能影响较大。
+例如，一个使用二分搜索搜索数组的函数要求数组是有序的。
+断言这个要求需要扫描整个数组，然而这将一个应该在对数时间内运行的操作变成了需要线性时间的操作。
+在测试期间，你应该愿意（渴望！）付出这个代价，因为它使调试变得容易得多，但在程序发布给用户之后则不然。
+然而，对于大多数应用程序来说，与代码的其余部分相比，断言<em>并不</em>昂贵，它们在 bug 检查方面提供的好处值得付出那一点点性能代价。</p>
+
+<p id="@languages_which_assertions"><a class="jump" href="index.html#@languages_which_assertions"></a>在断言默认关闭的语言中，确保显式启用它们。
+我们在 6.102 中使用的 Node assert 库始终运行其断言语句，因此无需担心显式开启断言。</p>
+
+</div><h3 id="what_to_assert"><a class="jump" href="index.html#what_to_assert"></a>应该断言什么</h3><div data-outline="what_to_assert">
+
+<p id="@here_some_things"><a class="jump" href="index.html#@here_some_things"></a>以下是一些你应该断言的内容：</p>
+
+<p id="@argument_preconditions_like"><a class="jump" href="index.html#@argument_preconditions_like"></a><strong>参数前置条件</strong>，就像我们上面 <a href="index.html#second_defense_make_bugs_easy_to_find">之前</a>对 <code>sqrt</code> 看到的。</p>
+
+<p id="@return_value_postconditions"><a class="jump" href="index.html#@return_value_postconditions"></a><strong>返回值后置条件。</strong>这种断言有时被称为<em><mark data-structure-text="self check" id="^self_check">自检</mark></em>。例如，<code>sqrt</code> 方法可能会将其结果平方，以检查它是否合理地接近 x：</p>
+
+<pre id="@function_sqrt-x_number"><a class="jump" href="index.html#@function_sqrt-x_number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">sqrt</span>(<span class="hljs-params">x: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">number</span> </span>{
+    assert(x &gt;= <span class="hljs-number">0</span>);
+    <span class="hljs-keyword">let</span> r: <span class="hljs-built_in">number</span>;
+    ... <span class="hljs-comment">// compute result r</span>
+    assert(<span class="hljs-built_in">Math</span>.abs(r*r - x) &lt; <span class="hljs-number">.0001</span>);
+    <span class="hljs-keyword">return</span> r;
+}</code></pre>
+
+<p id="@rep_invariant_we-ve"><a class="jump" href="index.html#@rep_invariant_we-ve"></a><strong>表示不变量。</strong>当然，我们已经一直在断言表示不变量了，即为每个抽象数据类型编写 <a href="../../07-abstraction-functions-rep-invariants/index.html#checking_the_rep_invariant"><code>checkRep</code></a> 方法，并在操作中的适当位置调用它。</p>
+
+<p id="@should_you_write"><a class="jump" href="index.html#@should_you_write"></a>什么时候应该编写运行时断言？
+在你编写代码的时候，而不是事后。
+当你编写代码时，你的脑海中已经有了不变量。
+如果你推迟编写断言，你就不太可能去做，而且你可能会遗漏一些重要的不变量。</p>
+
+</div><h3 id="what_not_to_assert"><a class="jump" href="index.html#what_not_to_assert"></a>不应该断言什么</h3><div data-outline="what_not_to_assert">
+
+<p id="@runtime_assertions_not"><a class="jump" href="index.html#@runtime_assertions_not"></a>运行时断言并非没有代价。
+它们可能会使代码变得杂乱，因此必须谨慎使用。
+避免平凡的断言，就像避免无信息量的注释一样。
+例如：</p>
+
+<pre id="@don-t_do_x"><a class="jump" href="index.html#@don-t_do_x"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// don't do this:</span>
+x = y + <span class="hljs-number">1</span>;
+assert(x === y+<span class="hljs-number">1</span>);</code></pre>
+
+<p id="@assertion_doesn-t_find"><a class="jump" href="index.html#@assertion_doesn-t_find"></a>这个断言不会在你的代码中发现 bug。
+它发现的是编译器或 JavaScript 解释器中的 bug，这些是你应该信任的组件，除非你有充分的理由怀疑它们。
+如果一个断言从其局部上下文来看是显而易见的，就不要写它。</p>
+
+<p id="@never_use_assertions"><a class="jump" href="index.html#@never_use_assertions"></a>永远不要使用断言来测试程序外部的条件，例如文件的存在性、网络的可用性或人类用户输入的正确性。
+<strong>断言测试的是程序的内部状态</strong>，以确保它在其规格说明的范围内。
+当断言失败时，它表明程序在某种意义上已经偏离了轨道，进入了一个它未被设计来正常运作的状态。
+因此，断言失败表明存在 bug。
+外部失败并不是<em>你的</em>系统中的 bug（它们甚至可能根本不是 bug！），而且你无法提前对程序做任何更改来防止它们的发生。
+<strong>外部失败应该使用异常来处理。</strong></p>
+
+<span id="assertions_should_not_have_side_effects"></span>
+
+<p id="@aforementioned_many_assertion"><a class="jump" href="index.html#@aforementioned_many_assertion"></a>如前所述，许多断言机制被设计为仅在测试和调试期间执行断言，当程序发布给用户时则关闭。
+（重申一下，Node 断言不是这种情况，它们不能被禁用；但例如 Java 断言实际上默认是禁用的。）
+由于断言有时被禁用，确保程序的正确性不依赖于断言表达式是否被执行是一个好习惯。
+特别是，断言表达式不应该有<em>副作用</em>。
+例如，如果你想从列表中弹出一个元素，并在弹出之前断言列表非空，不要这样写：</p>
+
+<pre id="@don-t_do_assert-list-pop"><a class="jump" href="index.html#@don-t_do_assert-list-pop"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// don't do this:</span>
+assert(list.pop());</code></pre>
+
+<p id="@if_assertions_disabled"><a class="jump" href="index.html#@if_assertions_disabled"></a>如果断言被禁用，整个表达式会被跳过，列表不会被弹出任何元素。应该这样写：</p>
+
+<pre id="@const_found_list-pop"><a class="jump" href="index.html#@const_found_list-pop"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> found = list.pop();
+assert(found);</code></pre>
+
+<p id="@similarly_if_conditional"><a class="jump" href="index.html#@similarly_if_conditional"></a>类似地，如果一个条件语句没有覆盖所有可能的情况，使用检查来阻止非法情况是一个好习惯。</p>
+
+<pre id="@if_level_undergrad"><a class="jump" href="index.html#@if_level_undergrad"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">if</span> (level == UNDERGRAD) {
+  <span class="hljs-keyword">return</span> <span class="hljs-string">'U'</span>;
+} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (level == GRAD) {
+  <span class="hljs-keyword">return</span> <span class="hljs-string">'G'</span>;
+} <span class="hljs-keyword">else</span> {
+  assert.fail(<span class="hljs-string">'should never get here'</span>);
+}</code></pre>
+
+<p id="@effect_asserting_level"><a class="jump" href="index.html#@effect_asserting_level"></a>这相当于断言 <code>level</code> 必须是 <code>UNDERGRAD</code> 或 <code>GRAD</code>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-second_defense_make_bugs_easy_to_find"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-second_defense_make_bugs_easy_to_find-assertions" data-target="#ex-second_defense_make_bugs_easy_to_find-assertions" data-toggle="collapse"><a class="jump" href="index.html#@ex-second_defense_make_bugs_easy_to_find-assertions"></a><span class="panel-title">断言</span></div><div class="panel-collapse collapse exercise-panel" id="ex-second_defense_make_bugs_easy_to_find-assertions" data-outline="assertions" data-ex-id="what_not_to_assert/assertions" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@consider_incomplete_function"><a class="jump" href="index.html#@consider_incomplete_function"></a>考虑这个（不完整的）函数：</p>
+
+<pre id="@solves_quadratic_equation_ax-2_bx_c_0_param_quadratic_coefficient_requires_0_param_b_linear_coefficient_param_c_constant_term_returns_list_distinct_real"><a class="jump" href="index.html#@solves_quadratic_equation_ax-2_bx_c_0_param_quadratic_coefficient_requires_0_param_b_linear_coefficient_param_c_constant_term_returns_list_distinct_real"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Solves quadratic equation ax^2 + bx + c = 0.
+ *
+ * @param a quadratic coefficient, requires a != 0
+ * @param b linear coefficient
+ * @param c constant term
+ * @returns a list of the distinct real roots of the equation
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">quadraticRoots</span>(<span class="hljs-params">a: <span class="hljs-built_in">number</span>, b: <span class="hljs-built_in">number</span>, c: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> roots: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+    <span class="hljs-comment">// A</span>
+    ... <span class="hljs-comment">// compute roots        </span>
+    <span class="hljs-comment">// B</span>
+    <span class="hljs-keyword">return</span> roots;
+}</code></pre>
+
+<label class="exercise-part-heading" id="@statements_would_be_reasonable_write_position_0"><a class="jump" href="index.html#@statements_would_be_reasonable_write_position_0"></a>在位置 A 写哪些语句是合理的？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="assert(a !== 0);"><label for="md_converted_choice_2_0"><input type="checkbox" id="md_converted_choice_2_0"><code>assert(a !== 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(b !== 0);"><label for="md_converted_choice_2_1"><input type="checkbox" id="md_converted_choice_2_1"><code>assert(b !== 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(c !== 0);"><label for="md_converted_choice_2_2"><input type="checkbox" id="md_converted_choice_2_2"><code>assert(c !== 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(roots.length >= 0);"><label for="md_converted_choice_2_3"><input type="checkbox" id="md_converted_choice_2_3"><code>assert(roots.length &gt;= 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(roots.length <= 2);"><label for="md_converted_choice_2_4"><input type="checkbox" id="md_converted_choice_2_4"><code>assert(roots.length &lt;= 2);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="for (const x of roots) { assert(Math.abs(a*x*x + b*x + c) < 0.0001); }"><label for="md_converted_choice_2_5"><input type="checkbox" id="md_converted_choice_2_5"><code>for (const x of roots) { assert(Math.abs(a*x*x + b*x + c) &lt; 0.0001); }</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@statements_would_be_reasonable_write_position_b"><a class="jump" href="index.html#@statements_would_be_reasonable_write_position_b"></a>在位置 B 写哪些语句是合理的？</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="assert(a !== 0);"><label for="md_converted_choice_3_0"><input type="checkbox" id="md_converted_choice_3_0"><code>assert(a !== 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(b !== 0);"><label for="md_converted_choice_3_1"><input type="checkbox" id="md_converted_choice_3_1"><code>assert(b !== 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(c !== 0);"><label for="md_converted_choice_3_2"><input type="checkbox" id="md_converted_choice_3_2"><code>assert(c !== 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(roots.length >= 0);"><label for="md_converted_choice_3_3"><input type="checkbox" id="md_converted_choice_3_3"><code>assert(roots.length &gt;= 0);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(roots.length <= 2);"><label for="md_converted_choice_3_4"><input type="checkbox" id="md_converted_choice_3_4"><code>assert(roots.length &lt;= 2);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="for (const x of roots) { assert(Math.abs(a*x*x + b*x + c) < 0.0001); }"><label for="md_converted_choice_3_5"><input type="checkbox" id="md_converted_choice_3_5"><code>for (const x of roots) { assert(Math.abs(a*x*x + b*x + c) &lt; 0.0001); }</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="incremental_development"><a class="jump" href="index.html#incremental_development"></a>增量开发</h3><div data-outline="incremental_development">
+
+<p id="@great_way_localize"><a class="jump" href="index.html#@great_way_localize"></a>将 bug 定位到程序的一小部分的一个好方法是<mark data-structure-text="incremental development" id="^incremental_development"><em>增量开发</em></mark>。
+每次只构建程序的一小部分，并在继续之前彻底测试该部分。
+这样，当你发现 bug 时，它更可能在你刚刚编写的部分中，而不是在一大堆代码的任何地方。</p>
+
+<p id="@our_class_testing"><a class="jump" href="index.html#@our_class_testing"></a>我们关于测试的课程讨论了两种有助于此的技术：</p>
+
+<ul id="@unit_testing_you">
+<li><a class="jump" href="index.html#@unit_testing_you"></a><a href="../../02-testing/index.html#unit_and_integration_testing"><strong>单元测试</strong></a>：当你隔离地测试一个模块时，你可以确信你发现的任何 bug 都在该单元中——或者可能在测试用例本身中。</li>
+<li><a href="../../02-testing/index.html#automated_regression_testing"><strong>回归测试</strong></a>：当你向一个大型系统添加新功能时，尽可能频繁地运行回归测试套件。如果测试失败，bug 可能在你刚刚更改的代码中。</li>
+</ul>
+
+<p id="@we-ve_also_talked"><a class="jump" href="index.html#@we-ve_also_talked"></a>我们还讨论过<a href="../../../tools/git-1-version-control/index.html"><strong>版本控制</strong></a>。
+频繁地添加、提交和推送不仅是保存你的工作以免因断电而丢失的好方法，
+也是保存<em>可运行的、无 bug 的</em>代码的好方法。
+如果你经常添加、提交和推送可运行的代码，那么在 bug 出现的瞬间，
+你可以将你的更改与上次保存的可运行版本进行比较，并从差异中调试。</p>
+
+</div><h3 id="modularity_encapsulation"><a class="jump" href="index.html#modularity_encapsulation"></a>模块化与封装</h3><div data-outline="modularity_encapsulation">
+
+<div class="handout-aside-group handout-aside panel-success panel panel-default pull-right"><div class="panel-heading"><strong>"好的设计不仅使程序更易于理解、维护、重构和复用，也更易于调试。"</strong></div><div class="panel-body">
+
+<p>Zeller，《Why Programs Fail》，第 4 章</p></div></div>
+
+<p id="@you_can_also"><a class="jump" href="index.html#@you_can_also"></a>你也可以通过更好的软件设计来定位 bug。</p>
+
+<p id="@modularity_means_dividing"><a class="jump" href="index.html#@modularity_means_dividing"></a><mark data-mark-text="modular" data-structure-text="modular" id="^modular"><strong>模块化</strong></mark>意味着将系统划分为组件或模块，每个模块都可以独立于系统的其余部分进行设计、实现、测试、推理和复用。
+模块化系统的反面是<mark data-structure-text="monolithic" id="^monolithic"><em>单体</em></mark>系统——庞大且所有部分相互纠缠、相互依赖。</p>
+
+<p id="@program_consisting_single"><a class="jump" href="index.html#@program_consisting_single"></a>由单个非常长的函数组成的程序是单体的——更难理解，也更难隔离 bug。
+相比之下，分解为小函数和类的程序更加模块化。</p>
+
+<p id="@encapsulation_means_building"><a class="jump" href="index.html#@encapsulation_means_building"></a><mark data-structure-text="encapsulation" id="^encapsulation"><strong>封装</strong></mark>意味着在模块周围建立墙壁，使模块对其自身内部行为负责，系统其他部分的 bug 无法破坏其完整性。</p>
+
+<span id="access-control"></span>
+
+<p id="@one_kind_encapsulation"><a class="jump" href="index.html#@one_kind_encapsulation"></a>一种封装是<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Classes/Private_class_fields">访问控制</a>，使用 <code>public</code> 和 <code>private</code> 来控制变量和方法的可见性和可访问性。
+公共变量或方法可以被任何代码访问（假设包含该变量或方法的类也是公共的）。
+私有变量或方法只能被同一类中的代码访问。
+（通常有办法绕过访问控制，但只有通过编写底层或特殊代码才能实现，不太可能意外完成。）
+尽可能将内容保持为私有，特别是对于变量，可以提供封装，因为它限制了可能无意中导致 bug 的代码。</p>
+
+<p id="@another_kind_encapsulation"><a class="jump" href="index.html#@another_kind_encapsulation"></a>另一种封装来自<strong>变量作用域</strong>。
+变量的<em><mark data-structure-text="scope" id="^scope">作用域</mark></em>是定义该变量的程序部分，即表达式和语句可以引用并可能更改变量的范围：</p>
+
+<ul id="@function_parameter-s_scope">
+<li><a class="jump" href="index.html#@function_parameter-s_scope"></a>函数参数的作用域是函数体。</li>
+<li>局部变量的作用域从其声明处延伸到下一个闭合花括号。</li>
+<li><a href="../../04-specifications/index.html#modules">未导出的</a>全局变量的作用域从其声明处延伸到文件末尾。</li>
+<li>导出的全局变量在其被导入的每个其他模块中都处于作用域内。</li>
+</ul>
+
+<p id="@keeping_variable_scopes"><a class="jump" href="index.html#@keeping_variable_scopes"></a>尽可能缩小变量作用域使得推理 bug 在程序中的位置变得更加容易。
+例如，假设你有这样一个循环：</p>
+
+<pre id="@i_0_i"><a class="jump" href="index.html#@i_0_i"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">for</span> (i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">100</span>; ++i) {
+    ...
+    doSomeThings();
+    ...
+}</code></pre>
+
+<p id="@you-ve_discovered_loop"><a class="jump" href="index.html#@you-ve_discovered_loop"></a>……你发现这个循环永远在运行——<code>i</code> 永远达不到 100。有人在某个地方修改了 <code>i</code>。
+但在哪里？
+如果 <code>i</code> 被声明为全局变量，像这样：</p>
+
+<pre id="@let_i_number_i_0_i_100_i_dosomethings"><a class="jump" href="index.html#@let_i_number_i_0_i_100_i_dosomethings"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> i: <span class="hljs-built_in">number</span>;
+...
+<span class="keyword">for</span> (i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">100</span>; ++i) {
+    ...
+    doSomeThings();
+    ...
+}</code></pre>
+
+<p id="@then_scope_entire"><a class="jump" href="index.html#@then_scope_entire"></a>……那么它的作用域是整个模块。
+它可能在文件中的任何地方被修改：被 <code>doSomeThings()</code>，被 <code>doSomeThings()</code> 调用的某个其他函数，被运行完全不同代码的并发线程。
+但如果 <code>i</code> 被声明为作用域狭窄的局部变量，像这样：</p>
+
+<pre id="@let_i_0_i_100_i_dosomethings"><a class="jump" href="index.html#@let_i_0_i_100_i_dosomethings"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">100</span>; ++i) {
+    ...
+    doSomeThings();
+    ...
+}</code></pre>
+
+<p id="@then_only_place"><a class="jump" href="index.html#@then_only_place"></a>……那么 <code>i</code> 可以被修改的唯一位置是在 for 语句内部——实际上，只在我们省略的 <code>...</code> 部分中。
+你甚至不需要考虑 <code>doSomeThings()</code>，因为 <code>doSomeThings()</code> 无法访问这个局部变量。</p>
+
+<p id="@minimizing_scope_variables"><a class="jump" href="index.html#@minimizing_scope_variables"></a><strong>最小化变量作用域</strong>是定位 bug 的强大实践。
+以下是一些对 TypeScript 有益的规则：</p>
+
+<ul>
+<li><p id="@always_declare_loop"><a class="jump" href="index.html#@always_declare_loop"></a><strong>始终在 for 循环初始化器中声明循环变量。</strong>所以不要在循环之前声明它：</p>
+
+<pre id="@let_i_number_i_0_i_100_i_1"><a class="jump" href="index.html#@let_i_number_i_0_i_100_i_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> i: <span class="hljs-built_in">number</span>;
+<span class="hljs-keyword">for</span> (i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">100</span>; ++i) {</code></pre>
+
+<p id="@which_makes_scope_variable_entire_rest"><a class="jump" href="index.html#@which_makes_scope_variable_entire_rest"></a>这使得变量的作用域是包含这段代码的整个外层花括号块的其余部分，你应该这样做：</p>
+
+<pre id="@let_i_0_i_100_i_1"><a class="jump" href="index.html#@let_i_0_i_100_i_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">100</span>; ++i) {</code></pre>
+
+<p id="@which_makes_scope_i_limited_just"><a class="jump" href="index.html#@which_makes_scope_i_limited_just"></a>这使得 <code>i</code> 的作用域仅限于 for 循环。</p></li>
+<li><p id="@always_use_const"><a class="jump" href="index.html#@always_use_const"></a><strong>始终使用 <code>const</code> 或 <code>let</code>，永远不要使用 <code>var</code>。</strong>
+<code>const</code> 或 <code>let</code> 变量的作用域是包围它的最小花括号块，而 <code>var</code> 声明的作用域是包围它的整个函数（顺便说一下，这与 Python 局部变量使用的规则相同）。你会在网上看到很多使用 <code>var</code> 的旧 JavaScript 代码；避免使用它。现代 JavaScript/TypeScript 编程始终使用 <code>const</code> 或 <code>let</code>。</p></li>
+<li><p id="@declare_variable_only"><a class="jump" href="index.html#@declare_variable_only"></a><strong>只在首次需要时才声明变量，并在尽可能内的花括号块（最小作用域）中声明。</strong>
+将变量声明放在包含所有需要使用该变量的表达式的最内层块中。
+不要在函数开头声明所有变量——这会使它们的作用域不必要地变大。</p></li>
+<li><p id="@avoid_global_variables"><a class="jump" href="index.html#@avoid_global_variables"></a><strong>避免使用全局变量。</strong>
+使用全局变量是一个非常糟糕的主意，特别是当程序变得庞大时。
+使用全局变量作为捷径来在程序的多个部分之间共享一些数据可能很诱人；不要上当。
+最好将参数传递给需要它的代码，而不是将其放在全局空间中，在那里它可能被无意中重新赋值。
+或者更好的是，对全局变量的感知需求可能恰好是一个好机会，可以创建一个 ADT 来包含该状态，以便方法可以共享它。</p></li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-second_defense_make_bugs_easy_to_find_2"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-second_defense_make_bugs_easy_to_find_2-variable_scope" data-target="#ex-second_defense_make_bugs_easy_to_find_2-variable_scope" data-toggle="collapse"><a class="jump" href="index.html#@ex-second_defense_make_bugs_easy_to_find_2-variable_scope"></a><span class="panel-title">变量作用域</span></div><div class="panel-collapse collapse exercise-panel" id="ex-second_defense_make_bugs_easy_to_find_2-variable_scope" data-outline="variable_scope" data-ex-id="modularity_encapsulation/variable_scope" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@consider_following_code"><a class="jump" href="index.html#@consider_following_code"></a>考虑以下代码（缺少一些变量声明）：</p>
+
+<pre id="@1_class_apartment"><a class="jump" href="index.html#@1_class_apartment"></a><code class="language-ts hljs typescript"> <span class="hljs-number">1</span> <span class="hljs-keyword">class</span> Apartment {
+ <span class="hljs-number">2</span>
+ <span class="hljs-number">3</span>     <span class="hljs-keyword">private</span> bathrooms: <span class="hljs-built_in">number</span>;
+ <span class="hljs-number">4</span>     <span class="hljs-comment">// declaration of roommates variable</span>
+ <span class="hljs-number">5</span>
+ <span class="hljs-number">6</span>     <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">bathrooms: <span class="hljs-built_in">number</span></span>) {
+ <span class="hljs-number">7</span>         <span class="hljs-keyword">this</span>.bathrooms = bathrooms;
+ <span class="hljs-number">8</span>         <span class="hljs-keyword">this</span>.roommates = <span class="hljs-keyword">new</span> Set&lt;Person&gt;();
+ <span class="hljs-number">9</span>     }
+ <span class="hljs-number">10</span>
+ <span class="hljs-number">11</span>    <span class="hljs-keyword">public</span> addRoommate(newRoommate: Person): <span class="hljs-built_in">void</span> {
+ <span class="hljs-number">12</span>         <span class="hljs-keyword">this</span>.roommates.add(newRoommate);
+ <span class="hljs-number">13</span>         <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.roommates.size &gt; PEOPLE_PER_BATHROOM * <span class="hljs-keyword">this</span>.bathrooms) {
+ <span class="hljs-number">14</span>             <span class="hljs-keyword">this</span>.roommates.delete(newRoommate);
+ <span class="hljs-number">15</span>             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'too many people'</span>);
+ <span class="hljs-number">16</span>         }
+ <span class="hljs-number">17</span>     }
+ <span class="hljs-number">18</span>
+ <span class="hljs-number">19</span>     <span class="hljs-keyword">public</span> getMaximumOccupancy(): <span class="hljs-built_in">number</span> {
+ <span class="hljs-number">20</span>         <span class="hljs-keyword">return</span> PEOPLE_PER_BATHROOM * <span class="hljs-keyword">this</span>.bathrooms;
+ <span class="hljs-number">21</span>     }
+ <span class="hljs-number">22</span> }</code></pre>
+
+<label class="exercise-part-heading" id="@which_these_lines"><a class="jump" href="index.html#@which_these_lines"></a>哪些行在 <code>newRoommate</code> 变量的作用域内？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="line 3"><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0">第 3 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="line 12"><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1">第 12 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="line 14"><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2">第 14 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="line 20"><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3">第 20 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<label class="exercise-part-heading" id="@which_part_file"><a class="jump" href="index.html#@which_part_file"></a>文件的哪部分是（当前未声明的）<code>roommates</code> 实例变量的作用域？</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="lines 2-21"><label for="md_converted_choice_5_0"><input type="radio" id="md_converted_choice_5_0" name="md_converted_radio_5">第 2-21 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="lines 7-8"><label for="md_converted_choice_5_1"><input type="radio" id="md_converted_choice_5_1" name="md_converted_radio_5">第 7-8 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="lines 12-16"><label for="md_converted_choice_5_2"><input type="radio" id="md_converted_choice_5_2" name="md_converted_radio_5">第 12-16 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="line 20"><label for="md_converted_choice_5_3"><input type="radio" id="md_converted_choice_5_3" name="md_converted_radio_5">第 20 行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<label class="exercise-part-heading" id="@out_choices_below_best_declaration_roommates"><a class="jump" href="index.html#@out_choices_below_best_declaration_roommates"></a>在以下选项中，<code>roommates</code> 实例变量的最佳声明是什么？</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="roommates: Array<Person>;"><label for="md_converted_choice_6_0"><input type="radio" id="md_converted_choice_6_0" name="md_converted_radio_6"><code>roommates: Array&lt;Person&gt;;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="roommates: Set<Person>;"><label for="md_converted_choice_6_1"><input type="radio" id="md_converted_choice_6_1" name="md_converted_radio_6"><code>roommates: Set&lt;Person&gt;;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="readonly roommates: Set<Person>;"><label for="md_converted_choice_6_2"><input type="radio" id="md_converted_choice_6_2" name="md_converted_radio_6"><code>readonly roommates: Set&lt;Person&gt;;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<label class="exercise-part-heading" id="@out_choices_below_best_declaration_people_per_bathroom"><a class="jump" href="index.html#@out_choices_below_best_declaration_people_per_bathroom"></a>在以下选项中，<code>PEOPLE_PER_BATHROOM</code> 的最佳声明是什么？</label>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="let PEOPLE_PER_BATHROOM: number = 5;"><label for="md_converted_choice_7_0"><input type="radio" id="md_converted_choice_7_0" name="md_converted_radio_7"><code>let PEOPLE_PER_BATHROOM: number = 5;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="public PEOPLE_PER_BATHROOM: number = 5;"><label for="md_converted_choice_7_1"><input type="radio" id="md_converted_choice_7_1" name="md_converted_radio_7"><code>public PEOPLE_PER_BATHROOM: number = 5;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="const PEOPLE_PER_BATHROOM: number = 5;"><label for="md_converted_choice_7_2"><input type="radio" id="md_converted_choice_7_2" name="md_converted_radio_7"><code>const PEOPLE_PER_BATHROOM: number = 5;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-second_defense_make_bugs_easy_to_find_2-snapshots_of_scope" data-target="#ex-second_defense_make_bugs_easy_to_find_2-snapshots_of_scope" data-toggle="collapse"><a class="jump" href="index.html#@ex-second_defense_make_bugs_easy_to_find_2-snapshots_of_scope"></a><span class="panel-title">作用域快照</span></div><div class="panel-collapse collapse exercise-panel" id="ex-second_defense_make_bugs_easy_to_find_2-snapshots_of_scope" data-outline="snapshots_of_scope" data-ex-id="modularity_encapsulation/snapshots_of_scope" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<div class="panel panel-default panel-figure pull-right pull-margin"><img src="figures/snapshot-diagram.svg" width="400">
+
+<div class="panel-body"><pre id="@const_people_per_bathroom_5"><a class="jump" href="index.html#@const_people_per_bathroom_5"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> PEOPLE_PER_BATHROOM = <span class="hljs-number">5</span>;
+
+<span class="hljs-keyword">class</span> Apartment {
+
+    <span class="hljs-keyword">private</span> bathrooms: <span class="hljs-built_in">number</span>;
+    <span class="hljs-keyword">private</span> roommates: Set&lt;Person&gt;;
+
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">bathrooms: <span class="hljs-built_in">number</span></span>) {
+        <span class="hljs-keyword">this</span>.bathrooms = bathrooms;
+        <span class="hljs-keyword">this</span>.roommates = <span class="hljs-keyword">new</span> Set&lt;Person&gt;();
+    }
+
+    <span class="hljs-keyword">public</span> addRoommate(newRoommate: Person): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">this</span>.roommates.add(newRoommate);
+        <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.roommates.size &gt; PEOPLE_PER_BATHROOM * <span class="hljs-keyword">this</span>.bathrooms) {
+            <span class="hljs-keyword">this</span>.roommates.delete(newRoommate);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'too many people'</span>);
+        }
+    }
+
+    <span class="hljs-keyword">public</span> getMaximumOccupancy(): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">return</span> PEOPLE_PER_BATHROOM * <span class="hljs-keyword">this</span>.bathrooms;
+    }
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">const</span> apt: Apartment = <span class="hljs-keyword">new</span> Apartment(<span class="hljs-number">1</span>);
+    apt.addRoommate(<span class="hljs-keyword">new</span> Person(<span class="hljs-string">"Sherlock Holmes"</span>));
+}
+main();</code></pre></div></div>
+
+<p id="@same_code_shown"><a class="jump" href="index.html#@same_code_shown"></a>同样的代码显示在右侧，现在包含了所有变量声明，以及一个 <code>main</code> 函数。</p>
+
+<p id="@suppose_stop_code"><a class="jump" href="index.html#@suppose_stop_code"></a>假设我们在 <code>addRoomate()</code> 调用内部停止代码。
+该点的不完整快照图显示在右侧。
+在快照图中填入每个位置应该出现的名称。
+如果你不记得每个标记的框代表什么，请参考<a href="../../03-code-review/index.html#kinds_of_variables_in_snapshot_diagrams">快照图中的变量类型</a>。</p>
+
+<p id="@location_inside_box"><a class="jump" href="index.html#@location_inside_box"></a>位置 A，在标记为 addRoommate 的框内</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; PEOPLE_PER_BATHROOM; newRoommate; roommates; none of these"><select class="form-control"><option selected="selected"></option><option>PEOPLE_PER_BATHROOM</option>,<option>newRoommate</option>,<option>roommates</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; apt; bathrooms (instance variable); bathrooms (local variable); this; none of these"><select class="form-control"><option selected="selected"></option><option>apt</option>,<option>bathrooms（实例变量）</option>,<option>bathrooms（局部变量）</option>,<option>this</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@location_b_inside"><a class="jump" href="index.html#@location_b_inside"></a>位置 B，在标记为 main 的框内</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; PEOPLE_PER_BATHROOM; newRoommate; roommates; none of these"><select class="form-control"><option selected="selected"></option><option>PEOPLE_PER_BATHROOM</option>,<option>newRoommate</option>,<option>roommates</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; apt; bathrooms (instance variable); bathrooms (local variable); this; none of these"><select class="form-control"><option selected="selected"></option><option>apt</option>,<option>bathrooms（实例变量）</option>,<option>bathrooms（局部变量）</option>,<option>this</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@location_c_inside"><a class="jump" href="index.html#@location_c_inside"></a>位置 C，在标记为 Apartment 的椭圆内</p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="dropdown exercise-choice" data-outline="; PEOPLE_PER_BATHROOM; newRoommate; roommates; none of these"><select class="form-control"><option selected="selected"></option><option>PEOPLE_PER_BATHROOM</option>,<option>newRoommate</option>,<option>roommates</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="f"><div class="dropdown exercise-choice" data-outline="; apt; bathrooms (instance variable); bathrooms (local variable); this; none of these"><select class="form-control"><option selected="selected"></option><option>apt</option>,<option>bathrooms（实例变量）</option>,<option>bathrooms（局部变量）</option>,<option>this</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@location_d_outside"><a class="jump" href="index.html#@location_d_outside"></a>位置 D，在所有形状之外，标记为全局</p>
+
+<div class="form-group exercise-part" data-outline="g"><div class="dropdown exercise-choice" data-outline="; PEOPLE_PER_BATHROOM; newRoommate; roommates; none of these"><select class="form-control"><option selected="selected"></option><option>PEOPLE_PER_BATHROOM</option>,<option>newRoommate</option>,<option>roommates</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="h"><div class="dropdown exercise-choice" data-outline="; apt; bathrooms (instance variable); bathrooms (local variable); this; none of these"><select class="form-control"><option selected="selected"></option><option>apt</option>,<option>bathrooms（实例变量）</option>,<option>bathrooms（局部变量）</option>,<option>this</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@which_names_out_scope_do_not"><a class="jump" href="index.html#@which_names_out_scope_do_not"></a>哪些名称超出了作用域并且在程序当前的状态中<strong>不存在</strong>？</p>
+
+<div class="form-group exercise-part" data-outline="i"><div class="dropdown exercise-choice" data-outline="; PEOPLE_PER_BATHROOM; newRoommate; roommates; none of these"><select class="form-control"><option selected="selected"></option><option>PEOPLE_PER_BATHROOM</option>,<option>newRoommate</option>,<option>roommates</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="j"><div class="dropdown exercise-choice" data-outline="; apt; bathrooms (instance variable); bathrooms (local variable); this; none of these"><select class="form-control"><option selected="selected"></option><option>apt</option>,<option>bathrooms（实例变量）</option>,<option>bathrooms（局部变量）</option>,<option>this</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@which_names_out_scope_point_i-e"><a class="jump" href="index.html#@which_names_out_scope_point_i-e"></a>哪些名称在此点超出了作用域（即 <code>addRoomate()</code> 内部的代码无法访问），但在程序的状态中<strong>仍然存在</strong>？</p>
+
+<div class="form-group exercise-part" data-outline="k"><div class="dropdown exercise-choice" data-outline="; PEOPLE_PER_BATHROOM; newRoommate; roommates; none of these"><select class="form-control"><option selected="selected"></option><option>PEOPLE_PER_BATHROOM</option>,<option>newRoommate</option>,<option>roommates</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="l"><div class="dropdown exercise-choice" data-outline="; apt; bathrooms (instance variable); bathrooms (local variable); this; none of these"><select class="form-control"><option selected="selected"></option><option>apt</option>,<option>bathrooms（实例变量）</option>,<option>bathrooms（局部变量）</option>,<option>this</option>,<option>以上都不是</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="reproduce_the_bug"><a class="jump" href="index.html#reproduce_the_bug"></a>复现 bug</h2><div data-outline="reproduce_the_bug">
+
+<p id="@suppose_somebody_reported"><a class="jump" href="index.html#@suppose_somebody_reported"></a>假设有人向你报告了你编写的某个软件中的 bug（例如，在 pset 的 alpha 提交后一个失败的隐藏测试用例）。这在软件工程职业生涯中是不可避免的。</p>
+
+<p id="@start_finding_small"><a class="jump" href="index.html#@start_finding_small"></a>首先从找到一个能复现失败的小型、可重复的测试用例开始。
+如果 bug 是通过<a href="../../02-testing/index.html#automated_regression_testing">回归测试</a>发现的，那么你很幸运；你的测试套件中已经有了一个失败的测试用例。
+如果 bug 是由用户报告的，可能需要一些努力来复现该 bug。
+对于图形用户界面和多线程程序，如果 bug 取决于事件或线程执行的时序，可能很难一致地复现。</p>
+
+<p id="@nevertheless_any_effort"><a class="jump" href="index.html#@nevertheless_any_effort"></a>尽管如此，你在使测试用例小型化和可重复方面付出的任何努力都是值得的，因为在搜索 bug 和开发修复方案时，你将不得不反复运行它。
+此外，在你成功修复 bug 后，你会希望将该测试用例保留在你的回归测试套件中，这样 bug 就不会再次出现。
+一旦你有了 bug 的测试用例，让这个测试通过就成为你的目标。</p>
+
+<p id="@here-s_example_suppose"><a class="jump" href="index.html#@here-s_example_suppose"></a>举个例子。假设你写了这个函数：</p>
+
+<pre id="@find_most_common_word_string_param"><a class="jump" href="index.html#@find_most_common_word_string_param"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Find the most common word in a string.
+ * @param text string containing zero or more words, where a word
+ *     is a string of alphanumeric characters bounded by nonalphanumerics.
+ * @returns a word that occurs maximally often in text, ignoring alphabetic case.
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">mostCommonWord</span>(<span class="hljs-params">text: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">string</span> </span>{
+    ...
+}</code></pre>
+
+<p id="@user_passes_whole"><a class="jump" href="index.html#@user_passes_whole"></a>一个用户将莎士比亚戏剧的全部文本传入你的函数，类似 <code>mostCommonWord(allShakespearesPlaysConcatenated)</code>，发现函数没有返回像 <code>"the"</code> 或 <code>"a"</code> 这样可预测的常见英文单词，而是返回了意想不到的结果，也许是 <code>"e"</code>。</p>
+
+<p id="@shakespeare-s_plays_100-000"><a class="jump" href="index.html#@shakespeare-s_plays_100-000"></a>莎士比亚戏剧有 100,000 行，包含超过 800,000 个单词，所以这个输入调试起来会非常痛苦。如果你先将有 bug 的输入缩小到可管理的规模，同时仍然表现出相同（或非常相似）的 bug，调试会更容易：</p>
+
+<ul id="@does_first_half">
+<li><a class="jump" href="index.html#@does_first_half"></a>莎士比亚的前半部分是否表现出同样的 bug？（如果是，继续对半分割！二分搜索通常是一个好技术。下面会更多讨论。）</li>
+<li>单个戏剧是否有同样的 bug？</li>
+<li>单个独白是否有同样的 bug？</li>
+</ul>
+
+<p id="@once_you-ve_found"><a class="jump" href="index.html#@once_you-ve_found"></a>一旦你找到了一个小的测试用例，用这个更小的测试用例找到并修复 bug，然后回到原来的有 bug 的输入，确认你修复了同样的 bug。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-reproduce_the_bug"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-reproduce_the_bug-reducing_a_bug_to_a_test_case" data-target="#ex-reproduce_the_bug-reducing_a_bug_to_a_test_case" data-toggle="collapse"><a class="jump" href="index.html#@ex-reproduce_the_bug-reducing_a_bug_to_a_test_case"></a><span class="panel-title">将 bug 缩小为测试用例</span></div><div class="panel-collapse collapse exercise-panel" id="ex-reproduce_the_bug-reducing_a_bug_to_a_test_case" data-outline="reducing_a_bug_to_a_test_case" data-ex-id="reproduce_the_bug/reducing_a_bug_to_a_test_case" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@suppose_user_reports"><a class="jump" href="index.html#@suppose_user_reports"></a>假设一个用户报告 <code>mostCommonWord("chicken chicken chicken beef")</code> 返回 <code>"beef"</code> 而不是 <code>"chicken"</code>。</p>
+
+<label class="exercise-part-heading" id="@shorten_simplify_input"><a class="jump" href="index.html#@shorten_simplify_input"></a>为了在开始调试之前缩短和简化这个输入，以下哪些输入值得尝试？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="mostCommonWord(&quot;chicken chicken beef&quot;)"><label for="md_converted_choice_8_0"><input type="checkbox" id="md_converted_choice_8_0"><code>mostCommonWord("chicken chicken beef")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mostCommonWord(&quot;Chicken Chicken Chicken beef&quot;)"><label for="md_converted_choice_8_1"><input type="checkbox" id="md_converted_choice_8_1"><code>mostCommonWord("Chicken Chicken Chicken beef")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mostCommonWord(&quot;chicken beef&quot;)"><label for="md_converted_choice_8_2"><input type="checkbox" id="md_converted_choice_8_2"><code>mostCommonWord("chicken beef")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mostCommonWord(&quot;a b c&quot;)"><label for="md_converted_choice_8_3"><input type="checkbox" id="md_converted_choice_8_3"><code>mostCommonWord("a b c")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mostCommonWord(&quot;c c c b&quot;)"><label for="md_converted_choice_8_4"><input type="checkbox" id="md_converted_choice_8_4"><code>mostCommonWord("c c c b")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<p id="@give_all_answers"><a class="jump" href="index.html#@give_all_answers"></a>给出所有合理的答案，不仅仅是最简单的那个（因为最简单的有时不再表现出 bug！）</p>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-reproduce_the_bug-regression_testing" data-target="#ex-reproduce_the_bug-regression_testing" data-toggle="collapse"><a class="jump" href="index.html#@ex-reproduce_the_bug-regression_testing"></a><span class="panel-title">回归测试</span></div><div class="panel-collapse collapse exercise-panel" id="ex-reproduce_the_bug-regression_testing" data-outline="regression_testing" data-ex-id="reproduce_the_bug/regression_testing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@suppose_you_reduce"><a class="jump" href="index.html#@suppose_you_reduce"></a>假设你将 <code>"chicken chicken chicken beef"</code> 输入缩小到 <code>"c c b"</code>，它也有问题。你找到了一个 bug，修复了它，并观察到 <code>"c c b"</code> 和 <code>"chicken chicken chicken beef"</code> 现在都返回了正确的答案。</p>
+
+<label class="exercise-part-heading" id="@which_test_cases"><a class="jump" href="index.html#@which_test_cases"></a>你现在应该将哪些测试用例添加到你的测试套件中？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="assert.strictEqual(mostCommonWord(&quot;chicken chicken chicken beef&quot;), &quot;chicken&quot;)"><label for="md_converted_choice_9_0"><input type="checkbox" id="md_converted_choice_9_0"><code>assert.strictEqual(mostCommonWord("chicken chicken chicken beef"), "chicken")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert.strictEqual(mostCommonWord(&quot;c c b&quot;), &quot;c&quot;)"><label for="md_converted_choice_9_1"><input type="checkbox" id="md_converted_choice_9_1"><code>assert.strictEqual(mostCommonWord("c c b"), "c")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert.strictEqual(mostCommonWord(&quot;c b&quot;), &quot;c&quot;)"><label for="md_converted_choice_9_2"><input type="checkbox" id="md_converted_choice_9_2"><code>assert.strictEqual(mostCommonWord("c b"), "c")</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="you shouldn’t change the test suite, because you haven’t changed the spec"><label for="md_converted_choice_9_3"><input type="checkbox" id="md_converted_choice_9_3">你不应该更改测试套件，因为你没有更改规格说明</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="find_the_bug_using_the_scientific_method"><a class="jump" href="index.html#find_the_bug_using_the_scientific_method"></a>使用科学方法定位 bug</h2><div data-outline="find_the_bug_using_the_scientific_method">
+
+<p id="@localize_bug_cause"><a class="jump" href="index.html#@localize_bug_cause"></a>要定位 bug 及其原因，你可以使用科学方法：</p>
+
+<ol>
+<li><p id="@study_data_look"><a class="jump" href="index.html#@study_data_look"></a><strong>研究数据。</strong>
+查看导致 bug 的测试输入，并检查由此产生的不正确结果、失败的断言和堆栈跟踪。</p></li>
+<li><p id="@hypothesize_propose_hypothesis"><a class="jump" href="index.html#@hypothesize_propose_hypothesis"></a><strong>提出假设。</strong>
+提出一个与所有数据一致的假设，关于 bug 可能在哪里，或者它<em>不可能</em>在哪里。
+最好一开始让这个假设具有普遍性。</p></li>
+<li><p id="@experiment_devise_run"><a class="jump" href="index.html#@experiment_devise_run"></a><strong>实验。</strong>
+设计并运行一个测试你假设的实验。
+最好一开始让实验成为一种<em>观察</em>——一个尽可能少干扰系统的探测。</p></li>
+<li><p id="@repeat_add_data"><a class="jump" href="index.html#@repeat_add_data"></a><strong>重复。</strong>
+将实验中收集的数据添加到之前已知的信息中，并做出新的假设。
+希望你已经排除了一些可能性，缩小了 bug 可能的位置和原因的范围。</p></li>
+</ol>
+
+<p id="@kind_deliberate_process"><a class="jump" href="index.html#@kind_deliberate_process"></a>这种深思熟虑的过程对于每个 bug 都是不必要的。
+有了良好的快速失败设计，你有望在非常接近 bug 源头的地方得到一个异常，堆栈跟踪会直接引导你找到它，错误通过检查代码就会显而易见。
+那么什么时候需要应用科学方法呢？
+一个好的经验法则是<strong>10 分钟规则</strong>。
+如果你已经花了 10 分钟使用临时的、非系统化的检查来搜索 bug，那么是时候退后一步，开始应用科学方法了。</p>
+
+<p id="@part_transition_you"><a class="jump" href="index.html#@part_transition_you"></a>作为这个过渡的一部分，你还应该将你的调试过程从你的脑海中移出来——你的脑海对你尝试过什么以及从中学到了什么的有限工作记忆——并开始记笔记，无论是在纸上还是在笔记本电脑上。
+在过程的每次迭代中，你都会写下：</p>
+
+<ul id="@hypothesis_based_you-ve">
+<li><a class="jump" href="index.html#@hypothesis_based_you-ve"></a><em>假设。</em>基于你目前学到的，你对 bug 的位置或原因的下一个假设是什么？</li>
+<li><em>实验。</em>你即将尝试什么来验证或证伪这个假设？</li>
+<li><em>预测。</em>根据你的假设，你预期实验的结果会是什么？</li>
+<li><em>观察。</em>当你做实验时，实际发生了什么？</li>
+</ul>
+
+<p id="@these_kinds_questions"><a class="jump" href="index.html#@these_kinds_questions"></a>这些问题应该对你来说非常熟悉，来自你过去在科学课堂上的经验。
+在接下来的几节中，我们将看到它们在调试代码时采取什么形式。
+在调试中，一些假设和一些实验比其他的好。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-find_the_bug_using_the_scientific_method"><h4 class="text-danger" id="@reading_exercises_5"><a class="jump" href="index.html#@reading_exercises_5"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method-scientific_method" data-target="#ex-find_the_bug_using_the_scientific_method-scientific_method" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method-scientific_method"></a><span class="panel-title">科学方法</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method-scientific_method" data-outline="scientific_method" data-ex-id="find_the_bug_using_the_scientific_method/scientific_method" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@process_already_discussed"><a class="jump" href="index.html#@process_already_discussed"></a>我们之前讨论的将 bug 报告简化为简单测试用例的过程就是应用科学方法的一个例子。
+对于特定测试简化过程中的以下每个时刻，正在应用上述科学方法的哪个步骤？</p>
+
+<p id="@user_reports_mostcommonword-chicken"><a class="jump" href="index.html#@user_reports_mostcommonword-chicken"></a>一个用户报告 <code>mostCommonWord("chicken chicken chicken beef")</code> 返回 <code>"beef"</code> 而不是 <code>"chicken"</code>。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; study the data; hypothesize; experiment"><select class="form-control"><option selected="selected"></option><option>研究数据</option>,<option>假设</option>,<option>实验</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@maybe_particular_words"><a class="jump" href="index.html#@maybe_particular_words"></a>也许特定的单词 "chicken" 和 "beef" 不会导致失败——重要的是它们出现的次数。</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; study the data; hypothesize; experiment"><select class="form-control"><option selected="selected"></option><option>研究数据</option>,<option>假设</option>,<option>实验</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@run_test_case"><a class="jump" href="index.html#@run_test_case"></a>运行测试用例 <code>mostCommonWord("a a a b")</code>。</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; study the data; hypothesize; experiment"><select class="form-control"><option selected="selected"></option><option>研究数据</option>,<option>假设</option>,<option>实验</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="1_study_the_data"><a class="jump" href="index.html#1_study_the_data"></a>1. 研究数据</h3><div data-outline="1_study_the_data">
+
+<p id="@one_important_kind"><a class="jump" href="index.html#@one_important_kind"></a>一种重要的数据是来自异常的堆栈跟踪。
+练习阅读你得到的堆栈跟踪，因为它们会为你提供大量关于 bug 可能在哪里的信息。</p>
+
+<p id="@typical_stack_trace"><a class="jump" href="index.html#@typical_stack_trace"></a>在典型的堆栈跟踪中，最新的调用在最上面，最旧的调用在最下面。
+但堆栈顶部或底部的调用可能是你没有编写的库代码。
+你自己的代码——bug 最有可能存在的地方——通常在中间。
+不要因此感到气馁。
+浏览堆栈跟踪直到看到熟悉的内容，然后在你的代码中找到它。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-find_the_bug_using_the_scientific_method_2"><h4 class="text-danger" id="@reading_exercises_6"><a class="jump" href="index.html#@reading_exercises_6"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method_2-reading_a_stack_trace" data-target="#ex-find_the_bug_using_the_scientific_method_2-reading_a_stack_trace" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method_2-reading_a_stack_trace"></a><span class="panel-title">阅读堆栈跟踪</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method_2-reading_a_stack_trace" data-outline="reading_a_stack_trace" data-ex-id="1_study_the_data/reading_a_stack_trace" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@suppose_ben_bitdiddle"><a class="jump" href="index.html#@suppose_ben_bitdiddle"></a>假设 Ben Bitdiddle 正在编写一个 TypeScript 程序，得到了这个堆栈跟踪：</p>
+
+<pre class="no-markdown pre-scrollable" id="@error_enoent_no_such_file_directory_open_art-coordinates-txt_object-opensync_fs-js-476-3_object-readfilesync_fs-js-377-35_object-drawpersonalart_src-turtlesoup-ts-92-5_context-anonymous_test-turtlesoup-test-ts-13-9_processimmediate_internal-timers-js-461-21_0"><a class="jump" href="index.html#@error_enoent_no_such_file_directory_open_art-coordinates-txt_object-opensync_fs-js-476-3_object-readfilesync_fs-js-377-35_object-drawpersonalart_src-turtlesoup-ts-92-5_context-anonymous_test-turtlesoup-test-ts-13-9_processimmediate_internal-timers-js-461-21_0"></a><code class="text">     Error: ENOENT: no such file or directory, open 'art-coordinates.txt'
+      at Object.openSync (fs.js:476:3)
+      at Object.readFileSync (fs.js:377:35)
+      at Object.drawPersonalArt (src/turtlesoup.ts:92:5)
+      at Context.&lt;anonymous&gt; (test/turtlesoup.test.ts:13:9)
+      at processImmediate (internal/timers.js:461:21)
+</code></pre>
+
+<p id="@line_code_actually"><a class="jump" href="index.html#@line_code_actually"></a><strong>实际抛出异常的是哪行代码？</strong></p>
+
+<p id="@filename_0"><a class="jump" href="index.html#@filename_0"></a>文件名：</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 32%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<p id="@line_number_0"><a class="jump" href="index.html#@line_number_0"></a>行号：</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<p id="@exception_thrown_last"><a class="jump" href="index.html#@exception_thrown_last"></a><strong>当异常被抛出时，Ben 自己的代码中最后执行的是哪一行？</strong></p>
+
+<p id="@filename_1"><a class="jump" href="index.html#@filename_1"></a>文件名：</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<p id="@line_number_1"><a class="jump" href="index.html#@line_number_1"></a>行号：</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<p id="@entry_point_ben-s"><a class="jump" href="index.html#@entry_point_ben-s"></a><strong>Ben 代码的<a href="https://en.wikipedia.org/wiki/Entry_point"><em>入口点</em></a>是什么，即在这个堆栈跟踪中 Ben 自己的代码中首先被调用的是哪一行？</strong></p>
+
+<p id="@filename_2"><a class="jump" href="index.html#@filename_2"></a>文件名：</p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<p id="@line_number_2"><a class="jump" href="index.html#@line_number_2"></a>行号：</p>
+
+<div class="form-group exercise-part" data-outline="f"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method_2-interpreting_a_stack_trace" data-target="#ex-find_the_bug_using_the_scientific_method_2-interpreting_a_stack_trace" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method_2-interpreting_a_stack_trace"></a><span class="panel-title">解释堆栈跟踪</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method_2-interpreting_a_stack_trace" data-outline="interpreting_a_stack_trace" data-ex-id="1_study_the_data/interpreting_a_stack_trace" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@here_again_ben"><a class="jump" href="index.html#@here_again_ben"></a>Ben Bitdiddle 的堆栈跟踪再次如下：</p>
+
+<pre class="no-markdown pre-scrollable" id="@error_enoent_no_such_file_directory_open_art-coordinates-txt_object-opensync_fs-js-476-3_object-readfilesync_fs-js-377-35_object-drawpersonalart_src-turtlesoup-ts-92-5_context-anonymous_test-turtlesoup-test-ts-13-9_processimmediate_internal-timers-js-461-21_1"><a class="jump" href="index.html#@error_enoent_no_such_file_directory_open_art-coordinates-txt_object-opensync_fs-js-476-3_object-readfilesync_fs-js-377-35_object-drawpersonalart_src-turtlesoup-ts-92-5_context-anonymous_test-turtlesoup-test-ts-13-9_processimmediate_internal-timers-js-461-21_1"></a><code class="text">     Error: ENOENT: no such file or directory, open 'art-coordinates.txt'
+      at Object.openSync (fs.js:476:3)
+      at Object.readFileSync (fs.js:377:35)
+      at Object.drawPersonalArt (src/turtlesoup.ts:92:5)
+      at Context.&lt;anonymous&gt; (test/turtlesoup.test.ts:13:9)
+      at processImmediate (internal/timers.js:461:21)
+</code></pre>
+
+<p id="@trace_happened_ben-s"><a class="jump" href="index.html#@trace_happened_ben-s"></a>通过排列以下事件来追踪 Ben 代码中发生的事情：</p>
+
+<label class="exercise-part-heading" id="@internal_fs-js_code"><a class="jump" href="index.html#@internal_fs-js_code"></a>内部 <code>fs.js</code> 代码尝试打开不存在的文件 <code>art-coordinates.txt</code>，并报错。</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; First; Second; Third; Fourth"><select class="form-control"><option selected="selected"></option><option>第一</option>,<option>第二</option>,<option>第三</option>,<option>第四</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@drawpersonalart_attempts_read"><a class="jump" href="index.html#@drawpersonalart_attempts_read"></a><code>drawPersonalArt</code> 尝试使用 <code>fs</code> 库读取文件。</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; First; Second; Third; Fourth"><select class="form-control"><option selected="selected"></option><option>第一</option>,<option>第二</option>,<option>第三</option>,<option>第四</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@turtlesoup_unit_test"><a class="jump" href="index.html#@turtlesoup_unit_test"></a>一个 turtlesoup 单元测试调用 <code>drawPersonalArt</code>。</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; First; Second; Third; Fourth"><select class="form-control"><option selected="selected"></option><option>第一</option>,<option>第二</option>,<option>第三</option>,<option>第四</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@ben_runs_his"><a class="jump" href="index.html#@ben_runs_his"></a>Ben 运行他的测试套件。</label>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; First; Second; Third; Fourth"><select class="form-control"><option selected="selected"></option><option>第一</option>,<option>第二</option>,<option>第三</option>,<option>第四</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h4 id="@aside_more_praxis"><a class="jump" href="index.html#@aside_more_praxis"></a><em>题外话：更多 Praxis Tutor</em></h4>
+
+<div class="handout-due local-only alert alert-danger"><p id="@staff_playtesting_reading"><a class="jump" href="index.html#@staff_playtesting_reading"></a>对于在发布给学生之前对本阅读进行试玩的工作人员，你需要将你的个人起始 URL 更改为使用开发版本的 tutor，该版本包含调试练习。</p>
+
+<p id="@click_here_get"><a class="jump" href="index.html#@click_here_get"></a><a href="https://praxistutor.mit.edu/register/openid?tutor=debug-6102-sp26" target="tutor-url" class="no-markdown alert-link">点击此处获取带有调试练习的 tutor 的个人起始 URL</a><br></p>
+
+<p id="@then_go_settings"><a class="jump" href="index.html#@then_go_settings"></a>然后进入 VS Code 中的设置，搜索 <code>praxis</code> 找到 Praxis Tutor 设置，并将新的起始 URL 复制粘贴到标记为 <code>Location: Personal Link</code> 的框中</p>
+
+<p id="@your_tutor_pane"><a class="jump" href="index.html#@your_tutor_pane"></a>你的 Tutor 面板现在将显示所有原始的 TypeScript 练习级别（尽管它们将不再被标记为已完成，因为你在不同的概念图上完成了它们），调试练习级别将在底部。所有级别都应该被解锁，因为你是工作人员。</p>
+
+<p id="@reading_released_class"><a class="jump" href="index.html#@reading_released_class"></a>当本阅读发布给学生时，调试练习也将发布到生产环境，并自动出现在学生的 Tutor 视图中，无需重置他们的起始 URL，他们在之前练习级别的进度将不受影响。</p>
+
+<p id="@message_be_automatically"><a class="jump" href="index.html#@message_be_automatically"></a>当本阅读发布给学生时，这条消息将被自动删除，他们只会看到后面的文本：</p></div>
+
+<p id="@now_time_put"><a class="jump" href="index.html#@now_time_put"></a>现在是时候在 Praxis Tutor 中将第 1 步付诸实践了——<em>错误解释</em>！
+<strong>但在你出发之前</strong>，几点设置说明：</p>
+
+<ol id="@open_your_praxis">
+<li><a class="jump" href="index.html#@open_your_praxis"></a>在 Visual Studio Code 中打开你的 Praxis Tutor 面板。如果它说你的 Tutor 插件太旧，那么你需要<a href="../../../tools/getting-started/index.html#praxis-tutor">重新下载并安装</a>。</li>
+</ol>
+
+<div class="panel panel-default panel-figure pull-right"><video controls="" autoplay="" style="max-width:400px;"><source src="figures/DragToRightSidebar.mov"></video></div>
+
+<span id="move_tutor_to_right"></span>
+
+<ol start="2">
+<li><p id="@future_exercises_reading"><a class="jump" href="index.html#@future_exercises_reading"></a>对于本阅读中的未来练习，你需要在 Explorer 面板和 Run and Debug 面板之间切换。
+为此，<strong>请将你的 tutor 窗口移到右侧边栏</strong>，在那里它将始终可见。
+要查看方法，请观看右侧的视频。
+完成本阅读中的练习后，你可以随意将窗口移回 Explorer 面板。</p></li>
+<li><p id="@some_exercises_require_extension_reload_after_minute_if_tutor_window_does_not_reappear_don-t_close"><a class="jump" href="index.html#@some_exercises_require_extension_reload_after_minute_if_tutor_window_does_not_reappear_don-t_close"></a><strong>某些练习需要重新加载扩展。</strong>
+一分钟后，<strong>如果 Tutor 窗口<em>没有</em>重新出现</strong>，<em>不要</em>关闭右侧边栏。
+相反，通过转到
+<em>View</em> → <em>Command Palette</em> → 并搜索 <em>Developer: Reload Window</em> 来<strong>重新加载 VS Code 窗口</strong>。如果你不小心关闭了右侧边栏，可以通过转到 <em>View</em> → <em>Open View</em> 并搜索 <em>Praxis Tutor</em> 来恢复它。</p></li>
+</ol>
+
+<span id="start_over_button"></span>
+
+<ol start="4" id="@some_more_involved">
+<li><a class="jump" href="index.html#@some_more_involved"></a>对于一些更复杂的调试练习，你可能会受益于<em>重新开始</em>按钮：<img src="figures/tutor-start-over.png" width="200px"></li>
+</ol>
+
+<div class="clearfix"></div>
+
+<p id="@now_go_ahead"><a class="jump" href="index.html#@now_go_ahead"></a>现在去完成 Praxis Tutor 中的<em>错误解释</em>，然后回到阅读。</p>
+
+<div class="tutorProgress no-markdown">
+  <img class="ideWindow" src="../../../tools/typescript/figures/small-vscode-window-right.png">
+  <div class="callout callout-right">
+
+      <div class="level">
+          <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">错误解释</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+        </div>
+  </div>
+</div>
+
+</div><h3 id="2_hypothesize"><a class="jump" href="index.html#2_hypothesize"></a>2. 提出假设</h3><div data-outline="2_hypothesize">
+
+<p id="@point_program_actually"><a class="jump" href="index.html#@point_program_actually"></a>程序实际失败的点——通过抛出异常或产生错误答案——不一定是 bug 所在的位置。
+有 bug 的代码可能在最终失败之前已经通过程序的良好部分传播了一些错误值。所以你的假设应该是关于 bug 实际在哪里（或不在哪里），以及可能是什么原因导致的。</p>
+
+<p id="@can_help_think"><a class="jump" href="index.html#@can_help_think"></a>将你的程序视为数据流或算法中的步骤，并尝试一次排除整个程序的部分，可能会有所帮助。
+让我们在 <code>mostCommonWord()</code> 例子的上下文中思考这个问题，用三个辅助函数进一步展开：</p>
+
+<pre id="@find_most_common_word_string_function"><a class="jump" href="index.html#@find_most_common_word_string_function"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Find the most common word in a string.
+ * ...
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">mostCommonWord</span>(<span class="hljs-params">text: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">string</span> </span>{
+    <span class="hljs-keyword">let</span> words: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = splitIntoWords(text);
+    <span class="hljs-keyword">let</span> frequencies: Map&lt;<span class="hljs-built_in">string</span>,<span class="hljs-built_in">number</span>&gt; = countOccurrences(words);
+    <span class="hljs-keyword">let</span> winner: <span class="hljs-built_in">string</span> = findMostFrequent(frequencies);
+    <span class="hljs-keyword">return</span> winner;
+}</code></pre>
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/dataflow.svg" alt="数据流经程序的各个模块" width="600"></div>
+
+<p id="@flow_data_mostcommonword"><a class="jump" href="index.html#@flow_data_mostcommonword"></a><code>mostCommonWord()</code> 中的数据流如右图所示。</p>
+
+<p id="@suppose_getting_unexpected"><a class="jump" href="index.html#@suppose_getting_unexpected"></a>假设我们在 <code>countOccurrences()</code> 中得到了一个意外的异常。
+这就是我们正在调查的失败。
+然后我们可以排除该点<em>下游</em>的所有内容（即数据流中更晚的部分）作为 bug 的可能位置。
+例如，我们不会通过查看 <code>findMostFrequent()</code> 来找到 bug，因为当失败发生时它甚至还没有被执行。</p>
+
+<p id="@so_here_some"><a class="jump" href="index.html#@so_here_some"></a>所以这里有一些与我们目前掌握的信息一致的假设。
+它们按与失败的时间倒序排列：</p>
+
+<ul id="@bug_countoccurrences_input">
+<li><a class="jump" href="index.html#@bug_countoccurrences_input"></a>bug 在 <code>countOccurrences</code> 中：其输入有效，但它抛出了异常</li>
+<li>bug 在 <code>splitIntoWords</code> 和 <code>countOccurrences</code> 之间的连接处：两个函数都满足它们各自的契约，但前者保证的后置条件不满足后者期望的前置条件</li>
+<li>bug 在 <code>splitIntoWords</code> 中：其输入有效，但它产生了错误的输出</li>
+<li>bug 在 <code>mostCommonWord</code> 的原始输入中：<code>text</code> 不满足整个函数的前置条件</li>
+</ul>
+
+<p id="@which_hypothesis_try"><a class="jump" href="index.html#@which_hypothesis_try"></a>先尝试哪个假设？
+调试是一个搜索过程，你可以使用<strong>二分搜索</strong>来加速这个过程。
+要进行二分搜索，你可以将这个数据流分成两半，也许猜测 bug 在第一个辅助函数和第二个之间的连接处，并使用下面的一个实验（如打印语句、断点或断言）来检查那里的值。
+从那个实验的答案中，你会知道是应该在数据流的前半部分还是后半部分追踪 bug。</p>
+
+<h4 id="@delta_debugging"><a class="jump" href="index.html#@delta_debugging"></a>Delta 调试</h4>
+
+<p id="@process_isolating_small"><a class="jump" href="index.html#@process_isolating_small"></a>隔离小测试用例的过程也可能为你提供有助于形成假设的数据，特别是如果它发现了两个紧密相关的测试用例，它们<em>夹住</em>了 bug，即一个成功，一个失败。
+例如，也许 <code>mostCommonWord("c c, b")</code> 有 bug，但 <code>mostCommonWord("c c b")</code> 没问题。
+现在你可以检查这两个测试用例执行之间的差异来帮助形成你的假设。
+哪些代码在通过的测试用例中执行了，但在失败的测试用例中被跳过了，反之亦然？
+一个假设是 bug 就在那些代码行中，即通过运行和失败运行之间的<em>增量</em>。</p>
+
+<p id="@specific_example_general"><a class="jump" href="index.html#@specific_example_general"></a>这是 bug 查找中一个通用思想的具体例子，称为<mark data-structure-text="delta debugging" id="^delta_debugging"><a href="https://en.wikipedia.org/wiki/Delta_Debugging"><em>delta 调试</em></a></mark>，即通过比较成功运行和失败运行来尝试定位 bug。
+另一种 delta 调试在回归测试开始失败时很有用。
+使用你的版本控制系统，你检索仍然通过测试的最新版本，然后系统地探索旧的可运行版本和新的失败版本之间的代码更改，直到找到引入 bug 的更改。
+Delta 调试工具可以自动化这种搜索过程，尽管像<a href="https://en.wikipedia.org/wiki/Program_slicing">切片</a>工具一样，它们尚未被广泛使用。</p>
+
+<h4 id="prioritize"><a class="jump" href="index.html#prioritize"></a>优先排序假设</h4>
+
+<p id="@making_your_hypothesis"><a class="jump" href="index.html#@making_your_hypothesis"></a>在做出假设时，你可能需要记住，系统的不同部分有不同的失败可能性。
+例如，旧的、经过充分测试的代码可能比最近添加的代码更值得信赖。
+TypeScript 库代码可能比你的代码更值得信赖。
+TypeScript 编译器和运行时、操作系统平台和硬件越来越值得信赖，因为它们经过了更多的测试和验证。
+你应该信任这些较低层级，直到你有充分的理由不再信任它们。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-find_the_bug_using_the_scientific_method_3"><h4 class="text-danger" id="@reading_exercises_7"><a class="jump" href="index.html#@reading_exercises_7"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method_3-priorities" data-target="#ex-find_the_bug_using_the_scientific_method_3-priorities" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method_3-priorities"></a><span class="panel-title">优先级</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method_3-priorities" data-outline="priorities" data-ex-id="2_hypothesize/priorities" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@suppose_you_debugging"><a class="jump" href="index.html#@suppose_you_debugging"></a>假设你正在调试 <code>quadraticRoots</code> 函数，它有时似乎产生了错误的答案。</p>
+
+<pre id="@solves_quadratic_equation_ax-2_bx_c_0_param_quadratic_coefficient_requires_0_param_b_linear_coefficient_param_c_constant_term_returns_list_real_roots"><a class="jump" href="index.html#@solves_quadratic_equation_ax-2_bx_c_0_param_quadratic_coefficient_requires_0_param_b_linear_coefficient_param_c_constant_term_returns_list_real_roots"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Solves quadratic equation ax^2 + bx + c = 0.
+ *
+ * @param a quadratic coefficient, requires a != 0
+ * @param b linear coefficient
+ * @param c constant term
+ * @returns a list of the real roots of the equation
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">quadraticRoots</span>(<span class="hljs-params">a: <span class="hljs-built_in">number</span>, b: <span class="hljs-built_in">number</span>, c: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{ ... }</code></pre>
+
+<p id="@put_following_items"><a class="jump" href="index.html#@put_following_items"></a>将以下项目按你应该尝试的顺序排列：1、2、3。</p>
+
+<label class="exercise-part-heading" id="@try_your_code"><a class="jump" href="index.html#@try_your_code"></a>在 Firefox 而不是 Chrome 中尝试你的代码。</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@put_console-log_statements"><a class="jump" href="index.html#@put_console-log_statements"></a>在整个函数中放置 <code>console.log()</code> 语句以显示计算的中间值。</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@reproduce_bug_1"><a class="jump" href="index.html#@reproduce_bug_1"></a>复现 bug。</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="3_experiment"><a class="jump" href="index.html#3_experiment"></a>3. 实验</h3><div data-outline="3_experiment">
+
+<p id="@your_hypothesis_should"><a class="jump" href="index.html#@your_hypothesis_should"></a>你的假设应该引出一个预测，比如"我认为变量 <code>x</code> 在这点有一个错误的值"，甚至"我认为这段代码永远不会被执行。"
+你的实验应该被选择来测试这个预测。
+最好的实验是一个<em>探测</em>，一种对系统的温和观察，尽可能少地干扰它。</p>
+
+<h4 id="@assertions_revisited"><a class="jump" href="index.html#@assertions_revisited"></a>断言，再探</h4>
+
+<p id="@we-ve_already_discussed"><a class="jump" href="index.html#@we-ve_already_discussed"></a>我们已经详细讨论了一种探测：<a href="index.html#assertions"><strong>断言</strong></a>，用于测试变量值或其他内部状态。
+在上面 x 永远不允许超过 100 的例子中，我们可以在任何点插入 <code>assert(x &lt;= 100);</code> 作为探测。
+断言的优势在于它们不需要你手动检查输出，甚至可以在调试后保留在代码中，如果测试是普遍成立的（一些调试断言只对你正在调试的特定测试用例成立，那些需要被移除）。
+断言的缺点是，在许多语言（如 Java）中，它们默认不开启，所以你可能会被看似通过但实际上根本没有运行的断言所欺骗。</p>
+
+<h4 id="@print_statements_logging"><a class="jump" href="index.html#@print_statements_logging"></a>打印语句与日志</h4>
+
+<p id="@another_familiar_probe"><a class="jump" href="index.html#@another_familiar_probe"></a>另一种熟悉的探测是<strong>打印语句</strong>。
+<em>打印调试</em>
+（出于历史原因也称为 <em>printf 调试</em> <a href="https://stackoverflow.com/questions/189562/what-is-the-proper-name-for-doing-debugging-by-adding-print-statements">），
+其优势在于它几乎适用于每一种编程语言。
+其缺点在于它对程序进行了更改，你必须记得撤销。
+经过长时间的调试后，程序中到处都是打印语句太容易了。
+在编写调试打印语句时，稍微深思熟虑一下也是明智的。
+与其在十五个不同的地方打印相同的 <code>hi!</code> 来追踪程序的执行方式，并失去对哪个是哪个的跟踪，不如打印一些清晰且具有描述性的内容，如 <code>start of calculateTotalBonus</code>。</p>
+
+<p id="@more_elaborate_kind"><a class="jump" href="index.html#@more_elaborate_kind"></a>一种更复杂的打印调试方式是<em>日志</em>，它将信息性的打印语句永久保留在代码中，并通过全局设置来开启或关闭它们，比如布尔值 <code>DEBUG</code> 常量或<em>日志级别</em>变量。
+日志级别思想的一个简单版本可以在<a href="https://developer.mozilla.org/en-US/docs/Web/API/Console#outputting_text_to_the_console">标准 JavaScript <code>console</code> API</a>中找到，它不仅提供 <code>console.log()</code>，还提供 <code>console.info()</code>、<code>console.warn()</code> 和 <code>console.error()</code>，代表所显示消息越来越高的重
+要性级别。
+<code>console</code> 框架允许用户过滤日志输出以隐藏不太重要的消息，而发送到最关键日志级别（如 <code>console.error()</code>）的消息通常以红色显示，以便无论过滤器如何都能突出显示。
+像 <a href="https://www.npmjs.com/package/winston">winston</a> 这样更复杂的日志框架还可以将日志定向到文件或网络上的服务器，可以记录结构化数据以及人类可读的字符串，并且可以在部署环境中使用，而不仅仅是开发中。
+如果没有日志，大型复杂的系统将非常难以运营。</p>
+
+<p id="@like_assertions_you"><a class="jump" href="index.html#@like_assertions_you"></a><a href="index.html#assertions_should_not_have_side_effects">像断言一样</a>，你必须注意不要在打印或日志探测中引入副作用。
+例如，考虑以下函数：</p>
+
+<pre id="@function_recursivehelper-arr_array-number_number_base_case_return_recursivehelper-arr"><a class="jump" href="index.html#@function_recursivehelper-arr_array-number_number_base_case_return_recursivehelper-arr"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">recursiveHelper</span>(<span class="hljs-params">arr: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt;</span>): <span class="hljs-title">number</span> </span>{
+  <span class="hljs-comment">// base case </span>
+  ...
+  <span class="hljs-keyword">return</span> recursiveHelper(arr);
+}</code></pre>
+
+<p id="@instead_print_debugging"><a class="jump" href="index.html#@instead_print_debugging"></a>不要像下面这样进行打印调试：</p>
+
+<pre id="@function_recursivehelper-arr_array-number_number_base_case_console-log-recursivehelper_returning_recursivehelper-arr"><a class="jump" href="index.html#@function_recursivehelper-arr_array-number_number_base_case_console-log-recursivehelper_returning_recursivehelper-arr"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">recursiveHelper</span>(<span class="hljs-params">arr: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt;</span>): <span class="hljs-title">number</span> </span>{
+  <span class="hljs-comment">// base case </span>
+  ...
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"recursiveHelper returning:"</span>, recursiveHelper(arr)); <span class="hljs-comment">// BAD BAD BAD</span>
+  <span class="hljs-keyword">return</span> recursiveHelper(arr);
+}</code></pre>
+
+<p id="@much_safer_pull"><a class="jump" href="index.html#@much_safer_pull"></a>将返回值提取到一个常量中，然后打印并返回它，<em>安全得多</em>：</p>
+
+<pre id="@function_recursivehelper-arr_array-number_number_base_case_const_output_recursivehelper-arr"><a class="jump" href="index.html#@function_recursivehelper-arr_array-number_number_base_case_const_output_recursivehelper-arr"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">recursiveHelper</span>(<span class="hljs-params">arr: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt;</span>): <span class="hljs-title">number</span> </span>{
+  <span class="hljs-comment">// base case </span>
+  ...
+  <span class="hljs-keyword">const</span> output = recursiveHelper(arr);
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"recursiveHelper returning:"</span>, output);
+  <span class="hljs-keyword">return</span> output;
+}</code></pre>
+
+<p id="@saving_output_constant"><a class="jump" href="index.html#@saving_output_constant"></a>将输出保存到常量中可以防止意外的副作用，并避免因执行两次相同代码而导致的（可能很大的）运行时增加，
+并确保记录的值确实是正在返回的值。</p>
+
+<p id="@finally_word_about"><a class="jump" href="index.html#@finally_word_about"></a>最后，关于 TypeScript/JavaScript 中的打印调试说几句。
+一些内置类型，包括 <code>Map</code> 和 <code>Set</code>，有非常无用的 <code>toString()</code> 方法。
+这意味着如果你试图使用，比如说，<code>console.log("map is " + map)</code> 来调试，你可能会看到类似 "map is [object Map]" 这样无用的内容。
+有两种方法可以改善这个问题：</p>
+
+<ul>
+<li><p id="@use_multiple_arguments"><a class="jump" href="index.html#@use_multiple_arguments"></a>使用多个参数给 <code>console.log()</code>，而不是依赖 <code>+</code> 和 <code>toString()</code>：</p>
+
+<pre id="@console-log-map_map"><a class="jump" href="index.html#@console-log-map_map"></a><code class="hljs cpp">console.<span class="hljs-built_in">log</span>(<span class="hljs-string">"map is"</span>, <span class="hljs-built_in">map</span>);</code></pre>
+
+<p id="@means_console-log_takes"><a class="jump" href="index.html#@means_console-log_takes"></a>这意味着 <code>console.log()</code> 负责显示 <code>map</code> 对象，它在展示其内部内容方面做得更好。</p></li>
+<li><p id="@use_util-inspect_turn"><a class="jump" href="index.html#@use_util-inspect_turn"></a>使用 <code>util.inspect()</code> 将对象转换为字符串：</p>
+
+<pre id="@import_util_util"><a class="jump" href="index.html#@import_util_util"></a><code class="hljs coffeescript"><span class="hljs-keyword">import</span> util <span class="hljs-keyword">from</span> <span class="hljs-string">'util'</span>;
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"map is "</span> + util.inspect(map));</code></pre></li>
+</ul>
+
+<p id="@before_moving_go"><a class="jump" href="index.html#@before_moving_go"></a>在继续之前，<strong>请先去 Praxis Tutor 完成<em>有效打印探测</em>和<em>打印调试策略</em></strong>，然后回到阅读。</p>
+
+<div class="tutorProgress no-markdown">
+  <img class="ideWindow" src="../../../tools/typescript/figures/small-vscode-window-right.png">
+  <div class="callout callout-right">
+        <div class="level">
+          <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">有效打印探测</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+            <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">打印调试策略</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-find_the_bug_using_the_scientific_method_4"><h4 class="text-danger" id="@reading_exercises_8"><a class="jump" href="index.html#@reading_exercises_8"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method_4-probes" data-target="#ex-find_the_bug_using_the_scientific_method_4-probes" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method_4-probes"></a><span class="panel-title">探测</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method_4-probes" data-outline="probes" data-ex-id="3_experiment/probes" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@here_some_code"><a class="jump" href="index.html#@here_some_code"></a>这是一段已经成功调试但仍保留了一些调试探测的代码：</p>
+
+<pre id="@convert_one_currency"><a class="jump" href="index.html#@convert_one_currency"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Convert from one currency to another.
+ * @param fromCurrency currency that customer has (e.g. DOLLAR)
+ * @param fromValue value of fromCurrency that customer has (e.g. $145.23)
+ * @param toCurrency currency that customer wants (e.g. EURO).
+ *                   Must be different from fromCurrency.
+ * @returns value of toCurrency that customer will get,
+ *         after applying the conversion rate and bank fee
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">convertCurrency</span>(<span class="hljs-params">fromCurrency: Currency, fromValue: <span class="hljs-built_in">number</span>, toCurrency: Currency</span>): <span class="hljs-title">number</span> </span>{
+  assert(fromCurrency !== toCurrency);
+
+  <span class="hljs-keyword">let</span> rate: <span class="hljs-built_in">number</span> = getConversionRate(fromCurrency, toCurrency);
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"conversion rate is "</span> + rate);
+
+  <span class="hljs-keyword">let</span> fee: <span class="hljs-built_in">number</span> = getFee();
+  assert(fee === <span class="hljs-number">0.01</span>); <span class="hljs-comment">// right now the bank charges 1%</span>
+
+  <span class="hljs-keyword">return</span> fromValue * rate * (<span class="hljs-number">1</span>-fee);
+}</code></pre>
+
+<p id="@which_lines_should"><a class="jump" href="index.html#@which_lines_should"></a>在提交和推送之前，哪些行应该被移除？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="assert(fromCurrency !== toCurrency);"><label for="md_converted_choice_10_0"><input type="checkbox" id="md_converted_choice_10_0"><code>assert(fromCurrency !== toCurrency);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="let rate: number = getConversionRate(fromCurrency, toCurrency);"><label for="md_converted_choice_10_1"><input type="checkbox" id="md_converted_choice_10_1"><code>let rate: number = getConversionRate(fromCurrency, toCurrency);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="console.log(&quot;conversion rate is &quot; + rate);"><label for="md_converted_choice_10_2"><input type="checkbox" id="md_converted_choice_10_2"><code>console.log("conversion rate is " + rate);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="let fee: number = getFee();"><label for="md_converted_choice_10_3"><input type="checkbox" id="md_converted_choice_10_3"><code>let fee: number = getFee();</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="assert(fee === 0.01); // right now the bank charges 1%"><label for="md_converted_choice_10_4"><input type="checkbox" id="md_converted_choice_10_4"><code>assert(fee === 0.01); // right now the bank charges 1%</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="return fromValue * rate * (1-fee);"><label for="md_converted_choice_10_5"><input type="checkbox" id="md_converted_choice_10_5"><code>return fromValue * rate * (1-fee);</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h4 id="@debugger"><a class="jump" href="index.html#@debugger"></a>调试器</h4>
+
+<p id="@third_kind_probe"><a class="jump" href="index.html#@third_kind_probe"></a>第三种探测是使用调试器设置<strong>断点</strong>，它在程序运行到该点时停止，允许你单步执行程序并检查变量值。
+调试器是一个强大的工具，值得花时间学习如何使用它。</p>
+
+<p id="@next_learn_set"><a class="jump" href="index.html#@next_learn_set"></a>接下来，为了学习如何设置断点、移除断点和启动调试会话，<strong>请在 Praxis Tutor 中完成<em>基本调试器</em></strong>。
+但首先：</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-find_the_bug_using_the_scientific_method_5"><h4 class="text-danger" id="@reading_exercises_9"><a class="jump" href="index.html#@reading_exercises_9"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method_5-im_setup_for_success" data-target="#ex-find_the_bug_using_the_scientific_method_5-im_setup_for_success" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method_5-im_setup_for_success"></a><span class="panel-title">我已准备就绪！</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method_5-im_setup_for_success" data-outline="im_setup_for_success" data-ex-id="3_experiment/im_setup_for_success" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@tutor_window_should"><a class="jump" href="index.html#@tutor_window_should"></a><a href="index.html#move_tutor_to_right">Tutor 窗口应该在<strong>右侧边栏</strong></a>，在那里它将始终可见。</p>
+
+<p id="@my_tutor_window"><a class="jump" href="index.html#@my_tutor_window"></a>我的 Tutor 窗口在<strong>右侧边栏</strong>：</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_11_0"><input type="radio" id="md_converted_choice_11_0" name="md_converted_radio_11">是</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_11_1"><input type="radio" id="md_converted_choice_11_1" name="md_converted_radio_11">否</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@some_exercises_require_extension_reload_after_minute_if_tutor_window_does_not_reappear_i"><a class="jump" href="index.html#@some_exercises_require_extension_reload_after_minute_if_tutor_window_does_not_reappear_i"></a><strong>某些练习需要重新加载扩展。</strong>一分钟后，如果 Tutor 窗口<em>没有</em>重新出现，我会：</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="reload the VS Code window by going to View → Command Palette → and search for Developer: Reload Window."><label for="md_converted_choice_12_0"><input type="radio" id="md_converted_choice_12_0" name="md_converted_radio_12"><strong>重新加载 VS Code 窗口</strong>，通过转到 <em>View</em> → <em>Command Palette</em> → 并搜索 <em>Developer: Reload Window</em>。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@if_i_run"><a class="jump" href="index.html#@if_i_run"></a>如果我遇到问题，我的第一选择是：</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="click Start Over and try again; then submit a Report-A-Problem directly through the Tutor"><label for="md_converted_choice_13_0"><input type="radio" id="md_converted_choice_13_0" name="md_converted_radio_13"><a href="index.html#start_over_button">点击重新开始</a>并重试；然后直接通过 Tutor 提交报告问题</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="post on Piazza"><label for="md_converted_choice_13_1"><input type="radio" id="md_converted_choice_13_1" name="md_converted_radio_13">在 Piazza 上发帖</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<div class="tutorProgress no-markdown">
+  <img class="ideWindow" src="../../../tools/typescript/figures/small-vscode-window-right.png">
+  <div class="callout callout-right">
+
+      <div class="level">
+          <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">基本调试器</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+        </div>
+  </div>
+</div>
+
+<p id="@debuggers_provide_peek"><a class="jump" href="index.html#@debuggers_provide_peek"></a>调试器让你得以窥视系统幕后的状态，允许你在程序执行过程中观察其状态，
+并对其演化进行细粒度控制。
+调试器提供以下步进操作：</p>
+
+<ul id="@step_take_single">
+<li><a class="jump" href="index.html#@step_take_single"></a><em>Step in</em>（步入）在暂停行的第一个函数调用内部执行单步</li>
+<li><em>Step out</em>（步出）完成执行被调用函数并暂停在调用者中，紧接在被调用函数返回之后</li>
+<li><em>Step over</em>（步过）刚好运行过暂停行的函数调用，有效地将步入和步出结合在一起</li>
+<li><em>Continue</em>（继续）继续程序执行，直到命中另一个断点或程序执行完毕</li>
+</ul>
+
+<p id="@halted_debuggers_provide"><a class="jump" href="index.html#@halted_debuggers_provide"></a>当程序暂停时，调试器提供了一种方便的方式来通过<em>调试控制台</em>（也称为<em>调试 REPL</em>）检查暂停的程序。
+（你可能还记得 6.101 的 LISP 实验室中的 REPL 这个缩写，即<a href="https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%80%93print_loop">读取-求值-打印-循环</a>。）
+你可以在程序当前（暂停的）帧中使用调试控制台执行语句，
+检查局部变量和函数定义等内容。</p>
+
+<p id="@go_ahead_complete_debug_session_debug"><a class="jump" href="index.html#@go_ahead_complete_debug_session_debug"></a><strong>请在 Praxis Tutor 中完成<em>调试会话</em>和<em>调试 REPL</em></strong>来练习使用 VS Code 调试器。</p>
+
+<div class="tutorProgress no-markdown">
+  <img class="ideWindow" src="../../../tools/typescript/figures/small-vscode-window-right.png">
+  <div class="callout  callout-right">
+      <div class="level">
+          <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">调试会话</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+          <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">调试 REPL</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<p id="@debuggers_sometime_capability"><a class="jump" href="index.html#@debuggers_sometime_capability"></a>调试器有时具有在程序执行过程中<em>更改</em>程序部分的能力，例如变量值。
+在运行时修改值<strong>不推荐</strong>，通常会导致更多困惑。</p>
+
+<p id="@print_debugging_powerful"><a class="jump" href="index.html#@print_debugging_powerful"></a>打印调试因其简单和随时可用而强大——大多数程序员学习的第一件事就是打印！
+但打印调试也需要你<em>提前</em>决定在哪里探测什么，并在<em>之后</em>拼凑发生了什么。
+使用调试器让你能够自由地提出后续问题，并在<em>当下</em>深入探测你的有 bug 的程序，
+可以是更快发现 bug 的强大方式。调试器还有一个额外的好处，即使用后无需清理。</p>
+
+<p id="@go_ahead_complete_intermediate_debug_sessions"><a class="jump" href="index.html#@go_ahead_complete_intermediate_debug_sessions"></a><strong>请在 Praxis Tutor 中完成<em>中级调试会话</em>和<em>高级调试会话</em></strong>
+以进一步练习使用 VS Code 调试器浏览代码。</p>
+
+<div class="tutorProgress no-markdown">
+  <img class="ideWindow" src="../../../tools/typescript/figures/small-vscode-window-right.png">
+  <div class="callout callout-right">
+
+      <div class="level">
+          <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">中级调试会话</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+        </div>
+      <div class="level">
+          <div class="conceptGroup completed">
+              <button class="conceptGroupButton" disabled="">
+                  <span class="checkMark">✓</span>
+                  <span class="conceptGroupUiLabel">高级调试会话</span>
+                  <span class="numberSetsLeft">1/1</span>
+              </button>
+              <div class="conceptBoxes">
+                  <div class="conceptBox"></div>
+              </div>
+          </div>
+        </div>
+  </div>
+</div>
+
+<p id="@worth_noting_debuggers"><a class="jump" href="index.html#@worth_noting_debuggers"></a>值得注意的是，调试器<a href="https://en.wikipedia.org/wiki/List_of_debuggers">并非 VS Code 独有</a>。
+<a href="https://en.wikipedia.org/wiki/GNU_Debugger">GDB</a>，最知名的调试器之一，于 1986 年首次发布，
+至今仍被广泛使用（尽管缺乏原生图形用户界面，GDB 也是最难学习使用的调试器之一）。</p>
+
+<p id="@debuggers_despite_name"><a class="jump" href="index.html#@debuggers_despite_name"></a>调试器（尽管名字如此）对于调试之外的事情也是有用的工具。
+调试器对于<em>程序理解</em>也很有帮助——探索和理解一个你没有编写但必须对其进行更改的大型代码库。</p>
+
+<p id="@word_wise"><a class="jump" href="index.html#@word_wise"></a>给智者一句忠告：</p>
+
+<div class="panel panel-success"><div class="panel-heading"><p id="@even_working_interactive"><a class="jump" href="index.html#@even_working_interactive"></a><strong>"即使在使用交互式调试器时，
+ 也应该始终明确当前的假设，以及验证它所需的步骤……
+ 调试器可以是优秀的工具——但只有与良好的思考相结合。"</strong></p></div>
+
+<div class="panel-body"><p id="@zeller_why_programs"><a class="jump" href="index.html#@zeller_why_programs"></a>Zeller，《Why Programs Fail》，第 8 章</p></div></div>
+
+<div class="reading-exercises exercise-all-answers-correct exercises panel-group converted" id="ex-find_the_bug_using_the_scientific_method_6"><h4 class="text-danger" id="@reading_exercises_10"><a class="jump" href="index.html#@reading_exercises_10"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method_6-new_debugger_guru" data-target="#ex-find_the_bug_using_the_scientific_method_6-new_debugger_guru" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method_6-new_debugger_guru"></a><span class="panel-title">调试新手</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method_6-new_debugger_guru" data-outline="new_debugger_guru" data-ex-id="3_experiment/new_debugger_guru" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@course_staff_would"><a class="jump" href="index.html#@course_staff_would"></a>课程工作人员很想了解你之前使用调试器的经验！</p>
+
+<ol id="@which_debugger_skills">
+<li><a class="jump" href="index.html#@which_debugger_skills"></a>在本次阅读<strong>之前</strong>，你使用过哪些调试器技能（如果有的话）？</li>
+</ol>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Setting and removing breakpoints"><label for="md_converted_choice_14_0"><input type="checkbox" id="md_converted_choice_14_0">设置和移除断点</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="Single stepping during a debug session with steps in, out, and/or continue"><label for="md_converted_choice_14_1"><input type="checkbox" id="md_converted_choice_14_1">在调试会话中使用步入、步出和/或继续进行单步执行</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="Evaluating with the Debug Console / Debug REPL during a paused debugging session"><label for="md_converted_choice_14_2"><input type="checkbox" id="md_converted_choice_14_2">在暂停的调试会话中使用调试控制台/调试 REPL 进行求值</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="None of the above"><label for="md_converted_choice_14_3"><input type="checkbox" id="md_converted_choice_14_3">以上皆无</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<ol start="2" id="@which_debuggers_if">
+<li><a class="jump" href="index.html#@which_debuggers_if"></a>在本次阅读<strong>之前</strong>，你使用过哪些调试器（如果有的话）？</li>
+</ol>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="Browser console"><label for="md_converted_choice_15_0"><input type="checkbox" id="md_converted_choice_15_0">浏览器控制台</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="gdb"><label for="md_converted_choice_15_1"><input type="checkbox" id="md_converted_choice_15_1">gdb</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="pdb"><label for="md_converted_choice_15_2"><input type="checkbox" id="md_converted_choice_15_2">pdb</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="PyCharm Debugger"><label for="md_converted_choice_15_3"><input type="checkbox" id="md_converted_choice_15_3">PyCharm 调试器</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="Spyder Debugger "><label for="md_converted_choice_15_4"><input type="checkbox" id="md_converted_choice_15_4">Spyder 调试器 </label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="VS Code Debugger "><label for="md_converted_choice_15_5"><input type="checkbox" id="md_converted_choice_15_5">VS Code 调试器 </label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="Other"><label for="md_converted_choice_15_6"><input type="checkbox" id="md_converted_choice_15_6">其他</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="None"><label for="md_converted_choice_15_7"><input type="checkbox" id="md_converted_choice_15_7">无</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<ol start="3" id="@much_previous_experience">
+<li><a class="jump" href="index.html#@much_previous_experience"></a>在本次阅读<strong>之前</strong>，你对调试器有多少经验（如果有的话）？</li>
+</ol>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="Previously, I was very comfortable using a debugger."><label for="md_converted_choice_16_0"><input type="radio" id="md_converted_choice_16_0" name="md_converted_radio_16">之前，我使用调试器非常自如。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="Previously, I was comfortable using a debugger."><label for="md_converted_choice_16_1"><input type="radio" id="md_converted_choice_16_1" name="md_converted_radio_16">之前，我使用调试器比较自如。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="Previously, I was somewhat comfortable using a debugger."><label for="md_converted_choice_16_2"><input type="radio" id="md_converted_choice_16_2" name="md_converted_radio_16">之前，我对使用调试器还算自如。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="Previously, I was not comfortable using a debugger."><label for="md_converted_choice_16_3"><input type="radio" id="md_converted_choice_16_3" name="md_converted_radio_16">之前，我对使用调试器不太自如。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="Previously, I had never used a debugger."><label for="md_converted_choice_16_4"><input type="radio" id="md_converted_choice_16_4" name="md_converted_radio_16">之前，我从未使用过调试器。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h4 id="@swap_components"><a class="jump" href="index.html#@swap_components"></a>替换组件</h4>
+
+<p id="@if_you_hypothesize"><a class="jump" href="index.html#@if_you_hypothesize"></a>如果你假设 bug 在某个模块中，而你恰好有一个满足相同接口的不同实现，那么你可以做的一个实验就是尝试替换为替代方案。
+例如：</p>
+
+<ul id="@if_you_suspect">
+<li><a class="jump" href="index.html#@if_you_suspect"></a>如果你怀疑你的 <code>binarySearch()</code> 实现，那么用更简单的 <code>linearSearch()</code> 替代它。</li>
+<li>如果你怀疑 JavaScript 运行时，用不同的 web 浏览器或不同版本的 Node 运行。</li>
+<li>如果你怀疑操作系统，在不同的 OS 上运行你的程序。</li>
+<li>如果你怀疑硬件，在不同的机器上运行。</li>
+</ul>
+
+<p id="@you_can_waste"><a class="jump" href="index.html#@you_can_waste"></a>然而，你可能会浪费大量时间替换正常的组件，所以除非你有充分的理由怀疑某个组件，否则不要这样做。
+正如我们在<a href="index.html#prioritize">优先排序假设</a>中讨论的，编程语言、操作系统或硬件应该在你的嫌疑人列表中排在非常靠后的位置。</p>
+
+</div><h3 id="one_bug_at_a_time"><a class="jump" href="index.html#one_bug_at_a_time"></a>一次只处理一个 bug</h3><div data-outline="one_bug_at_a_time">
+
+<p id="@not_unusual_while"><a class="jump" href="index.html#@not_unusual_while"></a>在你试图调试一个问题的同时发现其他问题并不罕见。
+也许你注意到其他模块返回了错误的答案。
+也许在你阅读自己的代码（实际上相当于自我代码审查）时，你注意到需要修复的明显错误。</p>
+
+<p id="@keep_bug_list"><a class="jump" href="index.html#@keep_bug_list"></a><strong>维护一个 bug 列表</strong>。
+这帮助你在调试过程中处理新出现的问题。
+把它们写在 bug 列表上，以便之后回来处理。
+bug 列表可以简单到纸质笔记本或文本文件。
+对于团队软件开发，像 GitHub 的 Issues 标签这样的在线 bug 跟踪器是最佳方法。</p>
+
+<p id="@don-t_get_distracted"><a class="jump" href="index.html#@don-t_get_distracted"></a><strong>不要从你正在处理的 bug 上分心。</strong>
+思考新问题是否为你正在处理的 bug 提供了有用的数据——它是否引出了新的假设？
+但不要立即开始对新 bug 进行递归调试，因为你可能很难从心理上退回到原来的 bug。
+在调试时也不要随意编辑你的代码，因为你不知道这些更改是否会影响你的调试实验。
+让你的代码更改专注于一次仔细、受控地探测一个 bug。</p>
+
+<p id="@if_new_problem"><a class="jump" href="index.html#@if_new_problem"></a>如果新问题干扰了你调试的能力——例如，通过间歇性崩溃程序，使你无法可靠地运行实验——那么你可能需要重新调整修复 bug 的优先级。
+放下当前的 bug（回退或注释掉你的实验探测，并确保该 bug 在你的 bug 列表上以便稍后修复），转而处理新的 bug。</p>
+
+<h4 id="@don-t_fix_yet"><a class="jump" href="index.html#@don-t_fix_yet"></a>先不要修复</h4>
+
+<p id="@tempting_try_do"><a class="jump" href="index.html#@tempting_try_do"></a>试图做一个看起来能<em>修复</em>假设 bug 的实验，而不是仅仅探测，这种诱惑很强烈。
+这几乎总是错误的做法。
+首先，它导致了一种临时猜测和测试式的编程，产生糟糕的、复杂的、难以理解的代码。
+其次，你的修复可能只是掩盖了真正的 bug，而没有真正消除它——治标不治本。</p>
+
+<p id="@example_if_you-re"><a class="jump" href="index.html#@example_if_you-re"></a>例如，如果你遇到了 <code>RangeError</code>，不要只是添加捕获异常并忽略它的代码。确保你理解<em>为什么</em>会抛出那个异常，并修复导致它的真正问题。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-find_the_bug_using_the_scientific_method_7"><h4 class="text-danger" id="@reading_exercises_11"><a class="jump" href="index.html#@reading_exercises_11"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-find_the_bug_using_the_scientific_method_7-premature_fixes" data-target="#ex-find_the_bug_using_the_scientific_method_7-premature_fixes" data-toggle="collapse"><a class="jump" href="index.html#@ex-find_the_bug_using_the_scientific_method_7-premature_fixes"></a><span class="panel-title">过早修复</span></div><div class="panel-collapse collapse exercise-panel" id="ex-find_the_bug_using_the_scientific_method_7-premature_fixes" data-outline="premature_fixes" data-ex-id="one_bug_at_a_time/premature_fixes" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-13-debugging"><div class="panel-body">
+
+<p id="@following_code_been"><a class="jump" href="index.html#@following_code_been"></a>以下代码已经调试了一段时间：</p>
+
+<pre id="@returns_true_if"><a class="jump" href="index.html#@returns_true_if"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @returns true if and only if word1 is an anagram of word2
+ *         (i.e. a permutation of its characters)
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">isAnagram</span>(<span class="hljs-params">word1: <span class="hljs-built_in">string</span>, word2: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">boolean</span> </span>{
+  <span class="hljs-keyword">if</span> (word1 === <span class="hljs-string">""</span> || word2 === <span class="hljs-string">""</span>) {
+    <span class="hljs-keyword">return</span> word1 === <span class="hljs-string">""</span> &amp;&amp; word2 === <span class="hljs-string">""</span>;
+  }
+
+  <span class="hljs-keyword">try</span> {
+    word1 = sortCharacters(word1);
+    word2 = sortCharacters(word2);
+    <span class="hljs-keyword">return</span> word1 === word2;
+  } <span class="hljs-keyword">catch</span> (e) { <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>; }
+}</code></pre>
+
+<p id="@which_three_return"><a class="jump" href="index.html#@which_three_return"></a>它的三个 return 语句中，哪些可能是为了掩盖 bug 而添加的，而不是修复真正的问题？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="return word1 === &quot;&quot; &amp;&amp; word2 === &quot;&quot;;"><label for="md_converted_choice_17_0"><input type="checkbox" id="md_converted_choice_17_0"><code>return word1 === "" &amp;&amp; word2 === "";</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="return word1 === word2;"><label for="md_converted_choice_17_1"><input type="checkbox" id="md_converted_choice_17_1"><code>return word1 === word2;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="catch (e) { return false; }"><label for="md_converted_choice_17_2"><input type="checkbox" id="md_converted_choice_17_2"><code>catch (e) { return false; }</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="4_repeat"><a class="jump" href="index.html#4_repeat"></a>4. 重复</h3><div data-outline="4_repeat">
+
+<p id="@after_experiment_reflect"><a class="jump" href="index.html#@after_experiment_reflect"></a>实验之后，反思结果并修改你的假设。
+如果你观察到的结果与假设预测的不一致，那么拒绝该假设并提出新的假设。
+如果观察结果与预测一致，那么细化假设以缩小 bug 的位置和原因。
+然后用这个新的假设重复该过程。</p>
+
+<h4 id="audit-trail"><a class="jump" href="index.html#audit-trail"></a>保留审计跟踪</h4>
+
+<p id="@one_agans_nine"><a class="jump" href="index.html#@one_agans_nine"></a>这是 Agans 九条调试规则之一：保留审计跟踪。</p>
+
+<p id="@if_bug_takes"><a class="jump" href="index.html#@if_bug_takes"></a>如果一个 bug 需要超过几分钟才能找到，或者需要研究-假设-实验循环的几次迭代，那么你需要<strong>开始写下来</strong>，因为你的大脑短期记忆会很快失去对什么有效什么无效的跟踪。</p>
+
+<p id="@keep_log_text"><a class="jump" href="index.html#@keep_log_text"></a>在文本文件中记录你做了什么、按什么顺序、以及结果如何。
+包括：</p>
+
+<ul id="@hypothesis_you_exploring">
+<li><a class="jump" href="index.html#@hypothesis_you_exploring"></a>你目前正在探索的假设</li>
+<li>你目前正在尝试的测试该假设的实验</li>
+<li>你作为实验结果观察到的：
+
+<ul><li>这次测试是否通过</li>
+<li>程序输出，特别是你自己的调试消息</li>
+<li>任何堆栈跟踪</li></ul></li>
+</ul>
+
+<p id="@systematic_debugging_techniques"><a class="jump" href="index.html#@systematic_debugging_techniques"></a>系统化调试技术很快就会超出你的大脑跟踪能力，所以早点开始写下来。
+最小化测试用例和 delta 调试通常需要多次迭代才能找到答案。
+如果你不写下你正在尝试哪个测试用例以及它是否通过，那么你将很难跟踪你正在做什么。</p>
+
+<h4 id="@check_plug"><a class="jump" href="index.html#@check_plug"></a>检查电源插头</h4>
+
+<p id="@if_you_been"><a class="jump" href="index.html#@if_you_been"></a>如果你一直在对一个 bug 反复迭代但一切都不合理，考虑 Agans 的另一条规则：检查电源插头。
+这意味着你应该质疑你的假设。
+例如，如果你打开机器的电源开关，但机器没有启动，也许你不应该调试开关或机器——而是问机器是否插上了电源？
+或者电源插座本身是否有电？</p>
+
+<p id="@example_checking_plug"><a class="jump" href="index.html#@example_checking_plug"></a>编程中"检查电源插头"的一个例子是<strong>确保你的源代码和目标代码是最新的。</strong>
+如果你的观察结果似乎都不合理，一个可能的假设是你正在运行的代码（目标代码）与你正在阅读的代码（源代码）不匹配。
+为了测试这一点，从仓库中拉取最新版本，删除所有 JavaScript 输出文件（以 <code>.js</code> 结尾的文件），并重新编译你所有的 TypeScript 代码。</p>
+
+<p id="@another_example_checking"><a class="jump" href="index.html#@another_example_checking"></a>"检查电源插头"的另一个例子，当你调试一个失败的测试用例时，是<strong>仔细检查测试用例是否正确</strong>。
+它是否提供了正确的输入，并检查了正确的输出？</p>
+
+<div class="handout-aside-group handout-aside panel-success panel panel-default pull-right"><div class="panel-heading"><strong>调试的六个阶段：
+  <br>1. 那不可能发生。
+  <br>2. 那在我的机器上不会发生。
+  <br>3. 那不应该发生。
+  <br>4. 为什么会发生？
+  <br>5. 哦，我明白了。
+  <br>6. 那以前是怎么运行的？</strong></div><div class="panel-body">
+
+<p>Zeller，《Why Programs Fail》，第 2 章</p></div></div>
+
+<h4 id="@if_you_didn-t"><a class="jump" href="index.html#@if_you_didn-t"></a>如果你没有修复它，它就没有真正被修复</h4>
+
+<p id="@another_one_agans"><a class="jump" href="index.html#@another_one_agans"></a>这是 Agans 的九条规则中的另一条。
+在复杂系统中，有时 bug 会突然消失。
+也许是你做了什么，但也许不是。
+如果系统现在看起来运行正常，而你不知道 bug 是怎么被修复的……那么很可能它并没有被修复。
+bug 只是再次隐藏了，被环境中的某些变化所掩盖，但准备好有朝一日再次露出丑陋的面目。
+当我们稍后课程中讨论并发时，会看到一些这类棘手 bug 的例子。</p>
+
+<p id="@systematic_debugging_helps"><a class="jump" href="index.html#@systematic_debugging_helps"></a>系统化调试有助于建立信心，相信 bug 确实被修复了，而不仅仅是暂时隐藏。
+这就是为什么你首先要<em>复现</em> bug，这样你已经看到系统处于失败状态。
+然后你在不修复的情况下<em>理解</em> bug 的原因。
+最后利用你对原因的了解来应用更改以<em>修复</em> bug。
+为了获得你已经真正修复它的信心，你想看到你的更改导致系统从失败状态转变为正常状态，并理解为什么。</p>
+
+</div></div><h2 id="fix_the_bug"><a class="jump" href="index.html#fix_the_bug"></a>修复 bug</h2><div data-outline="fix_the_bug">
+
+<p id="@once_you_find"><a class="jump" href="index.html#@once_you_find"></a>一旦你找到了 bug 并理解了它的原因，第三步就是设计一个修复方案。
+避免草草打上补丁就继续前进的诱惑。
+问问自己这个 bug 是编码错误，比如拼写错误的变量或互换的方法参数，还是设计错误，比如规格说明不充分或接口不足。
+设计错误可能表明你应该退后一步重新审视你的设计，或者至少考虑失败接口的所有其他客户端，看看它们是否也受到该 bug 的影响。</p>
+
+<p id="@look_related_bugs"><a class="jump" href="index.html#@look_related_bugs"></a><strong>查找相关 bug 和新引入的 bug。</strong>
+想想代码的其他地方是否可能出现类似的 bug。
+如果我在这里发现了一个除以零的错误，我在代码的其他地方是否也这样做了？
+努力使代码免受未来此类 bug 的侵害。
+还要考虑你的修复会产生什么影响。
+它会破坏其他代码吗？</p>
+
+<p id="@undo_debugging_probes"><a class="jump" href="index.html#@undo_debugging_probes"></a><strong>撤销调试探测。</strong>
+在查找 bug 的过程中，你可能注释掉了代码、添加了打印语句或做了其他更改，以便探测程序的行为或使其更快地调试。
+现在，在你将修复提交到版本控制之前，撤销所有这些更改。查看 <code>git diff</code> 的输出是确保你已移除所有探测的好方法。</p>
+
+<p id="@make_regression_test"><a class="jump" href="index.html#@make_regression_test"></a><strong>创建回归测试。</strong>
+在你应用修复后，将 bug 的测试用例添加到你的回归测试套件中，并运行所有测试以确保 (a) bug 已修复，且 (b) 没有引入新的 bug。</p>
+
+<p id="@add_commit_push"><a class="jump" href="index.html#@add_commit_push"></a><strong>添加、提交、推送并反思。</strong>
+通过添加、提交和推送来保存你的可运行代码。
+然后反思。哪些调试策略最有效？
+你如何防止类似情况在未来发生？
+你现在应该感到一种新的拥有感，并对你的系统有更深入的理解。
+如果不是，那可能表明你只是暂时掩盖了 bug 的症状，而不是其原因。</p>
+
+<h3 id="other_tips"><a class="jump" href="index.html#other_tips"></a>其他建议</h3><div data-outline="other_tips">
+
+<h4 id="@get_fresh_view"><a class="jump" href="index.html#@get_fresh_view"></a><strong>获得新鲜视角。</strong></h4>
+
+<p id="@another_agans_nine"><a class="jump" href="index.html#@another_agans_nine"></a>这是 Agans 九条调试规则中的另一条。
+向别人解释你的问题通常很有帮助，即使对方完全不知道你在说什么。
+这有时被称为<a href="https://en.wikipedia.org/wiki/Rubber_duck_debugging"><em>橡皮鸭调试</em></a>或<em>泰迪熊调试</em>。
+有一个计算机实验室在他们的帮助台旁边放了一只大泰迪熊，规定在你尝试找人类求助之前，必须先"告诉熊"。
+这只熊独自处理了惊人数量的问题。
+大声说出你期望代码为什么能正常工作以及它实际在做什么，可以帮助你自己意识到问题。</p>
+
+<h4 id="@describe_writing"><a class="jump" href="index.html#@describe_writing"></a><strong>书面描述。</strong></h4>
+
+<p id="@teddy_bear_doesn-t"><a class="jump" href="index.html#@teddy_bear_doesn-t"></a>当泰迪熊没有帮助时，试着撰写一封（假装的）寻求帮助的电子邮件。
+大多数人没有时间阅读关于你的 bug 的论文，
+但大多数人也不会在没有足够细节或努力证明的情况下愿意提供帮助。
+以你的<a href="index.html#audit-trail">审计跟踪</a>为指导，将自己限制在 1-2 段，并尽量简洁而不牺牲重要细节。</p>
+
+<p id="@first_describe_symptoms"><a class="jump" href="index.html#@first_describe_symptoms"></a><strong>首先描述症状。</strong>
+你在最小化 bug 方面付出的努力将帮助你制作一个<a href="https://stackoverflow.com/help/minimal-reproducible-example">最小可复现示例</a>来包含在内（你也可以用它在线提问）。
+预期行为与实际行为有什么不同？
+如果抛出了运行时错误，你能从中获取什么信息？
+试着将你的程序想象成一个物理系统；描述<em>哪里</em>出了问题。</p>
+
+<p id="@then_describe_your"><a class="jump" href="index.html#@then_describe_your"></a><strong>然后描述你的实验。</strong>
+你已经测试了哪些假设？
+你看了哪些 StackOverflow 帖子？
+为什么它们不足以解决这个 bug？</p>
+
+<p id="@finally_reread_revise"><a class="jump" href="index.html#@finally_reread_revise"></a><strong>最后，重读并修改。</strong>问问自己：
+<em>如果我从别人那里收到这个 bug 报告，我会有能力帮助他们吗？</em>
+你能精简任何描述吗？
+你<em>真的</em>尝试了所有可用的调试策略并穷尽了<em>所有</em>假设吗？
+在以正式书面形式描述 bug 的过程中，
+你可能会获得新的见解，发现新的假设来测试，<a href="https://blog.regehr.org/archives/208">甚至解决这个 bug</a>。</p>
+
+<p id="@your_concise_problem"><a class="jump" href="index.html#@your_concise_problem"></a>你简洁的问题报告在向课程工作人员寻求帮助时也可能派上用场
+（毕竟，在实验课时间可能很宝贵！）
+并且在未来撰写 bug 报告或向同事寻求帮助时也是很好的练习。</p>
+
+<h4 id="@seek_help"><a class="jump" href="index.html#@seek_help"></a><strong>寻求帮助。</strong></h4>
+
+<p id="@programming_hard_bugs"><a class="jump" href="index.html#@programming_hard_bugs"></a>编程很难，bug 不可避免。
+6.102 的工作人员和同学通常知道你在说什么，所以他们更适合寻求帮助。
+在这个课堂之外，你可以从其他团队成员、同事或 StackOverflow 获得新鲜视角。</p>
+
+<h4 id="@sleep"><a class="jump" href="index.html#@sleep"></a><strong>睡一觉。</strong></h4>
+
+<p id="@if_you-re_too"><a class="jump" href="index.html#@if_you-re_too"></a>如果你太累了，你就不会是一个高效的调试者。
+用时间换取效率。</p>
+
+</div><h3 id="summary"><a class="jump" href="index.html#summary"></a>总结</h3><div data-outline="summary">
+
+<p id="@reading_looked_some"><a class="jump" href="index.html#@reading_looked_some"></a>在本次阅读中，我们探讨了一些最小化调试成本的方法，以及如何进行系统化调试：</p>
+
+<ul id="@avoid_debugging_make">
+<li><a class="jump" href="index.html#@avoid_debugging_make"></a>避免调试
+
+<ul><li>通过静态类型、自动动态检查和不可变性等技术使 bug 不可能发生</li></ul></li>
+<li>将 bug 限制在局部
+
+<ul><li>使用断言快速失败可以防止 bug 的影响扩散</li>
+<li>增量开发和单元测试将 bug 限制在你最近的代码中
+
+<ul><li><em>经常添加、提交和推送可运行的代码！</em></li></ul></li>
+<li>模块化、封装和作用域最小化减少了你需要搜索的程序范围</li></ul></li>
+<li>系统化地调试
+
+<ul><li>将 bug 复现为测试用例，并将其放入你的回归测试套件</li>
+<li>使用科学方法定位 bug：
+
+<ul><li>使用二分搜索和 delta 调试生成假设</li>
+<li>使用最小侵入性的探测，如打印语句、断言或调试器，来观察程序行为并测试你的假设预测</li></ul></li>
+<li>深思熟虑地修复 bug</li></ul></li>
+</ul>
+
+<p id="@thinking_about_our"><a class="jump" href="index.html#@thinking_about_our"></a>思考我们代码质量的三个主要衡量标准：</p>
+
+<ul id="@safe_bugs_trying">
+<li><a class="jump" href="index.html#@safe_bugs_trying"></a><strong>免受 bug 侵害。</strong>我们正在努力预防它们并消除它们。</li>
+<li><strong>易于理解。</strong>静态类型、<code>const</code>/<code>readonly</code> 声明和断言是对代码中假设的额外文档。变量作用域最小化使读者更容易理解变量的使用方式，因为需要查看的代码更少了。</li>
+<li><strong>适应变化。</strong>断言和静态类型以自动可检查的方式记录假设，以便当未来的程序员更改代码时，那些假设的意外违反会被检测到。</li>
+</ul></div></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>由 Rob Miller 和 Max Goldman 合作撰写，Saman Amarasinghe、Adam Chlipala、Srini Devadas、Gabriella Ecanow、Michael Ernst、John Guttag、Daniel Jackson、Josiah McMenamy、Martin Rinard 和 Armando Solar-Lezama 做出贡献，以及 Robert Durfee、Jenna Himawan、Stacia Johanna、Jessica Shi、Daniel Whatley 和 Elizabeth Zhou 的贡献。本作品采用 <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a> 许可协议。</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script src="../../../web/snapdown-021721.js"></script>
+<script type="text/javascript">
+window.onHandoutDidRenderThen = function (done) {
+  Snapdown.renderAll(true, done);
+}
+</script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 年春季课程网站存档  |  最新网站在 <a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍</a></footer><script type="text/javascript" charset="utf-8" src="../../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-13-debugging"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:31:11 GMT+0000 (Coordinated Universal Time)
+--></html>

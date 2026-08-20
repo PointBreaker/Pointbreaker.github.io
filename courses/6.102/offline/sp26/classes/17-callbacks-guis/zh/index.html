@@ -1,0 +1,1047 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>阅读 17：回调与图形用户界面</title>
+
+
+<script>
+window.onHandoutReady = function() {
+    const sizeTextbox = document.getElementById('sizeTextbox');
+    const sizeSlider = document.getElementById('sizeSlider');
+    sizeTextbox.addEventListener('input', (event) => {
+        sizeSlider.value = sizeTextbox.value;
+    });
+    sizeSlider.addEventListener('input', (event) => {
+        sizeTextbox.value = sizeSlider.value;
+    });
+};
+</script>
+
+<link href="../../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../../index.html">6.102</a></header><header><a href="../../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_17_callbacks_and_graphical_user_interfaces">阅读 17：回调与图形用户界面</a></li><li><a href="index.html#callbacks">回调</a></li><li><a href="index.html#timer_callbacks">定时器回调</a></li><li><a href="index.html#event_loop">事件循环</a></li><li><a href="index.html#using_callbacks_with_promises">将回调与 Promise 一起使用</a></li><li><a href="index.html#unpacking_an_asynchronous_function">解析异步函数</a></li><li><a href="index.html#html_and_the_document_object_model">HTML 与文档对象模型</a></li><li><a href="index.html#input_handling">输入处理</a></li><li><a href="index.html#event_sources">事件源</a></li><li><a href="index.html#pitfalls_in_listeners">监听器中的陷阱</a></li><li><a href="index.html#summary">总结</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_17_callbacks_and_graphical_user_interfaces"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-17-callbacks-guis"></iframe><a class="jump" href="index.html#reading_17_callbacks_and_graphical_user_interfaces"></a>阅读 17：回调与图形用户界面</h1><div data-outline="reading_17_callbacks_and_graphical_user_interfaces">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>6.102 中的软件</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>免受 Bug 侵害</th><th>易于理解</th><th>为变更做好准备</th></tr>
+<tr><td>
+  现在正确，在未来未知的情况下也正确。
+</td><td>
+  与未来的程序员清晰地沟通，包括未来的你自己。
+</td><td>
+  设计为能够适应变更而无需重写。
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<p id="@reading_talk_about"><a class="jump" href="index.html#@reading_talk_about"></a>在本阅读中，我们将讨论<em>回调（callbacks）</em>，即实现者调用由客户端提供的函数。
+我们以 Promise 为背景讨论这一概念，展示 <code>await</code> 是如何使用回调来实现的。
+我们还将探讨回调如何在图形用户界面（GUI）中使用，其中一种称为<em>监听器（listener）</em>的回调函数用于响应用户的输入事件。</p>
+
+<p id="@see_more_instances"><a class="jump" href="index.html#@see_more_instances"></a>在下节课讨论 Web 服务器时，我们将看到更多回调的实例。</p>
+
+<h1 id="callbacks"><a class="jump" href="index.html#callbacks"></a>回调</h1><div data-outline="callbacks">
+
+<p id="@callback_function_client"><a class="jump" href="index.html#@callback_function_client"></a><mark data-structure-text="callback" id="^callback"><em>回调（callback）</em></mark>是客户端提供给模块供其调用的函数。
+这与正常的控制流相反，在正常控制流中，客户端进行所有的调用：向下调用模块提供的函数。
+使用回调时，客户端提供一段代码供实现者调用。</p>
+
+<p id="@already_saw_one"><a class="jump" href="index.html#@already_saw_one"></a>我们在<a href="../../10-functional-programming/index.html">函数式编程</a>中已经见过一种回调：传递给 <code>map</code>、<code>filter</code> 或 <code>reduce</code> 的函数，它针对序列中的每个元素被反复调用。
+这是一种<em>同步</em>回调，因为它仅在 map/filter/reduce 执行期间被调用，之后不再使用。
+回调的使用在 map/filter/reduce 的调用和返回之间是<em>同步的</em>。</p>
+
+<p id="@reading_considers_asynchronous"><a class="jump" href="index.html#@reading_considers_asynchronous"></a>本阅读讨论的是<em>异步</em>回调，它被模块保存起来以供<em>将来</em>调用，在接收回调的函数已经返回之后。</p>
+
+<p id="@here-s_one_analogy"><a class="jump" href="index.html#@here-s_one_analogy"></a>这里有一个类比可以帮助理解同步和异步之间的区别。
+普通的（同步）函数调用就像拿起电话拨打某个服务，比如打电话给你的银行查询账户余额。
+你提供接线员查找账户所需的信息（类似于<em>传入参数</em>），他们在电话里向你报出账户余额（<em>返回值</em>），然后你挂断电话（从调用中收回控制权）。
+在这个类比中，你是客户端，银行是你正在调用的模块。</p>
+
+<p id="@sometimes_bank_slow"><a class="jump" href="index.html#@sometimes_bank_slow"></a>有时银行回答得很慢。
+你被搁置等待，直到他们为你找到答案。
+这就像一个同步函数调用，等待到准备就绪才返回。
+你在短时间内无法收回控制权；你被困在电话旁等待答案。</p>
+
+<p id="@but_sometimes_task"><a class="jump" href="index.html#@but_sometimes_task"></a>但有时任务可能需要很长时间，银行甚至不想让你等待。
+然后银行会要求你提供一个回拨电话号码，并承诺在未来某个不可预测的时间给你回电告知答案。
+向银行提供你的电话号码，类似于客户端向模块提供一个异步回调函数。</p>
+
+<p id="@note_just_analogy"><a class="jump" href="index.html#@note_just_analogy"></a请注意，这仅仅是一个类比；回拨电话号码与回调函数是非常不同的。
+但它提供了一些关于同步函数调用（你被困在电话旁等待答案）和异步函数调用（挂断电话，做其他事情，直到收到回电）之间区别的直觉。</p>
+
+<p id="@sometimes_callback_function"><a class="jump" href="index.html#@sometimes_callback_function"></a>有时回调函数只会被调用一次（或最多一次），作为对一次性请求的响应，就像这个账户余额的例子一样。
+但回调函数也可能被反复调用，每当某个特定事件发生时。
+这种回调的一个类比可能是账户欺诈保护，即每当你的账户发生可疑交易时，银行会拨打你注册的电话号码。
+在本阅读中，我们将看到这两种异步回调。</p>
+
+<h2 id="timer_callbacks"><a class="jump" href="index.html#timer_callbacks"></a>定时器回调</h2><div data-outline="timer_callbacks">
+
+<p id="@simple_example_uses"><a class="jump" href="index.html#@simple_example_uses"></a>一个使用回调的简单例子是内置的 JavaScript 函数 <a href="https://developer.mozilla.org/en-US/docs/Web/API/setTimeout"><code>setTimeout</code></a>，它接受两个参数：一个回调函数和执行该函数之前要等待的毫秒数：</p>
+
+<pre id="@settimeout_console-log-beep_3000_0"><a class="jump" href="index.html#@settimeout_console-log-beep_3000_0"></a><code class="language-ts hljs typescript">setTimeout(
+    <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"beep!"</span>),
+    <span class="hljs-number">3000</span>
+);</code></pre>
+
+<p id="@here_callback_function"><a class="jump" href="index.html#@here_callback_function"></a>这里，回调函数是由 lambda 表达式 <code>() =&gt; console.log("beep!")</code> 创建的函数对象。</p>
+
+<p id="@now_consider_output"><a class="jump" href="index.html#@now_consider_output"></a>现在考虑在 TypeScript 提示符下运行以下代码的输出：</p>
+
+<p id="@settimeout_console-log-beep_3000_console-log-boop_boop_3"><a class="jump" href="index.html#@settimeout_console-log-beep_3000_console-log-boop_boop_3"></a><code>&gt; setTimeout(() =&gt; console.log("beep!"), 3000); console.log("boop!");</code> <br>
+<code>boop!</code> <br>
+<code>&gt;</code> <br>
+<em>3 秒后</em> <br>
+<code>beep!</code>  </p>
+
+<p id="@notice_callback_asynchronous"><a class="jump" href="index.html#@notice_callback_asynchronous"></a>注意这个回调是异步的。<code>setTimeout()</code> 调用本身并不会等待 3000 毫秒（3 秒）再打印 <code>boop!</code>。
+相反，它启动一个内部定时器，存储对回调函数的引用，然后打印 <code>boop!</code>。三秒后内部定时器到期，回调函数才被最终调用，打印 <code>beep!</code>。</p>
+
+<p id="@see_example_defining"><a class="jump" href="index.html#@see_example_defining"></a>要查看一个定义带有回调的函数的例子，让我们来创建一个倒计时器：</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_0"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 启动一个每秒计时一次直到到期的定时器。
+ * @param ticks      定时器持续时间（秒），必须是整数 &gt;= 0
+ * @param callback   回调函数，最初同步调用，
+ *                   然后在定时器每次计时后再次调用，
+ *                   每次传递定时器到期前剩余的秒数。
+ *                   ticksLeft 必须是 [0, ticks] 范围内的整数。
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span></span></code></pre>
+
+<p id="@look_closely_type"><a class="jump" href="index.html#@look_closely_type"></a>仔细看 <code>callback</code> 参数的类型：这是一个<a href="https://www.typescriptlang.org/docs/handbook/2/functions.html#function-type-expressions"><em>函数类型</em></a>。
+在这个例子中，<code>countdown()</code> 期望的回调函数接受一个 <code>number</code> 参数并返回 <code>void</code>。</p>
+
+<p id="@here-s_might_be"><a class="jump" href="index.html#@here-s_might_be"></a>以下是在 TypeScript 提示符下调用它的一种方式：</p>
+
+<p id="@countdown-3_n_number"><a class="jump" href="index.html#@countdown-3_n_number"></a><code>&gt; countdown(3, (n: number) =&gt; console.log(n));</code> <br>
+<code>3</code> <br>
+<code>&gt;</code> <br>
+<em>一秒后</em> <br>
+<code>2</code> <br>
+<em>一秒后</em> <br>
+<code>1</code> <br>
+<em>一秒后</em> <br>
+<code>0</code>  </p>
+
+<p id="@notice_3_printed"><a class="jump" href="index.html#@notice_3_printed"></a>注意上面记录中 <code>3</code> 打印的位置：在下一个提示符 <code>&gt;</code> 显示<em>之前</em>，因为规范指出第一次回调应该<em>同步地</em>调用，在 <code>countdown()</code> 返回之前。回调的其余调用则以异步方式发生，随着定时器倒数到零。</p>
+
+<p id="@exercises_below_explore"><a class="jump" href="index.html#@exercises_below_explore"></a>下面的练习探讨了 <code>setTimeout()</code> 和 <code>countdown()</code> 回调的行为，并展示了如何使用 <code>setTimeout()</code> 来实现 <code>countdown()</code>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-time_to_print" data-target="#ex-callbacks-time_to_print" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-time_to_print"></a><span class="panel-title">打印时机</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-time_to_print" data-outline="time_to_print" data-ex-id="timer_callbacks/time_to_print" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<pre id="@settimeout_console-log-a_4000"><a class="jump" href="index.html#@settimeout_console-log-a_4000"></a><code class="language-ts hljs typescript">setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"A"</span>), <span class="hljs-number">4000</span>);
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"B"</span>), <span class="hljs-number">1000</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"C"</span>);</code></pre>
+
+<p id="@order_b_c_printed_code_0"><a class="jump" href="index.html#@order_b_c_printed_code_0"></a>这段代码按什么顺序打印 A、B 和 C？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="A, B, C"><label for="md_converted_choice_5_0"><input type="radio" id="md_converted_choice_5_0" name="md_converted_radio_5">A, B, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="A, C, B"><label for="md_converted_choice_5_1"><input type="radio" id="md_converted_choice_5_1" name="md_converted_radio_5">A, C, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, C, A"><label for="md_converted_choice_5_2"><input type="radio" id="md_converted_choice_5_2" name="md_converted_radio_5">B, C, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, A, C"><label for="md_converted_choice_5_3"><input type="radio" id="md_converted_choice_5_3" name="md_converted_radio_5">B, A, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, A, B"><label for="md_converted_choice_5_4"><input type="radio" id="md_converted_choice_5_4" name="md_converted_radio_5">C, A, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, B, A"><label for="md_converted_choice_5_5"><input type="radio" id="md_converted_choice_5_5" name="md_converted_radio_5">C, B, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@total_duration_program"><a class="jump" href="index.html#@total_duration_program"></a>从代码开始执行到最后一行打印，程序的总时长是多少？（四舍五入到最接近的秒）</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="0 seconds"><label for="md_converted_choice_6_0"><input type="radio" id="md_converted_choice_6_0" name="md_converted_radio_6">0 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_6_1"><input type="radio" id="md_converted_choice_6_1" name="md_converted_radio_6">1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="4 seconds"><label for="md_converted_choice_6_2"><input type="radio" id="md_converted_choice_6_2" name="md_converted_radio_6">4 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="5 seconds"><label for="md_converted_choice_6_3"><input type="radio" id="md_converted_choice_6_3" name="md_converted_radio_6">5 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-callback_type" data-target="#ex-callbacks-callback_type" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-callback_type"></a><span class="panel-title">回调类型</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-callback_type" data-outline="callback_type" data-ex-id="timer_callbacks/callback_type" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@recall_function_signature"><a class="jump" href="index.html#@recall_function_signature"></a>回顾 <code>countdown</code> 的函数签名，特别注意 <code>callback</code> 参数：</p>
+
+<pre id="@function_countdown-ticks_number"><a class="jump" href="index.html#@function_countdown-ticks_number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span></span></code></pre>
+
+<p id="@suppose_client_previously"><a class="jump" href="index.html#@suppose_client_previously"></a>假设客户端之前定义了这个函数：</p>
+
+<pre id="@function_mycallback-ticksleft_number"><a class="jump" href="index.html#@function_mycallback-ticksleft_number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">myCallback</span>(<span class="hljs-params">ticksLeft: <span class="hljs-built_in">number</span></span>) </span>{ <span class="hljs-built_in">console</span>.log(ticksLeft); }</code></pre>
+
+<p id="@which_following_true"><a class="jump" href="index.html#@which_following_true"></a>关于客户端可以传递给 <code>countdown</code> 的回调，以下哪些陈述是正确的？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="passing (n: number) => console.log(n) is not legal because the parameter must be named ticksLeft, not n"><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0">传递 <code>(n: number) =&gt; console.log(n)</code> 是不合法的，因为参数必须命名为 <code>ticksLeft</code>，而不是 <code>n</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="passing (ticksLeft: bigint) => console.log(ticksLeft) is not legal because the parameter must have type number, not bigint"><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1">传递 <code>(ticksLeft: bigint) =&gt; console.log(ticksLeft)</code> 是不合法的，因为参数的类型必须是 <code>number</code>，而不是 <code>bigint</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="passing myCallback is not legal because the callback must use => as shown in the type"><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2">传递 <code>myCallback</code> 是不合法的，因为回调必须像类型中那样使用 <code>=&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="passing myCallback(5) is not legal because it does not match the type of callback"><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3">传递 <code>myCallback(5)</code> 是不合法的，因为它与 <code>callback</code> 的类型不匹配</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_following_legal"><a class="jump" href="index.html#@which_following_legal"></a>以下哪些是 <code>countdown</code> 的<em>实现</em>调用回调的合法方式？假设 <code>n</code> 是一个局部变量，表示定时器上剩余的计时次数。</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="callback(n)"><label for="md_converted_choice_2_0"><input type="checkbox" id="md_converted_choice_2_0"><code>callback(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="callback()"><label for="md_converted_choice_2_1"><input type="checkbox" id="md_converted_choice_2_1"><code>callback()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="const f = callback; f(n)"><label for="md_converted_choice_2_2"><input type="checkbox" id="md_converted_choice_2_2"><code>const f = callback; f(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="myCallback(n)"><label for="md_converted_choice_2_3"><input type="checkbox" id="md_converted_choice_2_3"><code>myCallback(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-counting_down" data-target="#ex-callbacks-counting_down" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-counting_down"></a><span class="panel-title">倒计时</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-counting_down" data-outline="counting_down" data-ex-id="timer_callbacks/counting_down" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@consider_countdown_might"><a class="jump" href="index.html#@consider_countdown_might"></a>让我们考虑一下如何使用 <code>setTimeout()</code> 来实现 <code>countdown()</code>。下面是一个递归实现：</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_if_ticks_0"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_if_ticks_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 启动一个每秒计时一次直到到期的定时器。
+ * @param ticks      定时器持续时间（秒），必须是整数 &gt;= 0
+ * @param callback   回调函数，最初同步调用，
+ *                   然后在定时器每次计时后再次调用，
+ *                   每次传递定时器到期前剩余的秒数。
+ *                   ticksLeft 必须是 [0, ticks] 范围内的整数。
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-keyword">const</span> millisecondsPerTick = <span class="hljs-number">1000</span>;
+    <span class="hljs-keyword">if</span> ( ticks &gt; <span class="hljs-number">0</span> ) {
+        setTimeout(_____________, millisecondsPerTick);
+    }
+    callback(ticks);
+}</code></pre>
+
+<p id="@which_following_expressions"><a class="jump" href="index.html#@which_following_expressions"></a>以下哪个表达式可以填入递归情况中的空白处，使得实现对 <code>ticks &gt; 0</code> 有效？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="callback "><label for="md_converted_choice_3_0"><input type="checkbox" id="md_converted_choice_3_0"><code>callback</code> </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="callback(ticksLeft)"><label for="md_converted_choice_3_1"><input type="checkbox" id="md_converted_choice_3_1"><code>callback(ticksLeft)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="countdown"><label for="md_converted_choice_3_2"><input type="checkbox" id="md_converted_choice_3_2"><code>countdown</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="countdown(ticks-1, callback)"><label for="md_converted_choice_3_3"><input type="checkbox" id="md_converted_choice_3_3"><code>countdown(ticks-1, callback)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="() => countdown(ticks-1, callback)"><label for="md_converted_choice_3_4"><input type="checkbox" id="md_converted_choice_3_4"><code>() =&gt; countdown(ticks-1, callback)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_0"><a class="jump" href="index.html#@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_0"></a>当使用 <code>countdown(0, (ticksLeft) =&gt; console.log(ticksLeft))</code> 调用时，这段代码会做什么？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="prints 0 immediately and then returns"><label for="md_converted_choice_7_0"><input type="radio" id="md_converted_choice_7_0" name="md_converted_radio_7">立即打印 <code>0</code> 然后返回</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 0 once a second for a very long time"><label for="md_converted_choice_7_1"><input type="radio" id="md_converted_choice_7_1" name="md_converted_radio_7">每秒打印一次 <code>0</code>，持续很长时间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="returns immediately, then prints 0 one second later"><label for="md_converted_choice_7_2"><input type="radio" id="md_converted_choice_7_2" name="md_converted_radio_7">立即返回，一秒后打印 <code>0</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-counting_down_again" data-target="#ex-callbacks-counting_down_again" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-counting_down_again"></a><span class="panel-title">再次倒计时</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-counting_down_again" data-outline="counting_down_again" data-ex-id="timer_callbacks/counting_down_again" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@now_consider_imperative"><a class="jump" href="index.html#@now_consider_imperative"></a>现在让我们考虑 <code>countdown()</code> 的一个<a href="https://en.wikipedia.org/wiki/Imperative_programming">命令式</a>实现，它目前有一个 bug：</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_callback-ticks"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_callback-ticks"></a><code class="language-ts hljs typescript">    <span class="hljs-comment">/**
+     * 启动一个每秒计时一次直到到期的定时器。
+     * @param ticks      定时器持续时间（秒），必须是整数 &gt;= 0
+     * @param callback   回调函数，最初同步调用，
+     *                   然后在定时器每次计时后再次调用，
+     *                   每次传递定时器到期前剩余的秒数。
+     *                   ticksLeft 必须是 [0, ticks] 范围内的整数。
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span> </span>{
+        <span class="hljs-keyword">const</span> millisecondsPerTick = <span class="hljs-number">1000</span>;
+
+        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">doTick</span>(<span class="hljs-params"></span>) </span>{
+            callback(ticks);
+            <span class="hljs-keyword">if</span> ( ticks &gt; <span class="hljs-number">0</span> ) {
+                setTimeout(doTick, millisecondsPerTick);
+            }
+        }
+
+        doTick();
+    }</code></pre>
+
+<p id="@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_1"><a class="jump" href="index.html#@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_1"></a>当使用 <code>countdown(0, (ticksLeft) =&gt; console.log(ticksLeft))</code> 调用时，这段代码会做什么？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="prints 0 immediately and then returns"><label for="md_converted_choice_8_0"><input type="radio" id="md_converted_choice_8_0" name="md_converted_radio_8">立即打印 <code>0</code> 然后返回</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 0 once a second for a very long time"><label for="md_converted_choice_8_1"><input type="radio" id="md_converted_choice_8_1" name="md_converted_radio_8">每秒打印一次 <code>0</code>，持续很长时间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="returns immediately, then prints 0 one second later"><label for="md_converted_choice_8_2"><input type="radio" id="md_converted_choice_8_2" name="md_converted_radio_8">立即返回，一秒后打印 <code>0</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@does_code_do_called_countdown-1_ticksleft"><a class="jump" href="index.html#@does_code_do_called_countdown-1_ticksleft"></a>当使用 <code>countdown(1, (ticksLeft) =&gt; console.log(ticksLeft))</code> 调用时，这段代码会做什么？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="prints 1 immediately and returns, then nothing more"><label for="md_converted_choice_9_0"><input type="radio" id="md_converted_choice_9_0" name="md_converted_radio_9">立即打印 <code>1</code> 并返回，然后不再有其他输出</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 1 immediately and returns, then prints 0 one second later"><label for="md_converted_choice_9_1"><input type="radio" id="md_converted_choice_9_1" name="md_converted_radio_9">立即打印 <code>1</code> 并返回，一秒后打印 <code>0</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 1 once a second for a very long time"><label for="md_converted_choice_9_2"><input type="radio" id="md_converted_choice_9_2" name="md_converted_radio_9">每秒打印一次 <code>1</code>，持续很长时间</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="returns immediately, then prints 1 one second later, and 0 one second after that"><label for="md_converted_choice_9_3"><input type="radio" id="md_converted_choice_9_3" name="md_converted_radio_9">立即返回，一秒后打印 <code>1</code>，再一秒后打印 <code>0</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-counting_down_again_but_not_ad_infinitum" data-target="#ex-callbacks-counting_down_again_but_not_ad_infinitum" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-counting_down_again_but_not_ad_infinitum"></a><span class="panel-title">再次倒计时，但不是无限循环</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-counting_down_again_but_not_ad_infinitum" data-outline="counting_down_again_but_not_ad_infinitum" data-ex-id="timer_callbacks/counting_down_again_but_not_ad_infinitum" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@bug_imperative_implementation"><a class="jump" href="index.html#@bug_imperative_implementation"></a>命令式实现中的 bug 是它从未递减 <code>ticks</code>。让我们尝试修复它：</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_b"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_b"></a><code class="language-ts hljs typescript">    <span class="hljs-comment">/**
+     * 启动一个每秒计时一次直到到期的定时器。
+     * @param ticks      定时器持续时间（秒），必须是整数 &gt;= 0
+     * @param callback   回调函数，最初同步调用，
+     *                   然后在定时器每次计时后再次调用，
+     *                   每次传递定时器到期前剩余的秒数。
+     *                   ticksLeft 必须是 [0, ticks] 范围内的整数。
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span> </span>{
+        <span class="hljs-keyword">const</span> millisecondsPerTick = <span class="hljs-number">1000</span>;
+<span class="hljs-comment">//A</span>
+        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">doTick</span>(<span class="hljs-params"></span>) </span>{
+<span class="hljs-comment">//B</span>
+            callback(ticks);
+<span class="hljs-comment">//C</span>
+            <span class="hljs-keyword">if</span> ( ticks &gt; <span class="hljs-number">0</span> ) {
+<span class="hljs-comment">//D</span>
+                setTimeout(doTick, millisecondsPerTick);
+<span class="hljs-comment">//E</span>
+            }
+        }
+<span class="hljs-comment">//F</span>
+        doTick();
+<span class="hljs-comment">//G</span>
+    }</code></pre>
+
+<p id="@suppose_you_insert"><a class="jump" href="index.html#@suppose_you_insert"></a>假设你在标记为 A-G 的<em>一个</em>位置插入语句 <code>--ticks;</code>。哪些可能的插入位置可以修复这个 bug，使 <code>countdown()</code> 符合其规范？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="A"><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0">A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="B"><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1">B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="C"><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2">C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="D"><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3">D</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="E"><label for="md_converted_choice_4_4"><input type="checkbox" id="md_converted_choice_4_4">E</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="F"><label for="md_converted_choice_4_5"><input type="checkbox" id="md_converted_choice_4_5">F</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="G"><label for="md_converted_choice_4_6"><input type="checkbox" id="md_converted_choice_4_6">G</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="none of these work, because ticks will always go back to its original value every time doTick() is called"><label for="md_converted_choice_4_7"><input type="checkbox" id="md_converted_choice_4_7">这些都不行，因为每次调用 <code>doTick()</code> 时 <code>ticks</code> 都会恢复到原始值</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="event_loop"><a class="jump" href="index.html#event_loop"></a>事件循环</h2><div data-outline="event_loop">
+
+<p id="@these_timer_callbacks"><a class="jump" href="index.html#@these_timer_callbacks"></a>这些定时器回调使我们能够揭示 TypeScript/JavaScript 编程模型的一个基本方面。JavaScript 运行时系统的核心是一个<mark data-structure-text="event queue" id="^event_queue"><em>事件队列</em></mark>，一个先进先出的队列，用于存储从各个来源到达的事件。该队列由一个<mark data-structure-text="event loop" id="^event_loop"><em>事件循环</em></mark>提供服务，它反复检查这个队列中是否有新到达的事件，并调用适当的回调函数。</p>
+
+<p id="@one_source_events"><a class="jump" href="index.html#@one_source_events"></a>事件的一个来源是由 <code>setTimeout</code> 创建的定时器。定时器到期会导致一个"定时器完成"事件被放入队列末尾，连同其回调函数一起。当事件循环最终从队列顶部检索到这个事件时，它调用回调函数，最终履行 <code>setTimeout</code> 契约的义务。</p>
+
+<p id="@later_reading_see"><a class="jump" href="index.html#@later_reading_see"></a>在本阅读的后面，我们将看到事件的另一个来源：图形用户界面。
+对于在 HTML 网页中运行的 JavaScript，用户的按键、鼠标移动和点击或触摸被放入事件队列的末尾，并最终由它们注册的回调函数处理。</p>
+
+<p id="@still_another_source"><a class="jump" href="index.html#@still_another_source"></a>事件的另一个来源是文件系统和网络的输入和输出，这将在未来的阅读中介绍。</p>
+
+<p id="@all_our_typescript-javascript"><a class="jump" href="index.html#@all_our_typescript-javascript"></a>我们所有的 TypeScript/JavaScript 代码实际上都是在事件循环内部运行的——甚至程序的启动也是由事件循环发起的。
+为了使程序正确运行，我们所有的代码也必须及时返回到事件循环，这样事件循环才能继续处理下一个事件，并继续处理后续的定时器到期或 GUI/文件/网络事件。</p>
+
+<p id="@if_any_our"><a class="jump" href="index.html#@if_any_our"></a>如果我们任何代码出现<mark data-mark-text="blocking" data-structure-text="blocking" id="^blocking"><em>阻塞</em></mark>——占用控制流且相当长一段时间不返回给调用者——那么事件循环就会停止处理事件。
+定时器回调不会触发，用户界面停止响应，网络连接停止传输数据。
+如果你曾经看到鼠标指针变成了旋转的沙漏或彩色旋转球，那就是一个事件循环已被阻塞、不再处理事件的程序的征兆。
+这很糟糕。</p>
+
+<p id="@here-s_simple_function"><a class="jump" href="index.html#@here-s_simple_function"></a>这里有一个会阻塞 JavaScript 事件循环的简单函数：</p>
+
+<pre id="@wait_milliseconds_pass"><a class="jump" href="index.html#@wait_milliseconds_pass"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** Wait for `milliseconds` to pass before returning. */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">busyWait</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-keyword">const</span> now = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime(); <span class="hljs-comment">// new Date().getTime() is always the current clock time in milliseconds</span>
+    <span class="hljs-keyword">const</span> deadline = now + milliseconds;
+    <span class="hljs-keyword">while</span> (<span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime() &lt; deadline) {
+        <span class="hljs-comment">// do nothing, just wait until the clock reaches the deadline time</span>
+    }
+}</code></pre>
+
+<p id="@call_busywait-10000_spins"><a class="jump" href="index.html#@call_busywait-10000_spins"></a>调用 <code>busyWait(10000)</code> 会不停地在 <code>while</code> 循环中旋转，监视时钟，直到 10 秒过去。
+在那段时间里，事件会在事件队列中堆积，但事件循环无法处理它们，因为 <code>busyWait()</code> 还没有返回。
+一旦 <code>busyWait()</code> 返回给它的调用者（然后调用者再返回给它的调用者，一直回到事件循环，事件循环是 JavaScript 中一切代码的原始调用者），事件循环终于可以取出下一个等待的事件并调用其回调函数，生活才能恢复正常。
+但所有那些堆积的定时器回调都会太晚触发！</p>
+
+<p id="@recall_spinning_loop"><a class="jump" href="index.html#@recall_spinning_loop"></a>回想一下，在循环中旋转等待外部变化被称为<a href="../../15-promises/index.html#^busy-waiting">忙等待（busy-waiting）</a>，对于像 JavaScript 这样的事件循环运行时系统来说，这是一个非常坏的代码异味。
+像 <code>busyWait()</code> 这样的代码需要被重写。它应该使用由变化触发的回调（就像内置的 JavaScript 函数 <code>setTimeout()</code> 那样），或者由变化触发的 Promise（像我们的异步版本 <code>timeout()</code>）。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_2"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-blocking_the_event_loop" data-target="#ex-callbacks_2-blocking_the_event_loop" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-blocking_the_event_loop"></a><span class="panel-title">阻塞事件循环</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-blocking_the_event_loop" data-outline="blocking_the_event_loop" data-ex-id="event_loop/blocking_the_event_loop" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@busywait_function_definitely"><a class="jump" href="index.html#@busywait_function_definitely"></a><code>busyWait()</code> 函数对于 TypeScript/JavaScript 来说绝对是一个糟糕的设计。但即使是善意的函数也可能在无意中阻塞事件循环：</p>
+
+<pre id="@returns_random_prime"><a class="jump" href="index.html#@returns_random_prime"></a><code class="hljs php"><span class="hljs-comment">/** <span class="hljs-doctag">@returns</span> a random prime number with `n` decimal digits. */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">randomPrime</span><span class="hljs-params">( n: number )</span>: <span class="hljs-title">bigint</span></span>;</code></pre>
+
+<p id="@suppose_randomprime_implemented"><a class="jump" href="index.html#@suppose_randomprime_implemented"></a>假设 <code>randomPrime()</code> 通过猜测和测试策略实现，随机生成 <em>n</em> 位数字并测试其素性，直到找到一个素数。
+因此 <code>randomPrime(1000)</code> 可能需要不可预测的时间来运行。</p>
+
+<p id="@which_possible_behaviors"><a class="jump" href="index.html#@which_possible_behaviors"></a>在下面的示例代码中，你可能会看到哪些可能的行为？选择所有适用的选项。</p>
+
+<pre id="@settimeout_console-log-a_1000"><a class="jump" href="index.html#@settimeout_console-log-a_1000"></a><code class="language-ts hljs typescript">setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"A"</span>), <span class="hljs-number">1000</span>);
+<span class="hljs-built_in">console</span>.log(randomPrime(<span class="hljs-number">1000</span>));
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"B"</span>), <span class="hljs-number">2000</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="prints A after one second; then prints a prime number after some time; then prints B two seconds after that"><label for="md_converted_choice_10_0"><input type="checkbox" id="md_converted_choice_10_0">一秒后打印 <code>A</code>；然后过一段时间打印一个素数；然后两秒后打印 <code>B</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="prints a prime number almost immediately; then prints A one second later; then prints B one second after that"><label for="md_converted_choice_10_1"><input type="checkbox" id="md_converted_choice_10_1">几乎立即打印一个素数；然后一秒后打印 <code>A</code>；再一秒后打印 <code>B</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="prints a prime number after two seconds, then prints A and B together"><label for="md_converted_choice_10_2"><input type="checkbox" id="md_converted_choice_10_2">两秒后打印一个素数，然后同时打印 <code>A</code> 和 <code>B</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="nothing printed for five minutes, then prints a prime number and A together, then prints B two seconds later"><label for="md_converted_choice_10_3"><input type="checkbox" id="md_converted_choice_10_3">五分钟内没有任何输出，然后同时打印一个素数和 <code>A</code>，两秒后打印 <code>B</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-exceptions_from_synchronous_callbacks" data-target="#ex-callbacks_2-exceptions_from_synchronous_callbacks" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-exceptions_from_synchronous_callbacks"></a><span class="panel-title">同步回调中的异常</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-exceptions_from_synchronous_callbacks" data-outline="exceptions_from_synchronous_callbacks" data-ex-id="event_loop/exceptions_from_synchronous_callbacks" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@one_difference_between"><a class="jump" href="index.html#@one_difference_between"></a>同步回调和异步回调的一个区别在于它们在异常处理方面的行为。</p>
+
+<p id="@first_consider_synchronous"><a class="jump" href="index.html#@first_consider_synchronous"></a>让我们先考虑一个总是抛出异常的同步回调，被 <code>map</code> 使用：</p>
+
+<pre id="@function_alwaysthrows-n_number"><a class="jump" href="index.html#@function_alwaysthrows-n_number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+}
+
+[<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>].map(alwaysThrows);</code></pre>
+
+<p id="@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_0"><a class="jump" href="index.html#@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_0"></a>在以下哪些位置放置 <code>try-catch</code> 语句可以捕获 <code>alwaysThrows</code> 抛出的异常？假设各选项是独立的，即 <code>try-catch</code> 只放在代码中的一个位置。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="around the definition of alwaysThrows, i.e. try { function alwaysThrows(n: number) { throw new Error(&quot;boom!&quot;); } } catch (e) { ... } "><label for="md_converted_choice_11_0"><input type="checkbox" id="md_converted_choice_11_0">在 <code>alwaysThrows</code> 的定义周围，即 <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    }
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the body of alwaysThrows, i.e. function alwaysThrows(n: number) { try { throw new Error(&quot;boom!&quot;); } catch (e) { ... } } "><label for="md_converted_choice_11_1"><input type="checkbox" id="md_converted_choice_11_1">在 <code>alwaysThrows</code> 的函数体周围，即 <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    } <span class="hljs-keyword">catch</span> (e) { ... }
+}
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the call to map, i.e. try { [1, 2, 3].map(alwaysThrows); } catch (e) { ... } "><label for="md_converted_choice_11_2"><input type="checkbox" id="md_converted_choice_11_2">在 <code>map</code> 调用周围，即 <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    [<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>].map(alwaysThrows);
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the argument to map, i.e. [1, 2, 3].map( try { alwaysThrows } catch (e) { ... } ); "><label for="md_converted_choice_11_3"><input type="checkbox" id="md_converted_choice_11_3">在 <code>map</code> 的参数周围，即 <pre class="no-markdown"><code class="ts hljs typescript">[<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>].map(
+    <span class="hljs-keyword">try</span> {
+        alwaysThrows
+    } <span class="hljs-keyword">catch</span> (e) { ... }
+);
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-exceptions_from_asynchronous_callbacks" data-target="#ex-callbacks_2-exceptions_from_asynchronous_callbacks" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-exceptions_from_asynchronous_callbacks"></a><span class="panel-title">异步回调中的异常</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-exceptions_from_asynchronous_callbacks" data-outline="exceptions_from_asynchronous_callbacks" data-ex-id="event_loop/exceptions_from_asynchronous_callbacks" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@now_consider_asynchronous"><a class="jump" href="index.html#@now_consider_asynchronous"></a>现在让我们考虑一个<em>异步</em>回调，被 <code>setTimeout</code> 使用：</p>
+
+<pre id="@function_alwaysthrows_throw"><a class="jump" href="index.html#@function_alwaysthrows_throw"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+}
+
+setTimeout(alwaysThrows, <span class="hljs-number">1000</span>);</code></pre>
+
+<p id="@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_1"><a class="jump" href="index.html#@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_1"></a>在以下哪些位置放置 <code>try-catch</code> 语句可以捕获 <code>alwaysThrows</code> 抛出的异常？假设各选项是独立的，即 <code>try-catch</code> 只放在代码中的一个位置。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="around the definition of alwaysThrows, i.e. try { function alwaysThrows(n: number) { throw new Error(&quot;boom!&quot;); } } catch (e) { ... } "><label for="md_converted_choice_12_0"><input type="checkbox" id="md_converted_choice_12_0">在 <code>alwaysThrows</code> 的定义周围，即 <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    }
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the body of alwaysThrows, i.e. function alwaysThrows(n: number) { try { throw new Error(&quot;boom!&quot;); } catch (e) { ... } } "><label for="md_converted_choice_12_1"><input type="checkbox" id="md_converted_choice_12_1">在 <code>alwaysThrows</code> 的函数体周围，即 <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    } <span class="hljs-keyword">catch</span> (e) { ... }
+}
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the call to setTimeout, i.e. try { setTimeout(alwaysThrows, 1000); } catch (e) { ... } "><label for="md_converted_choice_12_2"><input type="checkbox" id="md_converted_choice_12_2">在 <code>setTimeout</code> 调用周围，即 <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    setTimeout(alwaysThrows, <span class="hljs-number">1000</span>);
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the argument to setTimeout, i.e. setTimeout( try { alwaysThrows } catch (e) { ... }, 1000); ); "><label for="md_converted_choice_12_3"><input type="checkbox" id="md_converted_choice_12_3">在 <code>setTimeout</code> 的参数周围，即 <pre class="no-markdown"><code class="ts hljs typescript">setTimeout(
+    <span class="hljs-keyword">try</span> {
+        alwaysThrows
+    } <span class="hljs-keyword">catch</span> (e) { ... },
+    <span class="hljs-number">1000</span>);
+);
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-time_is_up" data-target="#ex-callbacks_2-time_is_up" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-time_is_up"></a><span class="panel-title">时间到</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-time_is_up" data-outline="time_is_up" data-ex-id="event_loop/time_is_up" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<pre id="@settimeout_console-log-a_0"><a class="jump" href="index.html#@settimeout_console-log-a_0"></a><code class="language-ts hljs typescript">setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"A"</span>), <span class="hljs-number">0</span>);
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"B"</span>), <span class="hljs-number">1000</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"C"</span>);</code></pre>
+
+<p id="@order_b_c_printed_code_1"><a class="jump" href="index.html#@order_b_c_printed_code_1"></a>这段代码按什么顺序打印 A、B 和 C？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="A, B, C"><label for="md_converted_choice_13_0"><input type="radio" id="md_converted_choice_13_0" name="md_converted_radio_13">A, B, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="A, C, B"><label for="md_converted_choice_13_1"><input type="radio" id="md_converted_choice_13_1" name="md_converted_radio_13">A, C, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, A, C"><label for="md_converted_choice_13_2"><input type="radio" id="md_converted_choice_13_2" name="md_converted_radio_13">B, A, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, C, A"><label for="md_converted_choice_13_3"><input type="radio" id="md_converted_choice_13_3" name="md_converted_radio_13">B, C, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, A, B"><label for="md_converted_choice_13_4"><input type="radio" id="md_converted_choice_13_4" name="md_converted_radio_13">C, A, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, B, A"><label for="md_converted_choice_13_5"><input type="radio" id="md_converted_choice_13_5" name="md_converted_radio_13">C, B, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="using_callbacks_with_promises"><a class="jump" href="index.html#using_callbacks_with_promises"></a>将回调与 Promise 一起使用</h2><div data-outline="using_callbacks_with_promises">
+
+<p id="@prior_introduction_promises"><a class="jump" href="index.html#@prior_introduction_promises"></a>在 JavaScript 引入 Promise 之前，回调函数是实现异步函数行为最常见的方式，并且在 JavaScript 库生态系统中仍然有许多使用回调的场景。</p>
+
+<p id="@turns_out_under"><a class="jump" href="index.html#@turns_out_under"></a>事实证明，在底层，Promise <em>也</em>使用回调。
+让我们深入探讨 <code>Promise</code> 抽象数据类型，以更好地理解它的工作原理以及它与 <code>await</code> 和 <code>async function</code> 的交互方式。</p>
+
+<p id="@abstract_data_type"><a class="jump" href="index.html#@abstract_data_type"></a><a href="../../06-abstract-data-types/index.html#an_abstract_type_is_defined_by_its_operations">抽象数据类型由其操作定义</a>，而 <code>Promise&lt;T&gt;</code> 有一个关键操作，称为 <code>then</code>。
+以下是 <code>then</code> 最简单的版本：</p>
+
+<pre id="@interface_promise-t_then-callback_t_u_promise-u"><a class="jump" href="index.html#@interface_promise-t_then-callback_t_u_promise-u"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> Promise&lt;T&gt; {
+  then(callback: <span class="hljs-function"><span class="hljs-params">T</span> =&gt;</span> U): <span class="hljs-built_in">Promise</span>&lt;U&gt;;
+}</code></pre>
+
+<p id="@then_operation_promise"><a class="jump" href="index.html#@then_operation_promise"></a><code>then</code> 操作是一个 Promise 生产者。
+它在期望产生类型 <code>T</code> 值的现有 promise 上调用，并向该 promise 附加一个回调函数。
+回调函数消费 promise 最终产生的 <code>T</code> 值，并生成某种其他类型 <code>U</code> 的值（当然可能与 <code>T</code> 相同）。</p>
+
+<p id="@here-s_example_then"><a class="jump" href="index.html#@here-s_example_then"></a>以下是 <code>then</code> 实际使用的一个例子：</p>
+
+<pre id="@const_promise_promise-string"><a class="jump" href="index.html#@const_promise_promise-string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise : <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+
+<span class="hljs-keyword">const</span> biggerPromise : <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">number</span>&gt; = promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data: <span class="hljs-built_in">string</span></span>) </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-built_in">parseInt</span>(data);
+});</code></pre>
+
+<p id="@here_original_promise"><a class="jump" href="index.html#@here_original_promise"></a>这里，原始的 <code>promise</code> 正在将文件读取为字符串，通过 <code>then</code> 与将该字符串解析为数字的回调函数组合。生成的 <code>biggerPromise</code> 代表了整个计算——读取文件和将其解析为数字——并承诺最终产生该数字。</p>
+
+<p id="@helps_think_about"><a class="jump" href="index.html#@helps_think_about"></a>将 <code>then</code> 视为异步计算的<em>组合</em>操作会很有帮助。传统的函数组合接受两个函数 <code>f</code> 和 <code>g</code>，将它们组合成一个新函数 <code>g ⚬ f</code>，使得 <code>(g ⚬ f)(x) = g(f(x))</code>。如果 <code>f: S → T</code> 且 <code>g: T → U</code>，则结果组合的类型为 <code>g ⚬ f: S → U</code>。</p>
+
+<p id="@much_same_way"><a class="jump" href="index.html#@much_same_way"></a>非常类似地，<code>then</code> 将一个计算 <code>f</code>（由对其返回值的 promise <code>Promise&lt;T&gt;</code> 表示）与另一个计算 <code>g</code>（期望消费该 <code>T</code> 值并产生一个 <code>U</code> 值）组合。
+组合的结果是一个组合计算，承诺最终产生该 <code>U</code> 值，所以其类型为 <code>Promise&lt;U&gt;</code>。</p>
+
+<p id="@may_also_help"><a class="jump" href="index.html#@may_also_help"></a>将 <code>Promise&lt;T&gt;</code> 想象为一个（最终）包含 <code>T</code> 值的单元素列表也可能有帮助。从这个角度来看，<code>then(g)</code> 就像 <code>map(g)</code>——一旦 <code>T</code> 元素到达，<code>g</code> 回调就在其上调用，产生一个 <code>U</code> 值，作为结果 <code>Promise&lt;U&gt;</code> 的唯一元素。（然而，这个类比在一个地方不适用，即 <code>Promise&lt;void&gt;</code>，因为这样的 promise 实际上永远不会有任何元素值。在 <code>void</code> promise 上使用 <code>then(g)</code> 仍然会在 promise 履行时调用 <code>g</code>，但不会向 <code>g</code> 传递任何值。）</p>
+
+<p id="@need_expand_notion"><a class="jump" href="index.html#@need_expand_notion"></a>我们需要在一个重要方面扩展这个 <code>then</code> 的概念。
+回调函数不必返回一个已经计算好的 <code>U</code> 值。
+它可以改为返回自己的一个 promise，类型为 <code>Promise&lt;U&gt;</code>：</p>
+
+<pre id="@interface_promise-t_then-callback_t_u-promise-u_promise-u"><a class="jump" href="index.html#@interface_promise-t_then-callback_t_u-promise-u_promise-u"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> Promise&lt;T&gt; {
+  then(callback: <span class="hljs-function"><span class="hljs-params">T</span> =&gt;</span> U|<span class="hljs-built_in">Promise</span>&lt;U&gt;): <span class="hljs-built_in">Promise</span>&lt;U&gt;;
+}</code></pre>
+
+<p id="@callback_might_need"><a class="jump" href="index.html#@callback_might_need"></a>如果计算 <code>U</code> 值也需要在后台运行的另一长时间运行计算，则回调可能需要这样做。
+网页检索提供了一个很好的例子，因为从 <code>fetch()</code> 调用获取 <code>Response</code> 只表示你已经成功连接到 Web 服务器。实际下载完整页面可能需要更长时间。
+以下是该 promise 链可能的样子：</p>
+
+<pre id="@const_promisedresponse_promise-response"><a class="jump" href="index.html#@const_promisedresponse_promise-response"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promisedResponse: <span class="hljs-built_in">Promise</span>&lt;Response&gt; = fetch(<span class="hljs-string">'http://www.mit.edu/</span>);
+
+<span class="hljs-keyword">const</span> promisedText: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; =
+  promisedResponse.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response: Response</span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">string</span>&gt; </span>{
+    <span class="hljs-comment">// we've made a connection, which is why the `response` object exists</span>
+    <span class="hljs-keyword">const</span> downloadingPromise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = response.text();
+    <span class="hljs-comment">// but we may have to wait some more for the actual data, hence `downloadingPromise`</span>
+    <span class="hljs-keyword">return</span> downloadingPromise;
+  });</code></pre>
+
+<p id="@note_several_promises"><a class="jump" href="index.html#@note_several_promises"></a>注意此示例代码中显示的多个 promise：</p>
+
+<ul id="@promisedresponse_represents_computation">
+<li><a class="jump" href="index.html#@promisedresponse_represents_computation"></a><code>promisedResponse</code> 代表正在与 <code>www.mit.edu</code> 建立初始连接的计算</li>
+<li><code>downloadingPromise</code> 代表在连接已建立<em>之后</em>下载 MIT 主页的计算</li>
+<li><code>promisedText</code> 代表两个计算的组合：初始连接后跟下载。<code>promisedText</code> 的最终值来自 <code>downloadingPromise</code> 的值，即网页的文本。</li>
+</ul>
+
+<p id="@even_though_callback"><a class="jump" href="index.html#@even_though_callback"></a>尽管传入 <code>promisedResponse.then()</code> 的回调函数没有使用 <code>async</code> 或 <code>await</code>，它仍然返回一个 promise，所以它是一个<em>异步</em>函数。</p>
+
+<p id="@going_back_function"><a class="jump" href="index.html#@going_back_function"></a>回到函数组合的类比，如果 <code>promisedResponse</code> 和 <code>downloadingPromise</code> 分别类似于函数 <code>f</code> 和 <code>g</code>，那么 <code>promisedText</code> 就类似于组合 <code>g ⚬ f</code>。</p>
+
+<p id="@you_can_call"><a class="jump" href="index.html#@you_can_call"></a>你可以在一个 promise 上多次调用 <code>then</code>，以附加可能对 promise 的值做不同处理的不同回调。</p>
+
+<p id="@you_can_also"><a class="jump" href="index.html#@you_can_also"></a>你也可以在 promise 当前处于任何状态时调用 <code>then</code>。
+大多数情况下，promise 仍在等待中，所以 <code>then</code> 回调将在未来某个时间运行。
+如果 promise <em>已经</em>履行，<code>then</code> 回调会更快运行——但仍然是<em>异步地</em>。
+回调函数<em>永远不会</em>被 <code>then</code> 同步调用。
+相反，<code>then</code> 总是先返回，然后，在控制返回到事件循环之后，回调函数才会被调用。事件循环如何调用 promise 回调的细节不是本课程的要求，但如果你好奇，<a href="addendum.html">本阅读的附录</a>提供了一些细节。</p>
+
+<p id="@then_operation_fundamental"><a class="jump" href="index.html#@then_operation_fundamental"></a><code>then</code> 操作是 promise 的基本操作。<strong><code>then</code> 是访问 promise 计算值的唯一方式。</strong>（<code>await</code> 实际上使用了 <code>then</code>，我们马上就会看到。）这部分是一个安全属性，因为它确保客户端代码永远无法查看 promise 内部并看到缺失的值。但更重要的是，<code>then</code> 是并发设计的一个特性。它允许通过一系列组合计算——一系列 <code>then</code> 回调——来构建并发计算，这些回调可以以受控的、可预测的方式交错执行。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_3"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_3-then_more_timing" data-target="#ex-callbacks_3-then_more_timing" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_3-then_more_timing"></a><span class="panel-title">then 的更多时序问题</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_3-then_more_timing" data-outline="then_more_timing" data-ex-id="using_callbacks_with_promises/then_more_timing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@return_our_friend"><a class="jump" href="index.html#@return_our_friend"></a>让我们回到老朋友 <code>timeout</code>，它返回一个定时器 promise：</p>
+
+<pre id="@returns_promise_becomes"><a class="jump" href="index.html#@returns_promise_becomes"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// returns a promise that becomes fulfilled `milliseconds` milliseconds after the call to timeout</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">timeout</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt;</span></code></pre>
+
+<p id="@approximately_long_does"><a class="jump" href="index.html#@approximately_long_does"></a>以下代码大约需要多长时间才能到达打印 <code>done</code> 的位置？</p>
+
+<pre id="@timeout-1000-then-function_console-log-done_timeout-2000"><a class="jump" href="index.html#@timeout-1000-then-function_console-log-done_timeout-2000"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);
+});
+timeout(<span class="hljs-number">2000</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_14_0"><input type="radio" id="md_converted_choice_14_0" name="md_converted_radio_14">远不到 1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_14_1"><input type="radio" id="md_converted_choice_14_1" name="md_converted_radio_14">1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_14_2"><input type="radio" id="md_converted_choice_14_2" name="md_converted_radio_14">2 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_14_3"><input type="radio" id="md_converted_choice_14_3" name="md_converted_radio_14">3 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_14_4"><input type="radio" id="md_converted_choice_14_4" name="md_converted_radio_14">永远不打印 <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@timeout-1000-then-function_return_timeout-2000"><a class="jump" href="index.html#@timeout-1000-then-function_return_timeout-2000"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">return</span> timeout(<span class="hljs-number">2000</span>);
+});
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_15_0"><input type="radio" id="md_converted_choice_15_0" name="md_converted_radio_15">远不到 1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_15_1"><input type="radio" id="md_converted_choice_15_1" name="md_converted_radio_15">1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_15_2"><input type="radio" id="md_converted_choice_15_2" name="md_converted_radio_15">2 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_15_3"><input type="radio" id="md_converted_choice_15_3" name="md_converted_radio_15">3 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_15_4"><input type="radio" id="md_converted_choice_15_4" name="md_converted_radio_15">永远不打印 <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@timeout-1000-then-function_return_timeout-2000-then-function"><a class="jump" href="index.html#@timeout-1000-then-function_return_timeout-2000-then-function"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">return</span> timeout(<span class="hljs-number">2000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);
+  });
+});</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_16_0"><input type="radio" id="md_converted_choice_16_0" name="md_converted_radio_16">远不到 1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_16_1"><input type="radio" id="md_converted_choice_16_1" name="md_converted_radio_16">1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_16_2"><input type="radio" id="md_converted_choice_16_2" name="md_converted_radio_16">2 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_16_3"><input type="radio" id="md_converted_choice_16_3" name="md_converted_radio_16">3 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_16_4"><input type="radio" id="md_converted_choice_16_4" name="md_converted_radio_16">永远不打印 <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@timeout-1000-then-function_timeout-2000_then-function"><a class="jump" href="index.html#@timeout-1000-then-function_timeout-2000_then-function"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    timeout(<span class="hljs-number">2000</span>);
+}).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);
+});</code></pre>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_17_0"><input type="radio" id="md_converted_choice_17_0" name="md_converted_radio_17">远不到 1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_17_1"><input type="radio" id="md_converted_choice_17_1" name="md_converted_radio_17">1 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_17_2"><input type="radio" id="md_converted_choice_17_2" name="md_converted_radio_17">2 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_17_3"><input type="radio" id="md_converted_choice_17_3" name="md_converted_radio_17">3 秒</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_17_4"><input type="radio" id="md_converted_choice_17_4" name="md_converted_radio_17">永远不打印 <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="unpacking_an_asynchronous_function"><a class="jump" href="index.html#unpacking_an_asynchronous_function"></a>解析异步函数</h2><div data-outline="unpacking_an_asynchronous_function">
+
+<p id="@then_operation_now"><a class="jump" href="index.html#@then_operation_now"></a><code>then</code> 操作现在给了我们足够的能力来理解 <code>await</code> 和 <code>async function</code> 的含义，以及它们如何使用 promise 和回调来构建计算。</p>
+
+<p id="@here-s_async_function"><a class="jump" href="index.html#@here-s_async_function"></a>这里有一个 <code>async</code> 函数，包含一行等待 promise 的代码，然后对 promise 的结果进行一些计算：</p>
+
+<pre id="@async_function_getbalance"><a class="jump" href="index.html#@async_function_getbalance"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> promise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+    <span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> promise;
+    <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+    <span class="hljs-keyword">return</span> balance;
+}</code></pre>
+
+<p id="@await_encountered_execution"><a class="jump" href="index.html#@await_encountered_execution"></a>当在这样的函数执行过程中遇到 <code>await</code> 时，TypeScript 会取出该函数剩余的计算部分，并将其包装成一个 <code>then</code> 回调。
+所以这段代码：</p>
+
+<pre id="@const_data_string"><a class="jump" href="index.html#@const_data_string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> promise;
+<span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+<span class="hljs-keyword">return</span> balance;</code></pre>
+
+<p id="@becomes_something_like"><a class="jump" href="index.html#@becomes_something_like"></a>变成了类似这样的东西：</p>
+
+<pre id="@promise-then-function-data_string_const"><a class="jump" href="index.html#@promise-then-function-data_string_const"></a><code class="language-ts hljs typescript">promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data: <span class="hljs-built_in">string</span></span>) </span>{
+  <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+  <span class="hljs-keyword">return</span> balance;
+});</code></pre>
+
+<p id="@instead_spinning_wheels"><a class="jump" href="index.html#@instead_spinning_wheels"></a><code>await</code> 不是空转等待文件加载 promise 履行，而是创建一个组合 promise，将文件加载计算与 <code>parseInt</code> 计算组合在一起。然后它立即将控制权返回给调用者，连同这个组合 promise 一起。所以等价的代码，不使用 <code>await</code> 或 <code>async</code>，看起来像这样：</p>
+
+<pre id="@function_getbalance_promise-number"><a class="jump" href="index.html#@function_getbalance_promise-number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> promise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+    <span class="hljs-keyword">return</span> promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data: <span class="hljs-built_in">string</span></span>) </span>{
+      <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+      <span class="hljs-keyword">return</span> balance;
+    });
+}</code></pre>
+
+<p id="@note_version_getbalance"><a class="jump" href="index.html#@note_version_getbalance"></a>注意这个版本的 <code>getBalance</code> 相当简单，因为它只是直线式代码。当 <code>await</code> 在循环内部使用时，"函数计算剩余部分"包括循环的剩余迭代，这不能通过这样的语法转换轻松展示，因为它会将循环分割。但这个示例从语义上展示了 <code>await</code> 的含义。</p>
+
+<p id="@note_also_version"><a class="jump" href="index.html#@note_also_version"></a>还要注意，这个版本的 <code>getBalance</code> 不再有 <code>async</code> 关键字，因为我们正在展示 <code>async</code> 关键字在底层 TypeScript 代码中的含义。但这个版本的 <code>getBalance</code> 确实仍然是<em>异步的</em>，因为它返回一个表示尚未完成的并发计算的 promise。</p>
+
+<p id="@summarize_you_write"><a class="jump" href="index.html#@summarize_you_write"></a>总结一下，当你使用 <code>async function</code> 而不是 <code>function</code> 时，TypeScript/JavaScript 在内部转换函数的行为：</p>
+
+<ul id="@await_expressions_transformed">
+<li><a class="jump" href="index.html#@await_expressions_transformed"></a><code>await</code> 表达式被转换为返回一个与 <code>then</code> 组合的 promise；</li>
+<li><code>return</code>/<code>throw</code> 语句被转换为履行/拒绝（分别）该 promise
+
+<ul><li>一个通过执行到函数体末尾而返回的函数被转换为其履行 promise 之后再返回</li></ul></li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_4"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_4-then_what" data-target="#ex-callbacks_4-then_what" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_4-then_what"></a><span class="panel-title">then 会怎样？</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_4-then_what" data-outline="then_what" data-ex-id="unpacking_an_asynchronous_function/then_what" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@recall_await_always"><a class="jump" href="index.html#@recall_await_always"></a>回想一下，<code>await</code> 总是放弃控制权，即使它要等待的 promise 已经履行。</p>
+
+<p id="@since_await_can"><a class="jump" href="index.html#@since_await_can"></a>由于 <code>await</code> 可以用 <code>then</code> 来实现，正如刚才描述的，让我们看看这条规则对 <code>then</code> 意味着什么。假设 <code>promise</code> 指向一个<strong>已经履行</strong>的 <code>Promise&lt;void&gt;</code>。以下代码会做什么？</p>
+
+<pre id="@promise-then_console-log-a_console-log-b"><a class="jump" href="index.html#@promise-then_console-log-a_console-log-b"></a><code class="language-ts hljs typescript">promise.then( <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'A'</span>) );
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'B'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="prints A immediately, then prints B after returning to the event loop"><label for="md_converted_choice_18_0"><input type="radio" id="md_converted_choice_18_0" name="md_converted_radio_18">立即打印 <code>A</code>，然后在返回事件循环后打印 <code>B</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints B immediately, then prints A after returning to the event loop"><label for="md_converted_choice_18_1"><input type="radio" id="md_converted_choice_18_1" name="md_converted_radio_18">立即打印 <code>B</code>，然后在返回事件循环后打印 <code>A</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints A, but never prints B (even after returning to the event loop)"><label for="md_converted_choice_18_2"><input type="radio" id="md_converted_choice_18_2" name="md_converted_radio_18">打印 <code>A</code>，但永远不打印 <code>B</code>（即使在返回事件循环之后）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints B, but never prints A (even after returning to the event loop)"><label for="md_converted_choice_18_3"><input type="radio" id="md_converted_choice_18_3" name="md_converted_radio_18">打印 <code>B</code>，但永远不打印 <code>A</code>（即使在返回事件循环之后）</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@does_imply_about"><a class="jump" href="index.html#@does_imply_about"></a>这对 <code>then</code> 使用其回调函数的方式意味着什么？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="then always uses its callback synchronously, like map() and filter() and sort()"><label for="md_converted_choice_19_0"><input type="radio" id="md_converted_choice_19_0" name="md_converted_radio_19"><code>then</code> 总是同步使用其回调，就像 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map"><code>map()</code></a> 和 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter"><code>filter()</code></a> 和 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort"><code>sort()</code></a> 一样</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="then always uses its callback asynchronously, like setTimeout()"><label for="md_converted_choice_19_1"><input type="radio" id="md_converted_choice_19_1" name="md_converted_radio_19"><code>then</code> 总是异步使用其回调，就像 <code>setTimeout()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="then sometimes uses its callback synchronously, and sometimes asynchronously, like countdown() above"><label for="md_converted_choice_19_2"><input type="radio" id="md_converted_choice_19_2" name="md_converted_radio_19"><code>then</code> 有时同步使用其回调，有时异步使用，就像上面的 <code>countdown()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="html_and_the_document_object_model"><a class="jump" href="index.html#html_and_the_document_object_model"></a>HTML 与文档对象模型</h2><div data-outline="html_and_the_document_object_model">
+
+<p id="@asynchronous_callbacks_heavily"><a class="jump" href="index.html#@asynchronous_callbacks_heavily"></a>异步回调在图形用户界面中被大量使用。
+要理解其原理，我们需要从用户界面的结构开始看起，以 HTML 网页为例。</p>
+
+<p id="@html_consists_elements"><a class="jump" href="index.html#@html_consists_elements"></a>HTML 由<em>元素</em>组成，元素由开始标签和结束标签界定。
+例如，以下是 HTML 中描述按钮的方式：</p>
+
+<pre id="@button_id-drawbutton-draw-button"><a class="jump" href="index.html#@button_id-drawbutton-draw-button"></a><code class="language-html hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">button</span> <span class="hljs-attr">id</span>=<span class="hljs-string">'drawButton'</span>&gt;</span>Draw<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span></code></pre>
+
+<p id="@which_web_browser"><a class="jump" href="index.html#@which_web_browser"></a>...网页浏览器将其渲染为：</p>
+
+<div class="no-markdown">
+    <button>Draw</button>
+</div>
+
+<p id="@start_tag_often"><a class="jump" href="index.html#@start_tag_often"></a>开始标签通常包含<em>属性</em>，比如这个 <code>button</code> 示例中的 <code>id</code>。
+<code>id</code> 属性是元素的唯一标识符。
+其他属性可以指定元素的其他属性。
+例如，这是一个 256 乘 256 像素的绘图表面：</p>
+
+<pre id="@canvas_id-drawingcanvas_width-256"><a class="jump" href="index.html#@canvas_id-drawingcanvas_width-256"></a><code class="hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">canvas</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"drawingCanvas"</span> <span class="hljs-attr">width</span>=<span class="hljs-string">"256"</span> <span class="hljs-attr">height</span>=<span class="hljs-string">"256"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">canvas</span>&gt;</span></code></pre>
+
+<p id="@canvas_element_canvas"><a class="jump" href="index.html#@canvas_element_canvas"></a>（<code>&lt;canvas&gt;</code> 元素具有我们在 ps3 中使用的 <code>Canvas</code> 绘图接口。）</p>
+
+<p id="@html_elements_nested"><a class="jump" href="index.html#@html_elements_nested"></a>HTML 元素嵌套在其他 HTML 元素中，形成一棵树。下面是一段 HTML 片段，使用 <code>&lt;div&gt;</code> 分组元素将两个按钮放在同一行，将 canvas 放在另一行。它在网页中可能的渲染方式显示在右侧。</p>
+
+<div class="no-markdown panel panel-figure pull-right">
+    <div>
+        <button>Draw</button>
+        <button>Clear</button>
+    </div>
+    <div>
+        <canvas width="256" height="256" style="border: 1px solid black">
+        </canvas>
+    </div>
+</div>
+
+<pre id="@div_button_id-drawbutton-draw-button"><a class="jump" href="index.html#@div_button_id-drawbutton-draw-button"></a><code class="language-html hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">button</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"drawButton"</span>&gt;</span>Draw<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">button</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"clearButton"</span>&gt;</span>Clear<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">canvas</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"canvas"</span> <span class="hljs-attr">width</span>=<span class="hljs-string">"256"</span> <span class="hljs-attr">height</span>=<span class="hljs-string">"256"</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">canvas</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></code></pre>
+
+<p id="@web_browser_loads"><a class="jump" href="index.html#@web_browser_loads"></a>当网页浏览器加载并显示这样的 HTML 文档时，每个元素都由内存中的一个对象表示，是 <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement"><code>HTMLElement</code></a> 的一个子类型的实例。这棵元素树被称为<mark data-structure-text="document object model (dom)." id="^document_object_model_dom"><em>文档对象模型（DOM）</em></mark>。树中的每个元素占据屏幕上的某个区域，通常是一个称为其边界框的矩形区域。这棵树不仅仅是任意的层次结构，实际上是一棵空间树：子元素通常嵌套在其父元素的边界框内。</p>
+
+<p id="@virtually_every_gui"><a class="jump" href="index.html#@virtually_every_gui"></a>几乎每个 GUI 系统都有某种类似的视觉元素树。元素树是一个强大的结构化思想，在典型的 GUI 中承担着多项职责：</p>
+
+<p id="@output_attributes_children"><a class="jump" href="index.html#@output_attributes_children"></a><strong>输出</strong>。元素的属性和子元素影响元素在屏幕上显示的内容。例如，按钮上的标签是其开始标签和结束标签之间找到的文本。</p>
+
+<p id="@input_elements_can"><a class="jump" href="index.html#@input_elements_can"></a><strong>输入</strong>。元素可以有输入处理器，用于响应用户的鼠标和键盘输入，以及其他事件。稍后会详细介绍。</p>
+
+<p id="@layout_dom_controls"><a class="jump" href="index.html#@layout_dom_controls"></a><strong>布局</strong>。DOM 控制元素在屏幕上的布局方式，即如何分配它们的边界框。自动布局算法自动计算每个元素的位置和大小，由用层叠样式表（CSS）编写的样式规则控制。CSS 布局超出了我们在 6.102 中讨论的范围；6.104 [原 6.170]、6.450 或 IAP Web.Lab 是学习它的好地方。</p>
+
+<h3 id="connecting_to_typescript"><a class="jump" href="index.html#connecting_to_typescript"></a>连接到 TypeScript</h3><div data-outline="connecting_to_typescript">
+
+<p id="@make_interactive_user"><a class="jump" href="index.html#@make_interactive_user"></a>为了制作交互式用户界面，HTML 还可以包含 JavaScript 代码（或已编译为 JavaScript 的 TypeScript）。代码可以使用 <code>getElementByIdAndType()</code> 获取对树中元素的引用：</p>
+
+<pre id="@const_drawbutton_htmlbuttonelement"><a class="jump" href="index.html#@const_drawbutton_htmlbuttonelement"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> drawButton: HTMLButtonElement = getElementByIdAndType(<span class="hljs-string">'drawButton'</span>, HTMLButtonElement);</code></pre>
+
+<small><p id="@note_getelementbyidandtype_function"><a class="jump" href="index.html#@note_getelementbyidandtype_function"></a>注意，我们在这里使用的 <code>getElementByIdAndType()</code> 函数与 JavaScript 中使用的标准 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Document/getElementById"><code>document.getElementById()</code></a> 方法不完全相同，而是它的类型安全 TypeScript 版本。如果你对它的定义感兴趣，请参见<a href="code.html#drawts">完整代码</a>。</p></small>
+
+<p id="@dom_elements_mutable"><a class="jump" href="index.html#@dom_elements_mutable"></a>DOM 元素是<em>可变的</em>，因此代码可以重新分配实例变量或调用修改器来添加和删除树中的元素，或改变它们的外观。例如，这段代码改变了按钮的标签：</p>
+
+<pre id="@drawbutton-text_draw_randomly"><a class="jump" href="index.html#@drawbutton-text_draw_randomly"></a><code class="language-ts hljs typescript">drawButton.text = <span class="hljs-string">'Draw Randomly'</span>;</code></pre>
+
+<div class="no-markdown">
+    <button>Draw Randomly</button>
+</div>
+
+</div></div><h2 id="input_handling"><a class="jump" href="index.html#input_handling"></a>输入处理</h2><div data-outline="input_handling">
+
+<p id="@input_handled_differently"><a class="jump" href="index.html#@input_handled_differently"></a>GUI 中的输入处理方式与典型的命令行或文本输入用户界面不同。
+典型的文本 UI 有一个<em>输入循环</em>，显示提示符，读取用户输入的命令，进行解析，并决定如何将其引导到程序的不同模块。</p>
+
+<p id="@if_gui_written"><a class="jump" href="index.html#@if_gui_written"></a>如果 GUI 以这种方式编写，可能看起来像这样（伪代码）：</p>
+
+<pre id="@while_true_read"><a class="jump" href="index.html#@while_true_read"></a><code class="language-java hljs"><span class="hljs-keyword">while</span> (<span class="hljs-keyword">true</span>) {
+    <span class="hljs-function">read mouse <span class="hljs-title">click</span>
+    <span class="hljs-params">(x,y)</span> </span>= <span class="hljs-function">position of mouse click
+    <span class="hljs-title">if</span> <span class="hljs-params">(mouse was clicked on the Draw button)</span> <span class="hljs-title">drawRandomShape</span><span class="hljs-params">()</span></span>;
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (mouse was clicked on the Clear button) clearCanvas();
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (mouse was clicked somewhere on the canvas) drawShapeAtPosition(x, y);
+    ...
+}</code></pre>
+
+<p id="@but_gui_don-t"><a class="jump" href="index.html#@but_gui_don-t"></a>但在 GUI 中，我们不会直接编写这样的代码，因为它不够模块化。
+GUI 由各种库组件组合而成——按钮、滚动条、文本框、菜单——这些组件需要是自包含的并处理自己的输入。
+在图形用户界面库的深处，有一个输入循环正在从鼠标和键盘读取，并将这些输入事件传递给 GUI 的适当组件。</p>
+
+<p id="@order_make_button"><a class="jump" href="index.html#@order_make_button"></a>为了使按钮在被点击时执行某些操作，你需要为其附加一个<mark data-structure-text="listener" id="^listener"><em>监听器（listener）</em></mark>：</p>
+
+<pre id="@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_0"><a class="jump" href="index.html#@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_0"></a><code class="language-ts hljs typescript">drawButton.addEventListener(<span class="hljs-string">'click'</span>, <span class="hljs-function">(<span class="hljs-params">event: MouseEvent</span>) =&gt;</span> {
+  drawRandomShape();
+});</code></pre>
+
+<p id="@gui_event_handling"><a class="jump" href="index.html#@gui_event_handling"></a>GUI 事件处理是<mark data-structure-text="listener pattern" id="^listener_pattern"><em>监听器模式（Listener pattern）</em></mark>的一个实例。
+在监听器模式中：</p>
+
+<ul id="@event_source_generates">
+<li><a class="jump" href="index.html#@event_source_generates"></a>事件源产生一系列离散事件。</li>
+<li>一个或多个其他模块订阅（或<em>监听</em>）事件流，提供一个在新事件发生时将被调用的函数。</li>
+</ul>
+
+<p id="@example_0"><a class="jump" href="index.html#@example_0"></a>在这个例子中：</p>
+
+<ul id="@button_event_source">
+<li><a class="jump" href="index.html#@button_event_source"></a>按钮是事件源；</li>
+<li>它的事件是按钮按下；</li>
+<li>监听器是客户端提供的函数。</li>
+</ul>
+
+<p id="@event_often_includes"><a class="jump" href="index.html#@event_often_includes"></a>事件通常包含额外的信息，这些信息可能被打包到一个事件对象中（比如这里的 <code>MouseEvent</code>），或作为参数传递给监听器函数。</p>
+
+<p id="@event_occurs_event"><a class="jump" href="index.html#@event_occurs_event"></a>当事件发生时，事件源通过调用其监听器回调将其分发给所有已订阅的监听器。</p>
+
+<p id="@so_control_flow"><a class="jump" href="index.html#@so_control_flow"></a>因此，通过图形用户界面的控制流如下进行：</p>
+
+<ul id="@event_loop_reads">
+<li><a class="jump" href="index.html#@event_loop_reads"></a><mark data-structure-text="event loop" id="^event_loop_2"><em>事件循环</em></mark>从鼠标和键盘读取输入。在 HTML/JavaScript 中，像大多数其他 GUI 框架一样，这个循环实际上是对你隐藏的。它深埋在 JavaScript 运行时系统内部，监听器看起来像是被神奇地调用的。</li>
+<li>每个监听器做自己的事情（可能涉及例如修改用户界面中的对象），然后<em>立即返回事件循环</em>。</li>
+</ul>
+
+<p id="@last_part_listeners"><a class="jump" href="index.html#@last_part_listeners"></a>最后一部分——监听器尽快返回事件循环——非常重要，因为它保持了用户界面的响应性。</p>
+
+<p id="@listener_design_pattern"><a class="jump" href="index.html#@listener_design_pattern"></a>监听器设计模式不仅仅用于按钮按下。
+每个 GUI 对象都会产生事件，通常是作为输入设备发送的某些低级输入事件组合的结果，比如鼠标、键盘或触摸屏。
+例如，在 HTML 中：</p>
+
+<ul id="@mouse_sends_low-level">
+<li><a class="jump" href="index.html#@mouse_sends_low-level"></a>鼠标发送低级事件 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/mousedown_event"><code>mousedown</code></a>（鼠标按钮被按下）和 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/mouseup_event"><code>mouseup</code></a>（按钮被释放时）</li>
+<li>键盘在按下和释放键盘键时发送类似的低级事件 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/keydown_event"><code>keydown</code></a> 和 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/keyup_event"><code>keyup</code></a></li>
+<li>按钮（<code>&lt;button&gt;</code>）在接收到 <code>mousedown</code> 和 <code>mouseup</code> 之后发送 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/click_event"><code>click</code></a> 事件。</li>
+<li>下拉菜单（<code>&lt;select&gt;</code>）当用户从下拉菜单中选择不同的元素时（无论是通过鼠标还是键盘）发送 <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/input_event"><code>input</code></a> 事件</li>
+<li>文本框（<code>&lt;input type=text&gt;</code>）当其内部的文本发生变化时发送 <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/input_event"><code>input</code></a> 事件，这是键盘或鼠标事件的结果。</li>
+</ul>
+
+<div class="handout-solo alert alert-warning"><p id="@here_full_html"><a class="jump" href="index.html#@here_full_html"></a>这是<a href="code.html" class="alert-link">绘图界面的完整 HTML 和 TypeScript 代码</a>。</p></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_5"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_5-listeners" data-target="#ex-callbacks_5-listeners" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_5-listeners"></a><span class="panel-title">监听器</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_5-listeners" data-outline="listeners" data-ex-id="input_handling/listeners" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@put_following_items"><a class="jump" href="index.html#@put_following_items"></a>按照在 HTML 图形用户界面的设置和执行过程中发生的顺序，对以下项目进行排序。</p>
+
+<p id="@const_launchbutton_htmlbuttonelement"><a class="jump" href="index.html#@const_launchbutton_htmlbuttonelement"></a><code>const launchButton: HTMLButtonElement = getElementByIdAndType('launchButton', HTMLButtonElement);</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@launchbutton-addeventlistener-click_launchspacecraft"><a class="jump" href="index.html#@launchbutton-addeventlistener-click_launchspacecraft"></a><code>launchButton.addEventListener('click', launchSpacecraft);</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@launchspacecraft_function_called"><a class="jump" href="index.html#@launchspacecraft_function_called"></a>调用 <code>launchSpacecraft()</code> 函数</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@html_code_button"><a class="jump" href="index.html#@html_code_button"></a>HTML 代码 <code>&lt;button id="launchButton"&gt;</code> 被网页浏览器解释为在 DOM 中创建 <code>HTMLButtonElement</code> 对象</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@mouse_click_launch"><a class="jump" href="index.html#@mouse_click_launch"></a>对启动按钮的鼠标点击被输入事件循环接收</p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_5-dont_call_me_ill_call_you" data-target="#ex-callbacks_5-dont_call_me_ill_call_you" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_5-dont_call_me_ill_call_you"></a><span class="panel-title">别打给我，我打给你</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_5-dont_call_me_ill_call_you" data-outline="dont_call_me_ill_call_you" data-ex-id="input_handling/dont_call_me_ill_call_you" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@listener_section_example"><a class="jump" href="index.html#@listener_section_example"></a>本节中的监听器是回调的一个例子，其中模块的<strong>客户端</strong>提供<strong>一段代码</strong>供<strong>该模块</strong>调用：</p>
+
+<pre id="@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_1"><a class="jump" href="index.html#@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_1"></a><code class="language-ts hljs typescript">drawButton.addEventListener(<span class="hljs-string">'click'</span>, <span class="hljs-function">(<span class="hljs-params">event: MouseEvent</span>) =&gt;</span> {
+  drawRandomShape();
+});</code></pre>
+
+<p id="@client_example"><a class="jump" href="index.html#@client_example"></a>示例中<strong>客户端</strong>是什么？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; the GUI event loop; the drawButton; the code setting up drawButton; the () => {…} arrow function; the drawRandomShape function"><select class="form-control"><option selected="selected"></option><option>GUI 事件循环</option>,<option>drawButton</option>,<option>设置 drawButton 的代码</option>,<option>() =&gt; {…} 箭头函数</option>,<option>drawRandomShape 函数</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@piece_code_example"><a class="jump" href="index.html#@piece_code_example"></a>示例中<strong>一段代码</strong>是什么？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; the GUI event loop; the drawButton; the code setting up drawButton; the () => {…} arrow function; the drawRandomShape method"><select class="form-control"><option selected="selected"></option><option>GUI 事件循环</option>,<option>drawButton</option>,<option>设置 drawButton 的代码</option>,<option>() =&gt; {…} 箭头函数</option>,<option>drawRandomShape 方法</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@module_example"><a class="jump" href="index.html#@module_example"></a>示例中<strong>该模块</strong>是什么？</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; the GUI event loop; the drawButton; the code setting up drawButton; the () => {…} arrow function; the drawRandomShape method"><select class="form-control"><option selected="selected"></option><option>GUI 事件循环</option>,<option>drawButton</option>,<option>设置 drawButton 的代码</option>,<option>() =&gt; {…} 箭头函数</option>,<option>drawRandomShape 方法</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_5-try_it" data-target="#ex-callbacks_5-try_it" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_5-try_it"></a><span class="panel-title">试一试</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_5-try_it" data-outline="try_it" data-ex-id="input_handling/try_it" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@download_code_drawing"><a class="jump" href="index.html#@download_code_drawing"></a>下载<a href="code.html">绘图界面的代码</a>作为 ZIP 文件。解压它，<code>npm install</code>，然后 <code>npm run compile</code> 进行编译。</p>
+
+<p id="@then_open_up"><a class="jump" href="index.html#@then_open_up"></a>然后在你的网页浏览器中打开 <code>draw.html</code>，点击几次"随机绘图"按钮。你应该会看到一些圆形出现。</p>
+
+<p id="@button-s_click_listener"><a class="jump" href="index.html#@button-s_click_listener"></a>按钮的点击监听器有一个 <code>console.log</code> 用于打印绘图 canvas 的宽度。打开你的网页浏览器的 JavaScript 控制台，以便查看该打印语句的输出。（在大多数浏览器中打开控制台的最简单方式是在页面上右键单击，选择检查，然后在出现的侧边栏中点击控制台选项卡。<a href="https://balsamiq.com/support/faqs/browser-console/#apple-safari">Safari 可能需要额外的步骤。</a>）</p>
+
+<p id="@number_code_prints"><a class="jump" href="index.html#@number_code_prints"></a>代码为 canvas 的宽度打印的数字是多少？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@now_find_console-log"><a class="jump" href="index.html#@now_find_console-log"></a>现在在 <code>draw.ts</code> 中找到那个 <code>console.log</code> 语句，并修改代码使其同时打印绘图 canvas 的高度。重新编译代码，重新加载网页，然后再次点击随机绘图。</p>
+
+<p id="@number_your_code"><a class="jump" href="index.html#@number_your_code"></a>你的代码为 canvas 的高度打印的数字是多少？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="event_sources"><a class="jump" href="index.html#event_sources"></a>事件源</h2><div data-outline="event_sources">
+
+<p id="@listener_pattern_general"><a class="jump" href="index.html#@listener_pattern_general"></a>监听器模式是一个通用的编程思想，它在 TypeScript/JavaScript 编程中以两种方式出现：</p>
+
+<ul>
+<li><p id="@web_pages_just"><a class="jump" href="index.html#@web_pages_just"></a>在网页中，正如我们刚刚看到的，可以作为事件源的对象实现了 <a href="https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener"><code>addEventListener()</code></a> 方法，它是 <code>EventTarget</code> 接口的一部分。</p></li>
+<li><p id="@node_event_sources"><a class="jump" href="index.html#@node_event_sources"></a>在 Node 中，事件源实现了 <a href="https://nodejs.org/api/events.html#emitteroneventname-listener"><code>on()</code></a> 方法，它是 <code>EventEmitter</code> 的一部分。而 <a href="https://nodejs.org/api/events.html#emitteraddlistenereventname-listener"><code>addListener()</code></a> 是 <code>on()</code> 的同义词。</p></li>
+</ul>
+
+<p id="@addeventlistener_on-addlistener_methods"><a class="jump" href="index.html#@addeventlistener_on-addlistener_methods"></a><code>addEventListener()</code> 和 <code>on()</code>/<code>addListener()</code> 方法具有本质上相同的参数：一个命名事件类型的字符串，以及一个在事件发生时将被调用的回调函数。</p>
+
+</div><h2 id="pitfalls_in_listeners"><a class="jump" href="index.html#pitfalls_in_listeners"></a>监听器中的陷阱</h2><div data-outline="pitfalls_in_listeners">
+
+<p id="@there_few_common"><a class="jump" href="index.html#@there_few_common"></a>监听器设计模式有一些常见的陷阱，特别是在 GUI 中使用时，了解这些陷阱很重要。</p>
+
+<p id="@listeners_should_run"><a class="jump" href="index.html#@listeners_should_run"></a><strong>监听器应该快速运行并快速返回。</strong>
+如果监听器函数通过执行长时间、缓慢的计算来响应事件，那么它会阻塞用户界面。由于监听器是由 GUI 事件循环调用的，在监听器返回之前，事件循环将无法继续处理输入事件。</p>
+
+<p id="@example_suppose_draw"><a class="jump" href="index.html#@example_suppose_draw"></a>例如，假设绘图按钮的监听器绘制了大量的随机图形：</p>
+
+<pre id="@drawbutton-addeventlistener-click_event_mouseevent_let_i_0"><a class="jump" href="index.html#@drawbutton-addeventlistener-click_event_mouseevent_let_i_0"></a><code class="language-ts hljs typescript">drawButton.addEventListener(<span class="hljs-string">'click'</span>, <span class="hljs-function">(<span class="hljs-params">event: MouseEvent</span>) =&gt;</span> {
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1</span>_000_000; i++) {
+        drawRandomShape();
+    }
+});</code></pre>
+
+<p id="@drawing_million_rectangles"><a class="jump" href="index.html#@drawing_million_rectangles"></a>绘制一百万个矩形可能涉及很长的停顿。
+在那段时间里，网页看起来冻结了。
+鼠标点击似乎不起作用，滚动不起作用，按键似乎没有被处理。
+在许多平台上，操作系统会将鼠标指针变为沙漏或彩色旋转球，以显示用户界面已卡住。</p>
+
+<p id="@once_million_rectangles"><a class="jump" href="index.html#@once_million_rectangles"></a>一旦一百万个矩形最终全部绘制完成，监听器函数返回，事件循环就会恢复处理。
+当你卡住时尝试的所有输入事件都被存储在队列中，所以它最终会赶上。</p>
+
+<p id="@lesson_here_graphical"><a class="jump" href="index.html#@lesson_here_graphical"></a>这里的教训是：在图形用户界面中，监听器函数必须快速运行并快速返回，通常在几毫秒内。</p>
+
+<p id="@if_listener_needs"><a class="jump" href="index.html#@if_listener_needs"></a>如果监听器需要执行长时间运行的计算，它应该使用我们在之前课上讨论过的<a href="../../15-promises/index.html#concurrency_model">并发</a>。</p>
+
+<p id="@be_careful_about"><a class="jump" href="index.html#@be_careful_about"></a><strong>注意循环。</strong>
+有时需要有两个相互依赖的 GUI 元素，比如下面代码中的文本框和滑块：</p>
+
+<div class="panel panel-figure no-markdown pull-right">
+    <div>
+        Size: <input type="number" id="sizeTextbox" value="10" min="1" max="50" maxlength="2">
+              <input type="range" id="sizeSlider" value="10" min="1" max="50">
+    </div>
+</div>
+
+<pre id="@div_size_input"><a class="jump" href="index.html#@div_size_input"></a><code class="language-html hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span>&gt;</span>
+    Size:
+    <span class="hljs-tag">&lt;<span class="hljs-name">input</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"number"</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"sizeTextbox"</span> <span class="hljs-attr">value</span>=<span class="hljs-string">"10"</span> <span class="hljs-attr">min</span>=<span class="hljs-string">"1"</span> <span class="hljs-attr">max</span>=<span class="hljs-string">"50"</span> <span class="hljs-attr">maxlength</span>=<span class="hljs-string">"2"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">input</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"range"</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"sizeSlider"</span> <span class="hljs-attr">value</span>=<span class="hljs-string">"10"</span> <span class="hljs-attr">min</span>=<span class="hljs-string">"1"</span> <span class="hljs-attr">max</span>=<span class="hljs-string">"50"</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></code></pre>
+
+<p id="@design_user_should"><a class="jump" href="index.html#@design_user_should"></a>在这个设计中，用户应该能够通过在框中输入数字或拖动滑块来改变大小。
+无论哪种方式都应该更新另一个元素，使它们保持一致。
+因此，很容易想附加这样的监听器，将值从文本框传播到滑块，反之亦然：</p>
+
+<pre id="@sizetextbox-addeventlistener-input_event_changeevent"><a class="jump" href="index.html#@sizetextbox-addeventlistener-input_event_changeevent"></a><code class="language-ts hljs typescript">sizeTextbox.addEventListener(<span class="hljs-string">'input'</span>, <span class="hljs-function">(<span class="hljs-params">event: ChangeEvent</span>) =&gt;</span> {
+    <span class="hljs-comment">// make the slider match the updated textbox</span>
+    sizeSlider.value = sizeTextbox.value;
+});
+sizeSlider.addEventListener(<span class="hljs-string">'input'</span>, <span class="hljs-function">(<span class="hljs-params">event: ChangeEvent</span>) =&gt;</span> {
+    <span class="hljs-comment">// make the textbox match the updated slider</span>
+    sizeTextbox.value = sizeSlider.value;
+});</code></pre>
+
+<p id="@creates_cycle_listeners"><a class="jump" href="index.html#@creates_cycle_listeners"></a>这创建了一个监听器<em>循环</em>。
+如果文本框发生变化，它的监听器通过修改滑块来响应，这反过来可能触发滑块的监听器，滑块监听器修改文本框，然后可能再次触发文本框监听器。
+存在无限循环的风险。</p>
+
+<p id="@case_cycle_broken"><a class="jump" href="index.html#@case_cycle_broken"></a>在这个例子中，循环被规范打破了：<code>input</code> 事件被指定为仅在<em>用户</em>使用鼠标或键盘输入更改文本框或滑块的值时发送。由<em>代码</em>引起的值修改不会触发事件。所以在这种情况下没有无限循环，但你应该注意一般情况下的可能性。</p>
+
+<p id="@finally_don-t_forget"><a class="jump" href="index.html#@finally_don-t_forget"></a>最后，<strong>不要忘记清理。</strong>
+你可能会在程序中到达一个想要<em>停止</em>监听的时刻。<code>EventTarget</code> 的 <code>addEventListener()</code> 和 <code>EventEmitter</code> 的 <code>on()</code>/<code>addListener()</code> 方法有对应的方法
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/removeEventListener"><code>removeEventListener()</code></a> 和
+<a href="https://nodejs.org/api/events.html#emitteroffeventname-listener"><code>off()</code></a>/<a href="https://nodejs.org/api/events.html#emitterremovelistenereventname-listener"><code>removeListener()</code></a>。
+在不再需要监听器时未能移除它们可能会减慢你的用户界面或导致 bug。</p>
+
+</div><h2 id="summary"><a class="jump" href="index.html#summary"></a>总结</h2><div data-outline="summary">
+
+<ul id="@callbacks_another_example">
+<li><a class="jump" href="index.html#@callbacks_another_example"></a>回调是<a href="../../10-functional-programming/index.html#first-class_functions">一等函数</a>的另一个例子，我们将函数视为数据对待：将它们传递给其他函数和从其他函数返回，并存储起来供以后调用。
+
+<ul><li>它们可以是同步的或异步的</li></ul></li>
+<li>TypeScript/JavaScript 使用事件循环和事件队列来存储事件和执行异步回调代码。</li>
+<li>GUI 事件处理（例如 HTML）使用监听器模式，其中模块可以监听不同的事件并提供回调函数。
+
+<ul><li>监听器必须快速返回以将控制权交还给事件循环，并且不应与另一个监听器形成循环。</li></ul></li>
+</ul>
+
+<p id="@these_ideas_connect"><a class="jump" href="index.html#@these_ideas_connect"></a>这些思想与我们优秀软件的三个关键属性关联如下：</p>
+
+<ul>
+<li><p id="@callbacks_make_code"><a class="jump" href="index.html#@callbacks_make_code"></a>回调使代码更加<strong>为变更做好准备</strong>，因为它允许客户端提供自己的代码在事件运行时执行，这样行为就不必被预先硬编码到实现中。</p></li>
+<li><p id="@writing_single_giant"><a class="jump" href="index.html#@writing_single_giant"></a>编写一个单一的巨型输入循环来处理大型系统中每个可能的事件，既<strong>不安全</strong>也<strong>不易理解</strong>：那一段代码变成了一个无所不知、无所不控的庞然大物。回调允许系统中的每个模块负责自己的事件。</p></li>
+</ul></div></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>由 Rob Miller 和 Max Goldman 合作编写，Saman Amarasinghe、Adam Chlipala、Srini Devadas、Gabriella Ecanow、Michael Ernst、John Guttag、Daniel Jackson、Josiah McMenamy、Martin Rinard 和 Armando Solar-Lezama 做出贡献，Robert Durfee、Jenna Himawan、Stacia Johanna、Jessica Shi、Daniel Whatley 和 Elizabeth Zhou 也参与了编写。本作品采用 <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a> 许可协议。</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 春季课程网站存档  | 最新网站 <a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍访问</a></footer><script type="text/javascript" charset="utf-8" src="../../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-17-callbacks-guis"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:31:56 GMT+0000 (Coordinated Universal Time)
+--></html>

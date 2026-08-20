@@ -1,0 +1,448 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>阅读 7 的代码示例</title>
+<script>
+window.onHandoutDidRender = function() {
+    $("span.hljs-comment:contains(code-page-anchor)").each(function(i, e) {
+        var $e = $(e);
+        var id = $e.text().match(/code-page-anchor\s*(.*)\s*\*\/$/)[1];
+        $e.attr('id', id);
+        $e.text('');
+    });
+};
+</script>
+
+<link href="../../../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../../../index.html">6.102</a></header><header><a href="../../../../index.html">6.102 — 软件构建</a><div>2026 春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="code.html#code_examples_for_reading_7">阅读 7 的代码示例</a></li><li><a href="code.html#download">下载</a></li><li><a href="code.html#charsetts">charset.ts</a></li><li><a href="code.html#ratnumts">ratnum.ts</a></li><li><a href="code.html#timespants">timespan.ts</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="code_examples_for_reading_7"><a class="jump" href="code.html#code_examples_for_reading_7"></a>阅读 7 的代码示例</h1><div data-outline="code_examples_for_reading_7">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h2 id="download"><a class="jump" href="code.html#download"></a>下载</h2><div data-outline="download">
+
+<p id="@you_can_also"><a class="jump" href="code.html#@you_can_also"></a>你也可以下载<a href="ex07-adt-examples.zip">包含此代码的 ZIP 文件</a>。</p>
+
+<p id="@after_downloading_unpacking"><a class="jump" href="code.html#@after_downloading_unpacking"></a>下载并解压 ZIP 文件后：</p>
+
+<ul id="@npm_install_install">
+<li><a class="jump" href="code.html#@npm_install_install"></a><code>npm install</code> 用于安装包依赖；</li>
+<li><code>npm run</code> 用于查看运行此代码的方式列表。
+
+<ul><li>例如，如果 <code>npm run</code> 显示有名为 <code>foo</code> 和 <code>bar</code> 的脚本，你可以用 <code>npm run foo</code> 或 <code>npm run bar</code> 来运行代码。</li>
+<li>两个常用的脚本名称是 <code>test</code> 和 <code>start</code>。如果代码包含这些脚本名称之一，则可以省略 <code>run</code>，直接说 <code>npm test</code> 或 <code>npm start</code>。</li></ul></li>
+</ul>
+
+<div style="display:none"><pre id="@seems_be_necessary"><a class="jump" href="code.html#@seems_be_necessary"></a><code class="language-java hljs">Seems to be necessary to have a triple-backtick block at the start of <span class="hljs-keyword">this</span> page,
+otherwise all the pre/code tags below aren<span class="hljs-string">'t syntax highlighted.
+So create a hidden one.</span></code></pre></div>
+
+</div><h2 id="charsetts"><a class="jump" href="code.html#charsetts"></a>charset.ts</h2><div data-outline="charsetts">
+
+<pre id="@import_assert_node-assert_mutable_set_characters"><a class="jump" href="code.html#@import_assert_node-assert_mutable_set_characters"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+
+<span class="hljs-comment">/**
+ * A mutable set of characters.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> CharSet1 {
+
+    <span class="hljs-keyword">private</span> s: <span class="hljs-built_in">string</span> = <span class="hljs-string">""</span>;
+
+    <span class="hljs-comment">// Rep invariant:</span>
+    <span class="hljs-comment">//   s contains no repeated characters</span>
+    <span class="hljs-comment">// Abstraction function:</span>
+    <span class="hljs-comment">//   AF(s) = {s[i] | 0 &lt;= i &lt; s.length()}</span>
+    <span class="hljs-comment">// Safety from rep exposure:</span>
+    <span class="hljs-comment">//   All fields are private and immutable.</span>
+
+    <span class="hljs-comment">// assert the rep invariant</span>
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-keyword">this</span>.s.length; ++i) {
+            <span class="hljs-keyword">const</span> c = <span class="hljs-keyword">this</span>.s[i];
+            assert(c !== <span class="hljs-literal">undefined</span>);
+            assert(<span class="hljs-keyword">this</span>.s.indexOf(c, i+<span class="hljs-number">1</span>) === <span class="hljs-number">-1</span>); <span class="hljs-comment">// c not found in rest of string</span>
+        }
+    }
+
+    <span class="hljs-comment">/**
+     * Make a new empty character set.
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params"></span>) {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/**
+     * Get size of the set.
+     * @returns the number of elements in this set
+     */</span>
+    <span class="hljs-keyword">public</span> size(): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.s.length;
+    }
+
+    <span class="hljs-comment">/**
+     * Test for membership.
+     * @param c a character, must be length-1 string
+     * @returns true iff this set contains c
+     */</span>
+    <span class="hljs-keyword">public</span> contains(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.s.indexOf(c) !== <span class="hljs-number">-1</span>;
+    }
+
+    <span class="hljs-comment">/**
+     * Modifies this set by adding c to the set.
+     * @param c character to add, must be length-1 string
+     */</span>
+    <span class="hljs-keyword">public</span> add(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">if</span> (!<span class="hljs-keyword">this</span>.contains(c)) <span class="hljs-keyword">this</span>.s += c;
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/**
+     * Modifies this set by removing c, if found.
+     * If c is not found in the set, has no effect.  
+     * @param c character to add, must be length-1 string
+     */</span>
+    <span class="hljs-keyword">public</span> remove(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">const</span> i = <span class="hljs-keyword">this</span>.s.indexOf(c);
+        <span class="hljs-keyword">if</span> (i !== <span class="hljs-number">-1</span>) <span class="hljs-keyword">this</span>.s = <span class="hljs-keyword">this</span>.s.substring(<span class="hljs-number">0</span>, i) + <span class="hljs-keyword">this</span>.s.substring(i+<span class="hljs-number">1</span>, <span class="hljs-keyword">this</span>.s.length);
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> toString()</span>
+
+}
+
+
+<span class="hljs-comment">/**
+ * A mutable set of characters.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> CharSet2 {
+
+    <span class="hljs-keyword">private</span> s: <span class="hljs-built_in">string</span> = <span class="hljs-string">""</span>;
+
+    <span class="hljs-comment">// Rep invariant:</span>
+    <span class="hljs-comment">//   true       &lt;-- i.e., any string `s` is a legal rep!</span>
+    <span class="hljs-comment">// Abstraction function:</span>
+    <span class="hljs-comment">//   AF(s) = {s[i] | 0 &lt;= i &lt; s.length()}</span>
+    <span class="hljs-comment">// Safety from rep exposure:</span>
+    <span class="hljs-comment">//   All fields are private and immutable.</span>
+
+    <span class="hljs-comment">// assert the rep invariant</span>
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        <span class="hljs-comment">// always true -- non-nullity guaranteed by static checking</span>
+    }
+
+    <span class="hljs-comment">/**
+     * Make a new empty character set.
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params"></span>) {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/**
+     * Get size of the set.
+     * @returns the number of elements in this set
+     */</span>
+    <span class="hljs-keyword">public</span> size(): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">let</span> n = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-keyword">this</span>.s.length; ++i) {
+            <span class="hljs-keyword">const</span> c = <span class="hljs-keyword">this</span>.s[i];
+            assert(c !== <span class="hljs-literal">undefined</span>);
+            <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.s.indexOf(c, i+<span class="hljs-number">1</span>) === <span class="hljs-number">-1</span>) {
+                <span class="hljs-comment">// This is the last time c occurs in s, so</span>
+                <span class="hljs-comment">// count it now.  This avoids double-counting</span>
+                <span class="hljs-comment">// characters that occur more than once.</span>
+                ++n;
+            }
+        }
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> n;
+    }
+
+    <span class="hljs-comment">/**
+     * Test for membership.
+     * @param c a character, must be length-1 string
+     * @returns true iff this set contains c
+     */</span>
+    <span class="hljs-keyword">public</span> contains(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.s.indexOf(c) !== <span class="hljs-number">-1</span>;
+    }
+
+    <span class="hljs-comment">/**
+     * Modifies this set by adding c to the set.
+     * @param c character to add, must be length-1 string
+     */</span>
+    <span class="hljs-keyword">public</span> add(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">this</span>.s += c;
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/**
+     * Modifies this set by removing c, if found.
+     * If c is not found in the set, has no effect.  
+     * @param c character to add, must be length-1 string
+     */</span>
+    <span class="hljs-keyword">public</span> remove(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-comment">// find and delete ALL occurrences of e</span>
+        <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
+            <span class="hljs-keyword">const</span> i = <span class="hljs-keyword">this</span>.s.indexOf(c);
+            <span class="hljs-keyword">if</span> (i === <span class="hljs-number">-1</span>) <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">this</span>.s = <span class="hljs-keyword">this</span>.s.substring(<span class="hljs-number">0</span>, i) + <span class="hljs-keyword">this</span>.s.substring(i+<span class="hljs-number">1</span>, <span class="hljs-keyword">this</span>.s.length);
+        }
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> toString()</span>
+
+}
+
+
+<span class="hljs-comment">/**
+ * A mutable set of characters.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> CharSet3 {
+
+    <span class="hljs-keyword">private</span> chars: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = [];
+
+    <span class="hljs-comment">// Rep Invariant:</span>
+    <span class="hljs-comment">//   every string in chars has length-1</span>
+    <span class="hljs-comment">//   chars is sorted in increasing order with no repeated characters, so</span>
+    <span class="hljs-comment">//       chars[i] &lt; chars[i+1] for all 0&lt;=i&lt;chars.length</span>
+    <span class="hljs-comment">// Abstraction function:</span>
+    <span class="hljs-comment">//   AF(s) = {chars[i] | 0 &lt;= i &lt; chars.length}</span>
+    <span class="hljs-comment">// Safety from rep exposure:</span>
+    <span class="hljs-comment">//   All fields are private.  The rep contains only one mutable type,</span>
+    <span class="hljs-comment">//   Array&lt;string&gt;, and none of the parameters or return values of the public</span>
+    <span class="hljs-comment">//   methods have that type, so they can't expose any aliases to the rep.</span>
+
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">let</span> previousC = <span class="hljs-string">""</span>; <span class="hljs-comment">// guaranteed to be &lt; any single-character string</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> c of <span class="hljs-keyword">this</span>.chars) {
+            assert(c.length === <span class="hljs-number">1</span>);
+            assert(previousC &lt; c);
+            previousC = c;
+        }
+    }
+
+    <span class="hljs-comment">/**
+     * Make a new empty character set.
+     */</span>
+    <span class="hljs-keyword">public</span> CharSet3() {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/**
+     * Get size of the set.
+     * @returns the number of elements in this set
+     */</span>
+    <span class="hljs-keyword">public</span> size(): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.chars.length;
+    }
+
+    <span class="hljs-comment">/**
+     * Find the location of a character in the sorted array this.chars,
+     * or the location where it should be inserted if it's not present.
+     * @param c character to search for; must be length-1
+     * @returns found=true if and only if this.chars contains c;
+     *          index is in the range [0, this.chars.length]
+     *          where this.chars[index]=c if found,
+     *                otherwise this.chars[index-1] &lt; c  (if index &gt; 0)
+     *                          and c &lt; (this.chars[index] (if index &lt; this.chars.length)
+     */</span>
+    <span class="hljs-keyword">private</span> find(c: <span class="hljs-built_in">string</span>): { found: <span class="hljs-built_in">boolean</span>, index: <span class="hljs-built_in">number</span> } {
+        <span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (; i &lt; <span class="hljs-keyword">this</span>.chars.length; ++i) {
+            <span class="hljs-keyword">const</span> thisChar = <span class="hljs-keyword">this</span>.chars[i];
+            assert(thisChar !== <span class="hljs-literal">undefined</span>);
+            <span class="hljs-keyword">if</span> (thisChar === c) {
+                <span class="hljs-keyword">return</span> { found: <span class="hljs-literal">true</span>, index: i };
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (thisChar &gt; c) {
+                <span class="hljs-keyword">return</span> { found: <span class="hljs-literal">false</span>, index: i };
+            }
+        }
+        <span class="hljs-keyword">return</span> { found: <span class="hljs-literal">false</span>, index: <span class="hljs-keyword">this</span>.chars.length };
+    }
+
+    <span class="hljs-comment">/**
+     * Test for membership.
+     * @param c a character, must be length-1 string
+     * @returns true iff this set contains c
+     */</span>
+    <span class="hljs-keyword">public</span> contains(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.find(c).found;
+    }
+
+    <span class="hljs-comment">/**
+     * Modifies this set by adding c to the set.
+     * @param c character to add, must be length-1 string
+     */</span>
+    <span class="hljs-keyword">public</span> add(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">const</span> {found, index} = <span class="hljs-keyword">this</span>.find(c);
+        <span class="hljs-keyword">if</span> ( ! found ) {
+            <span class="hljs-comment">// not yet in set; insert it</span>
+            <span class="hljs-keyword">this</span>.chars.splice(index, <span class="hljs-number">0</span>, c);
+        }
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/**
+     * Modifies this set by removing c, if found.
+     * If c is not found in the set, has no effect.  
+     * @param c character to add, must be length-1 string
+     */</span>
+    <span class="hljs-keyword">public</span> remove(c: <span class="hljs-built_in">string</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">const</span> {found, index} = <span class="hljs-keyword">this</span>.find(c);
+        <span class="hljs-keyword">if</span> (found) {
+            <span class="hljs-keyword">this</span>.chars.splice(index, <span class="hljs-number">1</span>);
+        }
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> toString()</span>
+
+}</code></pre>
+
+</div><h2 id="ratnumts"><a class="jump" href="code.html#ratnumts"></a>ratnum.ts</h2><div data-outline="ratnumts">
+
+<pre id="@import_assert_node-assert_ratnum_immutable_type"><a class="jump" href="code.html#@import_assert_node-assert_ratnum_immutable_type"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+
+<span class="hljs-comment">/**
+ * RatNum is an immutable type representing rational numbers.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> RatNum {
+
+    <span class="hljs-keyword">private</span> readonly numerator: bigint;
+    <span class="hljs-keyword">private</span> readonly denominator: bigint;
+
+    <span class="hljs-comment">// Rep invariant:</span>
+    <span class="hljs-comment">//   denominator &gt; 0</span>
+    <span class="hljs-comment">//   numerator/denominator is in reduced form, i.e. gcd(|numerator|,denominator) = 1</span>
+    <span class="hljs-comment">// Abstraction function:</span>
+    <span class="hljs-comment">//   AF(numerator, denominator) = numerator/denominator</span>
+    <span class="hljs-comment">// Safety from rep exposure:</span>
+    <span class="hljs-comment">//   All fields are private, and all types in the rep are immutable.</span>
+
+    <span class="hljs-comment">/**
+     * Make a new RatNum = (n / d).
+     * @param n numerator
+     * @param d denominator
+     * @throws Error if d = 0
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">n: bigint, d: bigint</span>) {
+        <span class="hljs-comment">// reduce ratio to lowest terms</span>
+        <span class="hljs-keyword">const</span> g = gcd(BigInt(n), BigInt(d));
+        <span class="hljs-keyword">const</span> reducedNumerator = n / g;
+        <span class="hljs-keyword">const</span> reducedDenominator = d / g;
+
+        <span class="hljs-comment">// make denominator positive</span>
+        <span class="hljs-keyword">if</span> (d &lt; <span class="hljs-number">0n</span>) {
+            <span class="hljs-keyword">this</span>.numerator = -reducedNumerator;
+            <span class="hljs-keyword">this</span>.denominator = -reducedDenominator;
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (d &gt; <span class="hljs-number">0n</span>) {
+            <span class="hljs-keyword">this</span>.numerator = reducedNumerator;
+            <span class="hljs-keyword">this</span>.denominator = reducedDenominator;
+        } <span class="hljs-keyword">else</span> {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="built_in">Error</span>(<span class="hljs-string">'denominator is zero'</span>);
+        }
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/////////////////////////////////////////</span>
+    <span class="hljs-comment">// other methods should go here</span>
+    <span class="hljs-comment">//    producers: add(), subtract(), multiply(), divide(), etc.</span>
+    <span class="hljs-comment">//    observers: isPositive(), intValue(), etc.</span>
+    <span class="hljs-comment">//    mutators: none</span>
+
+    <span class="hljs-comment">// assert the rep invariant</span>
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        assert(<span class="hljs-keyword">this</span>.denominator &gt; <span class="hljs-number">0n</span>);
+        assert(gcd(abs(<span class="hljs-keyword">this</span>.numerator), <span class="hljs-keyword">this</span>.denominator) === <span class="hljs-number">1n</span>);
+    }
+
+    <span class="hljs-comment">/**
+     * @returns a string representation of this rational number
+     */</span>
+    <span class="hljs-keyword">public</span> toString(): <span class="hljs-built_in">string</span> {
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> (<span class="hljs-keyword">this</span>.denominator &gt; <span class="hljs-number">1n</span>) ? (<span class="hljs-keyword">this</span>.numerator + <span class="hljs-string">"/"</span> + <span class="hljs-keyword">this</span>.denominator) : (<span class="hljs-keyword">this</span>.numerator + <span class="hljs-string">""</span>);
+    }
+
+}
+
+<span class="hljs-comment">// compute greatest common divisor of a and b</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">gcd</span>(<span class="hljs-params">a: bigint, b: bigint</span>): <span class="hljs-title">bigint</span> </span>{
+    <span class="hljs-keyword">return</span> (b === <span class="hljs-number">0n</span>) ? a : gcd(b, a % b);
+}
+
+<span class="hljs-comment">// compute the absolute value of a bigint</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">abs</span>(<span class="hljs-params">x: bigint</span>): <span class="hljs-title">bigint</span> </span>{
+    <span class="hljs-keyword">return</span> x &lt; <span class="hljs-number">0n</span> ? -x : x;
+}</code></pre>
+
+</div><h2 id="timespants"><a class="jump" href="code.html#timespants"></a>timespan.ts</h2><div data-outline="timespants">
+
+<pre id="@import_assert_node-assert_immutable_type_representing"><a class="jump" href="code.html#@import_assert_node-assert_immutable_type_representing"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+
+<span class="hljs-comment">/**
+ * Immutable type representing an interval starting from one date/time and
+ * ending at a later date/time. The interval includes its endpoints.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> Timespan {
+
+    <span class="hljs-keyword">private</span> readonly _start: <span class="hljs-built_in">Date</span>;
+    <span class="hljs-keyword">private</span> readonly _end: <span class="hljs-built_in">Date</span>;
+
+    <span class="hljs-comment">// Rep invariant:</span>
+    <span class="hljs-comment">//   start &lt;= end</span>
+    <span class="hljs-comment">// Abstraction function:</span>
+    <span class="hljs-comment">//   AF(start, end) = the time interval from start to end, including the endpoints </span>
+    <span class="hljs-comment">// Safety from rep exposure:</span>
+    <span class="hljs-comment">//   All fields are private and immutable. (&lt;=== oops, incorrect! </span><span id="bad_Timespan_argument"></span><span class="hljs-comment">Date is a mutable type,</span>
+    <span class="hljs-comment">//                                          so this safety argument needs to talk about how</span>
+    <span class="hljs-comment">//                                          the Date objects are either not exposed or</span>
+    <span class="hljs-comment">//                                          are defensively copied)</span>
+
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        assert(<span class="hljs-keyword">this</span>.start &lt;= <span class="hljs-keyword">this</span>.end);
+    }
+
+    <span class="hljs-comment">/**
+     * Make a Timespan.
+     *
+     * @param start starting date/time
+     * @param end ending date/time, requires start &lt;= end
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">start: <span class="hljs-built_in">Date</span>, end: <span class="hljs-built_in">Date</span></span>) {
+        <span class="hljs-keyword">if</span> (start &gt; end) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="built_in">Error</span>(<span class="hljs-string">"requires start &lt;= end"</span>);
+        }
+        <span class="hljs-keyword">this</span>._start = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>(start);
+        <span class="hljs-keyword">this</span>._end = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>(end);
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">get</span> start() {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>(<span class="hljs-keyword">this</span>._start);
+    }
+
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">get</span> end() {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>(<span class="hljs-keyword">this</span>._end);
+    }
+
+    <span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> toString()</span>
+
+}
+</code></pre></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>由 Rob Miller 和 Max Goldman 协作编写，贡献者包括 Saman Amarasinghe、Adam Chlipala、Srini Devadas、Gabriella Ecanow、Michael Ernst、John Guttag、Daniel Jackson、Josiah McMenamy、Martin Rinard 和 Armando Solar-Lezama，以及 Robert Durfee、Jenna Himawan、Stacia Johanna、Jessica Shi、Daniel Whatley 和 Elizabeth Zhou。本作品采用 <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a> 许可。</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 春季课程网站归档  |  最新网站位于 <a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍</a></footer><script type="text/javascript" charset="utf-8" src="../../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-07-abstraction-functions-rep-invariants-code"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:29:46 GMT+0000 (Coordinated Universal Time)
+--></html>
