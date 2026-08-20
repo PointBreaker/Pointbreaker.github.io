@@ -1,0 +1,705 @@
+<!DOCTYPE html><html><head><base href="../../../">
+<meta charset="utf-8">
+
+<title>Problem Set 4: 记忆乱序</title>
+
+<style>
+/* shared with Memory Scramble UI, which is now a single-page app instead of including memory.css */
+table.memory-board {
+  border-spacing: 2px;
+  border-collapse: separate;
+}
+table.memory-board tr td {
+  width: 2em;
+  height: 2.2em;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  color: rgba(0, 0, 0, 0);
+  padding: 0 !important;
+  border: 1px solid black;
+  border-radius: 4px;
+}
+table.memory-board td:not(:empty) {
+  background: gray;
+}
+table.memory-board td:empty.card-visible {
+  border: 1px solid rgba(0, 0, 0, .2);
+}
+table.memory-board td.card-visible {
+  color: rgba(0, 0, 0, 1);
+  background: white;
+}
+table.memory-board td.card-visible.card-control {
+  background: rgba(255, 255, 0, .25);
+  border-color: rgb(128, 64, 0);
+}
+table.memory-board td.card-waiting {
+  background: rgba(0, 255, 0, .25);
+  border-color: rgb(64, 128, 0);
+  cursor: wait;
+}
+/* ps4 */
+.panel-default.pull-right.pull-margin {
+  font-size: 90%;
+  max-width: 45%;
+}
+.panel-default.pull-right.pull-margin .panel-heading {
+  padding: 6px 8px;
+}
+.panel-default.pull-right.pull-margin .panel-body {
+  padding: 8px;
+}
+pre > span {
+  opacity: .5;
+}
+table.memory-board tr td {
+  cursor: default;
+}
+[data-outline='gameplay_rules'] dl dt {
+  width: 50px;
+}
+[data-outline='gameplay_rules'] dl dd {
+  margin-left: 70px;
+}
+#transcript > tbody > tr > td:nth-child(2),
+#transcript > tbody > tr > td:nth-child(3) {
+  padding: 4px;
+}
+#transcript > tbody > tr > td > p:last-child {
+  margin-bottom: 0;
+}
+#transcript > tbody > tr:first-child > td,
+#transcript table.table > tbody > tr:first-child > td {
+  border-top: none;
+}
+b.user-input { color: #009900; }
+
+@keyframes spin {
+  25% { transform: none; }
+  50% { transform: rotate(180deg); }
+  75% { transform: rotate(180deg); }
+  to { transform: rotate(360deg); }
+}
+.spin {
+  display: inline-block;
+  animation: spin 5s ease infinite;
+  text-align: center;
+}
+</style>
+<script>
+window.onHandoutWillRender = function(converter) {
+  // generate IDs for rule jump links
+  converter.hooks.chain('postConversion', function(text) {
+    return text.replace(/<dt>RULE ([\w-]+)<\/dt>\n<dd>/g, '<dt id="rule-$1">$1</dt><dd>');
+  });
+};
+window.onHandoutDidRender = function() {
+  // add rule jump links (assumes dl items are not jumpable by default)
+  makeJumpLinks({ jumpable: 'dt[id]', exclude: '', nest: {} });
+  // remove extra jump links (assumes dl is jumpable by default, with nesting to dt)
+  $('dl dt a.jump + a.jump').remove();
+  // indent sub-rules identified by an em-dash dt
+  var subs = $('dt:contains("—")');
+  subs.nextAll('dt').each(function() {
+    $(this).attr('style', 'width:95px');
+  });
+  subs.next('dd').nextAll('dd').each(function() {
+    $(this).attr('style', 'margin-left:115px');
+  });
+};
+window.onHandoutReady = function() {
+  var indexOfElement = function indexOfElement(elt) {
+    return Array.prototype.indexOf.call(elt.parentElement.children, elt);
+  };
+  $('#transcript .memory-board td').tooltip({
+    container: 'body',
+    placement: function(tip, elt) {
+      var idx = indexOfElement(elt);
+      if (idx < 1) {
+        return 'left';
+      } else if (idx > 1) {
+        return 'right';
+      } else if (indexOfElement(elt.parentElement) > 1) {
+        return 'bottom';
+      } else {
+        return 'top';
+      }
+    },
+    title: function() {
+      var description = this.dataset.transcript ? ': ' + this.dataset.transcript : '';
+      if (this.textContent == '') {
+        return '没有卡牌' + description;
+      } else if ( ! this.classList.contains('card-visible')) {
+        return '背面向下 "' + this.textContent + '"' + description;
+      } else {
+        return '正面向上 "' + this.textContent + '"' + description;
+      }
+    },
+  });
+};
+</script>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#problem_set_4_memory_scramble">Problem Set 4: 记忆乱序</a></li><li><a href="index.html#get_the_code">获取代码</a></li><li><a href="index.html#overview">概述</a></li><li><a href="index.html#problem_1_game_board">问题 1：游戏棋盘</a></li><li><a href="index.html#problem_2_connect_to_the_web_server">问题 2：连接 Web 服务器</a></li><li><a href="index.html#problem_3_revise_for_concurrent_players">问题 3：修订以支持并发玩家</a></li><li><a href="index.html#problem_4_changing_cards">问题 4：更换卡牌</a></li><li><a href="index.html#problem_5_board_events">问题 5：棋盘事件</a></li><li><a href="index.html#before_youre_done">完成之前</a></li><li><a href="index.html#submitting">提交</a></li><li><a href="index.html#grading">评分</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="problem_set_4_memory_scramble"><a class="jump" href="index.html#problem_set_4_memory_scramble"></a>Problem Set 4: 记忆乱序</h1><div data-outline="problem_set_4_memory_scramble">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><div class="handout-due alert alert-danger"><p id="@deadlines_problem_set"><a class="jump" href="index.html#@deadlines_problem_set"></a>本问题集的截止日期见<a class="no-markdown alert-link" href="../../calendar-agenda.html">课程日历</a>。</p></div>
+
+<p id="@purpose_problem_set"><a class="jump" href="index.html#@purpose_problem_set"></a>本问题集的目的是探索共享可变数据类型的并发编程。</p>
+
+<div class="panel panel-info"><div class="panel-heading"><p id="@design_freedom_restrictions"><a class="jump" href="index.html#@design_freedom_restrictions"></a><strong>设计自由度与限制</strong></p></div>
+<div class="panel-body"><p id="@problem_set_you_substantial_design_freedom"><a class="jump" href="index.html#@problem_set_you_substantial_design_freedom"></a>在本问题集中，你拥有充分的设计自由度。</p>
+
+<p id="@pay_attention_ps4"><a class="jump" href="index.html#@pay_attention_ps4"></a>请注意所提供代码中的 <strong>PS4 说明</strong>。
+你必须满足 <code>board.ts</code> 和 <code>commands.ts</code> 中某些函数的既定规范。
+你可以重写或删除所提供的其他任何代码，也可以添加新的类和方法等。
+在本问题集上，与之前的问题集不同，我们不会针对任何其他实现运行你的测试。</p>
+
+<p id="@take_care_coordinate"><a class="jump" href="index.html#@take_care_coordinate"></a>请确保你的游戏棋盘坐标系符合规范：<em>（行，列）</em> 坐标从左上角的 <em>(0, 0)</em> 开始，垂直向下递增，水平向右递增。</p>
+
+<p id="@your_responsibility_examine"><a class="jump" href="index.html#@your_responsibility_examine"></a>你有责任检查 Didit 反馈并确保你的代码能够编译和运行以供评分，但你必须自行测试以确保正确性。</p></div></div>
+
+<h2 id="get_the_code"><a class="jump" href="index.html#get_the_code"></a>获取代码</h2><div data-outline="get_the_code">
+
+<p id="@get_started"><a class="jump" href="index.html#@get_started"></a>要开始，</p>
+
+<ol>
+<li><p id="@ask_didit_create"><a class="jump" href="index.html#@ask_didit_create"></a>让 Didit 在 github.mit.edu 上为你<a href="https://didit.mit.edu/6.102/sp26/psets/ps4">创建一个远程 <code>psets/ps4</code> 仓库</a>。</p></li>
+<li><p id="@clone_repo_find"><a class="jump" href="index.html#@clone_repo_find"></a>克隆仓库。
+在你的 Didit 作业页面顶部找到 <code>git clone</code> 命令，完整复制，粘贴到终端中并运行。</p></li>
+<li><p id="@cd_ps4-username_run"><a class="jump" href="index.html#@cd_ps4-username_run"></a><code>cd ps4-«username»</code>，运行 <code>npm install</code>，然后在 Visual Studio Code 中打开。
+如需回顾如何创建、克隆或设置仓库，请参阅<a href="../ps0/index.html#clone">Problem Set 0</a>。</p></li>
+</ol>
+
+</div><h2 id="overview"><a class="jump" href="index.html#overview"></a>概述</h2><div data-outline="overview">
+
+<p id="@problem_set_you_build_networked_multiplayer"><a class="jump" href="index.html#@problem_set_you_build_networked_multiplayer"></a>在本问题集中，你将构建一个联网多人版的<a href="https://en.wikipedia.org/wiki/Concentration_%28card_game%29"><strong>记忆翻牌</strong>（Memory，又称 Concentration）</a>游戏，即翻开背面向下的卡牌并尝试找到匹配的一对。
+在我们的版本中，玩家将同时翻牌，而不是轮流翻牌。
+我们称之为「记忆乱序」。</p>
+
+<p id="@problem_1_you"><a class="jump" href="index.html#@problem_1_you"></a><strong>问题 1：</strong>你将为此游戏设计并实现一个或多个抽象数据类型（ADT）。</p>
+
+<p id="@problem_2_you"><a class="jump" href="index.html#@problem_2_you"></a><strong>问题 2：</strong>你将把 ADT 连接到一个使用 HTTP 处理客户端的游戏服务器。</p>
+
+<p id="@you-re_done_problems"><a class="jump" href="index.html#@you-re_done_problems"></a>完成问题 1-2 后，你就可以<a href="index.html#memory-scramble-ui">在浏览器中玩「记忆乱序」</a>了。</p>
+
+<p id="@problem_3_you"><a class="jump" href="index.html#@problem_3_you"></a><strong>问题 3：</strong>你将修改系统，使用异步棋盘来处理多个同时在线的玩家。</p>
+
+<p id="@problem_4_you"><a class="jump" href="index.html#@problem_4_you"></a><strong>问题 4：</strong>你将设计并实现一个类似 map 的函数（如 map/filter/reduce），用于替换棋盘上的卡牌。</p>
+
+<p id="@problem_5_you"><a class="jump" href="index.html#@problem_5_you"></a><strong>问题 5：</strong>你将设计并实现监视棋盘变化的功能，使「记忆乱序」用户界面更具响应性。</p>
+
+<div id="iterate" class="panel panel-warning"><div class="panel-heading"><p id="@iterative_development_recommendation_0"><a class="jump" href="index.html#@iterative_development_recommendation_0"></a><strong>迭代开发建议</strong></p></div>
+<div class="panel-body"><p id="@both_automatic_manual"><a class="jump" href="index.html#@both_automatic_manual"></a><strong>alpha</strong> 的<a href="index.html#grading">自动和手动评分</a>将更多地关注你在非并发情况下的棋盘和服务器。</p>
+
+<p id="@first_do_problems"><a class="jump" href="index.html#@first_do_problems"></a>首先，在不考虑并发的情况下完成问题 1 和 2：让你的 <code>Board</code> 或其他 ADT 使用同步方法，不用担心服务器中的多个并发玩家。
+通过编写测试、选择数据结构和编写代码来实现下文规定的游戏规则。
+考虑所有数据类型的抽象函数和表示不变量。</p>
+
+<p id="@then_revise_your"><a class="jump" href="index.html#@then_revise_your"></a>然后，在问题 3 中修改你的工作，<strong>使系统为并发玩家做好准备</strong>。
+根据异步操作的需要，修改你对 ADT 操作的选择。</p>
+
+<p id="@finally_go_problems"><a class="jump" href="index.html#@finally_go_problems"></a>最后，继续完成问题 4 和 5。</p></div></div>
+
+<p id="@game_board_gameplay"><a class="jump" href="index.html#@game_board_gameplay"></a><strong><a href="index.html#game_board">游戏棋盘</a> · <a href="index.html#gameplay_rules">游戏规则</a> · <a href="index.html#example_game_transcript">示例游戏记录</a> · <a href="index.html#playing_on_the_web">在 Web 上玩</a></strong></p>
+
+<h3 id="game_board"><a class="jump" href="index.html#game_board"></a>游戏棋盘</h3><div data-outline="game_board">
+
+<p id="@memory_scramble_game"><a class="jump" href="index.html#@memory_scramble_game"></a>「记忆乱序」的<strong>游戏棋盘</strong>有一个格子网格。
+每个格子起始时都有一张卡牌。
+当卡牌被匹配并移除后，格子变为空。</p>
+
+<p id="@card_our_game"><a class="jump" href="index.html#@card_our_game"></a>我们游戏中的<strong>卡牌</strong>是一个由非空白、非换行字符组成的非空字符串。
+这允许使用 emoji 字符来显示「图案」，如 <code>Hello</code> 和 🌈。
+例如：</p>
+
+<table class="no-markdown memory-board" style="margin-bottom: 10px; font-size: 22px;" id="@m_1"><tbody><tr>
+<td class="card-visible"><a class="jump" href="index.html#@m_1"></a>👁</td>
+<td class="card-visible">💖</td>
+<td class="card-visible">M</td>
+<td class="card-visible">√-1</td>
+<td class="card-visible">☕️</td>
+</tr></tbody></table>
+
+<p id="@two_cards_match"><a class="jump" href="index.html#@two_cards_match"></a>如果两张卡牌具有相同的字符字符串，则它们<strong>匹配</strong>。</p>
+
+<p id="@all_cards_start"><a class="jump" href="index.html#@all_cards_start"></a>所有卡牌起始时均为背面向下。
+玩家会将它们翻为正面朝上，然后这些卡牌要么重新翻回背面（如果玩家翻开的卡牌不匹配），要么从棋盘上移除（如果匹配）。</p>
+
+<p id="@game_boards_loaded"><a class="jump" href="index.html#@game_boards_loaded"></a>游戏棋盘是<strong>从文件加载</strong>的。
+以下是棋盘文件的形式语法：</p>
+
+<pre id="@board_file_row_x"><a class="jump" href="index.html#@board_file_row_x"></a><code class="language-plaintext hljs">BOARD_FILE ::= ROW "x" COLUMN NEWLINE (CARD NEWLINE)+
+
+CARD ::= [^\s\n\r]+
+ROW ::= INT
+COLUMN ::= INT
+INT ::= [0-9]+
+NEWLINE ::= "\r"? "\n"</code></pre>
+
+<p id="@board_file_row_number"><a class="jump" href="index.html#@board_file_row_number"></a>在 <code>BOARD_FILE</code> 中，<code>ROW</code> 是行数，<code>COLUMN</code> 是列数，卡牌按行从左到右列出，从顶行开始。</p>
+
+<table><tbody><tr><td><p id="@example_board_rainbows_unicorns_0"><a class="jump" href="index.html#@example_board_rainbows_unicorns_0"></a>例如，这个由<a href="https://emojipedia.org/rainbow/">彩虹</a>和<a href="https://emojipedia.org/unicorn-face/">独角兽</a>组成的棋盘： </p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible">🦄</td><td class="card-visible">🦄</td><td class="card-visible">🌈</td></tr><tr><td class="card-visible">🌈</td><td class="card-visible">🌈</td><td class="card-visible">🦄</td></tr><tr><td class="card-visible">🌈</td><td class="card-visible">🦄</td><td class="card-visible">🌈</td></tr></tbody></table></td></tr></tbody></table>
+
+<p id="@would_be_specified"><a class="jump" href="index.html#@would_be_specified"></a>……在文件中的指定方式如下：</p>
+
+<table class="side-by-side"><tbody><tr><td class="no-markdown"><pre id="@3x3_0"><a class="jump" href="index.html#@3x3_0"></a>3x3<span>↵</span>
+🦄<span>↵</span>
+🦄<span>↵</span>
+🌈<span>↵</span>
+🌈<span>↵</span>
+🌈<span>↵</span>
+🦄<span>↵</span>
+🌈<span>↵</span>
+🦄<span>↵</span>
+🌈<span>↵</span>
+</pre>
+</td><td><p id="@example_used_show_newlines_board_provided"><a class="jump" href="index.html#@example_used_show_newlines_board_provided"></a>在此示例中，<code>↵</code> 用于表示换行。
+该棋盘在问题集的 <code>boards</code> 文件夹中作为 <code>perfect.txt</code> 提供。</p>
+
+<p id="@valid_board_file"><a class="jump" href="index.html#@valid_board_file"></a>有效的棋盘文件必须恰好包含 <code>ROW</code>×<code>COLUMN</code> 个以换行符结尾的 <code>CARD</code> 行。</p></td></tr></tbody></table>
+
+</div><h3 id="gameplay_rules"><a class="jump" href="index.html#gameplay_rules"></a>游戏规则</h3><div data-outline="gameplay_rules">
+
+<p id="@multiple_players_manipulate"><a class="jump" href="index.html#@multiple_players_manipulate"></a>多个<strong>玩家</strong>同时操作棋盘上的卡牌。
+他们通过尝试翻开一对相同的卡牌来进行游戏。</p>
+
+<p id="@here-s_informal_summary"><a class="jump" href="index.html#@here-s_informal_summary"></a>以下是规则的简要说明：</p>
+
+<dl id="@1when_player_turns">
+<dt id="rule-1"><a class="jump" href="index.html#rule-1"></a>1</dt><dd>当玩家翻开一对中的<em>第一张卡牌</em>时，他们<em>控制</em>该卡牌；但如果其他玩家已经控制了它，则该玩家<em>等待</em>，直到能够取得控制权。</dd>
+
+<dt id="rule-2"><a class="jump" href="index.html#rule-2"></a>2</dt><dd>当玩家翻开<em>第二张卡牌</em>时，如果卡牌匹配，玩家保持控制；否则，玩家放弃控制。
+这些卡牌暂时保持正面朝上。</dd>
+
+<dt id="rule-3"><a class="jump" href="index.html#rule-3"></a>3</dt><dd>如果并且当玩家进行下一步操作时，如果之前的卡牌匹配，这些卡牌将从棋盘上移除；否则，如果没有人控制它们，它们将翻回背面。</dd>
+</dl>
+
+<p id="@notice_least_two"><a class="jump" href="index.html#@notice_least_two"></a>请注意与通常的记忆翻牌游戏规则至少有两点不同：你可以「翻开」一张已经正面朝上的卡牌，<em>等待</em>直到该卡牌可用；并且翻开的卡牌在棋盘上保持正面朝上，直到翻牌的玩家进行下一步操作。</p>
+
+<h4 id="@complete_rules"><a class="jump" href="index.html#@complete_rules"></a>完整规则</h4>
+
+<p id="@first_card_player"><a class="jump" href="index.html#@first_card_player"></a><em>第一张卡牌：</em>玩家通过指定棋盘上的一个格子来尝试翻开第一张卡牌……</p>
+
+<dl id="@1-aif_there_no">
+<dt id="rule-1-A"><a class="jump" href="index.html#rule-1-A"></a>1-A</dt><dd>如果那里没有卡牌（玩家指定了一个空格，也许是因为卡牌刚刚被另一个玩家移除了），则操作失败。</dd>
+
+<dt id="rule-1-B"><a class="jump" href="index.html#rule-1-B"></a>1-B</dt><dd>如果卡牌背面朝下，则翻为正面朝上（所有玩家现在都能看到它），且玩家<strong>控制</strong>该卡牌。</dd>
+
+<dt id="rule-1-C"><a class="jump" href="index.html#rule-1-C"></a>1-C</dt><dd>如果卡牌已经正面朝上，但没有被其他玩家控制，则保持正面朝上，且玩家<strong>控制</strong>该卡牌。</dd>
+
+<dt id="rule-1-D"><a class="jump" href="index.html#rule-1-D"></a>1-D</dt><dd>如果卡牌正面朝上且被其他玩家控制，则操作<em>等待</em>。
+该玩家将在下一次机会中与其他玩家争夺该卡牌的控制权。</dd>
+</dl>
+
+<p id="@second_card_once"><a class="jump" href="index.html#@second_card_once"></a><em>第二张卡牌：</em>一旦玩家控制了第一张卡牌，他们就可以尝试翻开第二张卡牌……</p>
+
+<dl id="@2-aif_there_no">
+<dt id="rule-2-A"><a class="jump" href="index.html#rule-2-A"></a>2-A</dt><dd>如果那里没有卡牌，则操作失败。
+玩家同时放弃对<em>第一张卡牌</em>的控制（但它暂时保持正面朝上）。</dd>
+
+<dt id="rule-2-B"><a class="jump" href="index.html#rule-2-B"></a>2-B</dt><dd>如果卡牌正面朝上且被某位玩家控制（无论是其他玩家还是自己），则操作失败。
+为避免死锁，操作<em>不</em>等待。
+玩家同时放弃对<em>第一张卡牌</em>的控制（但它暂时保持正面朝上）。</dd>
+
+<dt>—</dt>
+<dd>如果卡牌背面朝下，或者卡牌正面朝上但没有被玩家控制，则：</dd>
+
+<dt id="rule-2-C" style="width:95px"><a class="jump" href="index.html#rule-2-C"></a>2-C</dt><dd style="margin-left:115px">如果背面朝下，则翻为正面朝上。</dd>
+
+<dt id="rule-2-D" style="width:95px"><a class="jump" href="index.html#rule-2-D"></a>2-D</dt><dd style="margin-left:115px">如果两张卡牌相同，则匹配成功！
+玩家<em>保持控制</em>两张卡牌（它们在棋盘上暂时保持正面朝上）。</dd>
+
+<dt id="rule-2-E" style="width:95px"><a class="jump" href="index.html#rule-2-E"></a>2-E</dt><dd style="margin-left:115px">如果不相同，则玩家放弃对两张卡牌的控制（同样，它们暂时保持正面朝上）。</dd>
+</dl>
+
+<p id="@while_one_player"><a class="jump" href="index.html#@while_one_player"></a>当一名玩家<em>等待</em>翻开第一张卡牌时，其他玩家继续正常游戏。
+他们不会等待，除非他们也尝试翻开一张被其他玩家控制的第一张卡牌。</p>
+
+<span id="flip-failure"></span>
+
+<p id="@failure_1-a_2-a"><a class="jump" href="index.html#@failure_1-a_2-a"></a>在 1-A、2-A 和 2-B 中的<em>失败</em>意味着玩家未能控制一张卡牌（在 2-A/B 中，还放弃了控制）。
+玩家仍然可以继续游戏。</p>
+
+<p id="@after_trying_turn"><a class="jump" href="index.html#@after_trying_turn"></a>在尝试翻开<em>第二张卡牌</em>（无论成功与否）之后，玩家可以再次尝试翻开<em>第一张卡牌</em>。
+当他们这样做时，在遵循上述规则之前，先完成上一步操作：</p>
+
+<dl id="@3-aif_they_had">
+<dt id="rule-3-A"><a class="jump" href="index.html#rule-3-A"></a>3-A</dt><dd>如果他们翻开了一对匹配的卡牌，则控制两张卡牌。
+现在，这些卡牌从棋盘上移除，且他们放弃对它们的控制。
+游戏不规定计分方式。</dd>
+
+<dt id="rule-3-B"><a class="jump" href="index.html#rule-3-B"></a>3-B</dt><dd>否则，他们翻开了一张或两张不匹配的卡牌，放弃了控制但将它们留在棋盘上正面朝上。
+现在，对于每张这样的卡牌，如果卡牌仍在棋盘上，当前正面朝上，且当前没有被其他玩家控制，则将该卡牌翻回背面。</dd>
+</dl>
+
+<p id="@if_player_never"><a class="jump" href="index.html#@if_player_never"></a>如果玩家从未尝试翻开新的第一张卡牌，则 3-A/B 的步骤永远不会发生。</p>
+
+</div><h3 id="example_game_transcript"><a class="jump" href="index.html#example_game_transcript"></a>示例游戏记录</h3><div data-outline="example_game_transcript">
+
+<table id="transcript" class="table"><tbody><tr><td><p id="@start_3-3_grid"><a class="jump" href="index.html#@start_3-3_grid"></a>我们从一个 3×3 的背面朝上的卡牌网格和 3 名玩家开始：Alice、Bob 和 Charlie。
+<br><br></p>
+
+<sub style="float:right">将鼠标悬停或点击棋盘可显示提示。 →</sub></td><td><table class="no-markdown memory-board"><tbody><tr><td>❤️</td><td>💛</td><td>❤️</td></tr><tr><td>💚</td><td>💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td>💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@alice_turns_over_top_left_card"><a class="jump" href="index.html#@alice_turns_over_top_left_card"></a>Alice 翻开了左上角的卡牌。她暂时<em>控制</em>着该卡牌（规则 1-B）。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible" data-transcript="由 Alice 控制">❤️</td><td>💛</td><td>❤️</td></tr><tr><td>💚</td><td>💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td>💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@bob_charlie_also"><a class="jump" href="index.html#@bob_charlie_also"></a>Bob 和 Charlie 也同时尝试翻开那张卡牌。</p>
+
+<p id="@both_now_waiting"><a class="jump" href="index.html#@both_now_waiting"></a>两人现在都在等待取得控制权的机会（1-D）。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible" data-transcript="由 Alice 控制，Bob 和 Charlie 在等待">❤️</td><td>💛</td><td>❤️</td></tr><tr><td>💚</td><td>💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td>💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@alice_turns_over_bottom_right_card"><a class="jump" href="index.html#@alice_turns_over_bottom_right_card"></a>Alice 翻开了右下角的卡牌（2-C）。不匹配。</p>
+
+<p id="@alice_no_longer"><a class="jump" href="index.html#@alice_no_longer"></a>Alice 不再控制任何卡牌，但它们暂时保持正面朝上（2-E）。</p>
+
+<p id="@either_bob_charlie"><a class="jump" href="index.html#@either_bob_charlie"></a>Bob 或 Charlie 之一现在将取得左上角卡牌的控制权。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible" data-transcript="Alice 放弃控制，Bob 或 Charlie 将控制">❤️</td><td>💛</td><td>❤️</td></tr><tr><td>💚</td><td>💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td class="card-visible" data-transcript="无人控制">💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@bob_becomes_controller"><a class="jump" href="index.html#@bob_becomes_controller"></a>Bob 成为那张红心卡牌的控制者（1-C）。</p>
+
+<p id="@alice_hasn-t_made"><a class="jump" href="index.html#@alice_hasn-t_made"></a>Alice 还没进行下一步操作，所以紫色心形仍然正面朝上。</p>
+
+<p id="@charlie_still_waiting"><a class="jump" href="index.html#@charlie_still_waiting"></a>Charlie 仍在等待。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible" data-transcript="由 Bob 控制，Charlie 在等待">❤️</td><td>💛</td><td>❤️</td></tr><tr><td>💚</td><td>💛</td><td class="card-visible" data-transcript="无人控制">💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@alice_goes_ahead"><a class="jump" href="index.html#@alice_goes_ahead"></a>Alice 接着翻开了一张新的第一张卡牌，棋盘中心的黄色心形。</p>
+
+<p id="@red_heart_controlled"><a class="jump" href="index.html#@red_heart_controlled"></a>红色心形由 Bob 控制，所以它保持正面朝上（3-B）。</p>
+
+<p id="@but_purple_heart"><a class="jump" href="index.html#@but_purple_heart"></a>但紫色心形没有被控制，所以它翻回背面（同 3-B）。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible" data-transcript="由 Bob 控制，未被 Alice 翻回，Charlie 在等待">❤️</td><td>💛</td><td>❤️</td></tr><tr><td>💚</td><td class="card-visible" data-transcript="由 Alice 控制">💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td data-transcript="被 Alice 翻回背面">💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@while_alice_thinking"><a class="jump" href="index.html#@while_alice_thinking"></a>当 Alice 在思考她的第二张卡牌时，Bob 翻开了右上角的卡牌。</p>
+
+<p id="@his_first_second"><a class="jump" href="index.html#@his_first_second"></a>他的第一张和第二张卡牌匹配了！</p>
+
+<p id="@bob_keeps_control"><a class="jump" href="index.html#@bob_keeps_control"></a>Bob 暂时保持对这些卡牌的控制（2-D）。
+Charlie 仍在等待。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible" data-transcript="由 Bob 控制，Charlie 在等待">❤️</td><td>💛</td><td class="card-visible" data-transcript="由 Bob 控制">❤️</td></tr><tr><td>💚</td><td class="card-visible" data-transcript="由 Alice 控制">💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td>💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@bob_turns_over"><a class="jump" href="index.html#@bob_turns_over"></a>Bob 翻开了一张新的第一张卡牌，左边的一个绿色心形。</p>
+
+<p id="@his_matched_red"><a class="jump" href="index.html#@his_matched_red"></a>他匹配的红色心形从棋盘上移除，且他放弃了对它们的控制（3-A）。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible" data-transcript="Charlie 将无法控制"></td><td>💛</td><td class="card-visible"></td></tr><tr><td class="card-visible" data-transcript="由 Bob 控制">💚</td><td class="card-visible" data-transcript="由 Alice 控制">💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td>💜</td></tr></tbody></table></td></tr>
+<tr><td><p id="@charlie_finally_gets"><a class="jump" href="index.html#@charlie_finally_gets"></a>Charlie 终于有机会翻开左上角的卡牌——但它已经不在了（1-A）。</p>
+
+<p id="@charlie_now_ready"><a class="jump" href="index.html#@charlie_now_ready"></a>Charlie 现在准备翻开一张新的第一张卡牌。</p>
+
+<p id="@alice_bob_each"><a class="jump" href="index.html#@alice_bob_each"></a>Alice 和 Bob 各控制一张卡牌，并将尝试翻开一张匹配的第二张。</p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible"></td><td>💛</td><td class="card-visible"></td></tr><tr><td class="card-visible" data-transcript="由 Bob 控制">💚</td><td class="card-visible" data-transcript="由 Alice 控制">💛</td><td>💚</td></tr><tr><td>💜</td><td>💜</td><td>💜</td></tr></tbody></table></td></tr></tbody></table>
+
+</div><h3 id="playing_on_the_web"><a class="jump" href="index.html#playing_on_the_web"></a>在 Web 上玩</h3><div data-outline="playing_on_the_web">
+
+<p id="@support_multiplayer_memory"><a class="jump" href="index.html#@support_multiplayer_memory"></a>为了支持多人的联网「记忆乱序」游戏，我们定义了一个 HTTP 协议，使游戏可以在 Web 浏览器中进行。
+Web 服务器的代码已经提供（在 <code>server.ts</code> 中），但它依赖于本问题集代码中提供的以下函数规范，你需要实现这些函数：</p>
+
+<ul id="@parsefromfile_board-ts_look-flip-map">
+<li><a class="jump" href="index.html#@parsefromfile_board-ts_look-flip-map"></a><code>board.ts</code> 中的 <a href="doc/classes/board.Board.html#parseFromFile"><code>parseFromFile()</code></a></li>
+<li><a href="doc/modules/commands.html"><code>commands.ts</code> 中的 <code>look()</code>、<code>flip()</code>、<code>map()</code> 和 <code>watch()</code></a></li>
+</ul>
+
+<p id="@protocol_each_player"><a class="jump" href="index.html#@protocol_each_player"></a>在该协议中，每位玩家通过 ID 来标识自己，ID 是由字母数字或下划线字符组成的非空字符串，可自选。
+具有相同玩家 ID 的所有请求均视为同一玩家的操作。</p>
+
+<p id="@all_requests_server"><a class="jump" href="index.html#@all_requests_server"></a>对于所有请求，服务器会响应一个<em>棋盘状态</em>，显示从该玩家视角看到的当前棋盘状态。棋盘状态由以下语法描述：</p>
+
+<pre id="@board_state_row_x"><a class="jump" href="index.html#@board_state_row_x"></a><code class="language-plaintext hljs">BOARD_STATE ::= ROW "x" COLUMN NEWLINE (SPOT NEWLINE)+
+
+SPOT ::= "none" | "down" | "up " CARD | "my " CARD
+CARD ::= [^\s\n\r]+
+ROW ::= INT
+COLUMN ::= INT
+INT ::= [0-9]+
+NEWLINE ::= "\r"? "\n"</code></pre>
+
+<p id="@board_state_row"><a class="jump" href="index.html#@board_state_row"></a>在棋盘状态中，<code>ROW</code> 是行数，<code>COLUMN</code> 是列数，卡牌按行从左到右列出，从顶行开始。</p>
+
+<p id="@none_indicates_no"><a class="jump" href="index.html#@none_indicates_no"></a><code>none</code> 表示该位置没有卡牌，<code>down</code> 表示背面朝下的卡牌，<code>up</code> 表示正面朝上且由其他玩家控制（或无人控制）的卡牌，<code>my</code> 表示正面朝上且由发送请求的玩家控制的卡牌。</p>
+
+<p id="@example_3"><a class="jump" href="index.html#@example_3"></a>例如：</p>
+
+<table class="side-by-side"><tbody><tr><td class="no-markdown"><pre id="@3x3_up-a_down"><a class="jump" href="index.html#@3x3_up-a_down"></a>3x3<span>↵</span>
+up<span>␣</span>A<span>↵</span>
+down<span>↵</span>
+down<span>↵</span>
+none<span>↵</span>
+my<span>␣</span>B<span>↵</span>
+none<span>↵</span>
+down<span>↵</span>
+down<span>↵</span>
+up<span>␣</span>C<span>↵</span>
+</pre>
+</td><td><table class="no-markdown memory-board pull-right" id="@aaabccc"><tbody><tr><td class="card-visible"><a class="jump" href="index.html#@aaabccc"></a>A</td><td>A</td><td>A</td></tr><tr><td class="card-visible"></td><td class="card-visible card-control">B</td><td class="card-visible"></td></tr><tr><td>C</td><td>C</td><td class="card-visible">C</td></tr></tbody></table>
+
+<p id="@example_used_show_blank_spaces_show"><a class="jump" href="index.html#@example_used_show_blank_spaces_show"></a>在此示例中，<code>␣</code> 用于表示空格，<code>↵</code> 用于表示换行。</p>
+
+<p id="@there_no_cards"><a class="jump" href="index.html#@there_no_cards"></a>(1,0) 和 (1,2) 处没有卡牌。</p>
+
+<p id="@cards_0-0_1-1"><a class="jump" href="index.html#@cards_0-0_1-1"></a>(0,0)、(1,1) 和 (2,2) 处的卡牌正面朝上，且收到此消息的玩家控制着 (1,1) 处的 <code>B</code> 卡牌。</p></td></tr></tbody></table>
+
+<hr>
+
+</div></div><h2 id="problem_1_game_board"><a class="jump" href="index.html#problem_1_game_board"></a>问题 1：游戏棋盘</h2><div data-outline="problem_1_game_board">
+
+<p id="@specify_test_implement_mutable_board_adt"><a class="jump" href="index.html#@specify_test_implement_mutable_board_adt"></a><strong>规范、测试和实现</strong>一个<strong>可变的</strong> <code>Board</code> 抽象数据类型（ADT）来表示「记忆乱序」游戏棋盘。
+你可能还需要定义其他 ADT。</p>
+
+<p id="@remember_include_specification"><a class="jump" href="index.html#@remember_include_specification"></a>记得包含：为你编写的每个类和每个方法提供规范；抽象函数、表示不变量和防止表示暴露的论证；<code>checkRep()</code> 和 <code>toString()</code>。</p>
+
+<p id="@board_defines_static"><a class="jump" href="index.html#@board_defines_static"></a><code>Board</code> 定义了一个用于创建新棋盘的静态工厂方法，你必须支持：</p>
+
+<ul id="@parsefromfile-filename_creates_board">
+<li><a class="jump" href="index.html#@parsefromfile-filename_creates_board"></a><a href="doc/classes/board.Board.html#parseFromFile"><code>parseFromFile(filename)</code></a>：通过解析<a href="index.html#game_board">上述格式</a>的文件来创建棋盘</li>
+</ul>
+
+<p id="@parsing_board_files"><a class="jump" href="index.html#@parsing_board_files"></a>对于<strong>解析</strong>棋盘文件，使用解析器生成器（如 ParserLib）会带来不必要的复杂度。</p>
+
+<ul>
+<li><p id="@string-split_string-match_probably"><a class="jump" href="index.html#@string-split_string-match_probably"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/split"><code>String.split()</code></a> 和 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/match"><code>String.match()</code></a> 可能就能处理所有的解析和提取工作。</p></li>
+<li><p id="@fs-promises-readfile_reads_file"><a class="jump" href="index.html#@fs-promises-readfile_reads_file"></a><a href="https://nodejs.org/api/fs.html#fspromisesreadfilepath-options"><code>fs.promises.readFile()</code></a> 异步读取文件。请确保使用此函数的基于 Promise 的版本（在文档中称为 <code>fsPromises.readFile</code>，如果导入 <code>fs</code> 则引用为 <code>fs.promises.readFile</code>），而不是较旧的基于回调的版本（也称为 <code>readFile</code>，但在 <code>fs</code> 本身中）。</p></li>
+</ul>
+
+<p id="@keep_track_players"><a class="jump" href="index.html#@keep_track_players"></a>为了跟踪<strong>玩家</strong>及其状态：</p>
+
+<ul>
+<li><p id="@each_player_might_simply_be_identified"><a class="jump" href="index.html#@each_player_might_simply_be_identified"></a>每位玩家可以简单地用其在<a href="doc/modules/commands.html">命令函数</a>中使用的 ID 来标识。
+所有游戏状态都将存储在 <code>Board</code> 中。</p></li>
+<li><p id="@each_player_might_be_represented_using"><a class="jump" href="index.html#@each_player_might_be_represented_using"></a>每位玩家可以用一个 ADT 来表示，<em>例如</em> <code>Player</code>。
+玩家的部分状态可以存储在 <code>Player</code> 对象中，或者 <code>Board</code> 可以存储所有状态。</p></li>
+</ul>
+
+<p id="@you_need_track"><a class="jump" href="index.html#@you_need_track"></a>你需要根据游戏规则跟踪<strong>谁控制哪些卡牌</strong>以及<strong>每张卡牌的状态</strong>。</p>
+
+<div class="handout-solo alert alert-warning"><p id="@iterative_development_recommendation_implement_synchronous_board"><a class="jump" href="index.html#@iterative_development_recommendation_implement_synchronous_board"></a><a href="index.html#iterate" class="alert-link">迭代开发建议</a>：先实现一个同步棋盘（<em>即</em>除 <code>parseFromFile</code> 外没有 <code>async</code> 方法），并在问题 2 中将其连接到服务器。
+<a href="index.html#grading" class="alert-link">alpha 评分</a>将更多地关注在没有并发的情况下进行游戏。
+然后在问题 3 中修订以支持并发玩家的正确行为。</p></div>
+
+<p id="@implement_waiting_according"><a class="jump" href="index.html#@implement_waiting_according"></a>要根据游戏规则实现<strong>等待</strong>，使用异步方法和 <code>await</code>，或者<a href="../../classes/17-callbacks-guis/index.html#callbacks">回调函数</a>。
+棋盘<strong>不应</strong><a href="../../classes/15-promises/index.html#never_busy-wait">忙等待（busy-wait）</a>。</p>
+
+<p id="@you_decide_which"><a class="jump" href="index.html#@you_decide_which"></a>你来决定<strong>哪些操作是<a href="../../classes/16-mutual-exclusion/index.html#%5Eatomic">原子的</a></strong>，因为规则并未规定。
+例如，在规则 <strong>3-B</strong> 中，将两张卡牌翻回背面可能是单个操作——其他玩家无法看到或操作中间棋盘状态——也可能是两个独立的操作。
+但棋盘绝不能达到不一致的状态，例如两个玩家控制同一张卡牌，或者一张背面朝下的卡牌仍被某位玩家控制。</p>
+
+<p id="@note_flip_operation"><a class="jump" href="index.html#@note_flip_operation"></a>请注意，翻牌操作可能在<a href="index.html#flip-failure">规则中的多个位置</a>失败。
+在 <a href="doc/functions/commands.flip.html"><code>flip()</code> 命令</a>的规范中（你需要实现它来将 <code>Board</code> 连接到所提供的 Web 服务器），失败通过 rejected promise 来表示，这可以通过<a href="../../classes/15-promises/index.html#throw-to-reject">从 <code>async</code> 函数中抛出异常</a>来实现。
+在设计你自己的 <code>Board</code> 操作时请记住这一点。
+对于测试 rejected promise，<a href="https://nodejs.org/api/assert.html#assertrejectsasyncfn-error-message"><code>assert.rejects</code></a> 很有用。</p>
+
+<h4 id="@simulating_game"><a class="jump" href="index.html#@simulating_game"></a>模拟游戏</h4>
+
+<p id="@simulation-ts_provided_skeleton"><a class="jump" href="index.html#@simulation-ts_provided_skeleton"></a>在 <code>simulation.ts</code> 中，我们提供了一个模拟程序骨架代码，用于模拟单个玩家与棋盘的交互，随机翻开若干张卡牌。
+你应该能够填写 <code>simulationMain()</code> 函数中的 TODO，并使用 <code>npm run simulation</code> 来运行单人「记忆乱序」游戏的模拟。</p>
+
+<p id="@simulation-ts_uses_seedrandom"><a class="jump" href="index.html#@simulation-ts_uses_seedrandom"></a><code>simulation.ts</code> 使用 <code>seedrandom</code> 包来生成可复现的伪随机数序列。
+我们调用的是 <code>seedrandom(seed)</code> 返回的 <code>random</code> 函数，而不是目标始终是完全不可预测的 <code>Math.random()</code>：</p>
+
+<ul>
+<li><p id="@default_simulation_picks"><a class="jump" href="index.html#@default_simulation_picks"></a>默认情况下，模拟会随机选择一个 <code>seed</code>（使用 Node 的 <code>randomBytes()</code> 函数），以便每次运行使用新的伪随机数序列并探索新的事件序列。
+该 <code>seed</code> 以及模拟的其他参数会被打印到控制台。</p></li>
+<li><p id="@but_running_simulation"><a class="jump" href="index.html#@but_running_simulation"></a>但是，使用相同的 <code>seed</code>（和其他参数）多次运行模拟应产生相同的伪随机选择序列，使你能够添加日志或断言，帮助将「随机」失败转化为测试套件中的最小测试用例。</p></li>
+</ul>
+
+</div><h2 id="problem_2_connect_to_the_web_server"><a class="jump" href="index.html#problem_2_connect_to_the_web_server"></a>问题 2：连接 Web 服务器</h2><div data-outline="problem_2_connect_to_the_web_server">
+
+<p id="@order_connect_your"><a class="jump" href="index.html#@order_connect_your"></a>为了将你的 <code>Board</code> 类型连接到所提供的 Web 服务器，以及连接到 Didit 自动评分系统，你需要实现 <code>commands.ts</code> 中的函数，使其使用 <code>Board</code> 的操作。先从以下两个函数开始，它们足以让你进行游戏：</p>
+
+<ul id="@look_commands-ts_flip">
+<li><a class="jump" href="index.html#@look_commands-ts_flip"></a><a href="doc/functions/commands.look.html"><code>look()</code>（来自 <code>commands.ts</code>）</a></li>
+<li><a href="doc/functions/commands.flip.html"><code>flip()</code>（来自 <code>commands.ts</code>）</a></li>
+</ul>
+
+<p id="@point_your_look"><a class="jump" href="index.html#@point_your_look"></a>此时，你的 <code>look()</code> 和 <code>flip()</code> 可能还不能按规则实现正确的等待行为，也不能处理并发玩家，但它们应该能够处理<strong>按顺序行动的多个客户端</strong>。</p>
+
+<div id="glue_code"><p id="@general_keep_all"><a class="jump" href="index.html#@general_keep_all"></a>一般来说，保持 <code>commands.ts</code> 中的所有函数极其简单。
+它们应该不过是<em>胶水代码</em>，最多调用几个你的 <code>Board</code> 操作，不包含任何额外逻辑。
+具体来说：</p>
+
+<ul id="@body_each_function">
+<li><a class="jump" href="index.html#@body_each_function"></a>每个函数的主体最多 3 行，由最多几个简单的函数调用组成，可能使用局部变量，加上一个 <code>return</code> 语句。</li>
+<li>它们调用的所有函数应当已经经过充分测试，无论是通过你的 <code>Board</code> 测试套件还是通过 TypeScript 本身。</li>
+</ul>
+
+<p id="@if_that-s_case"><a class="jump" href="index.html#@if_that-s_case"></a>如果是这种情况，你就不需要为 <code>commands.ts</code> 编写单独的测试套件。
+你对 <code>Board</code> 的现有测试应该足够了。</p>
+
+<p id="@if_any_function"><a class="jump" href="index.html#@if_any_function"></a>如果 <code>commands.ts</code> 中的任何函数比那更复杂——例如，包含 <code>if</code> 或 <code>while</code> 等控制语句，或字符串处理操作——那么你需要创建 <code>test/commands.test.ts</code> 并为其设计测试套件。
+在你这样做之前，<strong>停下来！</strong>
+先与课程工作人员讨论你的设计，因为这表明你为 <code>Board</code> 类型选择的操作功能不够强大。</p></div>
+
+<ul id="@spec_specs_look">
+<li><a class="jump" href="index.html#@spec_specs_look"></a><strong>规范</strong>。
+已提供 <code>look()</code> 和 <code>flip()</code> 的规范，但你可以根据需要进行加强。</li>
+<li><strong>测试</strong>。
+保持这些操作极其简单，这样就不必单独测试它们。</li>
+<li><strong>代码</strong>。
+尽可能简单地实现 <code>look()</code> 和 <code>flip()</code>。</li>
+</ul>
+
+<h4 id="@running_web_server"><a class="jump" href="index.html#@running_web_server"></a>运行 Web 服务器</h4>
+
+<p id="@start_server_use"><a class="jump" href="index.html#@start_server_use"></a>要启动服务器，使用 <code>npm start</code>，它会运行 <code>main.ts</code> 中的 <code>main()</code>。
+此代码解析命令行参数，根据这些参数调用 <code>Board</code> 的解析函数，然后创建并启动来自 <code>server.ts</code> 的 <code>WebServer</code>。
+你不应该需要修改 <code>main.ts</code> 或 <code>server.ts</code>。</p>
+
+<p id="@run_main_first"><a class="jump" href="index.html#@run_main_first"></a>要运行 <code>main()</code>，首先在 Visual Studio Code 内部或单独的终端窗口中打开一个终端。
+然后在端口 8080 上使用我们的 3×3 彩虹和独角兽棋盘启动 Web 服务器：</p>
+
+<pre class="no-markdown" style="white-space: nowrap;" id="@npm_start_8080"><a class="jump" href="index.html#@npm_start_8080"></a>npm start 8080 boards/perfect.txt
+</pre>
+
+<p id="@remember_server_keeps"><a class="jump" href="index.html#@remember_server_keeps"></a>请记住，服务器会一直运行直到你终止其进程，如果你尝试在同一端口上运行第二个服务器，会因「地址已被占用」而失败。
+如果你从命令行运行服务器，请使用 <code>Ctrl</code>-<code>C</code> 在该终端中停止它。</p>
+
+<div class="clearfix"></div>
+
+<span id="memory-scramble-ui"></span>
+
+<p id="@once_your_server"><a class="jump" href="index.html#@once_your_server"></a>一旦你的服务器完成，你就可以在 Web 浏览器中玩游戏了！</p>
+
+<p id="@your_web_browser"><a class="jump" href="index.html#@your_web_browser"></a>在你的 Web 浏览器中，转到服务器启动时显示的 URL，它会返回一个与你的服务器进行游戏协议通信的网页。</p>
+
+<p id="@you_can_open"><a class="jump" href="index.html#@you_can_open"></a>你可以在多个标签页中打开该 URL 来模拟不同的玩家。每次打开页面时，它会随机生成一个新的玩家 ID 供你的服务器使用。</p>
+
+<p id="@you_can_also"><a class="jump" href="index.html#@you_can_also"></a>你也可以通过 IP 地址连接到朋友的服务器，但你可能无法直接在浏览器中将其作为 URL 访问（因为你的浏览器可能要求通过 HTTPS 连接，而此服务器不支持 HTTPS）。相反，在你自己的 ps4 代码中找到该网页文件（文件名为 <code>public/index.html</code>），在 Web 浏览器中打开该 HTML 文件，然后<a href="../../classes/18-message-passing-networking/index.html#@you_can_ask">通过 IP 地址指定另一台服务器</a>。</p>
+
+</div><h2 id="problem_3_revise_for_concurrent_players"><a class="jump" href="index.html#problem_3_revise_for_concurrent_players"></a>问题 3：修订以支持并发玩家</h2><div data-outline="problem_3_revise_for_concurrent_players">
+
+<p id="@revise_board_make"><a class="jump" href="index.html#@revise_board_make"></a>修改 <code>Board</code> 使其变为异步，根据需要更新其他 ADT。</p>
+
+<p id="@consider_using_await"><a class="jump" href="index.html#@consider_using_await"></a>考虑使用 <code>await</code> 等待棋盘返回的 promise，以实现规则中要求的<strong>等待卡牌</strong>。
+关于以下内容的讨论，请参阅<a href="../../classes/16-mutual-exclusion/index.html#making_and_keeping_a_promise"><em>互斥</em>中「建立和保持一个 promise」</a>：</p>
+
+<ul id="@promise-withresolvers_factory_function">
+<li><a class="jump" href="index.html#@promise-withresolvers_factory_function"></a><code>Promise.withResolvers()</code> 工厂函数，对于将回调转换为 promise 最为有用</li>
+<li><code>Deferred</code> 的规范和<a href="../../classes/16-mutual-exclusion/code.html#deferredts">实现</a>，对于存储待稍后解析的 promise 最为有用</li>
+</ul>
+
+<p id="@simulation-ts_increase_value"><a class="jump" href="index.html#@simulation-ts_increase_value"></a>在 <code>simulation.ts</code> 中，增加 <code>players</code> 的值来模拟多人「记忆乱序」游戏。
+通过添加日志（例如使用 <code>console.log()</code> 语句）或跟踪不同玩家翻开的卡牌，你应该能观察到正确的卡牌<em>控制</em>、玩家尝试翻开第一张卡牌时的正确<em>等待</em>，以及玩家进行下一步操作时匹配卡牌的正确<em>移除</em>。</p>
+
+<p id="@notice_your_simulation"><a class="jump" href="index.html#@notice_your_simulation"></a>请注意，如果你的模拟中一名玩家在最后一步翻开了匹配的卡牌（留下两张正面朝上的卡牌在该玩家控制下），而另一名玩家尝试将其中一张作为第一张卡牌翻开，则模拟不应终止。</p>
+
+<p id="@consider_revising_your"><a class="jump" href="index.html#@consider_revising_your"></a>考虑修改你的测试策略，测试并发玩家操作的不同交错情况。
+你可能会发现 <a href="../../classes/16-mutual-exclusion/index.html#timeout-function"><code>timeout()</code> 函数</a>对于强制短等待很有用。
+非常短的超时（1 甚至 0 毫秒）会放弃足够长的控制权，使并发操作能够完成。
+避免等待数百毫秒，因为这可能导致你的测试在 Didit 上超时。
+<strong>不要在实现代码中放置 <code>timeout()</code> 调用</strong>；这是你的设计存在<a href="../../classes/16-mutual-exclusion/index.html#race_conditions">竞态条件</a>的信号。</p>
+
+<p id="@review_your_commands-ts"><a class="jump" href="index.html#@review_your_commands-ts"></a>检查你的 <code>commands.ts</code> 文件，确保它按照规则正确地使用异步的 <code>Board</code>。
+你的命令不应忙等待或挂起。
+当一个请求在等待时（例如等待卡牌翻转），其他请求必须正常处理。</p>
+
+</div><h2 id="problem_4_changing_cards"><a class="jump" href="index.html#problem_4_changing_cards"></a>问题 4：更换卡牌</h2><div data-outline="problem_4_changing_cards">
+
+<p id="@problem_adds_one_more_command_protocol_map"><a class="jump" href="index.html#@problem_adds_one_more_command_protocol_map"></a>本问题向协议中添加了一个新命令：<a href="doc/functions/commands.map.html"><code>map()</code></a>。</p>
+
+<p id="@map_command_applies"><a class="jump" href="index.html#@map_command_applies"></a><code>map()</code> 命令将一个变换函数 <code>f</code> 应用于棋盘上的每张卡牌，将其一致地替换为 <code>f(card)</code>。</p>
+
+<table style="margin-bottom: 10px"><tbody><tr><td><p id="@example_board_rainbows_unicorns_two_cards"><a class="jump" href="index.html#@example_board_rainbows_unicorns_two_cards"></a>例如，这个由<a href="https://emojipedia.org/rainbow/">彩虹</a>和<a href="https://emojipedia.org/unicorn-face/">独角兽</a>组成的棋盘（已有两张卡牌匹配并移除）： </p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible">🦄</td><td class="card-visible">🦄</td><td class="card-visible">🌈</td></tr><tr><td class="card-visible">🌈</td><td class="card-visible">🌈</td><td class="card-visible"></td></tr><tr><td class="card-visible">🌈</td><td class="card-visible"></td><td class="card-visible">🌈</td></tr></tbody></table></td></tr>
+<tr><td><br></td></tr>
+<tr><td><p id="@might_be_converted"><a class="jump" href="index.html#@might_be_converted"></a>……可能通过 <code>map()</code> 被转换为这个由<a href="https://emojipedia.org/sun-with-face/">太阳</a>和<a href="https://emojipedia.org/lollipop/">棒棒糖</a>组成的棋盘： </p></td><td><table class="no-markdown memory-board"><tbody><tr><td class="card-visible">🌞</td><td class="card-visible">🌞</td><td class="card-visible">🍭</td></tr><tr><td class="card-visible">🍭</td><td class="card-visible">🍭</td><td class="card-visible"></td></tr><tr><td class="card-visible">🍭</td><td class="card-visible"></td><td class="card-visible">🍭</td></tr></tbody></table></td></tr></tbody></table>
+
+<div class="col-xs-5 col-lg-4 pull-right pull-margin"><div class="panel panel-default panel-warning"><div class="panel-body"><p id="correction-replace" class="text-warning no-markdown"><a class="jump" href="index.html#correction-replace"></a><strong>勘误</strong></p>
+
+<p id="@if_you_created"><a class="jump" href="index.html#@if_you_created"></a>如果你在 4 月 15 日之前创建了 ps4 仓库，客户端网页的 <em>replace</em> 功能存在一个 bug。
+<code>public/index.html</code> 第 317 行应为：<br><code class="no-markdown">const&nbsp;responseText&nbsp;= <span style="background-color: #ffff0080">&nbsp;await&nbsp;</span>response.text();</code></p>
+
+<div></div>
+
+<p id="@line_corrected_repos"><a class="jump" href="index.html#@line_corrected_repos"></a>在 4/15 之后创建的仓库中此行已被修正。
+如果你较早创建了仓库，请在你的 <code>public/index.html</code> 中添加缺失的 <code>await</code>。</p></div></div></div>
+
+<p id="@map_command_independent"><a class="jump" href="index.html#@map_command_independent"></a><code>map()</code> 命令独立于游戏的其他状态。
+因此，无论卡牌是正面朝上还是背面朝上，还是被其他玩家控制，仍然可以被替换，且其正面/背面状态和控制状态不受替换影响。</p>
+
+<p id="@transformer_function_f"><a class="jump" href="index.html#@transformer_function_f"></a>变换函数 <code>f</code> 是异步的（返回一个 promise），因此可能有多种实现方式（例如进行数据库查询、访问语言翻译 Web API，甚至询问人类用户替换卡牌应该是什么）。
+这意味着 <code>map()</code> 可能需要等待其对 <code>f</code> 的调用完成。
+但是，在运行过程中，<code>map()</code> 不得阻止棋盘上的其他命令与之交错执行（包括同一玩家发出的其他命令，以及其他 <code>map()</code> 命令）。
+根据你实现 <code>map()</code> 的方式，其他操作可能会看到部分转换的棋盘（某些卡牌已替换，而其他尚未替换），但棋盘必须在玩家看来保持一致性，即如果棋盘上的两张卡牌在 <code>map()</code> 开始时相互匹配，那么在该 <code>map()</code> 进行期间，不得导致任何玩家观察到该对卡牌不匹配的棋盘状态。</p>
+
+<p id="@function_f_must"><a class="jump" href="index.html#@function_f_must"></a>函数 <code>f</code> 必须是 <a href="doc/functions/commands.map.html"><code>map()</code> 规范</a>中所述的数学函数，但它不必是<a href="https://en.wikipedia.org/wiki/Injective_function">单射函数</a>。</p>
+
+<p id="@specify_test_implement_support_your_board_adt_enable_you_implement_map_function"><a class="jump" href="index.html#@specify_test_implement_support_your_board_adt_enable_you_implement_map_function"></a><strong>规范、测试和实现</strong>棋盘 ADT 中的支持功能，使你能够在 <code>commands.ts</code> 中将 <code>map()</code> 函数实现为简单的<a href="index.html#glue_code">胶水代码，无需单独测试</a>。</p>
+
+</div><h2 id="problem_5_board_events"><a class="jump" href="index.html#problem_5_board_events"></a>问题 5：棋盘事件</h2><div data-outline="problem_5_board_events">
+
+<p id="@problem_adds_one_more_command_protocol_watch"><a class="jump" href="index.html#@problem_adds_one_more_command_protocol_watch"></a>本问题向协议中添加了一个新命令：<a href="doc/functions/commands.watch.html"><code>watch()</code></a>。</p>
+
+<p id="@command_does_not"><a class="jump" href="index.html#@command_does_not"></a>此命令不会立即返回。
+相反，它会<em>等待</em>，直到棋盘下次发生变化。
+此时，它以棋盘的当前状态作为响应。</p>
+
+<p id="@change_defined_any"><a class="jump" href="index.html#@change_defined_any"></a><strong>变化</strong>定义为任何卡牌翻为正面或背面、从棋盘上移除，或从一个字符串变为不同的字符串。</p>
+
+<p id="@watch_call_must"><a class="jump" href="index.html#@watch_call_must"></a><code>watch()</code> 调用必须等待直到发生此类变化。
+当卡牌状态没有变化时——例如，玩家尝试翻开一个空格，或者玩家取得或放弃卡牌的控制权但卡牌没有翻转——待处理的 watch 请求必须继续等待。</p>
+
+<p id="@while_watch-board_player"><a class="jump" href="index.html#@while_watch-board_player"></a>当 <code class="no-markdown">watch(<i>board</i>, <i>playeri>)</code> 请求在等待时，玩家可以在同一棋盘上使用其他命令，这些命令将正常处理。
+例如，并发的 <code class="no-markdown">look(<i>board</i>, <i>playerId</code)</code> 请求不得等待。</p>
+
+<p id="@specify_test_implement_support_your_board_adt_enable_you_implement_watching_board"><a class="jump" href="index.html#@specify_test_implement_support_your_board_adt_enable_you_implement_watching_board"></a><strong>规范、测试和实现</strong>棋盘 ADT 中的支持功能，使你能够实现监视棋盘变化的功能。
+你的棋盘 ADT 可以实现仅通知单次变化，或通知所有未来变化：</p>
+
+<ul id="@if_client_receives">
+<li><a class="jump" href="index.html#@if_client_receives"></a>如果客户端仅接收单次变化，可以是一个异步方法，其 promise 在棋盘变化时兑现。</li>
+<li>监听器可以向 <code>Board</code> 提供<a href="../../classes/17-callbacks-guis/index.html#callbacks">回调函数</a>。
+棋盘将在每次变化时回调它们。</li>
+</ul>
+
+<p id="@first_try_using"><a class="jump" href="index.html#@first_try_using"></a>首先尝试在 <code>simulation.ts</code> 中使用你的棋盘变化通知，在模拟游戏期间并发地监视棋盘。</p>
+
+<p id="@then_use_your"><a class="jump" href="index.html#@then_use_your"></a>然后使用你的变化通知，在 <code>commands.ts</code> 中将 <code>watch()</code> 函数<strong>规范、测试和实现</strong>为简单的<a href="index.html#glue_code">胶水代码，无需单独测试</a>。</p>
+
+<p id="@note_you_decide"><a class="jump" href="index.html#@note_you_decide"></a>请注意，你来决定<strong>哪些变化是<a href="../../classes/16-mutual-exclusion/index.html#%5Eatomic">原子的</a></strong>。
+例如，<code>watch()</code> 规范并未说明，当一对匹配（或不匹配）的卡牌被移除（或翻回背面）时，是报告为单次变化还是两次独立的变化。</p>
+
+<p id="@once_you_added"><a class="jump" href="index.html#@once_you_added"></a>一旦你将 <code>watch()</code> 添加到服务器，你就可以将「记忆乱序」Web 用户界面从「轮询更新」切换为「监视更新」，你会发现界面能更快地显示其他客户端所做的棋盘更新。</p>
+
+<hr>
+
+</div><h2 id="before_youre_done"><a class="jump" href="index.html#before_youre_done"></a>完成之前</h2><div data-outline="before_youre_done">
+
+<ul>
+<li><p id="@make_sure_you_documented_specifications_form"><a class="jump" href="index.html#@make_sure_you_documented_specifications_form"></a>确保你已为所有类型和操作<strong>编写了规范</strong>，使用格式正确的 TypeDoc 注释。</p></li>
+<li><p id="@make_sure_you_documented_abstraction_functions"><a class="jump" href="index.html#@make_sure_you_documented_abstraction_functions"></a>确保你已为所有 ADT 编写了<strong>抽象函数和表示不变量</strong>，在字段声明附近以注释形式呈现。</p>
+
+<p id="@addition_document_type"><a class="jump" href="index.html#@addition_document_type"></a>此外，请<strong>说明该类型如何防止表示暴露</strong>。
+参见<a href="../../classes/07-abstraction-functions-rep-invariants/index.html#documenting_the_af_ri_and_safety_from_rep_exposure"><em>记录 AF、RI 和 SRE</em></a>。</p></li>
+<li><p id="@you_implement_waiting"><a class="jump" href="index.html#@you_implement_waiting"></a>在实现等待行为时，确保使用的是 promise，而非忙等待。</p></li>
+<li><p id="@make_sure_you_specify_test_implement"><a class="jump" href="index.html#@make_sure_you_specify_test_implement"></a>确保为所有不可变类型规范、测试和实现了 <code>equalValue()</code>。</p></li>
+<li><p id="@make_sure_implement"><a class="jump" href="index.html#@make_sure_implement"></a>确保实现了 <code>toString()</code>。（如果你想确认实现正确，可以<em>加强其规范</em>并对其进行<em>测试</em>。）</p></li>
+
+<p id="@also_use_inheritdoc"><a class="jump" href="index.html#@also_use_inheritdoc"></a>当类实现接口方法时，也可使用 <a href="https://jsdoc.app/tags-inheritdoc.html"><code>@inheritdoc</code></a>，以提醒读者在哪里可以找到规范。</p></li>
+<li><p id="@make_sure_you_thorough_principled_test"><a class="jump" href="index.html#@make_sure_you_thorough_principled_test"></a>确保为每个类型都有一套全面、有原则的<strong>测试套件</strong>。</p></li>
+</ul>
+
+<p id="@last_problem_set"><a class="jump" href="index.html#@last_problem_set"></a>这是 6.102 的最后一个问题集：你的作业应该体现<strong>SFB</strong>、<strong>ETU</strong>、<strong>RFC</strong> 软件构造标准！</p>
+
+<hr>
+
+</div><h2 id="submitting"><a class="jump" href="index.html#submitting"></a>提交</h2><div data-outline="submitting">
+
+<p id="@make_sure_you_commit_push_your"><a class="jump" href="index.html#@make_sure_you_commit_push_your"></a><strong>请确保在截止日期当天晚上 9:00 之前提交并推送你的作业</strong>。</p>
+
+<p id="@problem_set_can"><a class="jump" href="index.html#@problem_set_can"></a><span class="spin">⏳</span> 本问题集在 Didit 上的处理时间可能比之前的问题集长得多，请尽早推送。</p>
+
+<p id="@remember_didit_feedback"><a class="jump" href="index.html#@remember_didit_feedback"></a>请记住，Didit 反馈仅作为尽力提供的服务：</p>
+
+<ul id="@there_no_guarantee">
+<li><a class="jump" href="index.html#@there_no_guarantee"></a>不保证 Didit 测试会在任何特定时间范围内运行，甚至不保证会运行。
+如果你在接近截止日期时推送代码，大量的提交会减慢代码审查的周转时间。</li>
+<li>如果你恰好在截止日期前提交并推送，即使 Didit 构建在截止日期后完成也是可以的，因为提交和推送是按时进行的。</li>
+<li>通过 Didit 上的公开测试并不保证你能通过全套自动评分测试，但失败肯定意味着问题集的大量扣分。</li>
+</ul>
+
+</div><h2 id="grading"><a class="jump" href="index.html#grading"></a>评分</h2><div data-outline="grading">
+
+<p id="@your_overall_ps4"><a class="jump" href="index.html#@your_overall_ps4"></a>你的 ps4 总成绩将按以下方式计算：<br>
+约 30% alpha 自动评分（含在线练习）+ 约 20% alpha 手动评分 + 约 25% beta 自动评分 + 约 25% beta 手动评分（含代码审查）</p>
+
+<p id="@autograder_test_cases"><a class="jump" href="index.html#@autograder_test_cases"></a>自动评分测试用例从 alpha 到 beta 不会改变，但其分值会变化。
+为了鼓励<a href="../../classes/13-debugging/index.html#incremental_development">增量开发</a>，alpha 自动评分将主要关注客户端按顺序（在时间上分开）行动的场景，而非并发场景。
+在 beta 中，自动评分将考察全方位的并发场景。</p>
+
+<p id="@manual_grading_alpha"><a class="jump" href="index.html#@manual_grading_alpha"></alpha 的手动评分将仅检查内部文档（AF、RI、测试策略等）以及与并发无关的实现。
+beta 的手动评分可能检查任何部分，包括重新检查这些文档或代码，以及你如何处理代码审查反馈。</p></div></div>
+
+</div></main>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://cdn.jsdelivr.net/npm/bootstrap@3.3.7/dist/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 年春季课程网站存档  |  最新网站请见 <a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="psets-ps4"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:33:43 GMT+0000 (Coordinated Universal Time)
+--></html>

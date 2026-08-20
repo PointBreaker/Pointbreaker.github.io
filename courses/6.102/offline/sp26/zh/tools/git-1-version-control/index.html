@@ -1,0 +1,986 @@
+<!DOCTYPE html><html><head><base href="../../../"><meta charset="utf-8">
+
+<title>使用 Git 进行版本控制</title>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#version_control_with_git">使用 Git 进行版本控制</a></li><li><a href="index.html#version_control">版本控制</a></li><li><a href="index.html#git">Git</a></li><li><a href="index.html#terminal">命令行</a></li><li><a href="index.html#the_git_object_graph">Git 对象图</a></li><li><a href="index.html#copy_an_object_graph_with_git_clone">使用 git clone 复制对象图</a></li><li><a href="index.html#get_the_history_of_the_repository">获取仓库历史</a></li><li><a href="index.html#add_to_the_object_graph_with_git_commit">使用 git commit 添加到对象图</a></li><li><a href="index.html#get_the_status_of_your_repository">获取仓库状态</a></li><li><a href="index.html#send_receive_object_graphs_with_git_push_git_pull">使用 git push 和 git pull 发送与接收对象图</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="version_control_with_git"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?tools-git-1-version-control"></iframe><a class="jump" href="index.html#version_control_with_git"></a>使用 Git 进行版本控制</h1><div data-outline="version_control_with_git">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<ul id="@know_version_control">
+<li><a class="jump" href="index.html#@know_version_control"></a>了解什么是版本控制以及我们为什么使用它</li>
+<li>理解 Git 如何将版本历史存储为图结构</li>
+<li>练习作为独立程序员使用 Git</li>
+</ul>
+
+<h2 id="version_control"><a class="jump" href="index.html#version_control"></a>版本控制</h2><div data-outline="version_control">
+
+<p id="@version_control_systems"><a class="jump" href="index.html#@version_control_systems"></a><a href="http://en.wikipedia.org/wiki/Revision_control">版本控制系统</a>是软件工程领域不可或缺的工具。
+几乎所有项目——无论是严肃的还是爱好的、开源的还是专有的——都使用版本控制。
+没有版本控制，协调一个程序员团队同时编辑同一项目的代码将会令人极度抓狂。</p>
+
+<p id="@version_control_means"><a class="jump" href="index.html#@version_control_means"></a><em>版本控制</em>是指跟踪一个程序或文档的多个版本。
+在你迄今为止的计算经验中，你可能已经使用过某种形式的版本控制：</p>
+
+<ul id="@dropbox_version_history">
+<li><a class="jump" href="index.html#@dropbox_version_history"></a>Dropbox 有版本历史，保存文件的旧版本</li>
+<li>Google Docs 有文档的版本历史</li>
+<li>文字处理软件和编辑器都有<a href="http://en.wikipedia.org/wiki/Undo">撤销</a>功能，帮助你回到最近的编辑版本</li>
+</ul>
+
+<p id="@you_may_even"><a class="jump" href="index.html#@you_may_even"></a>你可能甚至自己实现过一些简单的版本控制，通过保存带有版本号的多个文件副本来实现。
+让我们探讨在编程中这样做的一个场景，看看一个好的软件版本控制系统应该具备哪些特性。</p>
+
+<p id="@suppose_alice_working"><a class="jump" href="index.html#@suppose_alice_working"></a>假设<a href="http://en.wikipedia.org/wiki/Alice_and_Bob">Alice</a>正在独自完成一个作业。</p>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@alice_version_1hello-ts">
+<tbody><tr>
+<td class="text-danger"><a class="jump" href="index.html#@alice_version_1hello-ts"></a><br><span class="glyphicon glyphicon-user"></span><br>Alice</td>
+<td class="text-danger">Version 1<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<p id="@she_starts_one"><a class="jump" href="index.html#@she_starts_one"></a>她从作业中的一个文件<code>hello.ts</code>开始，花了几天时间编写它。</p>
+
+<p id="@last_minute_before"><a class="jump" href="index.html#@last_minute_before"></a>在提交作业前的最后一刻，她意识到自己做了一个修改导致一切崩溃。
+要是她能回到过去获取一个之前的版本就好了！</p>
+
+<p id="@simple_discipline_saving"><a class="jump" href="index.html#@simple_discipline_saving"></a>一个简单的保存备份文件的规范就能解决问题。</p>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@alice_version_1hello-1-ts">
+<tbody><tr>
+<td class="text-danger"><a class="jump" href="index.html#@alice_version_1hello-1-ts"></a><br><span class="glyphicon glyphicon-user"></span><br>Alice</td>
+<td class="text-danger">Version 1<br><span class="glyphicon glyphicon-file"></span><br>hello.1.ts</td>
+<td class="text-danger">Version 2<br><span class="glyphicon glyphicon-file"></span><br>hello.2.ts</td>
+<td class="text-danger">Version 3<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+<td><br><span class="glyphicon glyphicon-arrow-left"></span> HEAD</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<p id="@alice_uses_her"><a class="jump" href="index.html#@alice_uses_her"></a>Alice 用自己的判断力来决定何时达到了某个值得保存代码的里程碑。
+她将<code>hello.ts</code>的版本保存为<code>hello.1.ts</code>、<code>hello.2.ts</code>和<code>hello.ts</code>。
+她遵循约定，最新版本就是<code>hello.ts</code>。
+我们将最新版本称为<em>head</em>。</p>
+
+<span class="clearfix"></span>
+
+<p id="@now_alice_realizes"><a class="jump" href="index.html#@now_alice_realizes"></a>现在当 Alice 发现版本 3 有致命缺陷时，她只需将版本 2 复制回当前代码的位置。
+灾难避免了！
+但如果版本 3 包含一些好的修改和一些坏的修改呢？
+Alice 可以手动比较文件来找到修改，并将它们分类为好修改和坏修改。
+然后她可以将好的修改复制到版本 2 中。</p>
+
+<p id="@lot_work_easy"><a class="jump" href="index.html#@lot_work_easy"></a>这是很多工作，而且人眼很容易遗漏修改。
+幸运的是，有标准的软件工具可以比较文本；在 UNIX 世界中，一个这样的工具是<a href="http://en.wikipedia.org/wiki/Diff"><code>diff</code></a>。
+一个更好的版本控制系统将使差异比较变得容易生成。</p>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@cloud_version_1hello-1-ts">
+<tbody><tr>
+<td class="text-muted"><a class="jump" href="index.html#@cloud_version_1hello-1-ts"></a><br><span class="glyphicon glyphicon-cloud"></span><br>Cloud</td>
+<td class="text-muted">Version 1<br><span class="glyphicon glyphicon-file"></span><br>hello.1.ts</td>
+<td class="text-muted">Version 2<br><span class="glyphicon glyphicon-file"></span><br>hello.2.ts</td>
+<td class="text-muted">Version 3<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+</tr>
+<tr>
+<td><span class="glyphicon glyphicon-arrow-up"></span></td>
+</tr>
+<tr>
+<td class="text-danger"><br><span class="glyphicon glyphicon-user"></span><br>Alice</td>
+<td class="text-danger">Version 1<br><span class="glyphicon glyphicon-file"></span><br>hello.1.ts</td>
+<td class="text-danger">Version 2<br><span class="glyphicon glyphicon-file"></span><br>hello.2.ts</td>
+<td class="text-danger">Version 3<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<p id="@alice_also_wants"><a class="jump" href="index.html#@alice_also_wants"></a>Alice 还想为她的笔记本电脑被公交车碾压的情况做好准备，所以她在云端保存了一份工作备份，每当她对工作目录的内容满意时就上传其内容。</p>
+
+<p id="@if_her_laptop"><a class="jump" href="index.html#@if_her_laptop"></a>如果她的笔记本电脑真的被压扁了，Alice 可以获取备份并在一台新机器上继续完成作业，同时保留随时回溯到旧版本的能力。</p>
+
+<span class="clearfix"></span>
+
+<p id="@furthermore_she_can"><a class="jump" href="index.html#@furthermore_she_can"></a>此外，她可以在多台机器上开发她的作业，使用云提供商作为公共交换点。
+Alice 在她的笔记本电脑上做了一些修改并将它们上传到云端。
+然后她在家里的台式机上下载，做更多工作，再将改进后的代码（包含旧文件版本）上传回云端。</p>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@cloud_version_5lhello-ts">
+<tbody><tr>
+<td colspan="2"></td>
+<td class="text-muted"><a class="jump" href="index.html#@cloud_version_5lhello-ts"></a><span class="glyphicon glyphicon-cloud"></span><br>Cloud</td>
+</tr>
+<tr>
+<td></td>
+<td colspan="3"><span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span>  <span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span></td>
+<td></td>
+</tr>
+<tr>
+<td class="text-danger">Version 5L<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+<td class="text-danger"><span class="glyphicon glyphicon-user"></span><br>Alice on<br>laptop</td>
+<td></td>
+<td class="text-danger"><span class="glyphicon glyphicon-user"></span><br>Alice on<br>desktop</td>
+<td class="text-danger">Version 5D<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<span id="version_5L_5D"></span>
+
+<p id="@if_alice_isn-t"><a class="jump" href="index.html#@if_alice_isn-t"></a>不过，如果 Alice 不小心，这种方法可能会遇到麻烦。
+想象一下，她开始在笔记本电脑上编辑<code>hello.ts</code>来创建"版本 5"。
+然后她分心了，忘记了她的修改。
+后来，她开始在台式机上创建一个新的"版本 5"，包含了<em>不同的</em>改进。
+我们将这些版本称为"5L"和"5D"，分别代表"笔记本电脑"和"台式机"。</p>
+
+<p id="@comes_time_upload"><a class="jump" href="index.html#@comes_time_upload"></a>当需要上传修改到云端时，就有发生意外的机会！
+Alice 可能将所有本地文件复制到云端，导致云端只包含版本 5D。之后 Alice 从云端同步到她的笔记本电脑，可能会覆盖版本 5L，丢失有价值的修改。
+Alice 真正想要的是一个<em>合并</em>操作，基于两个版本 5 创建一个新版本。</p>
+
+<p id="@point_considering_just"><a class="jump" href="index.html#@point_considering_just"></a>至此，仅考虑一个程序员独立工作的场景，我们已经列出了版本控制方案应该支持的操作：</p>
+
+<ul id="@reverting_past_version">
+<li><a class="jump" href="index.html#@reverting_past_version"></a><em>回退</em>到过去的版本</li>
+<li><em>比较</em>两个不同的版本</li>
+<li><em>推送</em>完整的版本历史到另一个位置</li>
+<li><em>拉取</em>历史记录从那个位置</li>
+<li><em>合并</em>从同一早期版本分叉出去的版本</li>
+</ul>
+
+<h3 id="multiple_developers"><a class="jump" href="index.html#multiple_developers"></a>多人开发</h3><div data-outline="multiple_developers">
+
+<p id="@now_add_bob"><a class="jump" href="index.html#@now_add_bob"></a>现在让我们把 Bob，另一位开发者，加入画面。
+这幅画面与我们刚才思考的情况没有太大区别。</p>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@cloud_version_5ahello-ts">
+<tbody><tr>
+<td colspan="3"></td>
+<td class="text-muted"><a class="jump" href="index.html#@cloud_version_5ahello-ts"></a><span class="glyphicon glyphicon-cloud"></span><br>Cloud</td>
+</tr>
+<tr>
+<td colspan="2"></td>
+<td colspan="3"><span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span>  <span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span></td>
+</tr>
+<tr>
+<td class="text-danger">Version 5A<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+<td class="text-danger">Version 5A<br><span class="glyphicon glyphicon-file"></span><br>greet.ts</td>
+<td class="text-danger"><br><span class="glyphicon glyphicon-user"></span><br>Alice</td>
+<td></td>
+<td class="text-warning"><br><span class="glyphicon glyphicon-user"></span><br>Bob</td>
+<td class="text-warning">Version 5B<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+<td class="text-warning">Version 5B<br><span class="glyphicon glyphicon-file"></span><br>greet.ts</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<p id="@alice_bob_here"><a class="jump" href="index.html#@alice_bob_here"></a>这里的 Alice 和 Bob 就像两台不同电脑上的两个 Alice。
+他们不再共享一个大脑，这使得在向共享云服务器推送和拉取时遵循严格的规范变得更加重要。
+两位程序员必须协调制定版本号的方案。
+理想情况下，该方案允许我们给<em>整套文件</em>分配清晰的名称，而不仅仅是单个文件。
+（代码文件通常依赖于其他代码文件，因此孤立地考虑它们有可能产生不一致。）</p>
+
+<span class="clearfix"></span>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@cloud_log-1_alice">
+<tbody><tr>
+<td colspan="4"></td>
+<td class="text-muted"><a class="jump" href="index.html#@cloud_log-1_alice"></a><span class="glyphicon glyphicon-cloud"></span><br>Cloud</td>
+</tr>
+<tr>
+<td colspan="3"></td>
+<td colspan="3"><span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span>  <span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span></td>
+</tr>
+<tr>
+<td class="text-left text-info"><span class="glyphicon glyphicon-pencil"></span> Log:<br>1: Alice, 7pm, ...<br>...<br>4: Bob, 8pm, ...<br>5A: Alice, 9pm, ...</td>
+<td class="text-danger">Ver. 5A<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+<td class="text-danger">Ver. 5A<br><span class="glyphicon glyphicon-file"></span><br>greet.ts</td>
+<td class="text-danger"><br><span class="glyphicon glyphicon-user"></span><br>Alice</td>
+<td></td>
+<td class="text-warning"><br><span class="glyphicon glyphicon-user"></span><br>Bob</td>
+<td class="text-warning">Ver. 5B<br><span class="glyphicon glyphicon-file"></span><br>hello.ts</td>
+<td class="text-warning">Ver. 5B<br><span class="glyphicon glyphicon-file"></span><br>greet.ts</td>
+<td class="text-left text-info"><span class="glyphicon glyphicon-pencil"></span> Log:<br>1: Alice, 7pm, ...<br>...<br>4: Bob, 8pm, ...<br>5B: Bob, 9pm, ...</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<p id="@merely_uploading_new"><a class="jump" href="index.html#@merely_uploading_new"></a>仅仅上传新源文件并不是向他人传达一组修改的高级理念的好方法。
+所以让我们添加一个日志，为每个版本记录是<em>谁</em>编写的、<em>何时</em>完成的，以及<em>什么</em>被修改了，以简短的人工编写消息的形式。</p>
+
+<span class="clearfix"></span>
+
+<p id="@pushing_another_version"><a class="jump" href="index.html#@pushing_another_version"></a>现在推送另一个版本变得更加复杂，因为我们需要合并日志。
+合并日志比合并 TypeScript 文件容易，因为日志的结构更简单——但如果没有工具支持，Alice 和 Bob 仍然需要手动合并他们的日志！
+我们还希望强制日志和实际可用文件集之间的一致性：对于每个日志条目，应该能够轻松提取出在该条目创建时完整的文件集。</p>
+
+<p id="@but_logs_all"><a class="jump" href="index.html#@but_logs_all"></a>但有了日志，就能启用各种有用的操作。
+我们可以只查看特定文件的日志：仅限于涉及修改某些文件的那些修改的日志视图。
+我们还可以使用日志来确定每行代码是由哪个修改贡献的，或者更好的是，确定每行代码是由谁贡献的，这样当代码出问题时我们就知道该找谁抱怨了。
+这种操作手动做会很繁琐；版本控制系统中的自动操作称为<em>annotate</em>（或者不幸的是，<em>blame</em>）。</p>
+
+</div><h3 id="multiple_branches"><a class="jump" href="index.html#multiple_branches"></a>多分支</h3><div data-outline="multiple_branches">
+
+<p id="@sometimes_makes_sense"><a class="jump" href="index.html#@sometimes_makes_sense"></a>有时让一部分开发者分开去开发一个<em>分支</em>是有意义的，一个平行的代码宇宙，比如说用来试验一个新功能。
+其他开发者不想拉取新功能，直到它完成，即使在此期间创建了多个协调的版本。
+即使单个开发者也可以发现创建分支是有用的，原因与 Alice 尽管独自工作却使用云服务器的原因相同。</p>
+
+<p id="@general_be_useful"><a class="jump" href="index.html#@general_be_useful"></a>一般而言，拥有多个共享位置来交换项目状态是有用的。
+可能同时存在多个分支位置，每个由几位程序员共享。
+通过正确的设置，任何程序员可以从任何位置拉取或推送到任何位置，创造了合作模式的极大灵活性。</p>
+
+</div><h3 id="the_shocking_conclusion"><a class="jump" href="index.html#the_shocking_conclusion"></a>令人震惊的结论</h3><div data-outline="the_shocking_conclusion">
+
+<p id="@course_turns_out"><a class="jump" href="index.html#@course_turns_out"></a>当然，事实证明我们在这里并没有发明任何新东西：
+<a href="http://git-scm.com">Git</a>为你做了所有这些事情，许多<a href="https://en.wikipedia.org/wiki/List_of_version-control_software">其他版本控制系统</a>也同样如此。</p>
+
+</div><h3 id="distributed_vs_centralized"><a class="jump" href="index.html#distributed_vs_centralized"></a>分布式 vs. 集中式</h3><div data-outline="distributed_vs_centralized">
+
+<div class="panel panel-default panel-figure pull-left no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@dan_carol_cloud_alice_bob_0">
+<tbody><tr>
+<td class="text-info"><a class="jump" href="index.html#@dan_carol_cloud_alice_bob_0"></a>Dan <span class="glyphicon glyphicon-user"></span></td>
+<td></td>
+<td class="text-success"><span class="glyphicon glyphicon-user"></span> Carol</td>
+</tr>
+<tr>
+<td colspan="3"><span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span> <span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span></td>
+</tr>
+<tr>
+<td class="text-muted" colspan="3"><span class="glyphicon glyphicon-cloud"></span> Cloud</td>
+</tr>
+<tr>
+<td colspan="3"><span class="glycerol-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span> <span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span></td>
+</tr>
+<tr>
+<td class="text-danger">Alice <span class="glyphicon glyphicon-user"></span></td>
+<td><span class="glyphicon glyphicon-arrow-right" style="color:white;opacity:0"></span></td>
+<td class="text-warning"><span class="glyphicon glyphicon-user"></span> Bob</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<p id="@traditional_centralized_version"><a class="jump" href="index.html#@traditional_centralized_version"></a>传统的<em>集中式</em>版本控制系统，如<a href="https://www.nongnu.org/cvs/">CVS</a>和<a href="http://subversion.apache.org/">Subversion</a>，实现了我们上面设想的部分功能。
+它们支持一个协作图——谁与谁共享什么修改——带有一个主服务器，以及只与主服务器通信的副本。</p>
+
+<p id="@centralized_system_everyone"><a class="jump" href="index.html#@centralized_system_everyone"></a>在集中式系统中，每个人必须向主<em>仓库</em>（通常缩写为<em>repo</em>）推送和从中拉取他们的工作。
+修改被安全地存储在<em>版本控制中</em>的条件是它们在<em>主仓库</em>中，因为那是唯一的仓库。</p>
+
+<span class="clearfix"></span>
+
+<div class="panel panel-default panel-figure pull-left no-markdown">
+<div class="panel-body text-center">
+<table class="table table-condensed table-figure" id="@dan_carol_cloud_alice_bob_1">
+<tbody><tr>
+<td class="text-info"><a class="jump" href="index.html#@dan_carol_cloud_alice_bob_1"></a>Dan <span class="glyphicon glyphicon-user"></span></td>
+<td style="line-height:0"><span class="glyphicon glyphicon-arrow-right" style="line-height:.5"></span><br><span class="glyphicon glyphicon-arrow-left"></span></td>
+<td class="text-success"><span class="glyphicon glyphicon-user"></span> Carol</td>
+</tr>
+<tr>
+<td colspan="3">   <span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span></td>
+</tr>
+<tr>
+<td class="text-muted" colspan="3"><span class="glyphicon glyphicon-cloud"></span> Cloud</td>
+</tr>
+<tr>
+<td colspan="3"><span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span> <span class="glyphicon glyphicon-arrow-up"></span><span class="glyphicon glyphicon-arrow-down"></span></td>
+</tr>
+<tr>
+<td class="text-danger">Alice <span class="glyphicon glyphicon-user"></span></td>
+<td style="line-height:0"><span class="glyphicon glyphicon-arrow-right" style="line-height:.5"></span><br><span class="glyphicon glyphicon-arrow-left"></span></td>
+<td class="text-warning"><span class="glyphicon glyphicon-user"></span> Bob</td>
+</tr>
+</tbody></table>
+</div></div>
+
+<p id="@contrast_distributed_version"><a class="jump" href="index.html#@contrast_distributed_version"></a>相比之下，<em>分布式</em>版本控制系统，如<a href="http://git-scm.com">Git</a>和<a href="https://www.mercurial-scm.org/">Mercurial</a>，允许各种不同类型的协作图，团队和团队子集可以轻易地试验代码和历史的替代版本，在确定它们是好的想法时将版本合并在一起。</p>
+
+<p id="@distributed_system_all"><a class="jump" href="index.html#@distributed_system_all"></a>在分布式系统中，所有仓库都是平等的，由用户为它们分配不同的角色。
+不同的用户可能向不同的仓库推送和从中拉取他们的工作，团队必须决定一个修改<em>进入版本控制</em>意味着什么。
+一个程序员仓库中的修改是否需要与指定的协作者或服务器共享，然后团队其余成员才认为它是正式的？</p>
+
+<span class="clearfix"></span>
+
+</div><h3 id="version_control_terminology"><a class="jump" href="index.html#version_control_terminology"></a>版本控制术语</h3><div data-outline="version_control_terminology">
+
+<ul id="@repository_repo_local">
+<li><a class="jump" href="index.html#@repository_repo_local"></a><mark data-structure-text="repository" id="^repository"><strong>Repository（仓库）</strong></mark>或 <strong>repo</strong>：本地或远程存储我们项目版本的地方</li>
+<li><mark data-structure-text="working copy" id="^working_copy"><strong>Working copy（工作副本）</strong></mark>：我们可以处理的本地可编辑的项目副本</li>
+<li><strong>File（文件）</strong>：我们项目中的单个文件</li>
+<li><strong>Version（版本）</strong>或 <strong>revision（修订）</strong>：在某个时间点我们项目内容的记录</li>
+<li><strong>Change（修改）</strong>或 <strong>diff（差异）</strong>：两个版本之间的差异</li>
+<li><strong>Head</strong>：当前版本</li>
+</ul>
+
+</div><h3 id="features_of_a_version_control_system"><a class="jump" href="index.html#features_of_a_version_control_system"></a>版本控制系统的特性</h3><div data-outline="features_of_a_version_control_system">
+
+<ul id="@reliable_keep_versions">
+<li><a class="jump" href="index.html#@reliable_keep_versions"></a><strong>可靠</strong>：在需要时长期保存版本；允许备份</li>
+<li><strong>多文件</strong>：跟踪项目的版本，而非单个文件</li>
+<li><strong>有意义的版本</strong>：做了什么修改，为什么做这些修改？</li>
+<li><strong>回退</strong>：恢复旧版本，全部或部分</li>
+<li><strong>比较版本</strong>：查看改变了什么</li>
+<li><strong>审查历史</strong>：针对整个项目或单个文件</li>
+<li><strong>不仅限于代码</strong>：文本、图片、……</li>
+</ul>
+
+<p id="@should_allow_multiple"><a class="jump" href="index.html#@should_allow_multiple"></a>它应该<strong>允许多人协同工作</strong>：</p>
+
+<ul id="@merge_combine_versions">
+<li><a class="jump" href="index.html#@merge_combine_versions"></a><strong>合并</strong>：合并没有从共同早期版本分叉的版本</li>
+<li><strong>跟踪责任</strong>：谁做了那个修改，谁碰了那行代码？</li>
+<li><strong>并行工作</strong>：允许一个程序员独立工作一段时间（不放弃版本控制）</li>
+<li><strong>进行中的工作</strong>：允许多个程序员共享未完成的工作（不影响他人，不放弃版本控制）</li>
+</ul>
+
+</div></div><h2 id="git"><a class="jump" href="index.html#git"></a>Git</h2><div data-outline="git">
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/sourcetree.png" width="400"></div>
+
+<p id="@version_control_system"><a class="jump" href="index.html#@version_control_system"></a>我们在 6.102 中使用的版本控制系统是<a href="http://git-scm.com">Git</a>。
+它功能强大，值得学习。
+但 Git 的用户界面可能非常令人沮丧。
+Git 的用户界面是什么？</p>
+
+<ul>
+<li><p id="@6-102_use_git"><a class="jump" href="index.html#@6-102_use_git"></a><strong>在 6.102 中，我们将在命令行使用 Git。</strong>
+命令行是一个生活事实，因其强大而无处不在。</p></li>
+<li><p id="@command_line_can"><a class="jump" href="index.html#@command_line_can"></a>命令行可能使你很难看清仓库中正在发生什么。
+你可能会发现<a href="http://www.sourcetreeapp.com">SourceTree</a>（右图所示）对 Mac 和 Windows 用户很有用。
+在任何平台上，<a href="http://git-scm.com/docs/gitk">gitk</a>都可以给你一个基本的 Git 图形界面。
+用 Google 搜索可以找到其他建议。</p></li>
+</ul>
+
+<span class="clearfix"></span>
+
+<p id="@important_note_about"><a class="jump" href="index.html#@important_note_about"></a>关于 Git 工具的一个重要说明：</p>
+
+<ul>
+<li><p id="@programming_editors_like"><a class="jump" href="index.html#@programming_editors_like"></a>像 VS Code 这样的编程编辑器通常内置了 Git 支持，带有有用的图标或高亮显示，展示（例如）你修改了哪些文件以及哪些文件还没有添加到仓库。
+然而，我们<strong>不</strong>建议使用编辑器菜单或插件来运行 git 命令，如 add、commit 或 push。
+如果你遇到问题，课程工作人员可能无法帮助你。</p></li>
+<li><p id="@github_makes_desktop"><a class="jump" href="index.html#@github_makes_desktop"></a><a href="http://github.com/">GitHub</a>为 Mac 和 Windows 制作了桌面应用。
+由于 GitHub 应用改变了某些 Git 操作的工作方式，如果你使用 GitHub 应用，课程工作人员将无法帮助你。</p></li>
+</ul>
+
+<h3 id="getting_started_with_git"><a class="jump" href="index.html#getting_started_with_git"></a>Git 入门</h3><div data-outline="getting_started_with_git">
+
+<p id="@git_website_you"><a class="jump" href="index.html#@git_website_you"></a>在<a href="http://git-scm.com">Git</a>网站上，你可以找到两个特别有用的资源：</p>
+
+<ul id="@pro_git_documents">
+<li><a class="jump" href="index.html#@pro_git_documents"></a><a href="http://git-scm.com/book"><em>Pro Git</em></a>记录了关于 Git 你可能需要知道的一切。</li>
+<li><a href="http://git-scm.com/docs">Git 命令参考</a>可以帮助你了解 Git 命令的语法。</li>
+</ul>
+
+</div></div><h2 id="terminal"><a class="jump" href="index.html#terminal"></a>命令行</h2><div data-outline="terminal">
+
+<p id="@one_thing_makes"><a class="jump" href="index.html#@one_thing_makes"></a>让许多学生学习 Git 更难的一件事是它是一个命令行程序。
+如果你不熟悉命令行，这可能会令人困惑。</p>
+
+<p id="@command-line_interface_your"><a class="jump" href="index.html#@command-line_interface_your"></a>命令行是你计算机的一个界面，类似于 Mac Finder 或 Windows Explorer，只不过它是基于文本的。
+正如其名称所示，你通过"命令"与之交互——每行输入以一个命令开头，后面跟着零个或多个参数，以空格分隔。</p>
+
+<h3 id="make_sure_youre_using_the_right_command_line"><a class="jump" href="index.html#make_sure_youre_using_the_right_command_line"></a>确保使用正确的命令行</h3><div data-outline="make_sure_youre_using_the_right_command_line">
+
+<p id="@macos_linux_open"><a class="jump" href="index.html#@macos_linux_open"></a>在 MacOS 和 Linux 上，打开你的终端应用。</p>
+
+<p id="@windows_make_sure"><a class="jump" href="index.html#@windows_make_sure"></a>在 Windows 上，确保你打开的是<strong>Git Bash</strong>。</p>
+
+<ul id="@don-t_use_windows">
+<li><a class="jump" href="index.html#@don-t_use_windows"></a>不要使用 Windows 命令提示符；它有不同的命令语法，不是 Mac 和 Linux 中使用的 Unix shell 语法。</li>
+<li>也不要使用 Windows Subsystem for Linux；虽然它<em>确实</em>使用 Unix shell 语法，但在一些其他重要方面（比如文本文件的换行符约定）与 Unix shell 不同，这会在本课程中给你带来问题。</li>
+</ul>
+
+</div><h3 id="common_commands"><a class="jump" href="index.html#common_commands"></a>常用命令</h3><div data-outline="common_commands">
+
+<p id="@you_be_able"><a class="jump" href="index.html#@you_be_able"></a>你将需要在命令行中四处移动。以下是实现这一目的最重要的命令。</p>
+
+<ul>
+<li><p id="@cd_stands_change"><a class="jump" href="index.html#@cd_stands_change"></a><strong><code>cd</code></strong>（代表"change directory"）</p>
+
+<p id="@changes_current_directory"><a class="jump" href="index.html#@changes_current_directory"></a>更改当前目录。
+如果你在一个名为<code>hello</code>的子目录所在的目录中，那么<code>cd&nbsp;hello</code>会进入那个子目录。</p>
+
+<p id="@use_cd_move"><a class="jump" href="index.html#@use_cd_move"></a>使用<code>cd&nbsp;..</code>移动到当前目录的父目录。</p></li>
+<li><p id="@pwd_print_working"><a class="jump" href="index.html#@pwd_print_working"></a><strong><code>pwd</code></strong>（"print working directory"）</p>
+
+<p id="@prints_out_current"><a class="jump" href="index.html#@prints_out_current"></a>打印当前目录，如果你不确定你在哪里。</p>
+
+<p id="@well-configured_system_your"><a class="jump" href="index.html#@well-configured_system_your"></a>在配置良好的系统中，你的当前目录会作为系统准备接收命令时显示的<em>提示符</em>的一部分显示出来。
+如果你的系统不是这样，请<a href="../../general/index.html#who-to-ask">寻求帮助</a>配置你的提示符。</p></li>
+<li><p id="@ls_list"><a class="jump" href="index.html#@ls_list"></a><strong><code>ls</code></strong>（"list"）</p>
+
+<p id="@lists_files_current"><a class="jump" href="index.html#@lists_files_current"></a>列出当前目录中的文件。</p>
+
+<p id="@use_ls_l"><a class="jump" href="index.html#@use_ls_l"></a>使用<code>ls -l</code>获取关于文件的额外信息（"长"列表）。
+使用<code>ls -a</code>（代表"all"）显示隐藏文件，即名称以句点开头的文件和子目录。</p></li>
+<li><p id="@mkdir_make_directory"><a class="jump" href="index.html#@mkdir_make_directory"></a><strong><code>mkdir</code></strong>（"make directory"）</p>
+
+<p id="@creates_new_directory"><a class="jump" href="index.html#@creates_new_directory"></a>在当前目录中创建一个新目录。
+要创建一个名为<code>goodbye</code>的目录，使用<code>mkdir&nbsp;goodbye</code>。</p></li>
+<li><p id="@up_arrow_down"><a class="jump" href="index.html#@up_arrow_down"></a><strong><em>上箭头</em>和<em>下箭头</em></strong></p>
+
+<p id="@use_up_arrow"><a class="jump" href="index.html#@use_up_arrow"></a>使用<em>上箭头</em>将你刚才运行的命令放回命令行。
+你现在可以编辑该命令来修正拼写错误，或者直接按<em>回车</em>再次运行它。</p>
+
+<p id="@use_up_down"><a class="jump" href="index.html#@use_up_down"></a>使用上下箭头键浏览你的命令历史，这样你永远不需要重新输入一个长命令行。</p></li>
+<li><p id="@ctrl-a_ctrl-e"><a class="jump" href="index.html#@ctrl-a_ctrl-e"></a><strong><code>Ctrl+A</code>和<code>Ctrl+E</code></strong></p>
+
+<p id="@use_ctrl-a_bring"><a class="jump" href="index.html#@use_ctrl-a_bring"></a>使用<code>Ctrl+A</code>将光标移到行首，或使用<code>Ctrl+E</code>将光标移到行尾。（如果你的键盘有 Home 或 End 键并且你的终端提示符能正确解释它们，它们也可能有效。）</p>
+
+<p id="@you_may_find"><a class="jump" href="index.html#@you_may_find"></a>你可能会发现这些快捷键对编辑长命令很有用，可以避免按左右箭头键在整个命令中移动光标。</p></li>
+<li><p id="@ctrl-c_0"><a class="jump" href="index.html#@ctrl-c_0"></a><strong><code>Ctrl+C</code></strong></p>
+
+<p id="@you_may_be"><a class="jump" href="index.html#@you_may_be"></a>你可能已经在 6.101（以前的 6.009）中熟悉了<code>Ctrl+C</code>，用于停止从命令行启动的正在运行的进程。不出所料，它在这里也会有用，特别是当我们开始部署小型 Web 服务器时。</p>
+
+<p id="@ctrl-c_another_use"><a class="jump" href="index.html#@ctrl-c_another_use"></a>然而，<code>Ctrl+C</code>还有另一个用途！如果你在终端中输入了一个长命令后改变了主意，在没有按<code>Enter</code>或<code>Return</code>的情况下，按<code>Ctrl+C</code>会给你一个新的提示符并丢弃之前的输入，允许你快速取消命令，而不需要按住<code>Backspace</code>。</p></li>
+<li><p id="@tab_completion"><a class="jump" href="index.html#@tab_completion"></a><strong>Tab 补全</strong></p>
+
+<p id="@you_can_use"><a class="jump" href="index.html#@you_can_use"></a>你可以使用<em>Tab</em>键自动补全文件或目录名称。</p>
+
+<p id="@example_if_you"><a class="jump" href="index.html#@example_if_you"></a>例如，如果你想将目录更改为一个名为<em>source</em>的子目录，你可以在命令行输入<code>cd s</code>然后按<em>Tab</em>，如果只有一个以<em>s</em>开头的子目录，它将自动补全命令（<code>cd source</code>），或者列出所有以<em>s</em>开头的子目录。</p></li>
+</ul>
+
+</div></div><h2 id="the_git_object_graph"><a class="jump" href="index.html#the_git_object_graph"></a>Git 对象图</h2><div data-outline="the_git_object_graph">
+
+<div class="handout-solo alert alert-warning"><p id="@read_pro_git"><a class="jump" href="index.html#@read_pro_git"></a>阅读：<a href="https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F" class="alert-link"><em>Pro Git</em> 1.3：什么是 Git？</a></p></div>
+
+<p id="@reading_introduces_three"><a class="jump" href="index.html#@reading_introduces_three"></a>该阅读材料介绍了 Git 仓库的三个部分：<code>.git</code> 目录、工作目录和暂存区。</p>
+
+<p id="@all_operations_do"><a class="jump" href="index.html#@all_operations_do"></a>我们使用 Git 执行的所有操作——clone、add、commit、push、log、merge、……——都是对图数据结构的操作，该数据结构存储了项目中所有文件的版本以及描述这些修改的所有日志条目。
+<strong>Git 对象图</strong>存储在你本地仓库的<code>.git</code>目录中。
+远程仓库也有该图的一个副本：对于 6.102，该副本在 github.mit.edu 上，存储在某个 IS&amp;T 数据中心。</p>
+
+</div><h2 id="copy_an_object_graph_with_git_clone"><a class="jump" href="index.html#copy_an_object_graph_with_git_clone"></a>使用<code>git clone</code>复制对象图</h2><div data-outline="copy_an_object_graph_with_git_clone">
+
+<p id="@do_you_get"><a class="jump" href="index.html#@do_you_get"></a>你如何将对象图从 github.mit.edu（或任何其他远程存储）获取到你的本地机器上，以便开始处理作业？
+<strong><code>git clone</code></strong>复制该图。</p>
+
+<p id="@suppose_your_username"><a class="jump" href="index.html#@suppose_your_username"></a>假设你的用户名是<code>bitdiddle</code>，你运行：</p>
+
+<div class="panel panel-default"><div class="panel-heading"><p id="@git_clone_ssh-github-mit-edu-ps0-bitdiddle-git"><a class="jump" href="index.html#@git_clone_ssh-github-mit-edu-ps0-bitdiddle-git"></a><code>git clone ssh://github.mit.edu/.../ps0-bitdiddle.git ps0</code></p></div>
+<div class="panel-body" id="hello-git-clone"><p id="@git_performs_several"><a class="jump" href="index.html#@git_performs_several"></a>Git 执行几个步骤。
+将鼠标悬停或点击每个步骤以更新下方图示：</p>
+
+<ol id="@create_empty_local">
+<li class="hover-figure-select highlighted"><a class="jump" href="index.html#@create_empty_local"></a>创建一个空的本地目录<code>ps0</code>，以及<code>ps0/.git</code>。</li>
+<li class="hover-figure-select">连接到 github.mit.edu 并将对象图从<code>ps0-bitdiddle.git</code>复制到<code>ps0/.git</code>中。</li>
+<li class="hover-figure-select"><strong>检出（Check out）</strong><strong><code>main</code>分支</strong>的当前版本。</li>
+</ol>
+
+<p id="@diagram_highlighted_step"><a class="jump" href="index.html#@diagram_highlighted_step"></a>高亮步骤的图示：</p>
+
+<div class="hover-figure no-markdown" data-selector="#hello-git-clone li" data-target="img" data-attr="src" data-template="figures/hello-git-clone-{index}.png"><img style="max-width:618px" src="figures/hello-git-clone-0.png"></div></div></div>
+
+<p id="@still_haven-t_explained"><a class="jump" href="index.html#@still_haven-t_explained"></a>我们还没有解释对象图中包含什么。
+但在那之前，让我们理解<code>git clone</code>的第 3 步：检出<code>main</code>分支的当前版本。</p>
+
+<p id="@object_graph_stored"><a class="jump" href="index.html#@object_graph_stored"></a>对象图以方便快捷的格式存储在磁盘上，用于执行 Git 操作，但不是我们可以直接使用的格式。
+在<a href="index.html#version_control">Alice 发明的版本控制方案</a>中，<code>hello.ts</code>的当前版本就称为<code>hello.ts</code>，因为她需要能够正常编辑它。
+在 Git 中，我们通过从对象图中<em>检出</em>文件来获取文件的普通副本。
+这些是我们在 VS Code 中看到和编辑的文件。</p>
+
+<p id="@also_decided_above"><a class="jump" href="index.html#@also_decided_above"></a>我们上面还决定，支持版本历史中的<a href="index.html#multiple_branches">多个<em>分支</em></a>可能是有用的。
+多个分支对于从事长期项目的大团队至关重要。
+为了在 6.102 中保持简单，我们将不使用分支，我们也不建议你创建任何分支。
+每个 6.102 Git 仓库都有一个名为<code>main</code>的默认分支，我们所有的工作都将在<code>main</code>分支上进行。
+（默认分支以前按惯例称为<code>master</code>。如果你在在线 Git 教程或 Stack Overflow 答案中看到它，只需将其替换为<code>main</code>即可。）</p>
+
+<p id="@so_step_2"><a class="jump" href="index.html#@so_step_2"></a>所以<code>git clone</code>的第 2 步为我们获取了对象图，第 3 步为我们获取了一个<strong>工作目录</strong>，其中包含我们可以编辑的文件，从项目的当前版本开始。</p>
+
+<h3 id="practice_with_gitstream"><a class="jump" href="index.html#practice_with_gitstream"></a>使用 GitStream 练习</h3><div data-outline="practice_with_gitstream">
+
+<p id="@reading_includes_links"><a class="jump" href="index.html#@reading_includes_links"></a>该阅读材料包含一个名为<strong>GitStream</strong>的 Git 教程的链接。
+GitStream 允许你在你的机器上练习 Git：对于每个练习，你克隆一个 GitStream 仓库，然后按照网页上的指示操作。
+GitStream 会在你完成每个练习时在终端和网页上给你反馈。</p>
+
+<div class="handout-solo alert alert-warning"><p id="@gitstream_not_work_multiple_exercise_pages_open_same_time_0"><a class="jump" href="index.html#@gitstream_not_work_multiple_exercise_pages_open_same_time_0"></a><strong><em>GitStream 在同时打开多个练习页面时无法工作</em></strong>。</p>
+
+<p id="@don-t_open_exercises_multiple_tabs_if_exercise_doesn-t_work_please_close_all_open_gitstream_pages_try_again_0"><a class="jump" href="index.html#@don-t_open_exercises_multiple_tabs_if_exercise_doesn-t_work_please_close_all_open_gitstream_pages_try_again_0"></a>不要在多标签页中打开练习。
+如果某个练习不起作用，请关闭所有打开的 GitStream 页面然后重试。</p>
+
+<p id="@if_you_encounter_problem_please_ask_help_0"><a class="jump" href="index.html#@if_you_encounter_problem_please_ask_help_0"></a>如果你遇到问题，请<a href="../../general/index.html#who-to-ask" class="alert-link">寻求帮助</a>。</p></div>
+
+<div class="no-markdown handout-due alert alert-danger"><i>GitStream</i> → <a href="https://gitstream.mit.edu/?theGitGo" target="gitstream" class="alert-link">练习 <code>git clone</code></a></div>
+
+<div class="handout-solo alert alert-warning"><p id="@note_gitstream_doesn-t"><a class="jump" href="index.html#@note_gitstream_doesn-t"></a>请注意，GitStream 不会跟踪你是否已经做过这个练习。
+要查看你已经完成了哪些 GitStream 练习，请查看<a href="https://omni.mit.edu/6.102/sp26/user/tools/git-1-version-control/gitstream-exercises" class="alert-link">Omnivore</a>。</p></div>
+
+</div></div><h2 id="get_the_history_of_the_repository"><a class="jump" href="index.html#get_the_history_of_the_repository"></a>获取仓库历史</h2><div data-outline="get_the_history_of_the_repository">
+
+<p id="@finally_dive_into"><a class="jump" href="index.html#@finally_dive_into"></a>让我们终于深入那个对象图吧！</p>
+
+<div class="handout-solo alert alert-warning"><p id="@clone_example_repo"><a class="jump" href="index.html#@clone_example_repo"></a>克隆一个有一些有趣历史的示例仓库：</p>
+
+<p id="@git_clone_https-github-com-6031-ex05-hello-git"><a class="jump" href="index.html#@git_clone_https-github-com-6031-ex05-hello-git"></a><strong><code>git clone https://github.com/6031/ex05-hello-git hello-git</code></strong></p>
+
+<p id="@make_sure_you"><a class="jump" href="index.html#@make_sure_you"></a>并确保你在它的目录中：</p>
+
+<p id="@cd_hello-git"><a class="jump" href="index.html#@cd_hello-git"></a><strong><code>cd hello-git</code></strong></p></div>
+
+<p id="@here_most_useful"><a class="jump" href="index.html#@here_most_useful"></a>以下是最有用的命令：</p>
+
+<ul>
+<li><p id="@git_lol"><a class="jump" href="index.html#@git_lol"></a><strong><code>git lol</code></strong>  </p>
+
+<p id="@shows_list_all"><a class="jump" href="index.html#@shows_list_all"></a>显示仓库中所有提交的列表。它是<code>git log</code>加上几个选项的别名，是你按照<a href="../getting-started/index.html#git-lol">入门说明</a>时创建的。</p></li>
+<li><p id="@git_show"><a class="jump" href="index.html#@git_show"></a><strong><code>git show</code></strong>  </p>
+
+<p id="@shows_last_commit"><a class="jump" href="index.html#@shows_last_commit"></a>显示仓库的最后一次提交。它会显示提交消息以及所有的修改。</p></li>
+</ul>
+
+<p id="@long_output_if"><a class="jump" href="index.html#@long_output_if"></a><strong>长输出</strong>：如果<code>git lol</code>或<code>git show</code>产生的输出超过一页，你会在屏幕底部看到一个冒号（<code>:</code>）符号。
+你将无法输入另一个命令！
+使用方向键或 Page Up/Page Down 上下滚动，按<code>q</code>退出输出查看器。
+（你也可以按<code>h</code>查看查看器的其他命令，但滚动和退出是最重要的。）</p>
+
+<p id="@commit_ids_every"><a class="jump" href="index.html#@commit_ids_every"></a><strong>提交 ID</strong>：每个 Git 提交都有一个唯一的 ID，就是你在<code>git lol</code>或<code>git show</code>中看到的十六进制数字。
+提交 ID 是该提交内容的唯一加密哈希值。
+每个提交，不仅仅是在你的仓库中，而是在所有 Git 仓库的<em>宇宙</em>中，都有一个唯一的 ID（以极高的概率）。</p>
+
+<p id="@you_can_reference"><a class="jump" href="index.html#@you_can_reference"></a>你可以通过 ID 引用一个提交（通常只需前几个字符）。
+这在<code>git show</code>等命令中很有用，你可以查看特定的提交，而不仅仅是最新的那个。</p>
+
+<p id="@you_also_see"><a class="jump" href="index.html#@you_also_see"></a>你还会在<a href="https://github.mit.edu/6102-sp26/">github.mit.edu</a>和<a href="https://didit.mit.edu/6.102/sp26/">Didit</a>等工具中看到以 ID 标识的提交。</p>
+
+<p id="@here-s_output_git"><a class="jump" href="index.html#@here-s_output_git"></a>以下是该示例仓库的<a href="../getting-started/index.html#git-lol"><code>git lol</code></a>输出：</p>
+
+<pre class="terminal-dark no-markdown" id="@b0b54b3_head_origin-main"><a class="jump" href="index.html#@b0b54b3_head_origin-main"></a>* <span class="yellow ">b0b54b3</span><span class="yellow "> (</span><span class="cyan bold ">HEAD</span><span class="yellow ">, </span><span class="red bold ">origin/main</span><span class="yellow ">, </span><span class="red bold ">origin/HEAD</span><span class="yellow ">, </span><span class="green bold ">main</span><span class="yellow ">)</span> Greeting in Java
+*   <span class="yellow ">3e62e60</span> Merge
+<span class="green ">|</span><span class="yellow ">\</span>
+<span class="green ">|</span> * <span class="yellow ">6400936</span> Greeting in Scheme
+* <span class="yellow ">|</span> <span class="yellow ">82e049e</span> Greeting in Ruby
+<span class="yellow ">|</span><span class="yellow ">/</span>
+* <span class="yellow ">1255f4e</span> Change the greeting
+* <span class="yellow ">41c4b8f</span> Initial commit
+</pre>
+
+<span id="git-object-graph"></span>
+
+<p id="@history_git_project"><a class="jump" href="index.html#@history_git_project"></a>Git 项目的历史是一个<a href="http://en.wikipedia.org/wiki/Directed_acyclic_graph"><strong>有向无环图</strong></a>（DAG）。
+历史图是存储在<code>.git</code>中的完整对象图的骨干，所以让我们先关注它一分钟。</p>
+
+<div class="panel panel-figure pull-left"><img src="figures/hello-git-history.png" width="196"></div>
+
+<p id="@each_node_history"><a class="jump" href="index.html#@each_node_history"></a>历史图中的每个节点都是项目的一个<mark data-structure-text="commit" id="^commit"><strong>提交（commit）</strong></mark>，也称为<mark data-mark-text="version (Git)" data-structure-text="version (Git)" id="^version_git"><strong>版本（version）</strong></mark>，也称为<mark data-structure-text="revision" id="^revision"><strong>修订（revision）</strong></mark>：在该时间点项目中所有文件的完整快照。
+每个提交通过其提交 ID 标识，以十六进制数字显示。</p>
+
+<p id="@except_initial_commit"><a class="jump" href="index.html#@except_initial_commit"></a>除了初始提交，每个提交都有一个指向<strong>父</strong>提交的指针。
+例如，提交<code>1255f4e</code>的父提交是<code>41c4b8f</code>：这意味着<code>41c4b8f</code>先发生，然后是<code>1255f4e</code>。</p>
+
+<p id="@some_commits_same"><a class="jump" href="index.html#@some_commits_same"></a>有些提交有相同的父提交。
+它们是从一个共同的早期版本分叉出去的版本，例如因为两个开发者在独立工作。</p>
+
+<p id="@commit_can_two"><a class="jump" href="index.html#@commit_can_two"></a>一个提交可以有两个父提交。
+这是一个将分叉的历史重新连接在一起的版本，例如因为这些开发者随后将他们的工作合并到了一起。</p>
+
+<p id="@branch_remember_main"><a class="jump" href="index.html#@branch_remember_main"></a>分支——记住<code>main</code>目前将是我们的唯一分支——只是一个指向提交的名字。</p>
+
+<p id="@finally_head_points"><a class="jump" href="index.html#@finally_head_points"></a>最后，<mark data-structure-text="HEAD" id="^head">HEAD</mark>指向我们当前的提交——几乎。
+我们还需要记住我们正在处理哪个分支。
+所以 HEAD 指向当前分支，分支指向当前提交。</p>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-get_the_history_of_the_repository"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_history_of_the_repository-head_count" data-target="#ex-get_the_history_of_the_repository-head_count" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_history_of_the_repository-head_count"></a><span class="panel-title">HEAD count</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_history_of_the_repository-head_count" data-outline="head_count" data-ex-id="get_the_history_of_the_repository/head_count" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<p id="@using_commands_like"><a class="jump" href="index.html#@using_commands_like"></a>使用<code>git lol</code>等命令，或<a href="http://git-scm.com/book/en/v2/Git-Basics-Viewing-the-Commit-History"><em>Pro Git</em></a>中的命令，或 SourceTree 等工具，回答关于<code>hello-git</code>示例仓库的以下问题：</p>
+
+<label class="exercise-part-heading" id="@many_commits_project"><a class="jump" href="index.html#@many_commits_project"></a>这个项目中有多少次提交？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@many_different_versions"><a class="jump" href="index.html#@many_different_versions"></a><code>hello.txt</code>有多少个不同的版本？</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@many_new_files"><a class="jump" href="index.html#@many_new_files"></a>有多少新文件被添加到项目中？</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@many_times_existing"><a class="jump" href="index.html#@many_times_existing"></a>已有文件被修改了多少次？</label>
+
+<div class="form-group exercise-part" data-outline="d"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<label class="exercise-part-heading" id="@many_times_file"><a class="jump" href="index.html#@many_times_file"></a>文件被删除了多少次？</label>
+
+<div class="form-group exercise-part" data-outline="e"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@stuck_try_looking"><a class="jump" href="index.html#@stuck_try_looking"></a>（卡住了？尝试寻找<code>git log</code>的选项或参数来回答这些问题。）</p>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_history_of_the_repository-first_impression" data-target="#ex-get_the_history_of_the_repository-first_impression" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_history_of_the_repository-first_impression"></a><span class="panel-title">First impression</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_history_of_the_repository-first_impression" data-outline="first_impression" data-ex-id="get_the_history_of_the_repository/first_impression" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@original_contents_hello-txt"><a class="jump" href="index.html#@original_contents_hello-txt"></a><code>hello.txt</code>的原始内容是什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield ttfont exercise-choice"><input type="text" class="form-control" style="width: 38%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_history_of_the_repository-graph-ical" data-target="#ex-get_the_history_of_the_repository-graph-ical" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_history_of_the_repository-graph-ical"></a><span class="panel-title">Graph-ical</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_history_of_the_repository-graph-ical" data-outline="graph-ical" data-ex-id="get_the_history_of_the_repository/graph-ical" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@which_these_correct"><a class="jump" href="index.html#@which_these_correct"></a>以下哪些是此仓库历史的正确表示？</label>
+
+<p id="@choose_all_correct"><a class="jump" href="index.html#@choose_all_correct"></a>选择所有正确答案。</p>
+
+<div style="column-count: 2"><div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="choice_1"><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0"><img src="exercise-figures/hello-git-a.png" width="200"></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="choice_2"><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1"><img src="exercise-figures/hello-git-b.png" width="200"></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="choice_3"><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2"><img src="exercise-figures/hello-git-c.png" width="200"></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="choice_4"><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3"><img src="exercise-figures/hello-git-d.png" width="200"></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="choice_5"><label for="md_converted_choice_1_4"><input type="checkbox" id="md_converted_choice_1_4"><img src="exercise-figures/hello-git-e.png" width="200"></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="choice_6"><label for="md_converted_choice_1_5"><input type="checkbox" id="md_converted_choice_1_5"><img src="exercise-figures/hello-git-f.png" width="200"></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div></div></div>
+
+<p><br></p>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_history_of_the_repository-around_and_around" data-target="#ex-get_the_history_of_the_repository-around_and_around" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_history_of_the_repository-around_and_around"></a><span class="panel-title">Around and around</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_history_of_the_repository-around_and_around" data-outline="around_and_around" data-ex-id="get_the_history_of_the_repository/around_and_around" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@would_be_meaning"><a class="jump" href="index.html#@would_be_meaning"></a>历史图中的<em>环</em>意味着什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Diverging changes were made in parallel"><label for="md_converted_choice_2_0"><input type="checkbox" id="md_converted_choice_2_0">分叉的修改是并行进行的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="More than two diverging histories were merged in a single merge"><label for="md_converted_choice_2_1"><input type="checkbox" id="md_converted_choice_2_1">超过两个分叉的历史在单次合并中被合并</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Some commit is its own ancestor"><label for="md_converted_choice_2_2"><input type="checkbox" id="md_converted_choice_2_2">某个提交是它自己的祖先</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Some commit is a descendant of itself"><label for="md_converted_choice_2_3"><input type="checkbox" id="md_converted_choice_2_3">某个提交是它自己的后代</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="A pair of commits contain inverse changes"><label for="md_converted_choice_2_4"><input type="checkbox" id="md_converted_choice_2_4">一对提交包含互逆的修改</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="This is impossible"><label for="md_converted_choice_2_5"><input type="checkbox" id="md_converted_choice_2_5">这是不可能的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div></div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="add_to_the_object_graph_with_git_commit"><a class="jump" href="index.html#add_to_the_object_graph_with_git_commit"></a>使用<code>git commit</code>添加到对象图</h2><div data-outline="add_to_the_object_graph_with_git_commit">
+
+<p id="@do_add_new"><a class="jump" href="index.html#@do_add_new"></a>我们如何向历史图中添加新的提交？<strong><code>git commit</code></strong>创建一个新的提交。</p>
+
+<p id="@some_alternate_universe"><a class="jump" href="index.html#@some_alternate_universe"></a>在某个平行宇宙中，<code>git commit</code>可能基于你工作目录的当前内容创建一个新的提交。
+所以如果你编辑了<code>hello.ts</code>然后执行了<code>git commit</code>，快照将包含你的修改。</p>
+
+<p id="@not_universe_our"><a class="jump" href="index.html#@not_universe_our"></a>我们不在那个宇宙中；在我们的宇宙中，Git 使用仓库的第三个也是最后一个部分：<mark data-structure-text="staging area" id="^staging_area"><strong>暂存区</strong></mark>（也称为<mark data-mark-text="index (Git)" data-structure-text="index (Git)" id="^index_git"><strong>索引（index）</strong></mark>，知道这个名字有用只是因为它有时会出现在文档中）。</p>
+
+<p id="@staging_area_like"><a class="jump" href="index.html#@staging_area_like"></a>暂存区就像一个原始提交，一个进行中的提交。
+以下是我们如何使用暂存区和<strong><code>git add</code></strong>来构建一个新的快照，然后使用<strong><code>git commit</code></strong>将其固定下来：</p>
+
+<div class="panel panel-default"><div class="panel-heading"><p id="@modify_hello-txt_git"><a class="jump" href="index.html#@modify_hello-txt_git"></a>修改<code>hello.txt</code>，<code>git add hello.txt</code>，<code>git commit</code></p></div>
+<div class="panel-body" id="hello-git-commit"><p id="@hover_tap_each_step_update_diagram_see_output_git"><a class="jump" href="index.html#@hover_tap_each_step_update_diagram_see_output_git"></a>将鼠标悬停或点击每个步骤以更新图示，并查看每个步骤的<code>git status</code>输出：</p>
+
+<ol id="@if_haven-t_made">
+<li class="hover-figure-select highlighted"><a class="jump" href="index.html#@if_haven-t_made"></a>如果我们还没有做任何修改，那么工作目录、暂存区和 HEAD 提交都是相同的。</li>
+<li class="hover-figure-select">对文件做一个修改。
+例如，让我们编辑<code>hello.txt</code>。<br>
+其他修改可能是创建一个新文件，或删除一个文件。</li>
+<li class="hover-figure-select">使用<code>git add</code><strong>暂存（Stage）</strong>这些修改。</li>
+<li class="hover-figure-select">使用<code>git commit</code>从所有已暂存的修改创建一个新的提交。</li>
+</ol>
+
+<div class="hover-figure no-markdown" data-selector="#hello-git-commit li" data-target="img" data-attr="src" data-template="figures/hello-git-commit-{index}.png"><img style="max-width:412px" src="figures/hello-git-commit-0.png"></div>
+
+<div class="hover-figure no-markdown" data-selector="#hello-git-commit li" data-target="pre" data-pick=":nth-child({index})">
+<pre class="terminal-dark" id="@git_status_branch_main_your_branch_up-to-date_origin-main_nothing" style=""><a class="jump" href="index.html#@git_status_branch_main_your_branch_up-to-date_origin-main_nothing"></a><span class="white ">$</span> git status
+On branch main
+Your branch is up-to-date with 'origin/main'.
+
+nothing to commit, working directory clean
+
+
+
+
+</pre>
+<pre class="terminal-dark" id="@git_status_branch_main_your_branch_up-to-date_origin-main_changes_not_staged_commit" style="display: none;"><a class="jump" href="index.html#@git_status_branch_main_your_branch_up-to-date_origin-main_changes_not_staged_commit"></a><span class="white ">$</span> git status
+On branch main
+Your branch is up-to-date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+<span class="red ">    modified:   hello.txt</span>
+
+no changes added to commit (use "git add" and/or "git commit -a")
+</file></file></pre>
+<pre class="terminal-dark" id="@git_add_hello-txt" style="display: none;"><a class="jump" href="index.html#@git_add_hello-txt"></a><span class="white ">$</span> git add hello.txt
+<span class="white ">$</span> git status
+On branch main
+Your branch is up-to-date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+
+<span class="green ">    modified:   hello.txt</span>
+
+
+</file></pre>
+<pre class="terminal-dark" id="@git_commit_main" style="display: none;"><a class="jump" href="index.html#@git_commit_main"></a><span class="white ">$</span> git commit
+[main 8a8858a] Update the greeting again
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+<span class="white ">$</span> git status
+On branch main
+Your branch is ahead of 'origin/main' by 1 commit.
+  (use "git push" to publish your local commits)
+
+nothing to commit, working directory clean
+
+
+</pre>
+</div></div></div>
+
+</div><h2 id="get_the_status_of_your_repository"><a class="jump" href="index.html#get_the_status_of_your_repository"></a>获取仓库状态</h2><div data-outline="get_the_status_of_your_repository">
+
+<p id="@git_some_nice"><a class="jump" href="index.html#@git_some_nice"></a>Git 有一些方便的命令用于查看仓库的状态。</p>
+
+<p id="@most_important_these"><a class="jump" href="index.html#@most_important_these"></a>其中最重要的是<strong><code>git status</code></strong>。
+随时运行它来查看哪些文件是：</p>
+
+<ul id="@untracked_completely_new">
+<li><a class="jump" href="index.html#@untracked_completely_new"></a><em>未跟踪的（untracked）</em>（全新的，从未添加到 Git 中）；</li>
+<li>已修改但尚未暂存的；</li>
+<li>已修改且已暂存的。如果你<code>git commit</code>，只有已暂存的修改会被包含在提交中。</li>
+</ul>
+
+<p id="@note_same_file"><a class="jump" href="index.html#@note_same_file"></a>注意，同一个文件可能同时有已暂存和未暂存的修改，如果你在运行<code>git add</code>之后再次修改了文件。</p>
+
+<p id="@you_unstaged_changes"><a class="jump" href="index.html#@you_unstaged_changes"></a>当你有未暂存的修改时，你可以通过运行<code>git diff</code>查看修改内容（相对于最后一次提交）。
+注意这<em>不会</em>包含已暂存（但未提交）的修改。
+你可以通过运行<code>git diff --staged</code>查看已提交但尚未提交的已暂存修改。</p>
+
+<p id="@use_git_status"><a class="jump" href="index.html#@use_git_status"></a>频繁使用<strong><code>git status</code></strong>来跟踪你是否有未修改、未跟踪文件、未暂存修改或已暂存的修改；以及你的本地仓库中是否有尚未推送的新提交，这将在下面讨论。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-get_the_status_of_your_repository"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_status_of_your_repository-whats_the_source" data-target="#ex-get_the_status_of_your_repository-whats_the_source" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_status_of_your_repository-whats_the_source"></a><span class="panel-title">What's the source?</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_status_of_your_repository-whats_the_source" data-outline="whats_the_source" data-ex-id="get_the_status_of_your_repository/whats_the_source" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<p id="@typescript_compiler_compiles"><a class="jump" href="index.html#@typescript_compiler_compiles"></a>TypeScript 编译器将<code>.ts</code>文件编译为<code>.js</code>文件。</p>
+
+<label class="exercise-part-heading" id="@should_you_commit"><a class="jump" href="index.html#@should_you_commit"></a>你应该将这些<code>.js</code>文件提交到版本控制吗？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_10_0"><input type="radio" id="md_converted_choice_10_0" name="md_converted_radio_10">是</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_10_1"><input type="radio" id="md_converted_choice_10_1" name="md_converted_radio_10">否</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_status_of_your_repository-take_the_stage" data-target="#ex-get_the_status_of_your_repository-take_the_stage" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_status_of_your_repository-take_the_stage"></a><span class="panel-title">Take the stage</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_status_of_your_repository-take_the_stage" data-outline="take_the_stage" data-ex-id="get_the_status_of_your_repository/take_the_stage" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@can_both_staged"><a class="jump" href="index.html#@can_both_staged"></a>我们能否同时拥有<em>已暂存的</em>和<em>未暂存的</em>修改？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_11_0"><input type="radio" id="md_converted_choice_11_0" name="md_converted_radio_11">是</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_11_1"><input type="radio" id="md_converted_choice_11_1" name="md_converted_radio_11">否</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_status_of_your_repository-upstaged" data-target="#ex-get_the_status_of_your_repository-upstaged" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_status_of_your_repository-upstaged"></a><span class="panel-title">Upstaged</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_status_of_your_repository-upstaged" data-outline="upstaged" data-ex-id="get_the_status_of_your_repository/upstaged" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<p id="@suppose_repo_there"><a class="jump" href="index.html#@suppose_repo_there"></a>假设我们有一个仓库，并且有<em>已暂存待提交的修改</em>。</p>
+
+<p id="@run_git_commit"><a class="jump" href="index.html#@run_git_commit"></a>我们运行<code>git commit</code>（不带任何花哨的参数）。</p>
+
+<label class="exercise-part-heading" id="@after_commit_can"><a class="jump" href="index.html#@after_commit_can"></a>提交之后，还能有<em>已暂存的</em>修改吗？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_12_0"><input type="radio" id="md_converted_choice_12_0" name="md_converted_radio_12">是</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_12_1"><input type="radio" id="md_converted_choice_12_1" name="md_converted_radio_12">否</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@can_there_still"><a class="jump" href="index.html#@can_there_still"></a>还能有<em>未暂存的</em>修改吗？</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_13_0"><input type="radio" id="md_converted_choice_13_0" name="md_converted_radio_13">是</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_13_1"><input type="radio" id="md_converted_choice_13_1" name="md_converted_radio_13">否</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_status_of_your_repository-downplayed" data-target="#ex-get_the_status_of_your_repository-downplayed" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_status_of_your_repository-downplayed"></a><span class="panel-title">Downplayed</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_status_of_your_repository-downplayed" data-outline="downplayed" data-ex-id="get_the_status_of_your_repository/downplayed" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<p id="@suppose_start_version"><a class="jump" href="index.html#@suppose_start_version"></a>假设我们从项目的版本 A 开始。</p>
+
+<p id="@version_b_make"><a class="jump" href="index.html#@version_b_make"></a>在版本 B 中，我们做了一些修改。</p>
+
+<p id="@then_version_c"><a class="jump" href="index.html#@then_version_c"></a>然后在版本 C 中，我们做了与版本 B 完全互逆的修改。</p>
+
+<label class="exercise-part-heading" id="@which_following_true"><a class="jump" href="index.html#@which_following_true"></a>以下哪项是正确的？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Our working copy now looks like it did when we started at version A"><label for="md_converted_choice_3_0"><input type="checkbox" id="md_converted_choice_3_0">我们的工作副本现在看起来与从版本 A 开始时一样</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Our version history now looks like it did when we started at version A"><label for="md_converted_choice_3_1"><input type="checkbox" id="md_converted_choice_3_1">我们的版本历史现在看起来与从版本 A 开始时一样</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Committing version C doesn't add a new commit, it removes commit B"><label for="md_converted_choice_3_2"><input type="checkbox" id="md_converted_choice_3_2">提交版本 C 不会添加新的提交，而是删除提交 B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="This sequence of operations makes sense if commit A was a bad idea entirely"><label for="md_converted_choice_3_3"><input type="checkbox" id="md_converted_choice_3_3">如果提交 A 完全是一个坏主意，这个操作序列是有意义的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="This sequence of operations makes sense if commit B was a bad idea entirely"><label for="md_converted_choice_3_4"><input type="checkbox" id="md_converted_choice_3_4">如果提交 B 完全是一个坏主意，这个操作序列是有意义的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="This sequence of operations makes sense if commit C was a bad idea entirely"><label for="md_converted_choice_3_5"><input type="checkbox" id="md_converted_choice_3_5">如果提交 C 完全是一个坏主意，这个操作序列是有意义的</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="This sequence of operations doesn't make any sense"><label for="md_converted_choice_3_6"><input type="checkbox" id="md_converted_choice_3_6">这个操作序列没有任何意义</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_status_of_your_repository-please_report_your_status" data-target="#ex-get_the_status_of_your_repository-please_report_your_status" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_status_of_your_repository-please_report_your_status"></a><span class="panel-title">Please report your status</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_status_of_your_repository-please_report_your_status" data-outline="please_report_your_status" data-ex-id="get_the_status_of_your_repository/please_report_your_status" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<p id="@get_habit_running"><a class="jump" href="index.html#@get_habit_running"></a>养成在每个 git 命令前后运行<code>git status</code>的习惯，以查看你的情况。
+假设<code>git status</code>显示以下输出。</p>
+
+<div class="no-markdown">
+<pre class="terminal-dark" id="@ls_hello-java_hello-rb"><a class="jump" href="index.html#@ls_hello-java_hello-rb"></a><span class="white ">$</span> ls
+Hello.java  hello.rb    hello.scm   hello.txt
+<span class="white ">$</span> git status
+On branch main
+Your branch is up-to-date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+
+<span class="green ">    modified:   Hello.java</span>
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git checkout -- <file>..." to discard changes in working directory)
+
+<span class="red ">    modified:   hello.txt</span>
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+
+<span class="red ">    hello.scm</span>
+</file></file></file></file></pre>
+</div>
+
+<p id="@does_mean_each"><a class="jump" href="index.html#@does_mean_each"></a>这对你工作目录中的每个文件意味着什么？
+<strong>为每个文件标记所有正确答案。</strong></p>
+
+<label class="exercise-part-heading" id="@hello-java"><a class="jump" href="index.html#@hello-java"></a><code>Hello.java</code></label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="is unchanged."><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0">没有变化。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="was changed since its last commit."><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1">自上次提交以来已被修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has never been committed."><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2">从未被提交过。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has changes in the staging area."><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3">在暂存区中有修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@hello-rb"><a class="jump" href="index.html#@hello-rb"></a><code>hello.rb</code></label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="is unchanged."><label for="md_converted_choice_5_0"><input type="checkbox" id="md_converted_choice_5_0">没有变化。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="was changed since its last commit."><label for="md_converted_choice_5_1"><input type="checkbox" id="md_converted_choice_5_1">自上次提交以来已被修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has never been committed."><label for="md_converted_choice_5_2"><input type="checkbox" id="md_converted_choice_5_2">从未被提交过。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has changes in the staging area."><label for="md_converted_choice_5_3"><input type="checkbox" id="md_converted_choice_5_3">在暂存区中有修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@hello-scm"><a class="jump" href="index.html#@hello-scm"></a><code>hello.scm</code></label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="is unchanged."><label for="md_converted_choice_6_0"><input type="checkbox" id="md_converted_choice_6_0">没有变化。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="was changed since its last commit."><label for="md_converted_choice_6_1"><input type="checkbox" id="md_converted_choice_6_1">自上次提交以来已被修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has never been committed."><label for="md_converted_choice_6_2"><input type="checkbox" id="md_converted_choice_6_2">从未被提交过。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has changes in the staging area."><label for="md_converted_choice_6_3"><input type="checkbox" id="md_converted_choice_6_3">在暂存区中有修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@hello-txt"><a class="jump" href="index.html#@hello-txt"></a><code>hello.txt</code></label>
+
+<div class="form-group exercise-part" data-outline="d"><div class="checkbox exercise-choice" data-outline="is unchanged."><label for="md_converted_choice_7_0"><input type="checkbox" id="md_converted_choice_7_0">没有变化。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="was changed since its last commit."><label for="md_converted_choice_7_1"><input type="checkbox" id="md_converted_choice_7_1">自上次提交以来已被修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has never been committed."><label for="md_converted_choice_7_2"><input type="checkbox" id="md_converted_choice_7_2">从未被提交过。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="has changes in the staging area."><label for="md_converted_choice_7_3"><input type="checkbox" id="md_converted_choice_7_3">在暂存区中有修改。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_status_of_your_repository-status_green" data-target="#ex-get_the_status_of_your_repository-status_green" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_status_of_your_repository-status_green"></a><span class="panel-title">Status green</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_status_of_your_repository-status_green" data-outline="status_green" data-ex-id="get_the_status_of_your_repository/status_green" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<p id="@you_run_some"><a class="jump" href="index.html#@you_run_some"></a>你运行了一些<code>git</code>命令，然后又运行了<code>git status</code>。
+它现在显示以下输出：</p>
+
+<div class="no-markdown">
+<pre class="terminal-dark" id="@git_status_branch_main_your_branch_up-to-date_origin-main_changes_be_committed_use"><a class="jump" href="index.html#@git_status_branch_main_your_branch_up-to-date_origin-main_changes_be_committed_use"></a><span class="white ">$</span> git status
+On branch main
+Your branch is up-to-date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+
+<span class="green ">    modified:   Hello.java</span>
+<span class="green ">    modified:   hello.scm</span>
+<span class="green ">    modified:   hello.txt</span>
+</file></pre>
+</div>
+
+<label class="exercise-part-heading" id="@which_git_commands"><a class="jump" href="index.html#@which_git_commands"></a>你必须运行了哪些 git 命令才能从上题的状态到达这个新状态？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="git add Hello.java"><label for="md_converted_choice_8_0"><input type="checkbox" id="md_converted_choice_8_0"><code>git add Hello.java</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="git add hello.rb"><label for="md_converted_choice_8_1"><input type="checkbox" id="md_converted_choice_8_1"><code>git add hello.rb</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="git add hello.scm"><label for="md_converted_choice_8_2"><input type="checkbox" id="md_converted_choice_8_2"><code>git add hello.scm</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="git add hello.txt"><label for="md_converted_choice_8_3"><input type="checkbox" id="md_converted_choice_8_3"><code>git add hello.txt</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="git commit"><label for="md_converted_choice_8_4"><input type="checkbox" id="md_converted_choice_8_4"><code>git commit</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-get_the_status_of_your_repository-clear_the_board" data-target="#ex-get_the_status_of_your_repository-clear_the_board" data-toggle="collapse"><a class="jump" href="index.html#@ex-get_the_status_of_your_repository-clear_the_board"></a><span class="panel-title">Clear the board</span></div><div class="panel-collapse collapse exercise-panel" id="ex-get_the_status_of_your_repository-clear_the_board" data-outline="clear_the_board" data-ex-id="get_the_status_of_your_repository/clear_the_board" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="tools-git-1-version-control"><div class="panel-body">
+
+<p id="@finally_you_run"><a class="jump" href="index.html#@finally_you_run"></a>最后，你运行<code>git commit</code>提交暂存区，然后又运行了<code>git status</code>。
+假设一切正常，在这个新状态下你期望在<code>git status</code>的输出中看到以下哪些行？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="On branch main"><label for="md_converted_choice_9_0"><input type="checkbox" id="md_converted_choice_9_0"><code>On branch main</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Your branch is ahead of 'origin/main' by 1 commit."><label for="md_converted_choice_9_1"><input type="checkbox" id="md_converted_choice_9_1"><code>Your branch is ahead of 'origin/main' by 1 commit.</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Changes to be committed:"><label for="md_converted_choice_9_2"><input type="checkbox" id="md_converted_choice_9_2"><code>Changes to be committed:</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Changes not staged for commit:"><label for="md_converted_choice_9_3"><input type="checkbox" id="md_converted_choice_9_3"><code>Changes not staged for commit:</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="Untracked files:"><label for="md_converted_choice_9_4"><input type="checkbox" id="md_converted_choice_9_4"><code>Untracked files:</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div><div class="checkbox exercise-choice" data-outline="nothing to commit, working directory clean"><label for="md_converted_choice_9_5"><input type="checkbox" id="md_converted_choice_9_5"><code>nothing to commit, working directory clean</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="send_receive_object_graphs_with_git_push_git_pull"><a class="jump" href="index.html#send_receive_object_graphs_with_git_push_git_pull"></a>使用<code>git push</code>和<code>git pull</code>发送与接收对象图</h2><div data-outline="send_receive_object_graphs_with_git_push_git_pull">
+
+<p id="@can_send_new"><a class="jump" href="index.html#@can_send_new"></a>我们可以使用<strong><code>git push</code></strong>将新的提交发送到远程仓库：</p>
+
+<div class="panel panel-default"><div class="panel-heading"><p id="@git_push_origin_main_0"><a class="jump" href="index.html#@git_push_origin_main_0"></a><code>git push origin main</code></p></div>
+<div class="panel-body" id="hello-git-push"><p id="@hover_tap_each_step_update_diagram_1"><a class="jump" href="index.html#@hover_tap_each_step_update_diagram_1"></a>将鼠标悬停或点击每个步骤以更新图示：</p>
+
+<ol id="@clone_repository_obtain">
+<li class="hover-figure-select highlighted"><a class="jump" href="index.html#@clone_repository_obtain"></a>当我们克隆一个仓库时，我们获取了历史图的一个副本。<br>
+Git 将我们克隆的来源记住为一个名为<strong><code>origin</code></strong>的<strong>远程仓库</strong>。</li>
+<li class="hover-figure-select">使用<code>git commit</code>，我们在<code>main</code>分支上向本地历史添加新的提交。</li>
+<li class="hover-figure-select">要将这些修改发送回<code>origin</code>远程，使用<code>git push origin main</code>。</li>
+</ol>
+
+<div class="hover-figure no-markdown" data-selector="#hello-git-push li" data-target="img" data-attr="src" data-template="figures/hello-git-push-{index}.png"><img style="max-width:623px" src="figures/hello-git-push-0.png"></div></div></div>
+
+<p id="@receive_new_commits"><a class="jump" href="index.html#@receive_new_commits"></a>我们使用<strong><code>git pull</code></strong>接收新的提交。
+除了获取对象图的新部分，<code>git pull</code>还通过检出最新版本来更新工作副本（就像<code>git clone</code>开始时检出工作副本一样）。
+如果远程仓库和本地仓库都已更改，<code>git pull</code>将尝试将这些修改合并在一起。</p>
+
+<h3 id="pushing"><a class="jump" href="index.html#pushing"></a>推送</h3><div data-outline="pushing">
+
+<p id="@after_you-ve_made"><a class="jump" href="index.html#@after_you-ve_made"></a>在你做了一些提交之后，你会想把它们推送到远程仓库。
+在 6.102 中，你应该只有一个远程仓库可以推送，叫做<code>origin</code>。
+要推送到它，你运行命令：</p>
+
+<p id="@git_push_origin_main_1"><a class="jump" href="index.html#@git_push_origin_main_1"></a><code>git push origin main</code></p>
+
+<p id="@origin_command_specifies"><a class="jump" href="index.html#@origin_command_specifies"></a>命令中的<code>origin</code>指定你要推送到<code>origin</code>远程。
+按照惯例，这是你克隆的远程仓库。</p>
+
+<p id="@main_refers_main"><a class="jump" href="index.html#@main_refers_main"></a><code>main</code>指的是<code>main</code>分支，我们 Git 仓库中的默认分支。
+在 6.102 中，我们不会使用<code>main</code>以外的分支。
+我们所有的提交都将在<code>main</code>上，这是我们要推送的分支。</p>
+
+<p id="@once_you_run"><a class="jump" href="index.html#@once_you_run"></a>一旦你运行了这个命令，你将被提示输入密码，然后希望一切都能推送成功。
+你会得到一行像这样的输出：</p>
+
+<pre id="@a67cc45-b4db9b0_main_main"><a class="jump" href="index.html#@a67cc45-b4db9b0_main_main"></a><code>a67cc45..b4db9b0  main -&gt; main
+</code></pre>
+
+<div class="no-markdown handout-due alert alert-danger"><i>GitStream</i> → <a href="https://gitstream.mit.edu/?basicWorkflow" target="gitstream" class="alert-link">练习 add-commit-push 工作流</a></div>
+
+<div class="handout-solo alert alert-warning"><p id="@gitstream_not_work_multiple_exercise_pages_open_same_time_1"><a class="jump" href="index.html#@gitstream_not_work_multiple_exercise_pages_open_same_time_1"></a><strong><em>GitStream 在同时打开多个练习页面时无法工作</em></strong>。</p>
+
+<p id="@don-t_open_exercises_multiple_tabs_if_exercise_doesn-t_work_please_close_all_open_gitstream_pages_try_again_1"><a class="jump" href="index.html#@don-t_open_exercises_multiple_tabs_if_exercise_doesn-t_work_please_close_all_open_gitstream_pages_try_again_1"></a>不要在多标签页中打开练习。
+如果某个练习不起作用，请关闭所有打开的 GitStream 页面然后重试。</p>
+
+<p id="@if_you_encounter_problem_please_ask_help_1"><a class="jump" href="index.html#@if_you_encounter_problem_please_ask_help_1"></a>如果你遇到问题，请<a href="../../general/index.html#who-to-ask" class="alert-link">寻求帮助</a>。</p></div></div></div></div></div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. 本作品采用<a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>许可协议。</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 年春季课程网站存档  |  最新网站地址：<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍访问</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="tools-git-1-version-control"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:36:06 GMT+0000 (Coordinated Universal Time)
+--></html>

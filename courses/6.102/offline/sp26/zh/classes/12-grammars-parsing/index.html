@@ -1,0 +1,1577 @@
+<!DOCTYPE html><html><head><base href="../../../">
+<meta charset="utf-8">
+
+<title>阅读 12：语法与解析</title>
+
+
+<script>
+window.onHandoutDidRender = function() {
+  // prefill a textbox answer
+  var span = $('[data-prefilled-answer]')[0];
+  var prefill = span.getAttribute('data-prefilled-answer');
+  var textbox = $('[data-prefilled-answer] ~ .exercise-part input[type="text"].form-control')[0];
+  console.log(prefill, textbox);
+  textbox.setAttribute('value', prefill); // store statically in HTML for the published version
+  textbox.value = prefill; // fill in dynamically for the in-repo development version
+};
+</script>
+
+<style>
+/* styling the regex text answer boxes in the exercises */
+.long-monospaced-answer ~ .exercise-part input[type="text"].form-control {
+  width: 90% !important;
+  font-family: monospace !important;
+}
+.long-monospaced-answer ~ .exercise-part .exercise-answer {
+  font-family: monospace !important;  
+}
+.nowrap {
+  white-space: nowrap;
+}
+</style>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件构造</a><div>2026 春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li class="active"><a href="index.html#reading_12_grammars_parsing">阅读 12：语法与解析</a></li><li><a href="index.html#introduction">引言</a></li><li><a href="index.html#grammars">语法</a></li><li><a href="index.html#parse_trees">解析树</a></li><li><a href="index.html#regular_expressions">正则表达式</a></li><li><a href="index.html#parser_generators">解析器生成器</a></li><li><a href="index.html#summary">总结</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_12_grammars_parsing"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-12-grammars-parsing"></iframe><a class="jump" href="index.html#reading_12_grammars_parsing"></a>阅读 12：语法与解析</h1><div data-outline="reading_12_grammars_parsing">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>6.102 中的软件</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>免受 Bug 困扰</th><th>易于理解</th><th>准备好应对变化</th></tr>
+<tr><td>
+  今天正确，在未来未知的情况下也正确。
+</td><td>
+  与未来的程序员清晰地沟通，包括未来的你自己。
+</td><td>
+  设计为可容纳变化而无需重写。
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<p id="@after_today-s_class"><a class="jump" href="index.html#@after_today-s_class"></a>今天的课程结束后，你应该能够：</p>
+
+<ul id="@understand_ideas_grammar">
+<li><a class="jump" href="index.html#@understand_ideas_grammar"></a>理解语法产生式和正则表达式运算符的概念</li>
+<li>能够阅读语法或正则表达式，并判断它是否匹配某个字符序列</li>
+<li>能够编写语法或正则表达式来匹配一组字符序列</li>
+<li>能够将语法与解析器生成器结合使用，将字符序列解析为解析树</li>
+<li>能够将解析树转换为有用的数据类型</li>
+</ul>
+
+<h2 id="introduction"><a class="jump" href="index.html#introduction"></a>引言</h2><div data-outline="introduction">
+
+<p id="@today-s_reading_introduces"><a class="jump" href="index.html#@today-s_reading_introduces"></a>今天的阅读介绍了几个概念：</p>
+
+<ul id="@grammars_productions_nonterminals">
+<li><a class="jump" href="index.html#@grammars_productions_nonterminals"></a>语法，包含产生式、非终结符、终结符和运算符</li>
+<li>正则表达式</li>
+<li>解析器生成器</li>
+</ul>
+
+<p id="@some_program_modules"><a class="jump" href="index.html#@some_program_modules"></a>一些程序模块以字节序列或字符序列的形式接收输入或产生输出，当它仅存储在内存中时称为<em>字符串</em>（string），当它流入或流出模块时称为<em>流</em>（stream）。就像我们一直在开发的具有多个客户端和实现的方法一样，有许多不同的用户依赖于对这些字符串或流格式的共识；换句话说，这些序列需要一个规范。在今天的阅读中，我们讨论如何为这样的序列编写规范。具体来说，字节或字符序列可能是：</p>
+
+<ul id="@string_file_disk">
+<li><a class="jump" href="index.html#@string_file_disk"></a>一个字符串</li>
+<li>磁盘上的文件，此时规范称为<em>文件格式</em></li>
+<li>通过网络发送的消息，此时规范称为<em>通信协议</em></li>
+<li>用户在控制台输入的命令，此时规范称为<em>命令行界面</em></li>
+</ul>
+
+<p id="@these_kinds_sequences"><a class="jump" href="index.html#@these_kinds_sequences"></a>对于这些类型的序列，我们引入<em>语法</em>（grammar）的概念，它不仅允许我们区分合法和非法的序列，还能将序列解析为程序可以处理的数据结构。从语法生成的数据结构通常是像我们在<a href="../11-recursive-data-types/index.html">递归数据类型阅读</a>中讨论的那样的递归数据类型。</p>
+
+<p id="@also_talk_about"><a class="jump" href="index.html#@also_talk_about"></a>我们还讨论了一种称为<em>正则表达式</em>（regular expression）的语法特殊形式。除了用于规范定义和解析之外，正则表达式还广泛用于许多字符串处理任务，如拆解字符串、从中提取信息或对其进行转换。</p>
+
+<p id="@finally_talk_about"><a class="jump" href="index.html#@finally_talk_about"></a>最后我们将讨论<em>解析器生成器</em>（parser generator），这是一种能将语法自动转换为该语法的解析器的工具。</p>
+
+</div><h2 id="grammars"><a class="jump" href="index.html#grammars"></a>语法</h2><div data-outline="grammars">
+
+<p id="@describe_string_symbols"><a class="jump" href="index.html#@describe_string_symbols"></a>为了描述符号串，无论它们是字节、字符还是从固定集合中抽取的其他类型的符号，我们使用一种称为<em>语法</em>（grammar）的紧凑表示方法。</p>
+
+<p id="@grammar_defines_set"><a class="jump" href="index.html#@grammar_defines_set"></a><mark data-structure-text="grammar" id="^grammar"><em>语法</em></mark>定义了一组字符串，通常称为一种<em>语言</em>。
+为了介绍语法，在整篇阅读中，我们将探讨表示 URL 的语法。
+我们用于 URL 的语法将指定 HTTP 协议中合法 URL 的字符串集合。</p>
+
+<p id="@there_two_main"><a class="jump" href="index.html#@there_two_main"></a>语法有两个主要元素：终结符和非终结符。</p>
+
+<p id="@literal_strings_grammar"><a class="jump" href="index.html#@literal_strings_grammar"></a>语法中的字面字符串称为<mark data-structure-text="terminal" id="^terminal"><em>终结符</em></mark>（terminal）。它们之所以被称为终结符，是因为它们不能再被进一步展开。
+我们通常用引号来表示终结符，如 <code>'http'</code> 或 <code>':'</code>。</p>
+
+<p id="@other_hand_nonterminals"><a class="jump" href="index.html#@other_hand_nonterminals"></a>另一方面，<mark data-mark-text="nonterminal" data-structure-text="nonterminal" id="^nonterminal"><em>非终结符</em></mark>（nonterminal）可以被视为能够匹配一组可能字符串中某一个的变量，因此可以被进一步展开。
+我们如何决定非终结符可以取什么值？
+每个语法由一组<mark data-structure-text="production" id="^production"><em>产生式</em></mark>（production）或规则组成，其中每个产生式用其他非终结符、运算符和终结符来定义一个非终结符。</p>
+
+<p id="@production_grammar_form"><a class="jump" href="index.html#@production_grammar_form"></a>语法中的产生式具有以下形式</p>
+
+<pre id="@nonterminal_expression_terminals"><a class="jump" href="index.html#@nonterminal_expression_terminals"></a><code class="language-parserlib hljs">nonterminal <span class="hljs-keyword">::=</span> expression of terminals, nonterminals, and operators </code></pre>
+
+<p id="@one_nonterminals_grammar"><a class="jump" href="index.html#@one_nonterminals_grammar"></a>语法中的一个非终结符被指定为<mark data-mark-text="root nonterminal" data-structure-text="root nonterminal" id="^root_nonterminal"><em>根</em></mark>（root）。
+按照惯例，我们首先列出根的产生式，以使语法更容易被人类理解。
+语法识别的字符串集合是那些匹配根非终结符的字符串。
+这个非终结符有时被称为 <code>root</code> 或 <code>start</code> 或者简写为 <code>S</code>，但在下面的语法中，我们通常会为根选择更具可读性的名称，如 <code>url</code>、<code>html</code> 和 <code>markdown</code>。</p>
+
+<p id="@so_grammar_represents_singleton_set_allowing"><a class="jump" href="index.html#@so_grammar_represents_singleton_set_allowing"></a>因此，表示单例集（只允许一个特定 URL）的语法可能只有一个定义非终结符 <code>url</code> 的产生式，右侧有一个终结符：</p>
+
+<pre id="@url_http-mit-edu_0"><a class="jump" href="index.html#@url_http-mit-edu_0"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://mit.edu/'</span></code></pre>
+
+<h3 id="grammar_operators"><a class="jump" href="index.html#grammar_operators"></a>语法运算符</h3><div data-outline="grammar_operators">
+
+<p id="@productions_can_use"><a class="jump" href="index.html#@productions_can_use"></a>产生式可以使用运算符来组合右侧的终结符和非终结符。
+产生式表达式中最重要的三个运算符是：</p>
+
+<p id="@repetition_represented"><a class="jump" href="index.html#@repetition_represented"></a><strong>重复</strong>（Repetition），用 <code>*</code> 表示：</p>
+
+<pre id="@x_y_x_matches_zero_more"><a class="jump" href="index.html#@x_y_x_matches_zero_more"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> y<span class="hljs-keyword">*</span>        <span class="hljs-comment">// x matches zero or more y</span></code></pre>
+
+<p id="@concatenation_represented_not"><a class="jump" href="index.html#@concatenation_represented_not"></a><strong>连接</strong>（Concatenation），不用符号表示，仅用空格：</p>
+
+<pre id="@x_y_z_x_matches_y"><a class="jump" href="index.html#@x_y_z_x_matches_y"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> y z       <span class="hljs-comment">// x matches y followed by z </span></code></pre>
+
+<p id="@union_also_called"><a class="jump" href="index.html#@union_also_called"></a><strong>并集</strong>（Union），也称为交替（alternation），用 <code>|</code> 表示：</p>
+
+<pre id="@x_y_z_x_matches_either"><a class="jump" href="index.html#@x_y_z_x_matches_either"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> y <span class="hljs-keyword">|</span> z     <span class="hljs-comment">// x matches either y or z </span></code></pre>
+
+<p id="@convention_postfix_operators"><a class="jump" href="index.html#@convention_postfix_operators"></a>按照惯例，后缀运算符如 <code>*</code> 具有最高优先级，这意味着它们最先被应用。
+其次是连接运算。
+交替 <code>|</code> 具有最低优先级，意味着它最后被应用。
+括号可以用来覆盖优先级：</p>
+
+<pre id="@m_b-c_d"><a class="jump" href="index.html#@m_b-c_d"></a><code class="language-parserlib hljs">m <span class="hljs-keyword">::=</span> a (b<span class="hljs-keyword">|</span>c) d      <span class="hljs-comment">// m matches a, followed by either b or c, followed by d</span>
+x <span class="hljs-keyword">::=</span> (y z <span class="hljs-keyword">|</span> a b)<span class="hljs-keyword">*</span>   <span class="hljs-comment">// x matches zero or more yz or ab pairs</span></code></pre>
+
+<p id="@use_these_operators"><a class="jump" href="index.html#@use_these_operators"></a>让我们使用这些运算符来推广我们的 <code>url</code> 语法，以匹配其他一些主机名，如 <code>http://stanford.edu/</code> 和 <code>http://google.com/</code>。</p>
+
+<pre id="@url_http_hostname_hostname_mit-edu_stanford-edu"><a class="jump" href="index.html#@url_http_hostname_hostname_mit-edu_stanford-edu"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> hostname <span class="hljs-string">'/'</span>
+hostname <span class="hljs-keyword">::=</span> <span class="hljs-string">'mit.edu'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'stanford.edu'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'google.com'</span></code></pre>
+
+<p id="@first_rule_grammar"><a class="jump" href="index.html#@first_rule_grammar"></a>这个语法的第一条规则演示了连接运算。
+<code>url</code> 非终结符匹配以字面字符串 <code>http://</code> 开头，接着匹配 <code>hostname</code> 非终结符，然后是字面字符串 <code>/</code> 的字符串。</p>
+
+<p id="@hostname_rule_demonstrates"><a class="jump" href="index.html#@hostname_rule_demonstrates"></a><code>hostname</code> 规则演示了并集运算。
+<code>hostname</code> 可以匹配三个字面字符串之一：<code>mit.edu</code>、<code>stanford.edu</code> 或 <code>google.com</code>。</p>
+
+<p id="@so_grammar_represents_set_three_strings"><a class="jump" href="index.html#@so_grammar_represents_set_three_strings"></a>因此，这个语法表示三个字符串的集合：<code>http://mit.edu/</code>、<code>http://google.com/</code> 和 <code>http://stanford.edu/</code>。</p>
+
+<p id="@take_one_step"><a class="jump" href="index.html#@take_one_step"></a>让我们更进一步，允许任何小写单词代替 <code>mit</code>、<code>stanford</code>、<code>google</code>、<code>com</code> 和 <code>edu</code>：</p>
+
+<pre id="@url_http_hostname_hostname_word_word_word_letter_letter"><a class="jump" href="index.html#@url_http_hostname_hostname_word_word_word_letter_letter"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> hostname <span class="hljs-string">'/'</span>
+hostname <span class="hljs-keyword">::=</span> word <span class="hljs-string">'.'</span> word
+word <span class="hljs-keyword">::=</span> letter<span class="hljs-keyword">*</span>
+letter <span class="hljs-keyword">::=</span> (<span class="hljs-string">'a'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'b'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'c'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'d'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'e'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'f'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'g'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'h'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'i'</span> 
+                <span class="hljs-keyword">|</span> <span class="hljs-string">'j'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'k'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'l'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'m'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'n'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'o'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'p'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'q'</span> 
+                <span class="hljs-keyword">|</span> <span class="hljs-string">'r'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'s'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'t'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'u'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'v'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'w'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'x'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'y'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'z'</span>)</code></pre>
+
+<p id="@new_word_rule"><a class="jump" href="index.html#@new_word_rule"></a>新的 <code>word</code> 规则匹配零个或多个小写字母的字符串，因此整体语法现在也可以匹配 <code>http://alibaba.com/</code> 和 <code>http://zyxw.edu/</code>。
+不幸的是，<code>word</code> 也可以匹配空字符串，所以这个 <code>url</code> 语法也会匹配 <code>http://./</code>，而这不是一个合法的 URL。
+下面是一种修复方法的详细写法，它要求 <code>word</code> 至少匹配一个字母。</p>
+
+<pre id="@word_letter_letter"><a class="jump" href="index.html#@word_letter_letter"></a><code class="language-parserlib hljs">word <span class="hljs-keyword">::=</span> letter letter<span class="hljs-keyword">*</span></code></pre>
+
+<p id="@see_simpler_way"><a class="jump" href="index.html#@see_simpler_way"></a>我们将在下一节中看到一种更简单的写法来表示 <code>word</code>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-grammars"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-grammars-reading_a_grammar_1" data-target="#ex-grammars-reading_a_grammar_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-grammars-reading_a_grammar_1"></a><span class="panel-title">阅读语法 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-grammars-reading_a_grammar_1" data-outline="reading_a_grammar_1" data-ex-id="grammar_operators/reading_a_grammar_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@which_strings_match_root_nonterminal_grammar_0"><a class="jump" href="index.html#@which_strings_match_root_nonterminal_grammar_0"></a>哪些字符串匹配这个语法的 <code>root</code> 非终结符？</label>
+
+<pre id="@root_name_name"><a class="jump" href="index.html#@root_name_name"></a><code class="language-parserlib hljs">root <span class="hljs-keyword">::=</span> name (<span class="hljs-string">' '</span> name)<span class="hljs-keyword">*</span>
+name <span class="hljs-keyword">::=</span> capitalLetter lowercaseLetter<span class="hljs-keyword">*</span>
+capitalLetter <span class="hljs-keyword">::=</span> (<span class="hljs-string">'A'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'B'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'C'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'D'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'E'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'F'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'G'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'H'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'I'</span> 
+                       <span class="hljs-keyword">|</span> <span class="hljs-string">'J'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'K'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'L'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'M'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'N'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'O'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'P'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Q'</span> 
+                       <span class="hljs-keyword">|</span> <span class="hljs-string">'R'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'S'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'T'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'U'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'V'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'W'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'X'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Y'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Z'</span>)
+lowercaseLetter <span class="hljs-keyword">::=</span> (<span class="hljs-string">'a'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'b'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'c'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'d'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'e'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'f'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'g'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'h'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'i'</span> 
+                         <span class="hljs-keyword">|</span> <span class="hljs-string">'j'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'k'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'l'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'m'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'n'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'o'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'p'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'q'</span> 
+                         <span class="hljs-keyword">|</span> <span class="hljs-string">'r'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'s'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'t'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'u'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'v'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'w'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'x'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'y'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'z'</span>)</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Bob"><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0"><code>Bob</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="V"><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1"><code>V</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="a"><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2"><code>a</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="The"><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3"><code>The</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Norma Jeane Mortenson"><label for="md_converted_choice_1_4"><input type="checkbox" id="md_converted_choice_1_4"><code>Norma Jeane Mortenson</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="King Edward VIII"><label for="md_converted_choice_1_5"><input type="checkbox" id="md_converted_choice_1_5"><code>King Edward VIII</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="New York"><label for="md_converted_choice_1_6"><input type="checkbox" id="md_converted_choice_1_6"><code>New York</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Joe DiMaggio"><label for="md_converted_choice_1_7"><input type="checkbox" id="md_converted_choice_1_7"><code>Joe DiMaggio</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="more_grammar_operators"><a class="jump" href="index.html#more_grammar_operators"></a>更多语法运算符</h3><div data-outline="more_grammar_operators">
+
+<p id="@you_can_also_use_additional_operators"><a class="jump" href="index.html#@you_can_also_use_additional_operators"></a>你还可以使用额外的运算符，它们只是语法糖（即等价于三个主要运算符的组合）。</p>
+
+<p id="@0_1_occurrence"><a class="jump" href="index.html#@0_1_occurrence"></a><strong>0 次或 1 次出现</strong>用 <code>?</code> 表示：</p>
+
+<pre id="@x_y_x_y_empty_string"><a class="jump" href="index.html#@x_y_x_y_empty_string"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> y<span class="hljs-keyword">?</span>       <span class="hljs-comment">// an x is a y or is the empty string</span>
+               <span class="hljs-comment">//    equivalent to x ::=   | y</span>
+               <span class="hljs-comment">//                        ^--- note the empty string here</span></code></pre>
+
+<p id="@1_more_occurrences"><a class="jump" href="index.html#@1_more_occurrences"></a><strong>1 次或多次出现</strong>用 <code>+</code> 表示：</p>
+
+<pre id="@x_y_x_one_more_y"><a class="jump" href="index.html#@x_y_x_one_more_y"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> y<span class="hljs-keyword">+</span>       <span class="hljs-comment">// an x is one or more y</span>
+               <span class="hljs-comment">//    equivalent to  x ::= y y*</span></code></pre>
+
+<p id="@exact_number_occurrences"><a class="jump" href="index.html#@exact_number_occurrences"></a><strong>精确的出现次数</strong>用 <code>{n}</code> 表示，<strong>出现次数范围</strong>用 <code>{n,m}</code>、<code>{n,}</code> 或 <code>{,m}</code> 表示：</p>
+
+<pre id="@x_y-3_x"><a class="jump" href="index.html#@x_y-3_x"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> y{3}     <span class="hljs-comment">// an x is three y</span>
+               <span class="hljs-comment">//    equivalent to x ::= y y y </span>
+
+x <span class="hljs-keyword">::=</span> y{1,3}   <span class="hljs-comment">// an x is between one and three y</span>
+               <span class="hljs-comment">//    equivalent to x ::= y | y y | y y y</span>
+
+x <span class="hljs-keyword">::=</span> y{,4}    <span class="hljs-comment">// an x is at most four y</span>
+               <span class="hljs-comment">//    equivalent to x ::=   | y | y y | y y y | y y y y</span>
+               <span class="hljs-comment">//                        ^--- note the empty string here</span>
+
+x <span class="hljs-keyword">::=</span> y{2,}    <span class="hljs-comment">// an x is two or more y</span>
+               <span class="hljs-comment">//    equivalent to x ::= y y y*</span></code></pre>
+
+<p id="@character_class_represents"><a class="jump" href="index.html#@character_class_represents"></a><strong>字符类</strong> <code>[...]</code> 表示匹配方括号中列出的任意字符的单字符字符串集合：</p>
+
+<pre id="@x_aeiou_equivalent"><a class="jump" href="index.html#@x_aeiou_equivalent"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> <span class="hljs-string">[aeiou]</span>     <span class="hljs-comment">// equivalent to  x ::= 'a' | 'e' | 'i' | 'o' | 'u'</span></code></pre>
+
+<p id="@ranges_characters_can"><a class="jump" href="index.html#@ranges_characters_can"></a>字符范围可以使用 <code>-</code> 紧凑地描述：</p>
+
+<pre id="@x_a-ckx-z_equivalent"><a class="jump" href="index.html#@x_a-ckx-z_equivalent"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> <span class="hljs-string">[a-ckx-z]</span>   <span class="hljs-comment">// equivalent to  x ::= 'a' | 'b' | 'c' | 'k' | 'x' | 'y' | 'z'</span></code></pre>
+
+<p id="@inverted_character_class"><a class="jump" href="index.html#@inverted_character_class"></a><strong>反转字符类</strong> <code>[^...]</code> 表示匹配<em>不</em>在括号中列出的字符的单字符字符串集合：</p>
+
+<pre id="@x_a-c_equivalent"><a class="jump" href="index.html#@x_a-c_equivalent"></a><code class="language-parserlib hljs">x <span class="hljs-keyword">::=</span> <span class="hljs-string">[^a-c]</span>  <span class="hljs-comment">// equivalent to  x ::= 'd' | 'e' | 'f' | ... | '0' | '1' | ... | '!' | '@'</span>
+              <span class="hljs-comment">//                          | ... (all other possible characters)</span></code></pre>
+
+<p id="@these_additional_operators"><a class="jump" href="index.html#@these_additional_operators"></a>这些额外的运算符允许 <code>word</code> 产生式被更紧凑地表达：</p>
+
+<pre id="@url_http_hostname_hostname_word_word_word_a-z_0"><a class="jump" href="index.html#@url_http_hostname_hostname_word_word_word_a-z_0"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> hostname <span class="hljs-string">'/'</span>
+hostname <span class="hljs-keyword">::=</span> word <span class="hljs-string">'.'</span> word
+word <span class="hljs-keyword">::=</span> <span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span></code></pre>
+
+</div><h3 id="recursion_in_grammars"><a class="jump" href="index.html#recursion_in_grammars"></a>语法中的递归</h3><div data-outline="recursion_in_grammars">
+
+<p id="@else_do_need"><a class="jump" href="index.html#@else_do_need"></a>我们还需要怎样推广？主机名可以有两个以上的组成部分，还可以有一个可选的端口号：</p>
+
+<pre id="@http-didit-csail-mit-edu-4949"><a class="jump" href="index.html#@http-didit-csail-mit-edu-4949"></a><code class="language-text">http://didit.csail.mit.edu:4949/</code></pre>
+
+<p id="@handle_kind_string"><a class="jump" href="index.html#@handle_kind_string"></a>为了处理这种字符串，现在的语法是：</p>
+
+<pre id="@url_http_hostname_port_hostname_word_hostname_word_word_port_0-9_word_a-z_0"><a class="jump" href="index.html#@url_http_hostname_port_hostname_word_hostname_word_word_port_0-9_word_a-z_0"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> hostname (<span class="hljs-string">':'</span> port)<span class="hljs-keyword">?</span> <span class="hljs-string">'/'</span> 
+hostname <span class="hljs-keyword">::=</span> word <span class="hljs-string">'.'</span> hostname <span class="hljs-keyword">|</span> word <span class="hljs-string">'.'</span> word
+port <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span>
+word <span class="hljs-keyword">::=</span> <span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span></code></pre>
+
+<p id="@notice_hostname_now"><a class="jump" href="index.html#@notice_hostname_now"></a><em>注意 hostname 现在是如何递归地以自身来定义的。</em> hostname 定义的哪部分是基础情况，哪部分是递归步骤？允许哪些类型的主机名？</p>
+
+<p id="@using_repetition_operator"><a class="jump" href="index.html#@using_repetition_operator"></a>使用重复运算符，我们也可以不用递归来写 <code>hostname</code>，像这样：</p>
+
+<pre id="@hostname_word_word"><a class="jump" href="index.html#@hostname_word_word"></a><code class="language-parserlib hljs">hostname <span class="hljs-keyword">::=</span> (word <span class="hljs-string">'.'</span>)<span class="hljs-keyword">+</span> word</code></pre>
+
+<p id="@recursion_can_sometimes"><a class="jump" href="index.html#@recursion_can_sometimes"></a>有时可以使用这样的运算符来消除语法中的递归，但并非总是如此。</p>
+
+<p id="@another_thing_observe"><a class="jump" href="index.html#@another_thing_observe"></a>另一个需要注意的事情是，这个语法允许技术上不合法的端口号，因为端口号只能范围从 0 到 65535（2<sup>16</sup>-1）。我们可以写一个更复杂的 <code>port</code> 定义来只匹配这些整数，但这通常不在语法中完成。相反，约束 0 ≤ <code>port</code> ≤ 65535 会在使用语法的程序中指定。</p>
+
+<p id="@there_more_things"><a class="jump" href="index.html#@there_more_things"></a>要更进一步，我们还需要做更多的事情：</p>
+
+<ul id="@generalizing_http_support">
+<li><a class="jump" href="index.html#@generalizing_http_support"></a>推广 <code>http</code> 以支持 URL 可以有的其他协议</li>
+<li>将末尾的 <code>/</code> 推广为以斜杠分隔的路径</li>
+<li>允许主机名使用完整的合法字符集，而不仅仅是 a-z</li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-grammars_2"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-grammars_2-reading_a_grammar_2" data-target="#ex-grammars_2-reading_a_grammar_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-grammars_2-reading_a_grammar_2"></a><span class="panel-title">阅读语法 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-grammars_2-reading_a_grammar_2" data-outline="reading_a_grammar_2" data-ex-id="recursion_in_grammars/reading_a_grammar_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@which_strings_match_root_nonterminal_grammar_1"><a class="jump" href="index.html#@which_strings_match_root_nonterminal_grammar_1"></a>哪些字符串匹配这个语法的 <code>root</code> 非终结符？</label>
+
+<pre id="@root_integer_integer"><a class="jump" href="index.html#@root_integer_integer"></a><code class="language-parserlib hljs">root    <span class="hljs-keyword">::=</span> integer (<span class="hljs-string">'-'</span> integer)<span class="hljs-keyword">+</span>
+integer <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="617"><label for="md_converted_choice_2_0"><input type="checkbox" id="md_converted_choice_2_0"><code>617</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="617-253"><label for="md_converted_choice_2_1"><input type="checkbox" id="md_converted_choice_2_1"><code>617-253</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="617-253-1000"><label for="md_converted_choice_2_2"><input type="checkbox" id="md_converted_choice_2_2"><code>617-253-1000</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="---"><label for="md_converted_choice_2_3"><input type="checkbox" id="md_converted_choice_2_3"><code>---</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="integer-integer-integer"><label for="md_converted_choice_2_4"><input type="checkbox" id="md_converted_choice_2_4"><code>integer-integer-integer</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="5--5"><label for="md_converted_choice_2_5"><input type="checkbox" id="md_converted_choice_2_5"><code>5--5</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="3-6-293-1"><label for="md_converted_choice_2_6"><input type="checkbox" id="md_converted_choice_2_6"><code>3-6-293-1</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-grammars_2-reading_a_grammar_3" data-target="#ex-grammars_2-reading_a_grammar_3" data-toggle="collapse"><a class="jump" href="index.html#@ex-grammars_2-reading_a_grammar_3"></a><span class="panel-title">阅读语法 3</span></div><div class="panel-collapse collapse exercise-panel" id="ex-grammars_2-reading_a_grammar_3" data-outline="reading_a_grammar_3" data-ex-id="recursion_in_grammars/reading_a_grammar_3" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@which_strings_match_root_nonterminal_grammar_2"><a class="jump" href="index.html#@which_strings_match_root_nonterminal_grammar_2"></a>哪些字符串匹配这个语法的 <code>root</code> 非终结符？</label>
+
+<pre id="@root_b_aa"><a class="jump" href="index.html#@root_b_aa"></a><code class="language-parserlib hljs">root   <span class="hljs-keyword">::=</span> (A B)<span class="hljs-keyword">+</span>
+A      <span class="hljs-keyword">::=</span> <span class="hljs-string">[Aa]</span>
+B      <span class="hljs-keyword">::=</span> <span class="hljs-string">[Bb]</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="aaaBBB"><label for="md_converted_choice_3_0"><input type="checkbox" id="md_converted_choice_3_0">aaaBBB</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="abababab"><label for="md_converted_choice_3_1"><input type="checkbox" id="md_converted_choice_3_1">abababab</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="aBAbabAB"><label for="md_converted_choice_3_2"><input type="checkbox" id="md_converted_choice_3_2">aBAbabAB</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="AbAbAbA"><label for="md_converted_choice_3_3"><input type="checkbox" id="md_converted_choice_3_3">AbAbAbA</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-grammars_2-writing_a_grammar" data-target="#ex-grammars_2-writing_a_grammar" data-toggle="collapse"><a class="jump" href="index.html#@ex-grammars_2-writing_a_grammar"></a><span class="panel-title">编写语法</span></div><div class="panel-collapse collapse exercise-panel" id="ex-grammars_2-writing_a_grammar" data-outline="writing_a_grammar" data-ex-id="recursion_in_grammars/writing_a_grammar" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@suppose_want_url"><a class="jump" href="index.html#@suppose_want_url"></a>假设我们希望目前只支持 http 的 <code>url</code> 语法也能匹配以下形式的字符串：</p>
+
+<pre id="@https-websis-mit-edu_ftp-ftp-athena-mit-edu"><a class="jump" href="index.html#@https-websis-mit-edu_ftp-ftp-athena-mit-edu"></a><code class="language-text">https://websis.mit.edu/
+ftp://ftp.athena.mit.edu/</code></pre>
+
+<p id="@but_not_strings"><a class="jump" href="index.html#@but_not_strings"></a>但不匹配以下形式的字符串：</p>
+
+<pre id="@ptth-web-mit-edu_mailto-bitdiddle-mit-edu"><a class="jump" href="index.html#@ptth-web-mit-edu_mailto-bitdiddle-mit-edu"></a><code class="language-text">ptth://web.mit.edu/
+mailto:bitdiddle@mit.edu</code></pre>
+
+<p id="@so_change_grammar"><a class="jump" href="index.html#@so_change_grammar"></a>因此我们将语法改为：</p>
+
+<pre id="@url_protocol_hostname"><a class="jump" href="index.html#@url_protocol_hostname"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> protocol <span class="hljs-string">'://'</span> hostname (<span class="hljs-string">':'</span> port)<span class="hljs-keyword">?</span> <span class="hljs-string">'/'</span> 
+protocol <span class="hljs-keyword">::=</span> TODO
+hostname <span class="hljs-keyword">::=</span> word <span class="hljs-string">'.'</span> hostname <span class="hljs-keyword">|</span> word <span class="hljs-string">'.'</span> word
+port <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span>
+word <span class="hljs-keyword">::=</span> <span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span></code></pre>
+
+<label class="exercise-part-heading" id="@could_you_put"><a class="jump" href="index.html#@could_you_put"></a>你可以用什么来代替 TODO，以匹配期望的 URL 但不匹配不期望的 URL？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="word"><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0"><code>word</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="'ftp' | 'http' | 'https'"><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1"><code>'ftp' | 'http' | 'https'</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="('http' 's'?) | 'ftp'"><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2"><code>('http' 's'?) | 'ftp'</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="('f' | 'ht') 'tp' 's'?"><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3"><code>('f' | 'ht') 'tp' 's'?</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="parse_trees"><a class="jump" href="index.html#parse_trees"></a>解析树</h2><div data-outline="parse_trees">
+
+<p id="@matching_grammar_against"><a class="jump" href="index.html#@matching_grammar_against"></a>将语法与字符串匹配可以生成一棵<mark data-structure-text="parse tree" id="^parse_tree"><em>解析树</em></mark>（parse tree），它显示字符串的各部分如何对应语法的各部分。</p>
+
+<p id="@leaves_parse_tree"><a class="jump" href="index.html#@leaves_parse_tree"></a>解析树的叶子节点用终结符标记，表示字符串中已被解析的部分。
+它们没有子节点，不能再被进一步展开。
+如果我们按顺序将叶子节点连接起来，就得到了原始字符串。
+一个简单的例子是我们一开始使用的单行 URL 语法，其（唯一可能的）解析树如右图所示：</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/url-simple.png" width="150px" alt="the parse tree produced by parsing 'http://mit.edu' with the one-line URL grammar"></div>
+
+<pre id="@url_http-mit-edu_1"><a class="jump" href="index.html#@url_http-mit-edu_1"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://mit.edu/'</span></code></pre>
+
+<div class="clearfix"></div>
+
+<p id="@internal_nodes_parse"><a class="jump" href="index.html#@internal_nodes_parse"></a>解析树的内部节点用非终结符标记，因为它们都有子节点。
+非终结符节点的直接子节点必须遵循语法中该非终结符产生式规则的模式。
+例如，在我们允许任意两部分主机名的更复杂的 URL 语法中，树中 <code>hostname</code> 节点的子节点必须遵循 <code>hostname</code> 规则的模式：<code>word '.' word</code>。
+右图显示了将此语法与 <code>http://mit.edu/</code> 匹配所产生的解析树：</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/url-with-hostname.png" width="180px" alt="the parse tree produced by parsing 'http://mit.edu' with a grammar with url, hostname, and word nonterminals"></div>
+
+<pre id="@url_http_hostname_hostname_word_word_word_a-z_1"><a class="jump" href="index.html#@url_http_hostname_hostname_word_word_word_a-z_1"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> hostname <span class="hljs-string">'/'</span>
+hostname <span class="hljs-keyword">::=</span> word <span class="hljs-string">'.'</span> word
+word <span class="hljs-keyword">::=</span> <span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span></code></pre>
+
+<div class="clearfix"></div>
+
+<p id="@more_elaborate_example"><a class="jump" href="index.html#@more_elaborate_example"></a>作为更复杂的例子，这里是递归 URL 语法的解析树。
+这棵树现在具有更多的结构。
+<code>hostname</code> 和 <code>word</code> 非终结符标记着树中的节点，它们的子树匹配语法中的那些规则。</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/url-with-recursive-hostname.png" width="250px" alt="a parse tree produced by a grammar with a recursive hostname rule"></div>
+
+<pre id="@url_http_hostname_port_hostname_word_hostname_word_word_port_0-9_word_a-z_1"><a class="jump" href="index.html#@url_http_hostname_port_hostname_word_hostname_word_word_port_0-9_word_a-z_1"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> hostname (<span class="hljs-string">':'</span> port)<span class="hljs-keyword">?</span> <span class="hljs-string">'/'</span> 
+hostname <span class="hljs-keyword">::=</span> word <span class="hljs-string">'.'</span> hostname <span class="hljs-keyword">|</span> word <span class="hljs-string">'.'</span> word
+port <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span>
+word <span class="hljs-keyword">::=</span> <span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span></code></pre>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-parse_trees"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parse_trees-parse_trees_1" data-target="#ex-parse_trees-parse_trees_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-parse_trees-parse_trees_1"></a><span class="panel-title">解析树 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parse_trees-parse_trees_1" data-outline="parse_trees_1" data-ex-id="parse_trees/parse_trees_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@string_matched_against"><a class="jump" href="index.html#@string_matched_against"></a>与语法匹配以产生上面最后一棵解析树的字符串是什么？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 47%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parse_trees-parse_trees_2" data-target="#ex-parse_trees-parse_trees_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-parse_trees-parse_trees_2"></a><span class="panel-title">解析树 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parse_trees-parse_trees_2" data-outline="parse_trees_2" data-ex-id="parse_trees/parse_trees_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@if_same_string"><a class="jump" href="index.html#@if_same_string"></a>如果将上一个练习中的相同字符串与这个具有<em>非递归</em> hostname 规则的语法匹配：</p>
+
+<pre id="@url_http_hostname_port_hostname_word_word_port_0-9"><a class="jump" href="index.html#@url_http_hostname_port_hostname_word_word_port_0-9"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> hostname (<span class="hljs-string">':'</span> port)<span class="hljs-keyword">?</span> <span class="hljs-string">'/'</span> 
+hostname <span class="hljs-keyword">::=</span> (word <span class="hljs-string">'.'</span>)<span class="hljs-keyword">+</span> word
+port <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span>
+word <span class="hljs-keyword">::=</span> <span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span></code></pre>
+
+<p id="@then_many_internal"><a class="jump" href="index.html#@then_many_internal"></a>那么生成的解析树会有多少个内部节点（由非终结符标记）？
+提示：在计数之前，试着在纸上画出解析树。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="clearfix"></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="example_markdown_and_html"><a class="jump" href="index.html#example_markdown_and_html"></a>示例：Markdown 和 HTML</h3><div data-outline="example_markdown_and_html">
+
+<p id="@now_look_grammars"><a class="jump" href="index.html#@now_look_grammars"></a>现在让我们来看一些文件格式的语法。我们将使用两种不同的标记语言来表示文本中的排版样式。它们如下：</p>
+
+<p id="@markdown_0"><a class="jump" href="index.html#@markdown_0"></a><strong>Markdown:</strong></p>
+
+<pre id="@_italic_"><a class="jump" href="index.html#@_italic_"></a><code class="language-text">This is _italic_.</code></pre>
+
+<p id="@learn_about_markdown"><a class="jump" href="index.html#@learn_about_markdown"></a>(To learn about Markdown, see the <a href="https://daringfireball.net/projects/markdown/syntax">Markdown syntax documentation</a> or <a href="https://en.wikipedia.org/wiki/Markdown"><em>Markdown</em> on Wikipedia</a>.)</p>
+
+<p id="@html_0"><a class="jump" href="index.html#@html_0"></a><strong>HTML:</strong></p>
+
+<pre id="@here_i-italic-i_word"><a class="jump" href="index.html#@here_i-italic-i_word"></a><code class="language-html hljs xml">Here is an <span class="hljs-tag">&lt;<span class="hljs-name">i</span>&gt;</span>italic<span class="hljs-tag">&lt;/<span class="hljs-name">i</span>&gt;</span> word.</code></pre>
+
+<p id="@learn_about_html"><a class="jump" href="index.html#@learn_about_html"></a>(To learn about HTML, see the <a href="https://html.spec.whatwg.org/multipage/">HTML Living Standard</a>, or <a href="https://en.wikipedia.org/wiki/HTML"><em>HTML</em> on Wikipedia</a>.)</p>
+
+<p id="@simplicity_our_example"><a class="jump" href="index.html#@simplicity_our_example"></a>为了简单起见，我们的示例 HTML 和 Markdown 语法只指定斜体，但其他文本样式当然也是可能的。
+同样为了简单起见，我们假设格式化分隔符之间的纯文本不允许使用任何格式化标点符号，如 <code>_</code> 或 <code>&lt;</code>。</p>
+
+<div class="panel panel-figure pull-right" style="width:350px"><img src="figures/markdown.png" width="300px" alt="a parse tree produced by the Markdown grammar"></div>
+
+<div style="height:20px;"></div>
+
+<p id="@here-s_grammar_our_simplified_version_markdown"><a class="jump" href="index.html#@here-s_grammar_our_simplified_version_markdown"></a>这是我们简化版 Markdown 的语法：</p>
+
+<pre id="@markdown_normal_italic"><a class="jump" href="index.html#@markdown_normal_italic"></a><code class="language-parserlib hljs">markdown <span class="hljs-keyword">::=</span> ( normal <span class="hljs-keyword">|</span> italic ) <span class="hljs-keyword">*</span>
+italic <span class="hljs-keyword">::=</span> <span class="hljs-string">'_'</span> normal <span class="hljs-string">'_'</span>
+normal <span class="hljs-keyword">::=</span> text
+text <span class="hljs-keyword">::=</span> <span class="hljs-string">[^_]</span><span class="hljs-keyword">*</span></code></pre>
+
+<div class="clearfix"></div>
+
+<div class="panel panel-figure pull-right"><img src="figures/html.png" width="350px" alt="a parse tree produced by the HTML grammar"></div>
+
+<div style="height:20px;"></div>
+
+<p id="@here-s_grammar_our_simplified_version_html"><a class="jump" href="index.html#@here-s_grammar_our_simplified_version_html"></a>这是我们简化版 HTML 的语法：</p>
+
+<pre id="@html_normal_italic"><a class="jump" href="index.html#@html_normal_italic"></a><code class="language-parserlib hljs">html <span class="hljs-keyword">::=</span> ( normal <span class="hljs-keyword">|</span> italic ) <span class="hljs-keyword">*</span>
+italic <span class="hljs-keyword">::=</span> <span class="hljs-string">'&lt;i&gt;'</span> html <span class="hljs-string">'&lt;/i&gt;'</span>
+normal <span class="hljs-keyword">::=</span> text
+text <span class="hljs-keyword">::=</span> <span class="hljs-string">[^&lt;&gt;]</span><span class="hljs-keyword">*</span></code></pre>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-parse_trees_2"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parse_trees_2-recursive_grammars" data-target="#ex-parse_trees_2-recursive_grammars" data-toggle="collapse"><a class="jump" href="index.html#@ex-parse_trees_2-recursive_grammars"></a><span class="panel-title">递归语法</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parse_trees_2-recursive_grammars" data-outline="recursive_grammars" data-ex-id="example_markdown_and_html/recursive_grammars" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@look_markdown_html"><a class="jump" href="index.html#@look_markdown_html"></a>看看上面的 <code>markdown</code> 和 <code>html</code> 语法，比较它们的 <code>italic</code> 产生式。注意它们不仅在分隔符上有所不同（一种是 <code>_</code>，另一种是 <code>&lt; &gt;</code> 标签），而且在这些分隔符之间匹配的非终结符也不同。一种语法是递归的；另一种语法不是。</p>
+
+<p id="@each_string_below"><a class="jump" href="index.html#@each_string_below"></a>对于下面的每个字符串，如果你将指定的语法与之匹配，哪些字母在 <code>italic</code> 非终结符的匹配之内？换句话说，哪些字母会是斜体？</p>
+
+<label class="exercise-part-heading" id="@markdown_a_b_c_d_e"><a class="jump" href="index.html#@markdown_a_b_c_d_e"></a>markdown: <code>a_b_c_d_e</code></label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="a"><label for="md_converted_choice_5_0"><input type="checkbox" id="md_converted_choice_5_0"><code>a</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="b"><label for="md_converted_choice_5_1"><input type="checkbox" id="md_converted_choice_5_1"><code>b</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="c"><label for="md_converted_choice_5_2"><input type="checkbox" id="md_converted_choice_5_2"><code>c</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="d"><label for="md_converted_choice_5_3"><input type="checkbox" id="md_converted_choice_5_3"><code>d</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="e"><label for="md_converted_choice_5_4"><input type="checkbox" id="md_converted_choice_5_4"><code>e</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@html_a-i-b-i-c-i-d-i-e"><a class="jump" href="index.html#@html_a-i-b-i-c-i-d-i-e"></a>html: <code>a&lt;i&gt;b&lt;i&gt;c&lt;/i&gt;d&lt;/i&gt;e</code></label>
+
+<div class="form-group exercise-part" data-outline="b_2"><div class="checkbox exercise-choice" data-outline="a"><label for="md_converted_choice_6_0"><input type="checkbox" id="md_converted_choice_6_0"><code>a</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="b"><label for="md_converted_choice_6_1"><input type="checkbox" id="md_converted_choice_6_1"><code>b</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="c"><label for="md_converted_choice_6_2"><input type="checkbox" id="md_converted_choice_6_2"><code>c</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="d"><label for="md_converted_choice_6_3"><input type="checkbox" id="md_converted_choice_6_3"><code>d</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="e"><label for="md_converted_choice_6_4"><input type="checkbox" id="md_converted_choice_6_4"><code>e</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="regular_expressions"><a class="jump" href="index.html#regular_expressions"></a>正则表达式</h2><div data-outline="regular_expressions">
+
+<p id="@regular_grammar_special"><a class="jump" href="index.html#@regular_grammar_special"></a><em>正则</em>语法具有一个特殊性质：通过将每个非终结符（除了根非终结符）替换为其右侧，可以将其简化为根的一个单一产生式，右侧只包含终结符和运算符。</p>
+
+<p id="@our_url_grammar"><a class="jump" href="index.html#@our_url_grammar"></a>我们的 URL 语法的则是正则的。通过将非终结符替换为它们的产生式，可以简化为单一表达式：</p>
+
+<pre id="@url_http_a-z"><a class="jump" href="index.html#@url_http_a-z"></a><code class="language-parserlib hljs">url <span class="hljs-keyword">::=</span> <span class="hljs-string">'http://'</span> (<span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span> <span class="hljs-string">'.'</span>)<span class="hljs-keyword">+</span> <span class="hljs-string">[a-z]</span><span class="hljs-keyword">+</span> (<span class="hljs-string">':'</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span>)<span class="hljs-keyword">?</span> <span class="hljs-string">'/'</span> </code></pre>
+
+<p id="@markdown_grammar_also"><a class="jump" href="index.html#@markdown_grammar_also"></a>Markdown 语法也是正则的：</p>
+
+<pre id="@markdown____"><a class="jump" href="index.html#@markdown____"></a><code class="language-parserlib hljs">markdown <span class="hljs-keyword">::=</span> (<span class="hljs-string">[^_]</span><span class="hljs-keyword">*</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'_'</span> <span class="hljs-string">[^_]</span><span class="hljs-keyword">*</span> <span class="hljs-string">'_'</span> )<span class="hljs-keyword">*</span></code></pre>
+
+<p id="@but_our_html"><a class="jump" href="index.html#@but_our_html"></a>But our HTML grammar can’t be reduced completely.  By substituting righthand sides for nonterminals, you can eventually reduce it to something like this:</p>
+
+<pre id="@html_i_html"><a class="jump" href="index.html#@html_i_html"></a><code class="language-parserlib hljs">html <span class="hljs-keyword">::=</span> ( <span class="hljs-string">[^&lt;&gt;]</span><span class="hljs-keyword">*</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'&lt;i&gt;'</span> html <span class="hljs-string">'&lt;/i&gt;'</span> )<span class="hljs-keyword">*</span></code></pre>
+
+<p id="@unfortunately_recursive_use"><a class="jump" href="index.html#@unfortunately_recursive_use"></a>Unfortunately, the recursive use of <code>html</code> on the righthand side can’t be eliminated, and can’t be simply replaced by a repetition operator either.  So the HTML grammar is not regular.</p>
+
+<p id="@reduced_expression_terminals"><a class="jump" href="index.html#@reduced_expression_terminals"></a>终结符和运算符的简化表达式可以写成一种更紧凑的形式，称为<mark data-structure-text="regular expression" id="^regular_expression"><em>正则表达式</em></mark>（regular expression）。正则表达式去掉了终结符周围的引号以及终结符和运算符之间的空格，因此它仅由终结符字符、用于分组的括号和运算符字符组成。
+例如，我们的 <code>markdown</code> 格式的正则表达式就是</p>
+
+<pre id="@_-_-_-_"><a class="jump" href="index.html#@_-_-_-_"></a><code class="language-text">([^_]*|_[^_]*_)*</code></pre>
+
+<p id="@regular_expressions_also"><a class="jump" href="index.html#@regular_expressions_also"></a>正则表达式也简称为<em>regex</em>（正则表达式）。
+正则表达式的可读性远不如原始语法，因为它缺乏记录每个子表达式含义的非终结符名称。
+但许多编程语言都有对正则表达式的库支持（而非对语法的支持），而且正则表达式的匹配速度比语法快得多。</p>
+
+<p id="@regex_syntax_commonly"><a class="jump" href="index.html#@regex_syntax_commonly"></a>编程语言库中通常实现的正则表达式语法，除了我们在上面语法中使用的之外，还有几个特殊字符。
+以下是一些常见的有用字符：</p>
+
+<pre id="@matches_any_single"><a class="jump" href="index.html#@matches_any_single"></a><code class="language-parserlib hljs"><span class="hljs-keyword">.</span>   <span class="hljs-comment">// matches any single character (but sometimes excluding newline, depending on the regex library)</span>
+
+\d  <span class="hljs-comment">// matches any digit, same as [0-9]</span>
+\s  <span class="hljs-comment">// matches any whitespace character, including space, tab, newline</span>
+\w  <span class="hljs-comment">// matches any word character including underscore, same as [a-zA-Z_0-9]</span></code></pre>
+
+<p id="@backslash_also_used"><a class="jump" href="index.html#@backslash_also_used"></a>Backslash is also used to “escape” an operator or special character so that it matches literally.
+Here are some of the common special characters that you need to escape:</p>
+
+<pre><code class="language-text">\.  \(  \)  \*  \+  \|  \[  \]  \\</code></pre>
+
+<p id="@using_backslashes_important"><a class="jump" href="index.html#@using_backslashes_important"></a>当存在可能与特殊字符混淆的终结符字符时，使用反斜杠非常重要。
+因为我们的 <code>url</code> 正则表达式中包含作为终结符的 <code>.</code>，我们需要使用反斜杠来转义它：</p>
+
+<pre id="@http-a-z-a-z-0-9"><a class="jump" href="index.html#@http-a-z-a-z-0-9"></a><code class="language-text">http://([a-z]+\.)+[a-z]+(:[0-9]+)?/</code></pre>
+
+<p id="@another_way_escape"><a class="jump" href="index.html#@another_way_escape"></a>另一种转义特殊字符的方法是将其放在字符类括号中。
+我们可以写 <code>[.]</code> 而不是 <code>\.</code> 来匹配字面意义上的 <code>.</code> 字符。
+在字符类括号内，大多数特殊字符失去其特殊含义，被简单地按字面意义处理。
+但对字符类语法特殊的字符，如 <code>[</code>、<code>]</code>、<code>^</code>、<code>-</code> 和 <code>\</code>，仍然需要通过反斜杠转义才能按字面意义使用。</p>
+
+<p id="@finally_while_subject"><a class="jump" href="index.html#@finally_while_subject"></a>最后，既然我们在讨论反斜杠，正则表达式也可以包含标准的<em>字符串转义字符</em>，如用于表示原本不可见字符的这些代码：</p>
+
+<pre id="@n_matches_literal"><a class="jump" href="index.html#@n_matches_literal"></a><code class="language-parserlib hljs">\n  <span class="hljs-comment">// matches a literal newline character</span>
+\t  <span class="hljs-comment">// matches a literal tab character</span></code></pre>
+
+<p id="@these_same_escape"><a class="jump" href="index.html#@these_same_escape"></a>These are the same escape characters that can be used in Python or TypeScript/JavaScript strings, and they mean a match to a single literal character, the same as if you put in <code>A</code> to match an uppercase A, or <code></code>&nbsp;(space) to match a single space character.</p>
+
+<p id="@so_be_careful"><a class="jump" href="index.html#@so_be_careful"></a>所以要小心：反斜杠在这里被严重重载了！它在正则表达式中用于三种不同的用途：在字符类快捷方式中（如 <code>\s</code>）；按字面意义匹配特殊字符（如 <code>\.</code>）；以及在字符串转义字符中（如 <code>\n</code>）。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-regular_expressions"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions-regex_crosswords" data-target="#ex-regular_expressions-regex_crosswords" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions-regex_crosswords"></a><span class="panel-title">正则表达式填字游戏</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions-regex_crosswords" data-outline="regex_crosswords" data-ex-id="regular_expressions/regex_crosswords" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@get_some_practice"><a class="jump" href="index.html#@get_some_practice"></a>To get some practice with <em>reading</em> a regular expression (i.e., deciding what strings the regular expression matches), let’s do some regex crosswords!</p>
+
+<p id="@two_warnings_before"><a class="jump" href="index.html#@two_warnings_before"></a>开始之前有两个警告：</p>
+
+<ul id="@regex_crossword_site">
+<li><a class="jump" href="index.html#@regex_crossword_site"></a><strong>正则表达式填字游戏网站不使用你的 MIT 登录。</strong>你<strong>不</strong>需要在该网站上创建账户或登录即可做谜题。请忽略关于不登录进度将不会被保存的警告。</li>
+<li><strong>Some of the puzzles use the backreference <code>\1</code> syntax.</strong>  This reading doesn’t talk about the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions/Groups_and_Backreferences"><code>\1</code> backreference syntax</a> because it’s rarely used.  The crossword site’s tutorial includes <code>\1</code>, but we will tell you to skip the other puzzles that use it.</li>
+</ul>
+
+<p id="@first_read_play"><a class="jump" href="index.html#@first_read_play"></a>首先，阅读<a href="https://regexcrossword.com/howtoplay">如何玩</a>。</p>
+
+<p id="@then_do_five"><a class="jump" href="index.html#@then_do_five"></a>然后，做<a href="https://regexcrossword.com/tutorial/1">五个教程谜题</a>。</p>
+
+<label class="exercise-part-heading" id="@color_used_represent"><a class="jump" href="index.html#@color_used_represent"></a>谜题中使用什么颜色来表示空格字符？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 31%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions-beginner" data-target="#ex-regular_expressions-beginner" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions-beginner"></a><span class="panel-title">初级</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions-beginner" data-outline="beginner" data-ex-id="regular_expressions/beginner" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@now_do_beginner"><a class="jump" href="index.html#@now_do_beginner"></a>现在做<a href="https://regexcrossword.com/challenges/beginner">初级谜题</a>，具体是：</p>
+
+<ul id="@beatles_skip_naughty">
+<li><a class="jump" href="index.html#@beatles_skip_naughty"></a><a href="https://regexcrossword.com/challenges/beginner/puzzles/475e811a-da59-4ce8-9b80-3124b33cc041">Beatles</a></li>
+<li>（跳过 Naughty 和 Ghost，因为它们包含 <code>\1</code>）</li>
+<li><a href="https://regexcrossword.com/challenges/beginner/puzzles/85b1c976-6c89-4d3a-9a2a-f90a6a12a564">Symbolism</a></li>
+<li><a href="https://regexcrossword.com/challenges/beginner/puzzles/d02a5949-9b96-475f-9311-18bf886654fb">Airstrip One</a></li>
+</ul>
+
+<label class="exercise-part-heading" id="@top_row_airstrip"><a class="jump" href="index.html#@top_row_airstrip"></a>Airstrip One 的顶行是什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions-intermediate" data-target="#ex-regular_expressions-intermediate" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions-intermediate"></a><span class="panel-title">中级</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions-intermediate" data-outline="intermediate" data-ex-id="regular_expressions/intermediate" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@finally_do_intermediate"><a class="jump" href="index.html#@finally_do_intermediate"></a>最后做<a href="https://regexcrossword.com/challenges/intermediate">中级谜题</a>，具体是：</p>
+
+<ul id="@always_remember_johnny">
+<li><a class="jump" href="index.html#@always_remember_johnny"></a><a href="https://regexcrossword.com/challenges/intermediate/puzzles/48f25c7e-0416-410e-b96a-c7ee19dfa110">Always remember</a></li>
+<li><a href="https://regexcrossword.com/challenges/intermediate/puzzles/7aa20819-ea88-4bb4-b7e0-022ffaaeae64">Johnny</a></li>
+<li>跳过 Earth，因为包含 <code>\1</code></li>
+<li><a href="https://regexcrossword.com/challenges/intermediate/puzzles/837fcf0c-7cd1-46d8-8a63-9902e689b772">Encyclopedia</a></li>
+<li>跳过 Technology，因为包含 <code>\1</code></li>
+</ul>
+
+<label class="exercise-part-heading" id="@top_row_encyclopedia"><a class="jump" href="index.html#@top_row_encyclopedia"></a>Encyclopedia 的顶行是什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<p id="@if_you_enjoyed"><a class="jump" href="index.html#@if_you_enjoyed"></a>如果你喜欢这些谜题，这里还有更多的正则表达式填字游戏：</p>
+
+<ul id="@regex_crosswords_homepage">
+<li><a class="jump" href="index.html#@regex_crosswords_homepage"></a><a href="https://regexcrossword.com/">正则表达式填字游戏首页</a></li>
+<li><a href="http://rampion.github.io/RegHex/">Mystery Hunt 2013</a></li>
+<li><a href="http://mariolurig.com/crossword/">movies</a></li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-regular_expressions_2"><h4 class="text-danger" id="@reading_exercises_5"><a class="jump" href="index.html#@reading_exercises_5"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_2-regex_101" data-target="#ex-regular_expressions_2-regex_101" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_2-regex_101"></a><span class="panel-title">正则表达式 101</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_2-regex_101" data-outline="regex_101" data-ex-id="regular_expressions/regex_101" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@now_practice_writing"><a class="jump" href="index.html#@now_practice_writing"></a>Now let’s practice writing some regular expressions.  The <a href="https://regex101.com/">Regex 101 site</a> allows you to write a regular expression and see what it matches and doesn’t match in a set of test cases.</p>
+
+<p id="@regex_101_does"><a class="jump" href="index.html#@regex_101_does"></a>Regex 101 不使用你的 MIT 登录，你<strong>不</strong>需要在该网站上创建账户或登录即可做下面的谜题。</p>
+
+<p id="@first_try_warmup"><a class="jump" href="index.html#@first_try_warmup"></a>首先，试试这个<a href="https://regex101.com/r/535n4J/8">热身练习</a>。</p>
+
+<label class="exercise-part-heading" id="@shortest_regular_expression"><a class="jump" href="index.html#@shortest_regular_expression"></a>满足<a href="https://regex101.com/r/535n4J/8">热身练习</a>的最短正则表达式是什么？</label>
+
+<p id="@desired_regular_expression"><a class="jump" href="index.html#@desired_regular_expression"></a>期望的正则表达式应该是一个不包含特殊正则运算符的字面字符串。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_2-anchors" data-target="#ex-regular_expressions_2-anchors" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_2-anchors"></a><span class="panel-title">锚点</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_2-anchors" data-outline="anchors" data-ex-id="regular_expressions/anchors" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@next_few_puzzles"><a class="jump" href="index.html#@next_few_puzzles"></a>在接下来的几个谜题中，你需要了解两个常见的正则表达式运算符：</p>
+
+<ul id="@matches_only_beginning">
+<li><a class="jump" href="index.html#@matches_only_beginning"></a><code>^</code> 仅在字符串的开头（或行的开头）匹配</li>
+<li><code>$</code> 仅在字符串或行的末尾匹配</li>
+</ul>
+
+<label class="exercise-part-heading" id="@shortest_possible_regular"><a class="jump" href="index.html#@shortest_possible_regular"></a>满足<a href="https://regex101.com/r/sflnXO/1">这个练习</a>的最短可能正则表达式是什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 31%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_2-ranges" data-target="#ex-regular_expressions_2-ranges" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_2-ranges"></a><span class="panel-title">范围</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_2-ranges" data-outline="ranges" data-ex-id="regular_expressions/ranges" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@regular_expression_can_you_use_satisfy"><a class="jump" href="index.html#@regular_expression_can_you_use_satisfy"></a>你可以使用什么正则表达式来满足<a href="https://regex101.com/r/GoDXvR/1">这个练习</a>？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 49%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_2-mit_subjects" data-target="#ex-regular_expressions_2-mit_subjects" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_2-mit_subjects"></a><span class="panel-title">MIT 课程</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_2-mit_subjects" data-outline="mit_subjects" data-ex-id="regular_expressions/mit_subjects" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@regular_expression_can_you_use_match_only_mit_subject"><a class="jump" href="index.html#@regular_expression_can_you_use_match_only_mit_subject"></a>你可以使用什么正则表达式来<a href="https://regex101.com/r/GqSioa/1">在此练习中</a>只匹配 MIT 课程编号？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_2-integers" data-target="#ex-regular_expressions_2-integers" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_2-integers"></a><span class="panel-title">整数</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_2-integers" data-outline="integers" data-ex-id="regular_expressions/integers" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@regular_expression_can_you_use_match_lists_integers_exercise"><a class="jump" href="index.html#@regular_expression_can_you_use_match_lists_integers_exercise"></a>你可以使用什么正则表达式来<a href="https://regex101.com/r/4kJ4Mg/1">在此练习中</a>匹配整数列表？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-regular_expressions_3"><h4 class="text-danger" id="@reading_exercises_6"><a class="jump" href="index.html#@reading_exercises_6"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_3-newlines_are_special" data-target="#ex-regular_expressions_3-newlines_are_special" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_3-newlines_are_special"></a><span class="panel-title">换行符是特殊的</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_3-newlines_are_special" data-outline="newlines_are_special" data-ex-id="regular_expressions/newlines_are_special" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@most_libraries_use"><a class="jump" href="index.html#@most_libraries_use"></a>在大多数使用正则表达式的库中，任意字符模式 <code>.</code> 不允许匹配换行符。考虑这个中间包含换行符的字符串：<code>"AB\nCD"</code>，打印时看起来像这样：</p>
+
+<pre id="@ab_cd"><a class="jump" href="index.html#@ab_cd"></a><code class="language-plain">AB
+CD</code></pre>
+
+<p id="@which_following_regexes"><a class="jump" href="index.html#@which_following_regexes"></a>使用 <code>.</code> 的默认含义，以下哪些正则表达式匹配这个字符串？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="AB.CD"><label for="md_converted_choice_7_0"><input type="checkbox" id="md_converted_choice_7_0"><code>AB.CD</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="AB\nCD"><label for="md_converted_choice_7_1"><input type="checkbox" id="md_converted_choice_7_1"><code>AB\nCD</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="AB\sCD"><label for="md_converted_choice_7_2"><input type="checkbox" id="md_converted_choice_7_2"><code>AB\sCD</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline=".*CD"><label for="md_converted_choice_7_3"><input type="checkbox" id="md_converted_choice_7_3"><code>.*CD</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="AB[^A-Z]CD"><label for="md_converted_choice_7_4"><input type="checkbox" id="md_converted_choice_7_4"><code>AB[^A-Z]CD</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="AB(.|\n)CD"><label for="md_converted_choice_7_5"><input type="checkbox" id="md_converted_choice_7_5"><code>AB(.|\n)CD</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="using_regular_expressions_in_practice"><a class="jump" href="index.html#using_regular_expressions_in_practice"></a>实际使用正则表达式</h3><div data-outline="using_regular_expressions_in_practice">
+
+<p id="@regexes_widely_used"><a class="jump" href="index.html#@regexes_widely_used"></a>正则表达式在编程中被广泛使用，你应该将它们放在你的工具箱中。</p>
+
+<p id="@typescript-javascript_you_can"><a class="jump" href="index.html#@typescript-javascript_you_can"></a>In TypeScript/JavaScript, you can use regexes for manipulating strings (see Mozilla’s <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions">guide</a>).
+They’re built-in as a first-class feature of other modern scripting languages like Python and Ruby, and you can use them in many text editors for find and replace.</p>
+
+<p id="@some_languages_including"><a class="jump" href="index.html#@some_languages_including"></a>在一些语言（包括 TypeScript/JavaScript）中，正则表达式有自己的以正斜杠分隔的字面语法 <code>/..../</code>。
+在其他语言（包括 Python 和 Java）中，正则表达式没有特殊的语法支持，所以你只需使用带引号的字符串。</p>
+
+<p id="@here_some_examples"><a class="jump" href="index.html#@here_some_examples"></a>以下是在 TypeScript 中使用正则表达式的一些示例。</p>
+
+<p id="@replace_all_runs"><a class="jump" href="index.html#@replace_all_runs"></a>将字符串 <code>s</code> 中所有连续的空格替换为单个空格：</p>
+
+<pre id="@const_singlespacedstring_s-replace"><a class="jump" href="index.html#@const_singlespacedstring_s-replace"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> singleSpacedString = s.replace(<span class="hljs-regexp">/ +/g</span>, <span class="hljs-string">" "</span>);</code></pre>
+
+<p id="@notice_g_character"><a class="jump" href="index.html#@notice_g_character"></a>Notice the <code>g</code> character in the example above.
+By default, a regex will only match the first instance in a string.
+Adding a <code>g</code> character after the regex makes this a “global” pattern which forces it to match all instances in the string.</p>
+
+<p id="@match_url"><a class="jump" href="index.html#@match_url"></a>匹配 URL：</p>
+
+<pre id="@if_s-match-http-a-z-a-z-0-9_then"><a class="jump" href="index.html#@if_s-match-http-a-z-a-z-0-9_then"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">if</span> (s.match(<span class="hljs-regexp">/http:\/\/([a-z]+\.)+[a-z]+(:[0-9]+)?\//</span>)) {
+    <span class="hljs-comment">// then s is a url</span>
+}</code></pre>
+
+<p id="@notice_backslashes_example"><a class="jump" href="index.html#@notice_backslashes_example"></a>注意上面示例中的反斜杠。
+我们想要匹配字面上的句点 <code>.</code>，所以我们必须先将其转义为 <code>\.</code>，以防止它被解释为正则表达式的匹配任意字符运算符。
+此外，我们想要匹配字面上的正斜杠 <code>/</code>，所以我们还必须将它们转义为 <code>\/</code>，以防止它们过早地表示正则表达式字面量的结束。
+频繁需要反斜杠转义使得正则表达式的可读性降低。</p>
+
+<p id="@extract_parts_date"><a class="jump" href="index.html#@extract_parts_date"></a>提取日期的各部分，如 <code>"2020-03-18"</code>：</p>
+
+<pre id="@const_s_2020-03-18"><a class="jump" href="index.html#@const_s_2020-03-18"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> s = <span class="hljs-string">"2020-03-18"</span>;
+<span class="hljs-keyword">const</span> regex = <span class="hljs-regexp">/(?&lt;year&gt;\d{4})-(?&lt;month&gt;\d{2})-(?&lt;day&gt;\d{2})/</span>;
+<span class="hljs-keyword">const</span> m = s.match(regex);
+<span class="hljs-keyword">if</span> (m) {
+  assert(m.groups);
+  <span class="hljs-keyword">const</span> year = m.groups.year;
+  <span class="hljs-keyword">const</span> month = m.groups.month;
+  <span class="hljs-keyword">const</span> day = m.groups.day;
+  <span class="hljs-comment">// m.groups.name is the part of s that matched (?&lt;name&gt;...)</span>
+}</code></pre>
+
+<p id="@example_uses_named"><a class="jump" href="index.html#@example_uses_named"></a>此示例使用<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions/Groups_and_Ranges#using_named_groups"><em>命名捕获组</em></a>，如 <span class="nowrap"><code>(?&lt;year&gt;...)</code></span>，来提取匹配字符串的各部分并为它们分配名称。
+<span class="nowrap"><code>(?&lt;name&gt;...)</code></span> 语法匹配括号内的正则表达式 <code>...</code>，然后将 <em>name</em> 分配给匹配的字符串。
+注意，这里的 <code>?</code> <em>不</em>表示 0 或 1 次重复。
+在此上下文中，在左括号之后，<code>?</code> 表示这些括号具有特殊含义，而不仅仅是分组。</p>
+
+<p id="@named_capturing_groups"><a class="jump" href="index.html#@named_capturing_groups"></a>命名捕获组可以在成功匹配后通过 groups 属性检索。
+例如，如果将此正则表达式与 <code>"2026-03-18"</code> 匹配，那么 <code>m.groups.year</code> 将返回 <code>"2026"</code>，<code>m.groups.month</code> 将返回 <code>"03"</code>，<code>m.groups.day</code> 将返回 <code>"18"</code>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-regular_expressions_4"><h4 class="text-danger" id="@reading_exercises_7"><a class="jump" href="index.html#@reading_exercises_7"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_4-regexes_for_substring_replacement" data-target="#ex-regular_expressions_4-regexes_for_substring_replacement" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_4-regexes_for_substring_replacement"></a><span class="panel-title">用于子字符串替换的正则表达式</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_4-regexes_for_substring_replacement" data-outline="regexes_for_substring_replacement" data-ex-id="using_regular_expressions_in_practice/regexes_for_substring_replacement" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@write_shortest_regex"><a class="jump" href="index.html#@write_shortest_regex"></a>编写你能写的最短的正则表达式，以从字符串中移除<strong>单个单词、仅含小写字母的 HTML 标签</strong>：</p>
+
+<pre id="@const_input_b-good-b"><a class="jump" href="index.html#@const_input_b-good-b"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> input = <span class="hljs-string">"The &lt;b&gt;Good&lt;/b&gt;, the &lt;i&gt;Bad&lt;/i&gt;, and the &lt;strong&gt;Ugly&lt;/strong&gt;"</span>;
+<span class="hljs-keyword">const</span> regex = <span class="hljs-regexp">/TODO/g</span>;
+<span class="hljs-keyword">const</span> output = input.replace(regex, <span class="hljs-string">""</span>);</code></pre>
+
+<p id="@desired_output_example"><a class="jump" href="index.html#@desired_output_example"></a>该示例的期望输出是 <code>"The Good, the Bad, and the Ugly"</code>。
+你能用什么最短的正则表达式来代替 <code>TODO</code>，以匹配任何单个单词、仅含小写字母的 HTML 标签，而不仅仅是此特定输入字符串中的那些？</p>
+
+<p id="@you_may_find_useful_try_your_answer_here_0"><a class="jump" href="index.html#@you_may_find_useful_try_your_answer_here_0"></a>你可能会发现<a href="https://regex101.com/r/FUKDDV/9">在这里尝试你的答案</a>很有用。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 26%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-regular_expressions_4-regexes_for_string_parsing" data-target="#ex-regular_expressions_4-regexes_for_string_parsing" data-toggle="collapse"><a class="jump" href="index.html#@ex-regular_expressions_4-regexes_for_string_parsing"></a><span class="panel-title">用于字符串解析的正则表达式</span></div><div class="panel-collapse collapse exercise-panel" id="ex-regular_expressions_4-regexes_for_string_parsing" data-outline="regexes_for_string_parsing" data-ex-id="using_regular_expressions_in_practice/regexes_for_string_parsing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@consider_snippet_code"><a class="jump" href="index.html#@consider_snippet_code"></a>考虑这段匹配街道地址的代码片段：</p>
+
+<pre id="@const_input_77"><a class="jump" href="index.html#@const_input_77"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> input = <span class="hljs-string">"77 Rose Court Ln"</span>;
+<span class="hljs-keyword">const</span> regex = <span class="hljs-regexp">/[0-9]+ .* (Rd|St|Ave|Ln)/</span>;
+<span class="hljs-keyword">const</span> m = input.match(regex);
+<span class="hljs-keyword">if</span> (m) {
+    ...
+}</code></pre>
+
+<p id="@want_not_only"><a class="jump" href="index.html#@want_not_only"></a>我们不仅要匹配街道地址，还要将其解析为各个部分。</p>
+
+<p id="@insert_named_capturing"><a class="jump" href="index.html#@insert_named_capturing"></a>在正则表达式 <code>regex</code> 中插入命名捕获组，以便在成功匹配 <code>m</code> 后提取这些部分：</p>
+
+<pre id="@const_housenumber_m-groups-housenumber"><a class="jump" href="index.html#@const_housenumber_m-groups-housenumber"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> houseNumber = m.groups.houseNumber; <span class="hljs-comment">// should be "77"</span>
+<span class="hljs-keyword">const</span> streetName = m.groups.streetName; <span class="hljs-comment">// should be "Rose Court"</span>
+<span class="hljs-keyword">const</span> streetType = m.groups.streetType; <span class="hljs-comment">// should be "Ln"</span></code></pre>
+
+<p id="@start_original_regular"><a class="jump" href="index.html#@start_original_regular"></a>从原始正则表达式 <code>[0-9]+ .* (Rd|St|Ave|Ln)</code> 开始（已在下方填入），只需在表达式中对应需要提取部分的周围加上正确命名的括号。
+注意空格，因为空格在正则表达式中具有含义。</p>
+
+<span class="long-monospaced-answer" data-prefilled-answer="[0-9]+ .* (Rd|St|Ave|Ln)"></span>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;" value="[0-9]+ .* (Rd|St|Ave|Ln)"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@you_may_find_useful_try_your_answer_here_1"><a class="jump" href="index.html#@you_may_find_useful_try_your_answer_here_1"></a>你可能会发现<a href="https://regex101.com/r/TAHcBA/9">在这里尝试你的答案</a>很有用。</p>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="context-free_grammars"><a class="jump" href="index.html#context-free_grammars"></a>上下文无关语法</h3><div data-outline="context-free_grammars">
+
+<p id="@general_language_can"><a class="jump" href="index.html#@general_language_can"></a>In general, a language that can be expressed with our system of grammars is called context-free.  <a href="https://en.wikipedia.org/wiki/Chomsky_hierarchy">Not all context-free languages are also regular</a>; that is, some grammars can’t be reduced to single nonrecursive productions.  Our HTML grammar is context-free but not regular.</p>
+
+<p id="@grammars_most_programming"><a class="jump" href="index.html#@grammars_most_programming"></a>大多数编程语言的语法也是上下文无关的。一般来说，任何具有嵌套结构（如嵌套的括号或大括号）的语言都是上下文无关的但不是正则的。这个描述适用于 TypeScript 语法，这里部分展示：</p>
+
+<pre id="@statement_statement_if"><a class="jump" href="index.html#@statement_statement_if"></a><code class="language-parserlib hljs">statement <span class="hljs-keyword">::=</span> 
+  <span class="hljs-string">'{'</span> statement<span class="hljs-keyword">*</span> <span class="hljs-string">'}'</span>
+<span class="hljs-keyword">|</span> <span class="hljs-string">'if'</span> <span class="hljs-string">'('</span> expression <span class="hljs-string">')'</span> statement (<span class="hljs-string">'else'</span> statement)<span class="hljs-keyword">?</span>
+<span class="hljs-keyword">|</span> <span class="hljs-string">'for'</span> <span class="hljs-string">'('</span> forinit<span class="hljs-keyword">?</span> <span class="hljs-string">';'</span> expression<span class="hljs-keyword">?</span> <span class="hljs-string">';'</span> forupdate<span class="hljs-keyword">?</span> <span class="hljs-string">')'</span> statement
+<span class="hljs-keyword">|</span> <span class="hljs-string">'while'</span> <span class="hljs-string">'('</span> expression <span class="hljs-string">')'</span> statement
+<span class="hljs-keyword">|</span> <span class="hljs-string">'do'</span> statement <span class="hljs-string">'while'</span> <span class="hljs-string">'('</span> expression <span class="hljs-string">')'</span> <span class="hljs-string">';'</span>
+<span class="hljs-keyword">|</span> <span class="hljs-string">'try'</span> <span class="hljs-string">'{'</span> statement<span class="hljs-keyword">*</span> <span class="hljs-string">'}'</span> ( catches <span class="hljs-keyword">|</span> catches<span class="hljs-keyword">?</span> <span class="hljs-string">'finally'</span> <span class="hljs-string">'{'</span> statement<span class="hljs-keyword">*</span> <span class="hljs-string">'}'</span> )
+<span class="hljs-keyword">|</span> <span class="hljs-string">'switch'</span> <span class="hljs-string">'('</span> expression <span class="hljs-string">')'</span> <span class="hljs-string">'{'</span> switchgroups <span class="hljs-string">'}'</span>
+<span class="hljs-keyword">|</span> <span class="hljs-string">'return'</span> expression<span class="hljs-keyword">?</span> <span class="hljs-string">';'</span>
+<span class="hljs-keyword">|</span> <span class="hljs-string">'throw'</span> expression <span class="hljs-string">';'</span> 
+<span class="hljs-keyword">|</span> <span class="hljs-string">'break'</span> label<span class="hljs-keyword">?</span> <span class="hljs-string">';'</span>
+<span class="hljs-keyword">|</span> <span class="hljs-string">'continue'</span> label<span class="hljs-keyword">?</span> <span class="hljs-string">';'</span>
+<span class="hljs-keyword">|</span> expression <span class="hljs-string">';'</span> 
+<span class="hljs-keyword">|</span> label <span class="hljs-string">':'</span> statement
+<span class="hljs-keyword">|</span> <span class="hljs-string">';'</span></code></pre>
+
+</div><h3 id="taking_stock"><a class="jump" href="index.html#taking_stock"></a>回顾总结</h3><div data-outline="taking_stock">
+
+<p id="@so_far_we-ve"><a class="jump" href="index.html#@so_far_we-ve"></a>So far, we’ve discussed:</p>
+
+<ul id="@grammars_which_describe">
+<li><a class="jump" href="index.html#@grammars_which_describe"></a><a href="index.html#grammars"><em>语法</em></a>，使用形如 <code>nonterminal ::= expression of terminals, nonterminals, and operators</code> 的<em>产生式</em>来描述字符串组
+
+<ul><li>语法使用<em>运算符</em>；三个最重要的是 <code>a * b</code>（重复）、<code>a b</code>（连接）和 <code>a | b</code>（并集）</li>
+<li>语法帮助区分有意义的字符串和无意义的字符串；例如，格式正确的 URL 将<em>匹配</em>我们的 url 语法，但文件系统路径不会</li></ul></li>
+<li><a href="index.html#parse_trees"><em>解析树</em></a>，用图形方式展示具体字符串如何匹配语法
+
+<ul><li>解析树在设计以有用方式自动将字符串匹配到语法的软件时会派上用场，
+我们将在下一节看到</li></ul></li>
+<li><a href="index.html#regular_expressions"><em>正则表达式</em></a>（regex），正则语法的紧凑版本
+
+<ul><li>正则表达式在计算机科学中有着丰富的历史；它们在整个技术栈和许多语言中被广泛使用</li>
+<li>TypeScript/JavaScript（像许多语言一样）内置了对正则表达式的支持，
+包括有意义的处理匹配的<em>命名捕获组</em></li>
+<li><a href="https://regex101.com">regex101.com</a> 是一个试验正则表达式的好网站</li></ul></li>
+</ul>
+
+<p id="@last_part_reading"><a class="jump" href="index.html#@last_part_reading"></a>本阅读的最后一部分介绍了解析器生成器的概念，它自动化了使用语法进行解析的过程。</p>
+
+</div></div><h2 id="parser_generators"><a class="jump" href="index.html#parser_generators"></a>解析器生成器</h2><div data-outline="parser_generators">
+
+<p id="@parser_generator_good"><a class="jump" href="index.html#@parser_generator_good"></a><mark data-structure-text="parser generator" id="^parser_generator"><em>解析器生成器</em></mark>是你应该添加到工具箱中的好工具。解析器生成器以语法作为输入，自动生成一个<mark data-structure-text="parser" id="^parser"><em>解析器</em></mark>，后者接收字符序列并尝试将其与语法匹配。</p>
+
+<p id="@parser_typically_produces"><a class="jump" href="index.html#@parser_typically_produces"></a>The parser typically produces a <mark data-structure-text="parse tree" id="^parse_tree_2"><em>parse tree</em></mark>, which shows how grammar productions are expanded into a sentence that matches the character sequence.  The root of the parse tree is the root nonterminal of the grammar.  Each node of the parse tree expands into one production of the grammar.  We’ll see how a parse tree actually looks later in this reading.</p>
+
+<p id="@final_step_parsing"><a class="jump" href="index.html#@final_step_parsing"></a>解析的最后一步是对这棵解析树做一些有用的事情。我们将把它转换为递归数据类型的值。递归抽象数据类型通常用于表示语言中的表达式，如 HTML、Markdown、TypeScript 或代数表达式（代数的符号语言）。表示语言表达式的递归抽象数据类型称为<em>抽象语法树</em>（AST）。</p>
+
+<p id="@6-102_going_use"><a class="jump" href="index.html#@6-102_going_use"></a>在 6.102 中，我们将使用 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/">ParserLib</a>，这是课程工作人员为 TypeScript 开发的解析器生成器。该解析器生成器在精神上与更广泛使用的解析器生成器如 <a href="http://www.antlr.org/">Antlr</a> 类似，但它具有更简单的接口，通常更容易使用。</p>
+
+<h3 id="a_parserlib_grammar"><a class="jump" href="index.html#a_parserlib_grammar"></a>ParserLib 语法</h3><div data-outline="a_parserlib_grammar">
+
+<div class="handout-solo alert alert-warning"><p id="@documentation_parserlib_can"><a class="jump" href="index.html#@documentation_parserlib_can"></a><a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/" class="alert-link">Documentation for ParserLib</a> can be found online.</p></div>
+
+<p id="@here_our_html"><a class="jump" href="index.html#@here_our_html"></a>这是<a href="index.html#example_markdown_and_html">我们的 HTML 语法</a>作为 ParserLib 语法时的样子：</p>
+
+<div><pre id="@html_italic_normal_italic_i_html"><a class="jump" href="index.html#@html_italic_normal_italic_i_html"></a><code class="language-parserlib hljs">html <span class="hljs-keyword">::=</span> ( italic <span class="hljs-keyword">|</span> normal ) <span class="hljs-keyword">*</span> ;
+italic <span class="hljs-keyword">::=</span> <span class="hljs-string">'&lt;i&gt;'</span> html <span class="hljs-string">'&lt;/i&gt;'</span> ;
+normal <span class="hljs-keyword">::=</span> text ; 
+text <span class="hljs-keyword">::=</span> <span class="hljs-string">[^&lt;&gt;]</span><span class="hljs-keyword">+</span> ;  <span class="hljs-comment">/* represents a string of one or more characters that are not &lt; or &gt; */</span></code></pre></div>
+
+<p id="@break_down"><a class="jump" href="index.html#@break_down"></a>Let’s break it down. </p>
+
+<p id="@each_parserlib_rule"><a class="jump" href="index.html#@each_parserlib_rule"></a>每个 ParserLib 规则由一个名称、一个 <code>::=</code>、其定义以及一个分号终止符组成。ParserLib 语法还可以包含 TypeScript 风格的注释，包括单行和多行注释。</p>
+
+<p id="@convention_use_lowercase"><a class="jump" href="index.html#@convention_use_lowercase"></a>By convention, we use lowercase for nonterminals: <code>html</code>, <code>normal</code>, <code>italic</code>, <code>text</code>. 
+The ParserLib library is case-insensitive with respect to nonterminal names; it canonicalizes names to all-lowercase, so even if you don’t write all your names into lowercase, you will see them as lowercase when you print your grammar.</p>
+
+<p id="@terminals_quoted_strings"><a class="jump" href="index.html#@terminals_quoted_strings"></a>终结符是带引号的字符串，如 <code>'&lt;i&gt;'</code>，或更一般地是正则表达式，如 <code>[^&lt;&gt;]+</code>。
+然而，与普通正则表达式不同，ParserLib 语法要求字面字符必须用引号括起来或放在字符类括号中。
+因此，正则表达式 <code>(alpha|beta|[c-z])*</code> 在 ParserLib 语法中写为 <code>('alpha'|'beta'|[c-z])*</code>。</p>
+
+<pre id="@html_italic_normal_1"><a class="jump" href="index.html#@html_italic_normal_1"></a><code class="language-parserlib hljs">html <span class="hljs-keyword">::=</span> ( italic <span class="hljs-keyword">|</span> normal ) <span class="hljs-keyword">*</span> ;</code></pre>
+
+<p id="@rule_shows_parserlib"><a class="jump" href="index.html#@rule_shows_parserlib"></a>This rule shows that ParserLib rules can have the alternation operator <code>|</code>,  repetition operators like <code>*</code> (and also <code>+</code> and <code>?</code>, even though they’re not shown in this rule), and parentheses for grouping, in the same way we’ve been using in the <a href="index.html#grammar_operators">grammars section</a>.</p>
+
+<p id="@whitespace_grammar_not"><a class="jump" href="index.html#@whitespace_grammar_not"></a>语法中的空白字符不重要（在带引号的字符串或 <code>[...]</code> 字符类之外）。
+这里运算符周围加了空格以使它们更醒目。
+将规则写为 <code>html::=(italic|normal)*;</code> 会有同样的效果，只是可读性较差。</p>
+
+<p id="@html_nonterminal_also"><a class="jump" href="index.html#@html_nonterminal_also"></a>The <code>html</code> nonterminal also happens to be the <em>root</em> of this grammar (also called starting symbol).
+The root is the nonterminal that the whole input needs to match.
+It’s good practice to put the rule for the root nonterminal first in the grammar, so that a human reader can take a top-down view, but it isn’t essential.
+When we create a parser from the grammar, we tell ParserLib which nonterminal the parse should use as the root.</p>
+
+<pre id="@italic_i_html"><a class="jump" href="index.html#@italic_i_html"></a><code class="language-parserlib hljs">italic <span class="hljs-keyword">::=</span> <span class="hljs-string">'&lt;i&gt;'</span> html <span class="hljs-string">'&lt;/i&gt;'</span> ;
+normal <span class="hljs-keyword">::=</span> text ;
+text <span class="hljs-keyword">::=</span> <span class="hljs-string">[^&lt;&gt;]</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@note_text_production"><a class="jump" href="index.html#@note_text_production"></a>注意 <code>text</code> 产生式使用了在<a href="index.html#more_grammar_operators">语法章节</a>中讨论的反转字符类 <code>[^&lt;&gt;]</code> 来表示除 <code>&lt;</code> 和 <code>&gt;</code> 之外的任何字符。</p>
+
+</div><h3 id="whitespace"><a class="jump" href="index.html#whitespace"></a>空白字符</h3><div data-outline="whitespace">
+
+<p id="@consider_grammar_shown"><a class="jump" href="index.html#@consider_grammar_shown"></a>考虑下面显示的语法。</p>
+
+<pre id="@expr_sum_sum"><a class="jump" href="index.html#@expr_sum_sum"></a><code class="language-parserlib hljs">expr <span class="hljs-keyword">::=</span> sum ;
+sum <span class="hljs-keyword">::=</span> primary (<span class="hljs-string">'+'</span> primary)<span class="hljs-keyword">*</span> ;
+primary <span class="hljs-keyword">::=</span> constant <span class="hljs-keyword">|</span> <span class="hljs-string">'('</span> sum <span class="hljs-string">')'</span> ;
+constant <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@grammar_accept_expression"><a class="jump" href="index.html#@grammar_accept_expression"></a>这个语法将接受像 <code>42+2+5</code> 这样的表达式，但会拒绝常量与 <code>+</code> 号之间有任何空格的类似表达式。我们可以通过修改 <code>sum</code> 的产生式规则来修改语法以允许加号周围的空白字符，如下所示：</p>
+
+<pre id="@sum_primary_whitespace"><a class="jump" href="index.html#@sum_primary_whitespace"></a><code class="language-parserlib hljs">sum <span class="hljs-keyword">::=</span> primary (whitespace<span class="hljs-keyword">*</span> <span class="hljs-string">'+'</span> whitespace<span class="hljs-keyword">*</span> primary)<span class="hljs-keyword">*</span> ;
+whitespace <span class="hljs-keyword">::=</span> <span class="hljs-string">[ \t\r\n]</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@however_can_become"><a class="jump" href="index.html#@however_can_become"></a>然而，一旦语法变得更复杂，这可能会很快变得繁琐。ParserLib 允许使用简写来表示应该跳过某些类型的字符。</p>
+
+<pre id="@integerexpression_grammar_skip_whitespace_expr_sum_sum_primary_primary_primary_constant_sum_whitespace_t-r-n_constant_0-9_0"><a class="jump" href="index.html#@integerexpression_grammar_skip_whitespace_expr_sum_sum_primary_primary_primary_constant_sum_whitespace_t-r-n_constant_0-9_0"></a><code class="language-parserlib hljs"><span class="hljs-comment">// the IntegerExpression grammar</span>
+<span class="hljs-keyword">@skip</span> whitespace {
+    expr <span class="hljs-keyword">::=</span> sum ;
+    sum <span class="hljs-keyword">::=</span> primary (<span class="hljs-string">'+'</span> primary)<span class="hljs-keyword">*</span> ;
+    primary <span class="hljs-keyword">::=</span> constant <span class="hljs-keyword">|</span> <span class="hljs-string">'('</span> sum <span class="hljs-string">')'</span> ;
+}
+whitespace <span class="hljs-keyword">::=</span> <span class="hljs-string">[ \t\r\n]</span><span class="hljs-keyword">+</span> ;
+constant <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@skip_whitespace_notation"><a class="jump" href="index.html#@skip_whitespace_notation"></a><code>@skip whitespace</code> 表示法表示，在 <code>expr</code>、<code>sum</code> 和 <code>primary</code> 右侧的每个终结符、非终结符和字符类之前和之后，应自动忽略对 <code>whitespace</code> 非终结符的零次或多次匹配。
+因此从语法匹配的角度来看，这三条规则实际上变为：</p>
+
+<pre class="pull-margin" id="@expr_whitespace_sum"><a class="jump" href="index.html#@expr_whitespace_sum"></a><code class="language-parserlib hljs">expr <span class="hljs-keyword">::=</span> whitespace<span class="hljs-keyword">*</span> sum whitespace<span class="hljs-keyword">*</span> ;
+sum <span class="hljs-keyword">::=</span> whitespace<span class="hljs-keyword">*</span> primary whitespace<span class="hljs-keyword">*</span> (whitespace<span class="hljs-keyword">*</span> <span class="hljs-string">'+'</span> whitespace<span class="hljs-keyword">*</span> primary whitespace<span class="hljs-keyword">*</span>)<span class="hljs-keyword">*</span> whitespace<span class="hljs-keyword">*</span> ;
+primary <span class="hljs-keyword">::=</span> whitespace<span class="hljs-keyword">*</span> constant whitespace<span class="hljs-keyword">*</span> <span class="hljs-keyword">|</span> whitespace<span class="hljs-keyword">*</span> <span class="hljs-string">'('</span>  whitespace<span class="hljs-keyword">*</span> sum  whitespace<span class="hljs-keyword">*</span> <span class="hljs-string">')'</span> whitespace<span class="hljs-keyword">*</span> ;</code></pre>
+
+<p id="@several_things_important"><a class="jump" href="index.html#@several_things_important"></a>关于 <code>@skip</code> 有几件事需要注意。
+首先，<code>whitespace</code> 没有什么特别的。<code>@skip</code> 指令适用于语法中定义的任何非终结符——所以你可以用 <code>@skip punctuation</code> 或 <code>@skip spacesAndComments</code> 代替，只需为这些非终结符定义适当的规则。</p>
+
+<p id="@second_note_definition"><a class="jump" href="index.html#@second_note_definition"></a>其次，注意 <code>constant</code> 的定义是如何被有意放在 <code>@skip</code> 块<em>外面</em>的。
+这是因为我们希望接受常量<em>周围</em>有空格的表达式，如 <code>42  +  2</code>，但拒绝常量<em>内部</em>有空格的表达式，如 <code>4   2 + 2</code>。
+将 <code>constant</code> 规则放在 <code>@skip</code> 块内会使其实际上变为 <code>constant ::= (whitespace* [0-9] whitespace*)+</code>，因此它会接受内部有空格的常量。
+将 <code>primary</code> 规则放在 <code>@skip</code> 块内——使其对 <code>constant</code> 的使用可以被空白字符包围——但将 <code>constant</code> 规则保留在外面，提供了所需的行为。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-parser_generators"><h4 class="text-danger" id="@reading_exercises_8"><a class="jump" href="index.html#@reading_exercises_8"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators-skip" data-target="#ex-parser_generators-skip" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators-skip"></a><span class="panel-title">@skip</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators-skip" data-outline="skip" data-ex-id="whitespace/skip" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@consider_simple_grammar"><a class="jump" href="index.html#@consider_simple_grammar"></a>考虑这个以 <code>semester</code> 为根非终结符的简单语法：</p>
+
+<pre id="@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_0"><a class="jump" href="index.html#@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_0"></a><code class="language-parserlib hljs"><span class="hljs-keyword">@skip</span> spaces {
+  semester <span class="hljs-keyword">::=</span> season year ;
+  season <span class="hljs-keyword">::=</span> <span class="hljs-string">'Fall'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Spring'</span> ;
+  year <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span> <span class="hljs-string">[0-9]</span> ;
+}
+spaces <span class="hljs-keyword">::=</span> <span class="hljs-string">' '</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@which_following_strings"><a class="jump" href="index.html#@which_following_strings"></a>以下哪些字符串被这个语法匹配（其中 <code>␣</code> 表示字符串中的空格）？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Fall15"><label for="md_converted_choice_8_0"><input type="checkbox" id="md_converted_choice_8_0"><code>Fall15</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="␣␣␣␣Spring␣␣␣␣␣␣23"><label for="md_converted_choice_8_1"><input type="checkbox" id="md_converted_choice_8_1"><code>␣␣␣␣Spring␣␣␣␣␣␣23</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Spring␣9␣9"><label for="md_converted_choice_8_2"><input type="checkbox" id="md_converted_choice_8_2"><code>Spring␣9␣9</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="F␣a␣l␣l␣06"><label for="md_converted_choice_8_3"><input type="checkbox" id="md_converted_choice_8_3"><code>F␣a␣l␣l␣06</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators-skip_less" data-target="#ex-parser_generators-skip_less" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators-skip_less"></a><span class="panel-title">@skip 更少</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators-skip_less" data-outline="skip_less" data-ex-id="whitespace/skip_less" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@now_suppose_grammar_instead_0"><a class="jump" href="index.html#@now_suppose_grammar_instead_0"></a>现在假设语法改为：</p>
+
+<pre id="@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_1"><a class="jump" href="index.html#@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_1"></a><code class="language-parserlib hljs"><span class="hljs-keyword">@skip</span> spaces {
+  semester <span class="hljs-keyword">::=</span> season year ;
+}
+season <span class="hljs-keyword">::=</span> <span class="hljs-string">'Fall'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Spring'</span> ;
+year <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span> <span class="hljs-string">[0-9]</span> ;
+spaces <span class="hljs-keyword">::=</span> <span class="hljs-string">' '</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@rules_still_same"><a class="jump" href="index.html#@rules_still_same"></a>规则仍然相同，但 <code>@skip spaces</code> 只包裹了 <code>semester</code> 规则。</p>
+
+<p id="@which_these_strings_match_new_grammar_0"><a class="jump" href="index.html#@which_these_strings_match_new_grammar_0"></a>以下哪些字符串匹配新语法？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Fall15"><label for="md_converted_choice_9_0"><input type="checkbox" id="md_converted_choice_9_0"><code>Fall15</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="␣␣␣␣Spring␣␣␣␣␣␣23"><label for="md_converted_choice_9_1"><input type="checkbox" id="md_converted_choice_9_1"><code>␣␣␣␣Spring␣␣␣␣␣␣23</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Spring␣9␣9"><label for="md_converted_choice_9_2"><input type="checkbox" id="md_converted_choice_9_2"><code>Spring␣9␣9</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="F␣a␣l␣l␣06"><label for="md_converted_choice_9_3"><input type="checkbox" id="md_converted_choice_9_3"><code>F␣a␣l␣l␣06</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators-another_skip" data-target="#ex-parser_generators-another_skip" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators-another_skip"></a><span class="panel-title">另一个 @skip</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators-another_skip" data-outline="another_skip" data-ex-id="whitespace/another_skip" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@now_suppose_grammar_1"><a class="jump" href="index.html#@now_suppose_grammar_1"></a>现在假设语法是：</p>
+
+<pre id="@skip_space_semester"><a class="jump" href="index.html#@skip_space_semester"></a><code class="language-parserlib hljs"><span class="hljs-keyword">@skip</span> space {
+  semester <span class="hljs-keyword">::=</span> season year ;
+}
+season <span class="hljs-keyword">::=</span> <span class="hljs-string">'Fall'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Spring'</span> ;
+year <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span> <span class="hljs-string">[0-9]</span> ;
+space <span class="hljs-keyword">::=</span> <span class="hljs-string">' '</span> ;</code></pre>
+
+<p id="@spaces_nonterminal_now"><a class="jump" href="index.html#@spaces_nonterminal_now"></a><code>spaces</nonterminal> 现在已更改为只匹配一个 <code>space</code>。</p>
+
+<p id="@which_these_strings_match_new_grammar_1"><a class="jump" href="index.html#@which_these_strings_match_new_grammar_1"></a>以下哪些字符串匹配新语法？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Fall15"><label for="md_converted_choice_10_0"><input type="checkbox" id="md_converted_choice_10_0"><code>Fall15</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="␣␣␣␣Spring␣␣␣␣␣␣23"><label for="md_converted_choice_10_1"><input type="checkbox" id="md_converted_choice_10_1"><code>␣␣␣␣Spring␣␣␣␣␣␣23</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Spring␣9␣9"><label for="md_converted_choice_10_2"><input type="checkbox" id="md_converted_choice_10_2"><code>Spring␣9␣9</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="F␣a␣l␣l␣06"><label for="md_converted_choice_10_3"><input type="checkbox" id="md_converted_choice_10_3"><code>F␣a␣l␣l␣06</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="generating_the_parser"><a class="jump" href="index.html#generating_the_parser"></a>生成解析器</h3><div data-outline="generating_the_parser">
+
+<div class="handout-solo alert alert-warning"><p id="@code_examples_follow"><a class="jump" href="index.html#@code_examples_follow"></a>以下示例的代码可下载为 <a href="code.html" class="alert-link">ex12-intexpr</a>。</p>
+
+<p id="@download_project_run"><a class="jump" href="index.html#@download_project_run"></a>下载项目，运行 <code>npm install</code>，在 VS Code 中打开，并使用 <code>npm run start</code> 来尝试你自己的修改。</p>
+
+<p id="@refer_documentation_parserlib"><a class="jump" href="index.html#@refer_documentation_parserlib"></b>参考网上的 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/" class="alert-link">ParserLib 文档</a>。</p></div>
+
+<p id="@rest_reading_use"><a class="jump" href="index.html#@rest_reading_use"></a>本阅读的其余部分将使用我们在上一节中定义的 <em>IntegerExpression</em> 语法作为贯穿示例。
+为了在 TypeScript 中嵌入语法并保留其换行符，我们将使用反引号（也称为<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals">模板字面量</a>）：</p>
+
+<pre id="@const_grammar_string"><a class="jump" href="index.html#@const_grammar_string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> grammar: <span class="hljs-built_in">string</span> = <span class="hljs-string">`
+  @skip whitespace {
+      expr ::= sum;
+      sum ::= primary ('+' primary)*;
+      primary ::= constant | '(' sum ')';
+  }
+  constant ::= [0-9]+;
+  whitespace ::= [ \\t\\r\\n]+;  // &lt;-- note that backslashes must be escaped here, because this regex is inside a string
+`</span>;</code></pre>
+
+<p id="@parserlib_parser_generator"><a class="jump" href="index.html#@parserlib_parser_generator"></a>ParserLib 解析器生成器工具将这样的语法字符串转换为解析器。为了做到这一点，你需要遵循三个步骤。首先，你需要导入 ParserLib 库：</p>
+
+<pre id="@import_parser_parsetree"><a class="jump" href="index.html#@import_parser_parsetree"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">import</span> { Parser, ParseTree, compile } <span class="hljs-keyword">from</span> <span class="hljs-string">"parserlib"</span>;</code></pre>
+
+<p id="@second_step_define"><a class="jump" href="index.html#@second_step_define"></a>第二步是定义一个包含语法使用的所有非终结符的 <code>enum</code> 类型。这将告诉 ParserLib 在语法中期望哪些定义，并允许它检查是否有遗漏。</p>
+
+<div class="code-container"><span class="handout-solo alert alert-warning"><a href="code.html#IntegerGrammar_enum" class="alert-link"><code>parser.ts</code></a></span>
+
+<pre id="@enum_integergrammar_expr"><a class="jump" href="index.html#@enum_integergrammar_expr"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">enum</span> IntegerGrammar {
+  Expr, Sum, Primary, Constant, Whitespace
+}</code></pre></div>
+
+<p id="@note_parserlib_itself"><a class="jump" href="index.html#@note_parserlib_itself"></a>注意 ParserLib 本身不区分大小写，但按照惯例，<code>enum</code> 值的名称首字母大写。</p>
+
+<p id="@within_your_code"><a class="jump" href="index.html#@within_your_code"></a>在你的代码中，你可以通过调用其 <code>compile</code> 工厂函数来创建一个 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/interfaces/Parser.html"><code>Parser</code></a>。</p>
+
+<div class="code-container"><span class="handout-solo alert alert-warning"><a href="code.html#Parser_compile" class="alert-link"><code>parser.ts</code></a></span>
+
+<pre id="@const_parser_parser-integergrammar"><a class="jump" href="index.html#@const_parser_parser-integergrammar"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> parser: Parser&lt;IntegerGrammar&gt; = compile(grammar, IntegerGrammar, IntegerGrammar.Expr);</code></pre></div>
+
+<p id="@compile_method_takes"><a class="jump" href="index.html#@compile_method_takes"></a><code>compile</code> 方法接收一个语法字符串、非终结符枚举以及用作语法根非终结符的非终结符。
+在这种情况下，我们想要的根非终结符是 <code>expr</code>，所以我们传入 <code>IntegerGrammar.Expr</code>。</p>
+
+<p id="@assuming_you_don-t"><a class="jump" href="index.html#@assuming_you_don-t"></a>Assuming you don’t have any syntax errors in your grammar, the result will be a <code>Parser</code> object that can be used to parse text. Notice that the Parser is a generic type that is parameterized by the <code>IntegerGrammar</code> enum that you defined earlier.</p>
+
+</div><h3 id="calling_the_parser"><a class="jump" href="index.html#calling_the_parser"></a>调用解析器</h3><div data-outline="calling_the_parser">
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/parse-tree.png" width="250px" alt="the parse tree produced by parsing '54+(2+ 89)' with the IntegerExpression grammar"></div>
+
+<p id="@now_you-ve_generated"><a class="jump" href="index.html#@now_you-ve_generated"></a>Now that you’ve generated the parser object, you are ready to parse your own text.  The parser has a method called <code>parse</code> that takes in the text to be parsed as a string, and returns a <code>ParseTree</code>. 
+Calling it produces a parse tree:</p>
+
+<pre id="@const_parsetree_parsetree-integergrammar"><a class="jump" href="index.html#@const_parsetree_parsetree-integergrammar"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> parseTree: ParseTree&lt;IntegerGrammar&gt; = parser.parse(<span class="hljs-string">"54+(2+ 89)"</span>);</code></pre>
+
+<p id="@note_parsetree_also"><a class="jump" href="index.html#@note_parsetree_also"></a>注意 <code>ParseTree</code> 也是一个泛型类型，由枚举类型 <code>IntegerGrammar</code> 参数化。</p>
+
+<p id="@debugging_can_then"><a class="jump" href="index.html#@debugging_can_then"></a>为了调试，我们可以将这棵树打印出来：</p>
+
+<pre id="@console-log-parsetree-tostring"><a class="jump" href="index.html#@console-log-parsetree-tostring"></a><code class="language-ts hljs typescript"><span class="hljs-built_in">console</span>.log(parseTree.toString());</code></pre>
+
+<p id="@you_can_also_try_calling_function"><a class="jump" href="index.html#@you_can_also_try_calling_function"></a>你也可以尝试调用函数 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/functions/visualizeAsUrl.html"><code>visualizeAsUrl(tree)</code></a>，它会提供一个 URL，你可以将其复制粘贴到浏览器中以查看可视化。</p>
+
+<div class="handout-solo alert alert-warning"><p id="@see_corresponding_code"><a class="jump" href="index.html#@see_corresponding_code"></a>参见 <a href="code.html#parser_parse" class="alert-link"><code>parser.ts</code></a> 中的相应代码。</p></div>
+
+</div><h3 id="traversing_the_parse_tree"><a class="jump" href="index.html#traversing_the_parse_tree"></a>遍历解析树</h3><div data-outline="traversing_the_parse_tree">
+
+<p id="@so_we-ve_used"><a class="jump" href="index.html#@so_we-ve_used"></a>So we’ve used the parser to turn a stream of characters into a parse tree, which shows how the grammar matches the stream.
+Next we want to do something useful with this parse tree: translating it into a value of a recursive abstract data type.</p>
+
+<p id="@like_parser_itself"><a class="jump" href="index.html#@like_parser_itself"></a>与 <code>Parser</code> 本身一样，<a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/interfaces/ParseTree.html"><code>ParseTree</code></a> 由类型 <code>NT</code> 参数化，这是一个列出语法中所有非终结符的 <code>enum</code> 类型，像我们之前定义的 <code>IntegerGrammar</code> 枚举。</p>
+
+<p id="@first_step_learn"><a class="jump" href="index.html#@first_step_learn"></a>第一步是学习如何遍历解析树。
+<code>ParseTree</code> 对象有四个方法你最需要熟悉。
+其中三个是基本的观察器，表示为 getter 属性：</p>
+
+<span id="ParseTree_interface"></span>
+
+<pre id="@interface_parsetree-nt_nonterminal"><a class="jump" href="index.html#@interface_parsetree-nt_nonterminal"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> ParseTree&lt;NT&gt; {
+
+  <span class="hljs-comment">/**
+   * The nonterminal corresponding to this node in the parse tree.
+   */</span>
+  name: NT;
+
+  <span class="hljs-comment">/**
+   * The children of this node, in order, excluding @skipped subtrees
+   */</span>
+  children: ReadonlyArray&lt;ParseTree&lt;NT&gt;&gt;;
+
+  <span class="hljs-comment">/**
+   * The substring of the original string that this subtree matched
+   */</span>
+  text: <span class="hljs-built_in">string</span>;</code></pre>
+
+<p id="@additionally_you_can"><a class="jump" href="index.html#@additionally_you_can"></a>此外，你可以查询 ParseTree 以获取匹配特定产生式的所有子节点：</p>
+
+<pre id="@get_children_correspond"><a class="jump" href="index.html#@get_children_correspond"></a><code class="language-ts hljs typescript">  <span class="hljs-comment">/**
+   * Get the children that correspond to a particular production rule 
+   * @param name Name of the nonterminal corresponding to the desired production rule.
+   * @returns children that represent matches of name's production rule.
+   */</span>
+  <span class="hljs-keyword">public</span> childrenByName(name: NT): ReadonlyArray&lt;ParseTree&lt;NT&gt;&gt;;
+}</code></pre>
+
+<p id="@good_way_visit"><a class="jump" href="index.html#@good_way_visit"></a>访问解析树中节点的好方法是编写递归函数。
+例如，下面的递归函数以适当的缩进打印解析树中的所有节点。</p>
+
+<pre id="@traverse_parse_tree"><a class="jump" href="index.html#@traverse_parse_tree"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Traverse a parse tree, indenting to make it easier to read.
+ * @param node   parse tree to print.
+ * @param indent indentation to use.
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">printNodes</span>(<span class="hljs-params">node: ParseTree&lt;IntegerGrammar&gt;, indent: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-built_in">console</span>.log(indent + node.name + <span class="hljs-string">":"</span> + node.text);
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> child of node.children){
+        printNodes(child, indent + <span class="hljs-string">"  "</span>);
+    }
+}</code></pre>
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/parse-tree.png" width="250px" alt="the parse tree produced by parsing '54+(2+ 89)' with the IntegerExpression grammar"></div>
+
+<div class="panel panel-figure pull-right pull-margin"></div>
+
+<p id="@running_function_parse"><a class="jump" href="index.html#@running_function_parse"></a>对 <code>54+(2+ 89)</code> 的解析树运行此函数会产生下面的输出。
+供参考，语法和可视化的解析树显示在右侧。</p>
+
+<table><tbody><tr><td style="width:30%; padding-right:30px; vertical-align:top"><pre id="@expr-54-2_89_sum-54-2"><a class="jump" href="index.html#@expr-54-2_89_sum-54-2"></a><code class="language-plaintext hljs">Expr:54+(2+ 89)
+  Sum:54+(2+ 89)
+    Primary:54
+      Constant:54
+    Primary:(2+ 89)
+      Sum:2+ 89
+        Primary:2
+          Constant:2
+        Primary:89
+          Constant:89</code></pre></td>
+<td style="width:30%; vertical-align:top"><pre id="@integerexpression_grammar_skip_whitespace_expr_sum_sum_primary_primary_primary_constant_sum_whitespace_t-r-n_constant_0-9_1"><a class="jump" href="index.html#@integerexpression_grammar_skip_whitespace_expr_sum_sum_primary_primary_primary_constant_sum_whitespace_t-r-n_constant_0-9_1"></a><code class="language-parserlib hljs"><span class="hljs-comment">// the IntegerExpression grammar</span>
+<span class="hljs-keyword">@skip</span> whitespace {
+    expr <span class="hljs-keyword">::=</span> sum ;
+    sum <span class="hljs-keyword">::=</span> primary (<span class="hljs-string">'+'</span> primary)<span class="hljs-keyword">*</span> ;
+    primary <span class="hljs-keyword">::=</span> constant <span class="hljs-keyword">|</span> <span class="hljs-string">'('</span> sum <span class="hljs-string">')'</span> ;
+}
+whitespace <span class="hljs-keyword">::=</span> <span class="hljs-string">[ \t\r\n]</span><span class="hljs-keyword">+</span> ;
+constant <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;</code></pre></td></tr></tbody></table>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-parser_generators_2"><h4 class="text-danger" id="@reading_exercises_9"><a class="jump" href="index.html#@reading_exercises_9"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_2-parse_trees" data-target="#ex-parser_generators_2-parse_trees" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_2-parse_trees"></a><span class="panel-title">解析树</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_2-parse_trees" data-outline="parse_trees" data-ex-id="traversing_the_parse_tree/parse_trees" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<label class="exercise-part-heading" id="@which_following_statements"><a class="jump" href="index.html#@which_following_statements"></a>通过仔细检查上面的示例输出，以下关于 <code>ParserLib</code> 解析树的哪些陈述是正确的？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="the root node of the tree corresponds to the root nonterminal of the grammar"><label for="md_converted_choice_11_0"><input type="checkbox" id="md_converted_choice_11_0">the root node of the tree corresponds to the root nonterminal of the grammar</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="each internal node of the tree is named by a nonterminal in the grammar"><label for="md_converted_choice_12_0"><input type="checkbox" id="md_converted_choice_12_0">each internal node of the tree is named by a nonterminal in the grammar</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="terminals do not have their own separate nodes that can be retrieved by children"><label for="md_converted_choice_13_0"><input type="checkbox" id="md_converted_choice_13_0">terminals do not have their own separate nodes that can be retrieved by <code>children</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-group exercise-part" data-outline="d"><div class="checkbox exercise-choice" data-outline="only a grammar with recursive productions can generate a parse tree"><label for="md_converted_choice_14_0"><input type="checkbox" id="md_converted_choice_14_0">only a grammar with recursive productions can generate a parse tree</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-group exercise-part" data-outline="e"><div class="checkbox exercise-choice" data-outline="a node’s immediate children must correspond to nonterminals mentioned in the node’s production "><label for="md_converted_choice_15_0"><input type="checkbox" id="md_converted_choice_15_0">a node’s immediate children must correspond to nonterminals mentioned in the node’s production </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-group exercise-part" data-outline="f"><div class="checkbox exercise-choice" data-outline="@skip N means that the skipped nonterminal N never appears among the children of nodes whose rules are inside the @skip block"><label for="md_converted_choice_16_0"><input type="checkbox" id="md_converted_choice_16_0"><code>@skip N</code> means that the skipped nonterminal <code>N</code> never appears among the <code>children</code> of nodes whose rules are inside the <code>@skip</code> block</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_2-snapshot_diagram_of_a_parsetree" data-target="#ex-parser_generators_2-snapshot_diagram_of_a_parsetree" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_2-snapshot_diagram_of_a_parsetree"></a><span class="panel-title">ParseTree 快照图</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_2-snapshot_diagram_of_a_parsetree" data-outline="snapshot_diagram_of_a_parsetree" data-ex-id="traversing_the_parse_tree/snapshot_diagram_of_a_parsetree" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<div class="panel panel-default panel-figure pull-right pull-margin no-markdown">
+<div class="panel-body text-center">
+<img src="figures/parse-tree-subtree.png" class="pull-right" width="200">
+<img src="figures/parse-tree-snapshot.png" class="pull-right" width="500">
+</div></div>
+
+<p id="@see_parser-lib_parse"><a class="jump" href="index.html#@see_parser-lib_parse"></a>Let’s see how a <code>Parser­Lib</code> parse tree looks as a snapshot diagram, because it’s closer to how we will think about it and work with it in TypeScript code.</p>
+
+<p id="@partial_snapshot_diagram"><a class="jump" href="index.html#@partial_snapshot_diagram"></a>右侧的部分快照图对应于 <code>"2+ 89"</code> 的 <code>Integer­Grammar</code> 解析树的一部分，也显示在右侧。</p>
+
+<p id="@snapshot_diagram_shows"><a class="jump" href="index.html#@snapshot_diagram_shows"></a>快照图显示了沿着解析树左分支的三个相应颜色的节点：<code>sum</code>、<code>primary</code> 和 <code>constant</code>。</p>
+
+<p id="@fill_gray_rectangles"><a class="jump" href="index.html#@fill_gray_rectangles"></a>填写快照图中的灰色矩形。</p>
+
+<label class="exercise-part-heading" id="@should_appear_location_0"><a class="jump" href="index.html#@should_appear_location_0"></a>位置 A 应该出现什么？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; Constant; Primary; Sum; “2”; “+”; “89”"><select class="form-control"><option selected="selected"></option><option>Constant</option>,<option>Primary</option>,<option>Sum</option>,<option>“2”</option>,<option>“+”</option>,<option>“89”</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@should_appear_location_b"><a class="jump" href="index.html#@should_appear_location_b"></a>位置 B 应该出现什么？</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; Constant; Primary; Sum; “2”; “+”; “89”"><select class="form-control"><option selected="selected"></option><option>Constant</option>,<option>Primary</option>,<option>Sum</option>,<option>“2”</option>,<option>“+”</option>,<option>“89”</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@should_appear_all"><a class="jump" href="index.html#@should_appear_all"></a>标记为 C 的所有位置应该出现什么？</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; IntegerGrammar; ReadonlyArray<ParseTree<IntegerGrammar>>; ParseTree<IntegerGrammar>"><select class="form-control"><option selected="selected"></option><option>IntegerGrammar</option>,<option>ReadonlyArray&lt;ParseTree&lt;IntegerGrammar&gt;&gt;</option>,<option>ParseTree&lt;IntegerGrammar&gt;</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="constructing_an_abstract_syntax_tree"><a class="jump" href="index.html#constructing_an_abstract_syntax_tree"></a>构建抽象语法树</h3><div data-outline="constructing_an_abstract_syntax_tree">
+
+<p id="@need_convert_parse"><a class="jump" href="index.html#@need_convert_parse"></a>We need to convert the parse tree into a recursive data type.
+Here’s the definition of the recursive data type that we’re going to use to represent integer arithmetic expressions:</p>
+
+<pre id="@integerexpression_constant-n_number"><a class="jump" href="index.html#@integerexpression_constant-n_number"></a><code class="language-plaintext hljs">IntegerExpression = Constant(n: number)
+                  + Plus(left: IntegerExpression, right: IntegerExpression)</code></pre>
+
+<p id="@if_syntax_mysterious"><a class="jump" href="index.html#@if_syntax_mysterious"></a>如果这种语法看起来很神秘，请复习<a href="../11-recursive-data-types/index.html#recursive_data_type_definitions">递归数据类型定义</a>。</p>
+
+<p id="@recursive_data_type"><a class="jump" href="index.html#@recursive_data_type"></a>当递归数据类型以这种方式表示一种语言时，它通常被称为<mark data-structure-text="abstract syntax tree" id="^abstract_syntax_tree"><em>抽象语法树</em></mark>。<a href="code.html#integerexpressionts"><code>IntegerExpression</code></a> 值捕获了表达式的重要特征——它的分组和其中的整数——同时省略了创建它的字符序列的不必要细节。</p>
+
+<p id="@contrast_parse_tree"><a class="jump" href="index.html#@contrast_parse_tree"></a>By contrast, the parse tree that we just generated with the <code>IntegerExpression</code> parser is a <mark data-structure-text="concrete syntax tree" id="^concrete_syntax_tree"><em>concrete syntax tree</em></mark>.
+It’s called concrete, rather than abstract, because it contains more details about how the expression is represented in actual characters.  For example, the strings <code>2+2</code>, <code>((2)+(2))</code>, and <code>0002+0002</code> would each produce a different concrete syntax tree, but these trees would all correspond to the same abstract <code>IntegerExpression</code> value: <code>Plus(Constant(2), Constant(2))</code>.</p>
+
+<p id="@now_can_create"><a class="jump" href="index.html#@now_can_create"></a>现在，我们可以创建一个递归函数来遍历 <code>ParseTree</code> 以生成 <code>IntegerExpression</code>，如下所示：</p>
+
+<div id="makeAbstractSyntaxTree" class="code-container pull-margin"><span class="handout-solo alert alert-warning"><a href="code.html#makeAbstractSyntaxTree" class="alert-link"><code>parser.ts</code></a></span>
+
+<pre id="@convert_parse_tree"><a class="jump" href="index.html#@convert_parse_tree"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Convert a parse tree into an abstract syntax tree.
+ * 
+ * @param parseTree constructed according to the IntegerExpression grammar
+ * @returns abstract syntax tree corresponding to parseTree
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">makeAbstractSyntaxTree</span>(<span class="hljs-params">parseTree: ParseTree&lt;IntegerGrammar&gt;</span>): <span class="hljs-title">IntegerExpression</span> </span>{
+    <span class="hljs-keyword">if</span> (parseTree.name === IntegerGrammar.Expr) {
+        <span class="hljs-comment">// expr ::= sum;</span>
+        <span class="hljs-keyword">return</span> makeAbstractSyntaxTree(parseTree.children[<span class="hljs-number">0</span>] ?? assert.fail(<span class="hljs-string">'missing child'</span>));
+
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (parseTree.name === IntegerGrammar.Sum) {
+        <span class="hljs-comment">// sum ::= primary ('+' primary)*;</span>
+        <span class="hljs-keyword">const</span> children = parseTree.childrenByName(IntegerGrammar.Primary);
+        <span class="hljs-keyword">const</span> subexprs = children.map(makeAbstractSyntaxTree);
+        <span class="hljs-keyword">const</span> expression: IntegerExpression = subexprs.reduce(<span class="hljs-function">(<span class="hljs-params">result, subexpr</span>) =&gt;</span> <span class="hljs-keyword">new</span> Plus(result, subexpr));
+        <span class="hljs-keyword">return</span> expression;
+
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (parseTree.name === IntegerGrammar.Primary) {
+        <span class="hljs-comment">// primary ::= constant | '(' sum ')';</span>
+        <span class="hljs-keyword">const</span> child: ParseTree&lt;IntegerGrammar&gt; = parseTree.children[<span class="hljs-number">0</span>] ?? assert.fail(<span class="hljs-string">'missing child'</span>);
+        <span class="hljs-comment">// check which alternative (constant or sum) was actually matched</span>
+        <span class="hljs-keyword">switch</span> (child.name) {
+        <span class="hljs-keyword">case</span> IntegerGrammar.Constant:
+            <span class="hljs-keyword">return</span> makeAbstractSyntaxTree(child);
+        <span class="hljs-keyword">case</span> IntegerGrammar.Sum:
+            <span class="hljs-keyword">return</span> makeAbstractSyntaxTree(child);
+            <span class="hljs-comment">// for this parser, we do the same thing either way (and should really DRY this out)</span>
+        <span class="hljs-keyword">default</span>:
+            assert.fail(<span class="hljs-string">`Primary node unexpected child <span class="hljs-subst">${IntegerGrammar[child.name]}</span>`</span>);
+        }
+
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (parseTree.name === IntegerGrammar.Constant) {
+        <span class="hljs-comment">// constant ::= [0-9]+;</span>
+        <span class="hljs-keyword">const</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(parseTree.text);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> Constant(n);
+
+    } <span class="hljs-keyword">else</span> {
+        assert.fail(<span class="hljs-string">`cannot make AST for <span class="hljs-subst">${IntegerGrammar[parseTree.name]}</span> node`</span>);
+    }
+}</code></pre></div>
+
+<p id="@function_follows_structure"><a class="jump" href="index.html#@function_follows_structure"></a>The function follows the structure of the grammar, handling each rule from the grammar in turn: <code>expr</code>, <code>sum</code>, <code>primary</code>, and <code>constant</code>.
+The only rule we don’t need to handle here is <code>whitespace</code>, because the grammar uses <code>whitespace</code> only in a <code>@skip</code> block, and skipped subtrees are not returned by <code>children</code> so they should never appear in the traversal.
+Note, however, that skipped whitespace will still appear in the <a href="index.html#ParseTree_interface"><code>text</code></a> field of a matched nonterminal.</p>
+
+<p id="@note_code_tied"><a class="jump" href="index.html#@note_code_tied"></a>注意这段代码与语法紧密相关。
+如果你以重大方式更改语法的规则，这段代码也可能需要更改。</p>
+
+<p id="@sum_nodes_code"><a class="jump" href="index.html#@sum_nodes_code"></a>对于 <code>sum</code> 节点，代码使用 <a href="../10-functional-programming/index.html#mapfilterreduce_abstraction"><code>map</code> 和 <code>reduce</code></a> 来避免编写循环（注意 <code>parseTree.childrenByName</code> 等同于对 <code>parseTree.children</code> 执行 <code>filter</code>）。</p>
+
+<p id="@handle_primary_nodes"><a class="jump" href="index.html#@handle_primary_nodes"></a>为了处理 <code>primary</code> 节点，这段代码使用 <code>switch</code> 语句。
+每次使用 <code>switch</code> 时，记住：<code>switch</code> 语句的执行从匹配的 <code>case</code> 开始，并会<em>贯穿</em>到后续的 case。
+我们这里的代码在每个 case 中小心地 <code>return</code>（或抛出错误），永远不会贯穿。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-parser_generators_3"><h4 class="text-danger" id="@reading_exercises_10"><a class="jump" href="index.html#@reading_exercises_10"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-string_to_ast_1" data-target="#ex-parser_generators_3-string_to_ast_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-string_to_ast_1"></a><span class="panel-title">字符串转 AST 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-string_to_ast_1" data-outline="string_to_ast_1" data-ex-id="constructing_an_abstract_syntax_tree/string_to_ast_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@if_input_string"><a class="jump" href="index.html#@if_input_string"></a>如果输入字符串是 <code>"19+23+18"</code>，上面的 <code>makeAbstractSyntaxTree</code> 会生成哪棵抽象语法树？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Plus(Constant(19))"><label for="md_converted_choice_21_0"><input type="radio" id="md_converted_choice_21_0" name="md_converted_radio_21">Plus(Constant(19))</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Plus(19, 23, 18)"><label for="md_converted_choice_21_1"><input type="radio" id="md_converted_choice_21_1" name="md_converted_radio_21">Plus(19, 23, 18)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Plus(Plus(19, 23), 18)"><label for="md_converted_choice_21_2"><input type="radio" id="md_converted_choice_21_2" name="md_converted_radio_21">Plus(Plus(19, 23), 18)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Plus(Plus(Constant(19), Constant(23)), Constant(18))"><label for="md_converted_choice_21_3"><input type="radio" id="md_converted_choice_21_3" name="md_converted_radio_21">Plus(Plus(Constant(19), Constant(23)), Constant(18))</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Plus(Constant(19), Plus(Constant(23), Constant(18)))"><label for="md_converted_choice_21_4"><input type="radio" id="md_converted_choice_21_4" name="md_converted_radio_21">Plus(Constant(19), Plus(Constant(23), Constant(18)))</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-string_to_ast_2" data-target="#ex-parser_generators_3-string_to_ast_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-string_to_ast_2"></a><span class="panel-title">字符串转 AST 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-string_to_ast_2" data-outline="string_to_ast_2" data-ex-id="constructing_an_abstract_syntax_tree/string_to_ast_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@which_following_input"><a class="jump" href="index.html#@which_following_input"></a>以下哪个输入字符串会产生：</p>
+
+<pre id="@plus-plus-constant-1_constant-2_plus-constant-3"><a class="jump" href="index.html#@plus-plus-constant-1_constant-2_plus-constant-3"></a><code class="language-plaintext hljs">Plus(Plus(Constant(1), Constant(2)), 
+     Plus(Constant(3), Constant(4)))</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="&quot;(1+2)+(3+4)&quot;"><label for="md_converted_choice_17_0"><input type="checkbox" id="md_converted_choice_17_0"><code>"(1+2)+(3+4)"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="&quot;1+2+3+4&quot;"><label for="md_converted_choice_17_1"><input type="checkbox" id="md_converted_choice_17_1"><code>"1+2+3+4"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="&quot;(1+2)+3+4&quot;"><label for="md_converted_choice_17_2"><input type="checkbox" id="md_converted_choice_17_2"><code>"(1+2)+3+4"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="&quot;(((1+2)))+(3+4)&quot;"><label for="md_converted_choice_17_3"><input type="checkbox" id="md_converted_choice_17_3"><code>"(((1+2)))+(3+4)"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-binary_parse_tree" data-target="#ex-parser_generators_3-binary_parse_tree" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-binary_parse_tree"></a><span class="panel-title">二叉解析树</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-binary_parse_tree" data-outline="binary_parse_tree" data-ex-id="constructing_an_abstract_syntax_tree/binary_parse_tree" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@code_looking_plus"><a class="jump" href="index.html#@code_looking_plus"></a>In the code we’re looking at, the <code>Plus</code> operator in the abstract syntax tree is <em>binary</em>.
+It represents the sum of exactly two expressions, a lefthand side and a righthand side.</p>
+
+<p id="@corresponding_grammar_rule"><a class="jump" href="index.html#@corresponding_grammar_rule"></a>其对应的语法规则 <code>sum ::= primary ('+' primary)*</code> 是<em>n 元的</em>。
+它匹配 <em>n</em> 个 primary 表达式的和，其中 <em>n</em> ≥ 1。
+因此，解析树中的 <code>Sum</code> 节点可能有一个或多个 <code>Primary</code> 子节点，而不仅仅是两个。</p>
+
+<p id="@part_complexity_sum"><a class="jump" href="index.html#@part_complexity_sum"></a><code>makeAbstractSyntaxTree()</code> 的 <code>Sum</code> 情况的复杂性部分来自于将 n 元节点转换为二元节点。</p>
+
+<p id="@if_wanted_sum"><a class="jump" href="index.html#@if_wanted_sum"></a>如果我们希望 <code>Sum</code> 节点是（最多）二元的，以下哪条语法规则能正确实现这一点？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="sum ::= primary '+' primary"><label for="md_converted_choice_18_0"><input type="checkbox" id="md_converted_choice_18_0"><code>sum ::= primary '+' primary</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="sum ::= primary '+' primary*"><label for="md_converted_choice_18_1"><input type="checkbox" id="md_converted_choice_18_1"><code>sum ::= primary '+' primary*</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="sum ::= primary | primary '+' sum"><label for="md_converted_choice_18_2"><input type="checkbox" id="md_converted_choice_18_2"><code>sum ::= primary | primary '+' sum</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="sum ::= sum '+' sum"><label for="md_converted_choice_18_3"><input type="checkbox" id="md_converted_choice_18_3"><code>sum ::= sum '+' sum</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-n-ary_ast" data-target="#ex-parser_generators_3-n-ary_ast" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-n-ary_ast"></a><span class="panel-title">N 元 AST</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-n-ary_ast" data-outline="n-ary_ast" data-ex-id="constructing_an_abstract_syntax_tree/n-ary_ast" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@suppose_instead_keep"><a class="jump" href="index.html#@suppose_instead_keep"></a>假设我们改为保持解析树中的 <code>Sum</code> 节点为 n 元的，但我们想将抽象语法树中的 <code>Plus</code> 节点从严格的二元改为 n 元的。
+以下哪个数据类型定义能正确实现这一点？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="IntegerExpression = Constant(n: number) + Plus(operands: Array<number>)"><label for="md_converted_choice_19_0"><input type="checkbox" id="md_converted_choice_19_0"><code>IntegerExpression = Constant(n: number) + Plus(operands: Array&lt;number&gt;)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="IntegerExpression = Constant(n: number) + Plus(operands: Array<IntegerExpression>)"><label for="md_converted_choice_19_1"><input type="checkbox" id="md_converted_choice_19_1"><code>IntegerExpression = Constant(n: number) + Plus(operands: Array&lt;IntegerExpression&gt;)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="IntegerExpression = Constants(array: Array<number>) + Plus(expr: IntegerExpression)"><label for="md_converted_choice_19_2"><input type="checkbox" id="md_converted_choice_19_2"><code>IntegerExpression = Constants(array: Array&lt;number&gt;) + Plus(expr: IntegerExpression)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-enumeration" data-target="#ex-parser_generators_3-enumeration" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-enumeration"></a><span class="panel-title">枚举</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-enumeration" data-outline="enumeration" data-ex-id="constructing_an_abstract_syntax_tree/enumeration" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@grammar_3"><a class="jump" href="index.html#@grammar_3"></a>对于这个语法：</p>
+
+<pre id="@skip_spaces_date"><a class="jump" href="index.html#@skip_spaces_date"></a><code class="language-parserlib hljs"><span class="hljs-keyword">@skip</span> spaces { 
+  date <span class="hljs-keyword">::=</span> monthname day <span class="hljs-string">','</span> year <span class="hljs-keyword">|</span> day <span class="hljs-string">'/'</span> monthnum <span class="hljs-string">'/'</span> year ;
+}
+monthname <span class="hljs-keyword">::=</span> <span class="hljs-string">'January'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'February'</span> ;
+monthnum <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ; 
+day <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;
+year <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;
+spaces <span class="hljs-keyword">::=</span> <span class="hljs-string">' '</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@values_would_you"><a class="jump" href="index.html#@values_would_you"></a>……你需要在你传给 ParserLib 的枚举类型中包含哪些值？</p>
+
+<p id="@specifically_you_define"><a class="jump" href="index.html#@specifically_you_define"></a>具体来说，当你定义 <code>enum DateGrammar { ... }</code> 并调用 <code>compile()</code> 时，<code>enum</code> 的 <code>...</code> 中应该出现哪些值？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Root"><label for="md_converted_choice_20_0"><input type="checkbox" id="md_converted_choice_20_0">Root</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Date"><label for="md_converted_choice_20_1"><input type="checkbox" id="md_converted_choice_20_1">Date</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Day"><label for="md_converted_choice_20_2"><input type="checkbox" id="md_converted_choice_20_2">Day</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Month"><label for="md_converted_choice_20_3"><input type="checkbox" id="md_converted_choice_20_3">Month</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="MonthName"><label for="md_converted_choice_20_4"><input type="checkbox" id="md_converted_choice_20_4">MonthName</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="MonthNum"><label for="md_converted_choice_20_5"><input type="checkbox" id="md_converted_choice_20_5">MonthNum</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Year"><label for="md_converted_choice_20_6"><input type="checkbox" id="md_converted_choice_20_6">Year</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="January"><label for="md_converted_choice_20_7"><input type="checkbox" id="md_converted_choice_20_7">January</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="February"><label for="md_converted_choice_20_8"><input type="checkbox" id="md_converted_choice_20_8">February</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Spaces"><label for="md_converted_choice_20_9"><input type="checkbox" id="md_converted_choice_20_9">Spaces</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Constant"><label for="md_converted_choice_20_10"><input type="checkbox" id="md_converted_choice_20_10">Constant</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-using_a_parse_tree" data-target="#ex-parser_generators_3-using_a_parse_tree" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-using_a_parse_tree"></a><span class="panel-title">使用解析树</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-using_a_parse_tree" data-outline="using_a_parse_tree" data-ex-id="constructing_an_abstract_syntax_tree/using_a_parse_tree" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@consider_grammar_which"><a class="jump" href="index.html#@consider_grammar_which"></a>考虑这个语法，它被设计为匹配像 <code>5,-8,3</code> 这样的数字列表：</p>
+
+<pre id="@skip_spaces_list"><a class="jump" href="index.html#@skip_spaces_list"></a><code class="language-parserlib hljs"><span class="hljs-keyword">@skip</span> spaces { 
+  list <span class="hljs-keyword">::=</span> int (<span class="hljs-string">','</span> list)<span class="hljs-keyword">?</span> ;
+}
+int <span class="hljs-keyword">::=</span> <span class="hljs-string">'-'</span><span class="hljs-keyword">?</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;
+spaces <span class="hljs-keyword">::=</span> <span class="hljs-string">' '</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@root_nonterminal_list"><a class="jump" href="index.html#@root_nonterminal_list"></a>根非终结符是 <code>list</code>。</p>
+
+<p id="@fill_blanks_function"><a class="jump" href="index.html#@fill_blanks_function"></a>填写这个函数的空白，该函数将此语法的 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/interfaces/ParseTree.html"><code>ParseTree</code></a> 转换为 <code>List</code>。</p>
+
+<pre id="@enum_listgrammar_list"><a class="jump" href="index.html#@enum_listgrammar_list"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">enum</span> ListGrammar { List, Int, Spaces }
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">makeList</span>(<span class="hljs-params">parseTree: ParseTree&lt;ListGrammar&gt;</span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">switch</span> (parseTree.name) {
+    <span class="hljs-keyword">case</span> ListGrammar.List:
+        <span class="hljs-keyword">const</span> list: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+        <span class="hljs-keyword">const</span> intChild: ParseTree&lt;ListGrammar&gt;|<span class="hljs-literal">undefined</span> = parseTree.children[<span class="hljs-number">0</span>];
+        <span class="hljs-keyword">const</span> listChild: ParseTree&lt;ListGrammar&gt;|<span class="hljs-literal">undefined</span> = parseTree.children[<span class="hljs-number">1</span>];
+        assert(intChild);
+        list.push(<span class="hljs-built_in">parseInt</span>(▶▶A◀◀));
+        <span class="hljs-keyword">if</span> (▶▶B◀◀) {
+            list = list.concat(▶▶C◀◀);
+        }
+        <span class="hljs-keyword">return</span> list;
+    <span class="hljs-keyword">default</span>:
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"should never get here"</span>);
+    }
+}</code></pre>
+
+<div class="list-style-upper-alpha"><ol>
+<li><div class="form-group exercise-part" data-outline="a"><div class="textfield ttfont exercise-choice"><input type="text" class="form-control" style="width: 28%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></li>
+<li><div class="form-group exercise-part" data-outline="b"><div class="textfield ttfont exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></li>
+<li><div class="form-group exercise-part" data-outline="c"><div class="textfield ttfont exercise-choice"><input type="text" class="form-control" style="width: 34%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></li>
+</ol></div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-to_every_thing" data-target="#ex-parser_generators_3-to_every_thing" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-to_every_thing"></a><span class="panel-title">万物皆有……</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-to_every_thing" data-outline="to_every_thing" data-ex-id="constructing_an_abstract_syntax_tree/to_every_thing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@consider_grammar_semester"><a class="jump" href="index.html#@consider_grammar_semester"></a>考虑这个以 <code>semester</code> 为根非终结符的语法：</p>
+
+<pre id="@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_2"><a class="jump" href="index.html#@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_2"></a><code class="language-parserlib hljs"><span class="hljs-keyword">@skip</span> spaces {
+  semester <span class="hljs-keyword">::=</span> season year ;
+  season <span class="hljs-keyword">::=</span> <span class="hljs-string">'Fall'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Spring'</span> ;
+}
+year <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span> <span class="hljs-string">[0-9]</span> ;
+spaces <span class="hljs-keyword">::=</span> <span class="hljs-string">' '</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@suppose_parserlib_used"><a class="jump" href="index.html#@suppose_parserlib_used"></a>假设使用 ParserLib 生成解析树，你正在编写代码将解析树转换为表示学期和季节的抽象数据类型。
+这是该代码中旨在处理树的季节节点的部分：</p>
+
+<pre id="@nonterminals_grammar_enum"><a class="jump" href="index.html#@nonterminals_grammar_enum"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// nonterminals in the grammar</span>
+<span class="hljs-keyword">enum</span> SemesterGrammar { Semester, Season, Year, Spaces }
+
+<span class="hljs-comment">// abstract data type representing a season of the year</span>
+<span class="hljs-keyword">enum</span> Season { Fall, Spring, Winter, Summer }
+
+<span class="hljs-comment">/**
+ * @param node must be a match to the season rule
+ * @returns corresponding Season value
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">convertToSeason</span>(<span class="hljs-params">node: ParseTree&lt;SemesterGrammar&gt;</span>): <span class="hljs-title">Season</span> </span>{
+  assert.equal(node.name, SemesterGrammar.Season);
+  <span class="hljs-keyword">return</span> ▶▶A◀◀ ? Season.Fall : Season.Spring;
+}</code></pre>
+
+<p id="@simplest_correct_code"><a class="jump" href="index.html#@simplest_correct_code"></a><code>▶▶A◀◀</code> 最简单的正确代码是什么？
+（你可能想查看 <code>ParseTree</code> 的规范，特别是 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/interfaces/ParseTree.html#text"><code>ParseTree.text</code></a>。）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="node.text == &quot;Fall&quot;"><label for="md_converted_choice_22_0"><input type="radio" id="md_converted_choice_22_0" name="md_converted_radio_22"><code>node.text ==  "Fall"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="node.text === &quot;Fall&quot;"><label for="md_converted_choice_22_1"><input type="radio" id="md_converted_choice_22_1" name="md_converted_radio_22"><code>node.text === "Fall"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="node.text.trim() === &quot;Fall&quot;"><label for="md_converted_choice_22_2"><input type="radio" id="md_converted_choice_22_2" name="md_converted_radio_22"><code>node.text.trim() === "Fall"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-parser_generators_3-there_is_a_season" data-target="#ex-parser_generators_3-there_is_a_season" data-toggle="collapse"><a class="jump" href="index.html#@ex-parser_generators_3-there_is_a_season"></a><span class="panel-title">……必有季节</span></div><div class="panel-collapse collapse exercise-panel" id="ex-parser_generators_3-there_is_a_season" data-outline="there_is_a_season" data-ex-id="constructing_an_abstract_syntax_tree/there_is_a_season" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-12-grammars-parsing"><div class="panel-body">
+
+<p id="@now_suppose_grammar_instead_1"><a class="jump" href="index.html#@now_suppose_grammar_instead_1"></a>现在假设语法改为：</p>
+
+<pre id="@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_3"><a class="jump" href="index.html#@skip_spaces_semester_season_year_season_fall_spring_year_0-9_0-9_spaces_3"></a><code class="language-parserlib hljs"><span class="hljs-keyword">@skip</span> spaces {
+  semester <span class="hljs-keyword">::=</span> season year ;
+}
+season <span class="hljs-keyword">::=</span> <span class="hljs-string">'Fall'</span> <span class="hljs-keyword">|</span> <span class="hljs-string">'Spring'</span> ;
+year <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span> <span class="hljs-string">[0-9]</span> ;
+spaces <span class="hljs-keyword">::=</span> <span class="hljs-string">' '</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@same_line_code"><a class="jump" href="index.html#@same_line_code"></a>在上一练习的同一行代码中：</p>
+
+<pre id="@return_season-fall_season-spring"><a class="jump" href="index.html#@return_season-fall_season-spring"></a><code class="hljs parserlib">  return ▶▶A◀◀ <span class="hljs-keyword">?</span> Season<span class="hljs-keyword">.</span>Fall : Season<span class="hljs-keyword">.</span>Spring;</code></pre>
+
+<p id="@now_simplest_correct"><a class="jump" href="index.html#@now_simplest_correct"></a>……现在 <code>▶▶A◀◀</code> 最简单的正确代码是什么？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="node.text == &quot;Fall&quot;"><label for="md_converted_choice_23_0"><input type="radio" id="md_converted_choice_23_0" name="md_converted_radio_23"><code>node.text == "Fall"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="node.text === &quot;Fall&quot;"><label for="md_converted_choice_23_1"><input type="radio" id="md_converted_choice_23_1" name="md_converted_radio_23"><code>node.text === "Fall"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="node.text.trim() === &quot;Fall&quot;"><label for="md_converted_choice_23_2"><input type="radio" id="md_converted_choice_23_2" name="md_converted_radio_23"><code>node.text.trim() === "Fall"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h3 id="handling_errors"><a class="jump" href="index.html#handling_errors"></a>错误处理</h3><div data-outline="handling_errors">
+
+<p id="@several_things_can"><a class="jump" href="index.html#@several_things_can"></a>解析时可能会出几种错误。</p>
+
+<p id="@your_grammar_may"><a class="jump" href="index.html#@your_grammar_may"></a><strong>你的语法可能有语法错误。</strong>
+在这种情况下，<code>compile</code> 会抛出一个 <a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/classes/ParseError.html"><code>ParseError</code></a>。</p>
+
+<p id="@string_you_trying"><a class="jump" href="index.html#@string_you_trying"></a><strong>你尝试解析的字符串可能无法用给定的语法解析。</strong>
+这可能发生在你的语法不正确，或者你的字符串不正确的情况下。
+无论哪种情况，问题都会通过 <code>parse</code> 方法抛出 <code>ParseError</code> 来发出信号。</p>
+
+<p id="@parseerror_error_contains"><a class="jump" href="index.html#@parseerror_error_contains"></a><code>ParseError</code> 错误包含有关错误可能位置的信息，尽管解析错误有时本质上难以定位，因为解析器无法知道你打算写什么字符串，所以你可能需要搜索一下才能找到错误的真正位置。</p>
+
+</div><h3 id="left_recursion_and_other_parserlib_limitations"><a class="jump" href="index.html#left_recursion_and_other_parserlib_limitations"></a>左递归和其他 ParserLib 限制</h3><div data-outline="left_recursion_and_other_parserlib_limitations">
+
+<p id="@parserlib_works_generating"><a class="jump" href="index.html#@parserlib_works_generating"></a>ParserLib 通过生成自顶向下的<a href="https://ocw.mit.edu/courses/6-035-computer-language-engineering-spring-2010/resources/mit6_035s10_lec04/">递归下降解析器</a>来工作。这类解析器在可以解析的语法方面有一些限制。特别值得指出的是两个限制。</p>
+
+<p id="@left_recursion_recursive"><a class="jump" href="index.html#@left_recursion_recursive"></a><mark data-mark-text="left recursion (parsing)" data-structure-text="left recursion (parsing)" id="^left_recursion_parsing"><strong>左递归。</strong></mark>如果语法涉及<a href="https://en.wikipedia.org/wiki/Left_recursion">左递归</a>，递归下降解析器可能会进入无限循环。这是一种非终结符的定义将该非终结符作为其最左符号的情况。例如，下面的语法包含了左递归，因为 <code>sum</code> 的一个可能定义是 <code>sum '+' number</code>，其中 <code>sum</code> 是其最左符号。</p>
+
+<pre id="@sum_number_sum"><a class="jump" href="index.html#@sum_number_sum"></a><code class="language-parserlib hljs">sum <span class="hljs-keyword">::=</span> number <span class="hljs-keyword">|</span> sum <span class="hljs-string">'+'</span> number ;
+number <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@left-recursive_definition_problematic"><a class="jump" href="index.html#@left-recursive_definition_problematic"></a>这个左递归定义是有问题的，因为递归下降解析器需要尝试匹配 <code>sum</code> 的所有备选项，包括 <code>number</code> 和 <code>sum '+' number</code>。
+但尝试匹配 <code>sum '+' number</code> 立即需要以匹配 <code>sum</code> 作为第一步。
+解析器不断递归地尝试该规则，但在被解析的字符串上没有取得任何进展——没有像正确递归要求终止的那样归约为更小的子问题。
+相比之下，像 <code>expr = number | '(' expr ')'</code> 这样的规则，是递归的但不是左递归的，它能够在字符串中取得进展，通过在再次递归应用 <code>expr</code> 规则之前先匹配 <code>(</code>。</p>
+
+<p id="@left_recursion_can"><a class="jump" href="index.html#@left_recursion_can"></a>左递归也可能间接发生。例如，将上面的语法改为下面的语法并不能解决问题，因为 <code>sum</code> 的定义仍然间接涉及一个以 <code>sum</code> 作为其第一个符号的符号。</p>
+
+<pre id="@sum_number_thing"><a class="jump" href="index.html#@sum_number_thing"></a><code class="language-parserlib hljs">sum <span class="hljs-keyword">::=</span> number <span class="hljs-keyword">|</span> thing number ;
+thing <span class="hljs-keyword">::=</span> sum <span class="hljs-string">'+'</span> ;
+number <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@if_you_give"><a class="jump" href="index.html#@if_you_give"></a>如果你将任何这些语法传给 ParserLib，然后尝试使用它们来解析一个符号，ParserLib 将以 <code>ParseError</code> 失败，列出违规的非终结符。</p>
+
+<p id="@there_some_general"><a class="jump" href="index.html#@there_some_general"></a>有一些<a href="https://en.wikipedia.org/wiki/Left_recursion#Removing_left_recursion">通用技术</a>可以消除左递归；对于我们的目的来说，最简单的方法是用重复（<code>*</code>）代替左递归，所以上面的语法变为：</p>
+
+<pre id="@sum_number_number"><a class="jump" href="index.html#@sum_number_number"></a><code class="language-parserlib hljs">sum <span class="hljs-keyword">::=</span> (number <span class="hljs-string">'+'</span>)<span class="hljs-keyword">*</span> number ;
+number <span class="hljs-keyword">::=</span> <span class="hljs-string">[0-9]</span><span class="hljs-keyword">+</span> ;</code></pre>
+
+<p id="@greediness_issue_you"><a class="jump" href="index.html#@greediness_issue_you"></a><strong>贪婪性。</strong>这是一个你在这门课程中可能不会遇到的问题，但它是 ParserLib 的一个限制，你应该意识到。ParserLib 的解析器是贪婪的，即在每个点它们都尝试为当前正在考虑的任何规则匹配最大字符串。例如，考虑以下语法：</p>
+
+<pre id="@g_ab_threeb"><a class="jump" href="index.html#@g_ab_threeb"></a><code class="language-parserlib hljs">g <span class="hljs-keyword">::=</span> ab threeb ;
+ab <span class="hljs-keyword">::=</span> <span class="hljs-string">'a'</span><span class="hljs-keyword">*</span><span class="hljs-string">'b'</span><span class="hljs-keyword">*</span> ;
+threeb <span class="hljs-keyword">::=</span> <span class="hljs-string">'bbb'</span> ;</code></pre>
+
+<p id="@string_aaaabbb_clearly"><a class="jump" href="index.html#@string_aaaabbb_clearly"></a>字符串 <code>'aaaabbb'</code> 显然应该匹配 <code>g</code>，但贪婪解析器无法解析它，因为它会尝试解析匹配 <code>ab</code> 符号的最大子字符串，然后发现无法解析 <code>threeb</code>，因为它已经消耗了整个字符串。与左递归（容易修复）不同，这是 ParserLib 实现的解析器类型的一个更基本的限制。</p>
+
+</div></div><h2 id="summary"><a class="jump" href="index.html#summary"></a>总结</h2><div data-outline="summary">
+
+<p id="@machine-processed_textual_languages"><a class="jump" href="index.html#@machine-processed_textual_languages"></a>机器处理的文本语言在计算机科学中无处不在。语法是描述这类语言的最流行的形式化方法，而正则表达式是语法的一个重要子类，可以在没有递归的情况下表达。</p>
+
+<p id="@topics_today-s_reading"><a class="jump" href="index.html#@topics_today-s_reading"></a>The topics of today’s reading connect to our three properties of good software as follows:</p>
+
+<ul>
+<li><p id="@safe_bugs_grammars"><a class="jump" href="index.html#@safe_bugs_grammars"></a><strong>免受 Bug 困扰。</strong>语法和正则表达式是字符串和流的声明性规范，可以由库和工具直接使用。这些规范通常比手写解析代码更简单、更直接，且更不容易出错。</p></li>
+<li><p id="@easy_understand_grammar"><a class="jump" href="index.html#@easy_understand_grammar"></a><strong>易于理解。</strong>语法以比手写解析代码更容易理解的形式捕获序列的形状。唉，正则表达式通常不容易理解，因为它们是可能更易懂的单行正则语法的简化形式。</p></li>
+<li><p id="@ready_change_grammar"><a class="jump" href="index.html#@ready_change_grammar"></a><strong>准备好应对变化。</strong>语法可以轻松编辑，但不幸的是，正则表达式更难更改，因为复杂的正则表达式是晦涩且难以理解的。</p></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>由 Rob Miller 和 Max Goldman 合作撰写，Saman Amarasinghe、Adam Chlipala、Srini Devadas、Gabriella Ecanow、Michael Ernst、John Guttag、Daniel Jackson、Josiah McMenamy、Martin Rinard 和 Armando Solar-Lezama 做出贡献，Robert Durfee、Jenna Himawan、Stacia Johanna、Jessica Shi、Daniel Whatley 和 Elizabeth Zhou 也参与了编写。本作品采用 <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a> 许可协议。</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-12-grammars-parsing"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:30:58 GMT+0000 (Coordinated Universal Time)
+--></html>
