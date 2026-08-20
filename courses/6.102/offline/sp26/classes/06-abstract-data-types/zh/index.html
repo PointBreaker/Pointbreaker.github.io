@@ -1,0 +1,1095 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>阅读 6：抽象数据类型</title>
+
+
+<style>
+.adt-implementation-table th, .adt-implementation-table td {
+  vertical-align: top;
+  padding: 0 10px 0;
+}
+.adt-implementation-table tr:last-child td {
+  padding-bottom: 10px;
+}
+.adt-implementation-table p {
+  margin: 0px;
+}
+.adt-implementation-table .new-row td {
+  padding-top: 10px;
+}
+.adt-implementation-table .new-row td:first-child {
+  white-space: nowrap;
+}
+</style>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_6_abstract_data_types">阅读 6：抽象数据类型</a></li><li><a href="index.html#introduction">引言</a></li><li><a href="index.html#what_abstraction_means">抽象的含义</a></li><li><a href="index.html#classifying_types_and_operations">类型和操作的分类</a></li><li><a href="index.html#an_abstract_type_is_defined_by_its_operations">抽象类型由其操作定义</a></li><li><a href="index.html#designing_an_abstract_type">设计抽象类型</a></li><li><a href="index.html#representation_independence">表示独立性</a></li><li><a href="index.html#realizing_adt_concepts_in_typescript">在 TypeScript 中实现 ADT 概念</a></li><li><a href="index.html#testing_an_abstract_data_type">测试抽象数据类型</a></li><li><a href="index.html#summary">总结</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_6_abstract_data_types"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-06-abstract-data-types"></iframe><a class="jump" href="index.html#reading_6_abstract_data_types"></a>阅读 6：抽象数据类型</h1><div data-outline="reading_6_abstract_data_types">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@praxis_tutor_exercises"><a class="jump" href="index.html#@praxis_tutor_exercises"></a>Praxis Tutor 练习</h4>
+
+<p id="@keep_making_progress"><a class="jump" href="index.html#@keep_making_progress"></a>通过在 Praxis Tutor 中完成以下类别，继续在 TypeScript 方面取得进展：</p>
+
+<div class="tutorProgress no-markdown">
+    <img class="ideWindow" src="../../tools/typescript/figures/small-vscode-window.png">
+    <div class="callout">
+
+      <div class="level">
+        <div class="conceptGroup completed">
+            <button class="conceptGroupButton" disabled="">
+                <span class="checkMark">✓</span>
+                <span class="conceptGroupUiLabel">创建类</span>
+                <span class="numberSetsLeft">2/2</span>
+            </button>
+            <div class="conceptBoxes">
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+            </div>
+        </div>
+        <div class="conceptGroup completed">
+            <button class="conceptGroupButton" disabled="">
+                <span class="checkMark">✓</span>
+                <span class="conceptGroupUiLabel">Access</span>
+                <span class="numberSetsLeft">1/1</span>
+            </button>
+            <div class="conceptBoxes">
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+            </div>
+        </div>
+    </div>
+
+  </div>
+</div>
+
+<h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>6.102 中的软件</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>免于 bug</th><th>易于理解</th><th>适应变化</th></tr>
+<tr><td>
+  今天正确，在未来未知的情况下也正确。
+</td><td>
+  Communicating clearly with future programmers, including future you.
+</td><td>
+  设计为适应变化而无需重写。
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<p id="@today-s_class_introduces"><a class="jump" href="index.html#@today-s_class_introduces"></a>Today’s class introduces two ideas:</p>
+
+<ul id="@abstract_data_types_representation_independence">
+<li><a class="jump" href="index.html#@abstract_data_types_representation_independence"></a>抽象数据类型</li>
+<li>表示独立性</li>
+</ul>
+
+<h2 id="introduction"><a class="jump" href="index.html#introduction"></a>Introduction</h2><div data-outline="introduction">
+
+<p id="@reading_look_powerful"><a class="jump" href="index.html#@reading_look_powerful"></a>In this reading, we look at a powerful idea: abstract data types.
+这个概念使我们能够将程序中数据结构的使用方式与数据结构本身的具体形式分离开来。</p>
+
+<p id="@abstract_data_types_address_particularly_dangerous"><a class="jump" href="index.html#@abstract_data_types_address_particularly_dangerous"></a>抽象数据类型 address a particularly dangerous problem: clients making assumptions about the type’s internal representation. We’ll see why this is dangerous and how it can be avoided. We’ll also discuss the classification of operations, and some principles of good design for abstract data types.</p>
+
+</div><h2 id="what_abstraction_means"><a class="jump" href="index.html#what_abstraction_means"></a>抽象的含义</h2><div data-outline="what_abstraction_means">
+
+<p id="@abstract_data_types_instance_general_principle"><a class="jump" href="index.html#@abstract_data_types_instance_general_principle"></a>抽象数据类型 are an instance of a general principle in software engineering, which goes by many names with slightly different shades of meaning.  以下是这个概念使用的一些名称：</p>
+
+<ul id="@abstraction_omitting_hiding">
+<li><a class="jump" href="index.html#@abstraction_omitting_hiding"></a><strong><mark data-structure-text="abstraction" id="^abstraction">Abstraction</mark>.</strong>
+Omitting or hiding low-level details with a simpler, higher-level idea.</li>
+<li><strong><mark data-structure-text="modularity" id="^modularity">Modularity</mark>.</strong>
+Dividing a system into components or modules, each of which can be designed, implemented, tested, reasoned about, and reused separately from the rest of the system.</li>
+<li><strong><mark data-structure-text="encapsulation" id="^encapsulation">Encapsulation</mark>.</strong>
+Building a wall around a module so that the module is responsible for its own internal behavior, and bugs in other parts of the system can’t damage its integrity. </li>
+<li><strong><mark data-structure-text="information hiding" id="^information_hiding">Information hiding</mark>.</strong>
+Hiding details of a module’s implementation from the rest of the system, so that those details can be changed later without changing the rest of the system.</li>
+<li><strong><mark data-structure-text="separation of concern" id="^separation_of_concern">Separation of concerns</mark>.</strong>
+Making a feature (or “concern”) the responsibility of a single module, rather than spreading it across multiple modules. </li>
+</ul>
+
+<p id="@software_engineer_you"><a class="jump" href="index.html#@software_engineer_you"></a>As a software engineer, you should know these terms, because you will run into them frequently.
+The fundamental purpose of all of these ideas is to help achieve the three important properties that we care about in 6.102: safety from bugs, ease of understanding, and readiness for change.</p>
+
+<p id="@fact_already_encountered"><a class="jump" href="index.html#@fact_already_encountered"></a>We have in fact already encountered some of these ideas in previous classes, in the context of writing <em>functions</em> that take inputs and produce outputs:</p>
+
+<ul id="@abstraction_spec_abstraction">
+<li><a class="jump" href="index.html#@abstraction_spec_abstraction"></a>Abstraction: A spec is an abstraction in that the client only has to understand its preconditions and postconditions to use it, not the full internal behavior of the implementation. </li>
+<li>模块化：单元测试和规范帮助将函数变成模块。</li>
+<li>Encapsulation: The local variables of a function are encapsulated, since only the function itself can use or modify them.
+Contrast with global variables, which are quite the opposite, or local variables pointing to mutable objects that have aliases, which also threaten encapsulation. </li>
+<li>信息隐藏：规范使用信息隐藏为实现在函数实现方式上留出一些自由度。</li>
+<li>Separation of concerns: A good function spec is <a href="../05-designing-specs/index.html#the_specification_should_be_coherent">coherent</a>, meaning it is responsible for just one concern.</li>
+</ul>
+
+<p id="@starting_today-s_class"><a class="jump" href="index.html#@starting_today-s_class"></a>Starting with today’s class, we’re going to move beyond abstractions for functions, and look at abstractions for <em>data</em> as well.
+But we’ll see that functions will still play a crucial role in how we describe data abstraction.</p>
+
+<h3 id="user-defined_types"><a class="jump" href="index.html#user-defined_types"></a>用户自定义类型</h3><div data-outline="user-defined_types">
+
+<p id="@early_days_computing"><a class="jump" href="index.html#@early_days_computing"></a>In the early days of computing, a programming language came with built-in types (such as integers, booleans, strings, etc.) and built-in functions, e.g., for input and output.
+Users could define their own functions: that’s how large programs were built.</p>
+
+<p id="@major_advance_software"><a class="jump" href="index.html#@major_advance_software"></a>A major advance in software development was the idea of abstract types: that one could design a programming language to allow user-defined types, too.
+This idea came out of the work of many researchers, notably Dahl, who invented the <a href="https://en.wikipedia.org/wiki/Simula">Simula 语言</a>;
+Hoare, who developed many of the techniques we now use to reason about abstract types; and Parnas, who coined the term information hiding and first articulated the idea of organizing program modules around the secrets they encapsulated.</p>
+
+<p id="@here_mit_barbara"><a class="jump" href="index.html#@here_mit_barbara"></a>Here at MIT, Barbara Liskov and John Guttag did seminal work in the specification of abstract types, and in programming language support for them – and developed the original course that subsequently evolved into 6.102.
+Barbara Liskov earned the Turing Award, computer science’s equivalent of the Nobel Prize, for her work on abstract types.</p>
+
+<p id="@key_idea_data"><a class="jump" href="index.html#@key_idea_data"></a>数据抽象的关键概念是，类型由你可以对其执行的操作来表征。
+A number is something you can add and multiply; a string is something you can concatenate and take substrings of; a boolean is something you can negate, and so on.
+In a sense, users could already define their own types in early programming languages: you could create a <a href="../../tools/typescript/index.html#^record_type">记录类型</a> <code>date</code>, for example, 带有整数字段的 <code>day</code>, <code>month</code>, and <code>year</code>.
+But what made abstract types new and different was the focus on operations: the user of the type would not need to worry about how its values were actually stored, in the same way that a programmer can ignore how the compiler actually stores integers.
+唯一重要的是操作。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-what_abstraction_means"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-what_abstraction_means-abstract_data_types" data-target="#ex-what_abstraction_means-abstract_data_types" data-toggle="collapse"><a class="jump" href="index.html#@ex-what_abstraction_means-abstract_data_types"></a><span class="panel-title">抽象数据类型</span></div><div class="panel-collapse collapse exercise-panel" id="ex-what_abstraction_means-abstract_data_types" data-outline="abstract_data_types" data-ex-id="user-defined_types/abstract_data_types" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@consider_abstract_data"><a class="jump" href="index.html#@consider_abstract_data"></a>考虑一个抽象数据类型 <code>Bool</code>.
+该类型有以下操作：</p>
+
+<p id="@true_bool_false"><a class="jump" href="index.html#@true_bool_false"></a><strong>true</strong> : Bool <br>
+<strong>false</strong> : Bool</p>
+
+<p id="@bool_bool_bool"><a class="jump" href="index.html#@bool_bool_bool"></a><strong>and</strong> : Bool × Bool → Bool <br>
+<strong>or</strong> : Bool × Bool → Bool <br>
+<strong>not</strong> : Bool → Bool</p>
+
+<p id="@first_two_operations"><a class="jump" href="index.html#@first_two_operations"></a>… where the first two operations construct the two values of the type, and the last three operations have the usual meanings of logical <em>and</em>, logical <em>or</em>, and logical <em>not</em> on those values.</p>
+
+<p id="@which_following_possible"><a class="jump" href="index.html#@which_following_possible"></a>以下哪些是 <code>Bool</code> might be implemented, and still be able to satisfy the specs of the operations?
+选择所有适用的选项。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="As a single bit, where 1 means true and 0 means false."><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0">As a single bit, where 1 表示 true， 0 表示 false。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="As a number value where 5 means true and 8 means false."><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1">As a <code>number</code> 值，其中 5 表示 true， 8 表示 false。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="As a reference to a string object where &quot;false&quot; means true and &quot;true&quot; means false."><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2">作为对 <code>string</code> 对象的引用，其中 <code>"false"</code> 表示 true， <code>"true"</code> 表示 false。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="As a number value where all possible values mean true."><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3">As a <code>number</code> 值，其中 all possible values mean true.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="As a number value > 1 where prime numbers mean true and composite numbers mean false. "><label for="md_converted_choice_1_4"><input type="checkbox" id="md_converted_choice_1_4">As a <code>number</code> value &gt; 1 其中素数表示 true，合数表示 false。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="classifying_types_and_operations"><a class="jump" href="index.html#classifying_types_and_operations"></a>类型和操作的分类</h2><div data-outline="classifying_types_and_operations">
+
+<p id="@types_whether_built-in"><a class="jump" href="index.html#@types_whether_built-in"></a>Types, whether built-in or user-defined, can be classified as <strong>mutable</strong> or <strong>immutable</strong>.
+The objects of a mutable type can be changed: that is, they provide operations which when executed cause the results of other operations on the same object to give different results.
+So <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date"><code>Date</code></a> is mutable, because you can call <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/setMonth"><code>setMonth</code></a> 并观察变化 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/getMonth"><code>getMonth</code></a> 操作。
+But <code>string</code> is immutable, because its operations create new <code>string</code> 对象而不是改变现有的。
+Sometimes a type will be provided in two forms, a mutable and an immutable form.
+<code>ReadonlyArray</code>, for example, 的不可变形式。 <code>Array</code>.</p>
+
+<p id="@operations_abstract_type"><a class="jump" href="index.html#@operations_abstract_type"></a>抽象类型的操作分类如下：</p>
+
+<ul>
+<li><p id="@creators_create_new"><a class="jump" href="index.html#@creators_create_new"></a><mark data-mark-text="creator" data-structure-text="creator" id="^creator"><strong>Creators</strong></mark> 创建该类型的新对象。
+A creator may take values of other types as arguments, but not an object of the type being constructed.</p>
+
+<ul><li>A creator operation is often implemented as a <em>constructor</em>, like <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/Date"><code>new Date()</code></a>.</li>
+<li><div id="factory_method"><p id="@but_creator_can"><a class="jump" href="index.html#@but_creator_can"></a>But a creator can simply be a static method instead, like <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/of"><code>Array.of()</code></a>.
+  A creator implemented as a static method or standalone function is often called a <strong><mark data-mark-text="factory method or function" data-structure-text="factory method or function" id="^factory_method_or_function">factory</mark></strong>.</p></div></li></ul></li>
+<li><p id="@producers_also_create"><a class="jump" href="index.html#@producers_also_create"></a><mark data-mark-text="producer" data-structure-text="producer" id="^producer"><strong>Producers</strong></mark> also create new objects of the type, but require one or more existing objects of the type as input.</p>
+
+<ul><li><div><p id="@concat_string_string"><a class="jump" href="index.html#@concat_string_string"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/concat"><code>concat</code></a>: <code>string</code> × <code>string</code> → <code>string</code>  是一个生产者：它接受两个字符串并生成一个表示它们拼接的新字符串。</p></div></li></ul></li>
+<li><p id="@observers_take_objects"><a class="jump" href="index.html#@observers_take_objects"></a><mark data-mark-text="observer" data-structure-text="observer" id="^observer"><strong>Observers</strong></mark> 接受抽象类型的对象并返回不同类型的对象。
+Some observers take no other arguments, such as:</p>
+
+<ul><li><div><p id="@size_map-k-v_number"><a class="jump" href="index.html#@size_map-k-v_number"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/size"><code>size</code></a> : <code>Map&lt;K,V&gt;</code> → <code>number</code></p></div></li></ul>
+
+<p id="@others_take_arguments"><a class="jump" href="index.html#@others_take_arguments"></a>… and others take arguments of other types, in addition to the value of the abstract type:</p>
+
+<ul><li><div><p id="@get_map-k-v_k"><a class="jump" href="index.html#@get_map-k-v_k"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/get"><code>get</code></a> : <code>Map&lt;K,V&gt;</code> × <code>K</code>  → <code>V</code></p></div></li></ul></li>
+<li><p id="@mutators_change_objects"><a class="jump" href="index.html#@mutators_change_objects"></a><mark data-mark-text="mutator" data-structure-text="mutator" id="^mutator"><strong>Mutators</strong></mark> 改变对象。
+For example, </p>
+
+<ul><li><p id="@push_array-t_t"><a class="jump" href="index.html#@push_array-t_t"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push"><code>push</code></a>: <code>Array&lt;T&gt;</code> × <code>T</code> → number, for example, mutates an array by adding an element to the end (and incidentally returns the new length of the list).</p></li>
+<li><p id="@mutators_often_signaled"><a class="jump" href="index.html#@mutators_often_signaled"></a>Mutators are often signaled by a <code>void</code> or <code>undefined</code> return type.  A method that returns void <em>must</em> be called for some kind of side-effect, since it doesn’t otherwise return anything.  但并非所有变化者都返回 void。  For example, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/add"><code>Set.add()</code></a> returns the set itself, so that multiple <code>add()</code> 调用可以 <a href="http://en.wikipedia.org/wiki/Method_chaining">链接在一起</a>.  </p></li>
+<li><p id="@if_operation_might"><a class="jump" href="index.html#@if_operation_might"></a>If an operation might mutate an object, then it is a mutator, regardless of its return type.
+生产者和观察者永远不应改变对象。</p></li></ul></li>
+</ul>
+
+<h3 id="abstract_data_type_examples"><a class="jump" href="index.html#abstract_data_type_examples"></a>抽象数据类型示例</h3><div data-outline="abstract_data_type_examples">
+
+<p id="@here_some_examples"><a class="jump" href="index.html#@here_some_examples"></a>Here are some examples of abstract data types, along with some of their operations, grouped by kind.</p>
+
+<p id="@number_typescript-s_primitive"><a class="jump" href="index.html#@number_typescript-s_primitive"></a><a href="https://developer.mozilla.org/en-US/docs/Glossary/Number"><strong><code>number</code></strong></a> is TypeScript’s primitive numeric type.
+<code>number</code> is immutable, so it has no mutators.</p>
+
+<ul id="@creators_numeric_literals">
+<li><a class="jump" href="index.html#@creators_numeric_literals"></a>创建者：数字字面量 <code>0</code>, <code>1</code>, <code>2</code>, …</li>
+<li>生产者：算术运算符 <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>**</code></li>
+<li>观察者：比较运算符 <code>===</code>, <code>!==</code>, <code>&lt;</code>, <code>&gt;</code> </li>
+<li>mutators: none (it’s immutable)</li>
+</ul>
+
+<p id="@array_typescript-s_array"><a class="jump" href="index.html#@array_typescript-s_array"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array"><strong><code>Array</code></strong></a> is TypeScript’s array type.
+<code>Array</code> 是可变的。</p>
+
+<ul id="@creators_array_constructor">
+<li><a class="jump" href="index.html#@creators_array_constructor"></a>creators: <code>Array</code> constructor, <code class="no-markdown">[ <em>item1</em>, <em>item2</em>, <em>etc.</em> ]</code> literal syntax, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/of"><code>Array.of</code></a>, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/from"><code>Array.from</code></a></li>
+<li>producers: <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/concat"><code>Array.concat</code></a></li>
+<li>观察者： <code>length</code>, <code>[..]</code> indexing syntax</li>
+<li>mutators: <code>push</code>, <code>pop</code>, <code>shift</code>, <code>unshift</code>, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reverse"><code>reverse</code></a>, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort"><code>sort</code></a></li>
+</ul>
+
+<p id="@string_typescript-s_string"><a class="jump" href="index.html#@string_typescript-s_string"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String"><strong><code>string</code></strong></a> is TypeScript’s string type.
+<code>string</code> is immutable.</p>
+
+<ul id="@creators_quoted_text">
+<li><a class="jump" href="index.html#@creators_quoted_text"></a>creators: <code class="no-markdown">"<em>quoted text</em>"</code> literal syntax, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/fromCharCode"><code>String.fromCharCode</code></a> static method</li>
+<li>producers: <code>concat</code>, <code>substring</code>, <code>toUpperCase</code></li>
+<li>观察者： <code>length</code></li>
+<li>mutators: none (it’s immutable)</li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-classifying_types_and_operations"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-classifying_types_and_operations-operations" data-target="#ex-classifying_types_and_operations-operations" data-toggle="collapse"><a class="jump" href="index.html#@ex-classifying_types_and_operations-operations"></a><span class="panel-title">Operations</span></div><div class="panel-collapse collapse exercise-panel" id="ex-classifying_types_and_operations-operations" data-outline="operations" data-ex-id="abstract_data_type_examples/operations" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@each_methods_below"><a class="jump" href="index.html#@each_methods_below"></a>以下每个方法都是 JavaScript 库中抽象数据类型上的操作。
+Click on the link to look at its documentation.  Think about the operation’s type signature.  Then classify the 操作。</p>
+
+<p id="@hints_pay_attention"><a class="jump" href="index.html#@hints_pay_attention"></a>Hints: pay attention to whether the type itself appears as a parameter or return value.  And remember that instance methods (lacking the <code>static</code> keyword) have an implicit parameter.</p>
+
+<table style="width: 100%"><tbody><tr><td style="width: 25%; vertical-align: top"><p>&nbsp; <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/parseInt" target="doc-frame"></a></p><p id="@number-parseint"><a class="jump" href="index.html#@number-parseint"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/parseInt" target="doc-frame"><code>Number.parseInt()</code></a></p><p></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; creator; producer; observer; mutator"><select class="form-control"><option selected="selected"></option><option>creator</option>,<option>producer</option>,<option>observer</option>,<option>mutator</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p>&nbsp; <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice" target="doc-frame"></a></p><p id="@array-slice"><a class="jump" href="index.html#@array-slice"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice" target="doc-frame"><code>Array.slice()</code></a></p><p></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; creator; producer; observer; mutator"><select class="form-control"><option selected="selected"></option><option>creator</option>,<option>producer</option>,<option>observer</option>,<option>mutator</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p>&nbsp; <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/shift" target="doc-frame"></a></p><p id="@array-shift"><a class="jump" href="index.html#@array-shift"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/shift" target="doc-frame"><code>Array.shift()</code></a></p><p></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; creator; producer; observer; mutator"><select class="form-control"><option selected="selected"></option><option>creator</option>,<option>producer</option>,<option>observer</option>,<option>mutator</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p>&nbsp; <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toUpperCase" target="doc-frame"></a></p><p id="@string-touppercase"><a class="jump" href="index.html#@string-touppercase"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toUpperCase" target="doc-frame"><code>String.toUpperCase()</code></a></p><p></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; creator; producer; observer; mutator"><select class="form-control"><option selected="selected"></option><option>creator</option>,<option>producer</option>,<option>observer</option>,<option>mutator</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p>&nbsp; <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/has" target="doc-frame"></a></p><p id="@set-has"><a class="jump" href="index.html#@set-has"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set/has" target="doc-frame"><code>Set.has()</code></a></p><p></p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="dropdown exercise-choice" data-outline="; creator; producer; observer; mutator"><select class="form-control"><option selected="selected"></option><option>creator</option>,<option>producer</option>,<option>observer</option>,<option>mutator</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p>&nbsp; <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/keys" target="doc-frame"></a></p><p id="@map-keys"><a class="jump" href="index.html#@map-keys"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/keys" target="doc-frame"><code>Map.keys()</code></a></p><p></p>
+
+<div class="form-group exercise-part" data-outline="f"><div class="dropdown exercise-choice" data-outline="; creator; producer; observer; mutator"><select class="form-control"><option selected="selected"></option><option>creator</option>,<option>producer</option>,<option>observer</option>,<option>mutator</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div></td></tr></tbody></table><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="an_abstract_type_is_defined_by_its_operations"><a class="jump" href="index.html#an_abstract_type_is_defined_by_its_operations"></a>抽象类型由其操作定义</h2><div data-outline="an_abstract_type_is_defined_by_its_operations">
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<img src="figures/adt-firewall.svg" class="pull-right" width="400">
+</div></div>
+
+<p id="@essential_idea_here"><a class="jump" href="index.html#@essential_idea_here"></a>这里的核心概念是<strong>抽象数据类型由其操作定义。</strong>
+类型 <em>T</em>, along with their specifications, fully characterize what we mean by <em>T</em>.</p>
+
+<p id="@so_example_talk"><a class="jump" href="index.html#@so_example_talk"></a>So, for example, when we talk about the <code>Array</code> type, what we mean is not a linked list, or a block of memory, or a hash table, or any other specific data structure that might represent a sequence of values.</p>
+
+<p id="@instead_array_refers"><a class="jump" href="index.html#@instead_array_refers"></a>Instead, <code>Array</code> 指的是满足 <code>Array</code>: <code>[..]</code> (indexing), <code>length</code>, <code>push()</code>, etc.
+The values of an abstract type are <em>opaque</em> in the sense that a client can’t examine the data stored inside them, except as permitted by operations.</p>
+
+<p id="@expanding_our_metaphor"><a class="jump" href="index.html#@expanding_our_metaphor"></a>扩展我们关于 <a href="../04-specifications/index.html#why_specifications">规范防火墙</a>, you might picture values of an abstract type as hard shells, hiding not just the implementation of an individual function, but of a set of related functions (the operations of the type) and the data they share (the private fields stored inside values of the type).</p>
+
+<p id="@operations_type_constitute"><a class="jump" href="index.html#@operations_type_constitute"></a>该类型的操作构成了它的 <mark data-mark-text="data abstraction" data-structure-text="data abstraction" id="^data_abstraction"><strong>抽象</strong></mark>.
+This is the public part, visible to clients who use the type.</p>
+
+<p id="@fields_class_implements"><a class="jump" href="index.html#@fields_class_implements"></a>The fields of the class that implements the type, as well as related classes that help implement a complex data structure, constitute a particular <mark data-structure-text="representation" id="^representation"><strong>表示</strong></mark>.
+This part is private, visible only to the implementer of the type.</p>
+
+<div class="clearfix"></div>
+
+</div><h2 id="designing_an_abstract_type"><a class="jump" href="index.html#designing_an_abstract_type"></a>Designing an abstract type</h2><div data-outline="designing_an_abstract_type">
+
+<p id="@designing_abstract_type_involves_choosing_good"><a class="jump" href="index.html#@designing_abstract_type_involves_choosing_good"></a>设计抽象类型涉及选择良好的操作并确定它们应该如何行为。
+以下是几个经验法则。</p>
+
+<p id="@better_few_simple"><a class="jump" href="index.html#@better_few_simple"></a>It’s better to have <strong>a few, simple operations</strong> that can be combined in powerful ways, rather than lots of complex operations.</p>
+
+<p id="@each_operation_should"><a class="jump" href="index.html#@each_operation_should"></a>Each operation should have a well-defined purpose, and should have a <strong>coherent</strong> behavior rather than a multitude of special cases.
+We probably shouldn’t add a <code>sum</code> operation to <code>Set</code>, for example.
+It might help clients who work with sets of numbers, but what about sets of strings? Or nested sets? All these special cases would make <code>sum</code> 成为一个难以理解和使用的操作。</p>
+
+<p id="@set_operations_should"><a class="jump" href="index.html#@set_operations_should"></a>操作集合应该是<strong>充足的</strong>，意味着必须有足够的操作来做客户端可能想要做的各种计算。
+一个好的测试是检查是否可以方便地提取关于该类型抽象值的信息。
+For example, if <code>string</code> 没有索引操作 <code>[i]</code>, 我们就无法找出字符串的各个字符是什么。
+基本信息不应该难以获得。
+For example, the <code>length</code> 属性对于 <code>string</code>, 因为我们可以在递增的索引 <code>[i]</code> 上应用 <code>i</code> 直到得到 <code>undefined</code>, 但这效率低下且不方便。</p>
+
+<p id="@type_may_be"><a class="jump" href="index.html#@type_may_be"></a>The type may be general-purpose: a list, or a set, or a graph, for example.
+Or it may be domain-specific: a street map, an employee database, a phone book, etc.
+但<strong>它不应混合通用功能和特定领域功能。</strong>
+A <code>Deck</code> type intended to represent a sequence of playing cards shouldn’t have a general-purpose <code>add</code> 操作。
+Conversely, it wouldn’t make sense to put a domain-specific operation like <code>dealCards</code> 放入通用类型 <code>Array</code>.</p>
+
+</div><h2 id="representation_independence"><a class="jump" href="index.html#representation_independence"></a>表示独立性</h2><div data-outline="representation_independence">
+
+<p id="@critically_good_abstract"><a class="jump" href="index.html#@critically_good_abstract"></a>Critically, a good abstract data type should be <mark data-mark-text="representation independence" data-structure-text="representation independence" id="^representation_independence"><strong>表示独立的</strong></mark>.
+This means that the use of an abstract type 独立于 its representation (the actual data structure or data fields used to implement it), so that changes in representation have no effect on code outside the abstract type itself.
+For example, the operations offered by <code>Array</code> are independent of whether the array is represented internally as a contiguous block of memory, a linked list, or a hash table.</p>
+
+<p id="@implementer_you_only"><a class="jump" href="index.html#@implementer_you_only"></a>As an implementer, you will only be able to safely change the representation of an ADT if its operations are fully specified with preconditions and postconditions, so that clients know what to depend on, and you know what you can safely change.</p>
+
+<h3 id="example_different_representations_for_strings"><a class="jump" href="index.html#example_different_representations_for_strings"></a>示例：字符串的不同表示</h3><div data-outline="example_different_representations_for_strings">
+
+<p id="@look_simple_abstract"><a class="jump" href="index.html#@look_simple_abstract"></a>Let’s look at a simple abstract data type to see what representation independence means and why it’s useful.
+The <code>MyString</code> 类型的操作比内置的 TypeScript <code>string</code>, and their specs are a little different, but it’s still illustrative.  以下是 ADT 的规范：</p>
+
+<pre id="@mystring_represents_immutable"><a class="jump" href="index.html#@mystring_represents_immutable"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** MyString represents an immutable sequence of characters. */</span>
+<span class="hljs-keyword">class</span> MyString { 
+
+    <span class="hljs-comment">//////////////////// Example creator operation ///////////////</span>
+    <span class="hljs-comment">/**
+     * @param s 
+     * @returns MyString representing the sequence of characters in s
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>) { ... }
+
+    <span class="hljs-comment">//////////////////// Example observer operations ///////////////</span>
+    <span class="hljs-comment">/**
+     * @returns number of characters in this string
+     */</span>
+    <span class="hljs-keyword">public</span> length(): <span class="hljs-built_in">number</span> { ... }
+
+    <span class="hljs-comment">/**
+     * @param i character position (requires 0 &lt;= i &lt; string length)
+     * @returns character at position i
+     */</span>
+    <span class="hljs-keyword">public</span> charAt(i: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">string</span> { ... }
+
+    <span class="hljs-comment">//////////////////// Example producer operation ///////////////</span>
+    <span class="hljs-comment">/** 
+     * Get the substring between start (inclusive) and end (exclusive).
+     * @param start starting index
+     * @param end ending index.  Requires 0 &lt;= start &lt;= end &lt;= string length.
+     * @returns string consisting of charAt(start)...charAt(end-1)
+     */</span>
+    <span class="hljs-keyword">public</span> substring(start: <span class="hljs-built_in">number</span>, end: <span class="hljs-built_in">number</span>): MyString { ... }
+
+    <span class="hljs-comment">/////// no mutator operations (why not?)</span>
+}</code></pre>
+
+<p id="@these_public_operations"><a class="jump" href="index.html#@these_public_operations"></a>这些公共操作及其规范是该数据类型的<em>客户端</em>被允许知道的唯一信息。
+但<em>实现</em>该数据类型需要一个表示。
+For now, let’s look at a simple representation for <code>MyString</code>: 的一个简单表示：只是一个字符数组。
+Each character is represented by a 16-bit number, its Unicode value, which we can get from a primitive string using <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/charCodeAt"><code>String.charCodeAt()</code></a> and <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/fromCharCode"><code>String.fromCharCode()</code></a>.
+TypeScript 中字符数组的适当类型是 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint16Array"><code>Uint16Array</code></a>, which means “unsigned 16-bit integer array.”
+该类型的行为在很大程度上类似于 <code>Array</code>, except that is limited to storing 16-bit unsigned integers, and it cannot grow or shrink.
+In our <code>MyString</code> representation, the array will have exactly the length of the string, with no extra room at the end.</p>
+
+<p id="@here-s_internal_representation"><a class="jump" href="index.html#@here-s_internal_representation"></a>Here’s how that internal representation (we’ll often abbreviate it <em>rep</em>) might be declared, as an instance variable within the class:</p>
+
+<pre id="@private_uint16array_0"><a class="jump" href="index.html#@private_uint16array_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">private</span> a: <span class="hljs-built_in">Uint16Array</span>;</code></pre>
+
+<p id="@choice_rep_operations"><a class="jump" href="index.html#@choice_rep_operations"></a>With that choice of rep, the operations would be implemented in a straightforward way:</p>
+
+<pre id="@public_constructor-s_string_this-a_new_uint16array-s-length_let_i_0_i_s-length_i_this-a-i_s-charcodeat-i_public"><a class="jump" href="index.html#@public_constructor-s_string_this-a_new_uint16array-s-length_let_i_0_i_s-length_i_this-a-i_s-charcodeat-i_public"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>) {
+  <span class="hljs-keyword">this</span>.a = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Uint16Array</span>(s.length);
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; s.length; ++i) {
+    <span class="hljs-keyword">this</span>.a[i] = s.charCodeAt(i);
+  }
+}
+
+<span class="hljs-keyword">public</span> length(): <span class="hljs-built_in">number</span> {
+  <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.a.length;
+}
+
+<span class="hljs-keyword">public</span> charAt(i: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">string</span> {
+  <span class="hljs-keyword">return</span> <span class="hljs-built_in">String</span>.fromCharCode(<span class="hljs-keyword">this</span>.a[i]);
+}
+
+<span class="hljs-keyword">public</span> substring(start: <span class="hljs-built_in">number</span>, end: <span class="hljs-built_in">number</span>): MyString {
+  <span class="hljs-keyword">const</span> that = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">""</span>);      <span class="hljs-comment">// make a temporarily-empty MyString object</span>
+  that.a = <span class="hljs-keyword">this</span>.a.slice(start, end);  <span class="hljs-comment">// ... and immediately replace its array</span>
+  <span class="hljs-keyword">return</span> that;
+}</code></pre>
+
+<p id="@questions_ponder_why"><a class="jump" href="index.html#@questions_ponder_why"></a>Questions to ponder: Why don’t <code>charAt</code> and <code>substring</code> 不需要检查其参数是否在有效范围内？ 如果客户端使用非法输入调用这些实现会发生什么？
+（第一个是关于 <a href="index.html#example_different_representations_for_strings"><code>MyString</code>’s specs</a>; 的问题；第二个是关于 <code>[..]</code>’s and <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/TypedArray/slice"><code>slice</code></a>’s specs.)</p>
+
+<p id="@here-s_snapshot_diagram"><a class="jump" href="index.html#@here-s_snapshot_diagram"></a>Here’s a snapshot diagram showing what this representation looks like for a couple of typical client operations:</p>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<img src="figures/mystring1.svg" class="pull-right" width="300">
+</div></div>
+
+<pre id="@const_s_new_mystring-true_const_t_s-substring-1-3_0"><a class="jump" href="index.html#@const_s_new_mystring-true_const_t_s-substring-1-3_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">"true"</span>);
+<span class="hljs-keyword">const</span> t = s.substring(<span class="hljs-number">1</span>,<span class="hljs-number">3</span>);</code></pre>
+
+<span class="clearfix"></span>
+
+<p id="@one_problem_implementation"><a class="jump" href="index.html#@one_problem_implementation"></a>One problem with this implementation is that it’s passing up an opportunity for performance improvement.
+Because this data type is immutable, the <code>substring</code> operation doesn’t really have to copy characters out into a fresh array.
+它只需指向原始 <code>MyString</code> object’s character array and keep track of the start and end that the new substring object represents.
+(In fact, this is <a href="https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.3.345.16/src/objects/string.h#786">Node.js 中的 V8 JavaScript 引擎可以对内置字符串执行的优化</a> 。</p>
+
+<p id="@implement_optimization_could"><a class="jump" href="index.html#@implement_optimization_could"></a>To implement this optimization, we could change the internal representation of this class to:</p>
+
+<pre id="@private_uint16array_private"><a class="jump" href="index.html#@private_uint16array_private"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">private</span> a: <span class="hljs-built_in">Uint16Array</span>;
+<span class="hljs-keyword">private</span> start: <span class="hljs-built_in">number</span>;
+<span class="hljs-keyword">private</span> end: <span class="hljs-built_in">number</span>;</code></pre>
+
+<p id="@new_representation_operations"><a class="jump" href="index.html#@new_representation_operations"></a>With this new representation, the operations are now implemented like this:</p>
+
+<pre id="@public_constructor-s_string_this-a_new_uint16array-s-length_let_i_0_i_s-length_i_this-a-i_s-charcodeat-i_this-start"><a class="jump" href="index.html#@public_constructor-s_string_this-a_new_uint16array-s-length_let_i_0_i_s-length_i_this-a-i_s-charcodeat-i_this-start"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>) {
+  <span class="hljs-keyword">this</span>.a = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Uint16Array</span>(s.length);
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; s.length; ++i) {
+    <span class="hljs-keyword">this</span>.a[i] = s.charCodeAt(i);
+  }
+  <span class="hljs-keyword">this</span>.start = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">this</span>.end = <span class="hljs-keyword">this</span>.a.length;
+}
+
+<span class="hljs-keyword">public</span> length(): <span class="hljs-built_in">number</span> {
+  <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.end - <span class="hljs-keyword">this</span>.start;
+}
+
+<span class="hljs-keyword">public</span> charAt(i: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">string</span> {
+  <span class="hljs-keyword">return</span> <span class="hljs-built_in">String</span>.fromCharCode(<span class="hljs-keyword">this</span>.a[<span class="hljs-keyword">this</span>.start + i]);
+}
+
+<span class="hljs-keyword">public</span> substring(start: <span class="hljs-built_in">number</span>, end: <span class="hljs-built_in">number</span>): MyString {
+  <span class="hljs-keyword">const</span> that = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">""</span>); <span class="hljs-comment">// make a temporarily-empty MyString object</span>
+  that.a = <span class="hljs-keyword">this</span>.a;               <span class="hljs-comment">// ... and immediately replace its instance variables </span>
+  that.start = <span class="hljs-keyword">this</span>.start + start;
+  that.end = <span class="hljs-keyword">this</span>.start + end;
+  <span class="hljs-keyword">return</span> that;
+}</code></pre>
+
+<p id="@now_same_client"><a class="jump" href="index.html#@now_same_client"></a>现在相同的客户端代码产生了非常不同的内部结构：</p>
+
+<div class="panel panel-default panel-figure pull-right no-markdown">
+<div class="panel-body text-center">
+<img src="figures/mystring2.svg" class="pull-right" width="300">
+</div></div>
+
+<pre id="@const_s_new_mystring-true_const_t_s-substring-1-3_1"><a class="jump" href="index.html#@const_s_new_mystring-true_const_t_s-substring-1-3_1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">"true"</span>);
+<span class="hljs-keyword">const</span> t = s.substring(<span class="hljs-number">1</span>,<span class="hljs-number">3</span>);</code></pre>
+
+<p id="@because_mystring-s_existing"><a class="jump" href="index.html#@because_mystring-s_existing"></a>Because <code>MyString</code>’s existing clients depend only on the specs of its public methods, not on its private fields, we can make this change without having to inspect and change all that client code.  That’s the power of representation independence.</p>
+
+<span class="clearfix"></span>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-representation_independence"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-representation_independence-representation_1" data-target="#ex-representation_independence-representation_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-representation_independence-representation_1"></a><span class="panel-title">表示 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-representation_independence-representation_1" data-outline="representation_1" data-ex-id="example_different_representations_for_strings/representation_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@consider_following_abstract"><a class="jump" href="index.html#@consider_following_abstract"></a>考虑以下抽象数据类型：</p>
+
+<pre id="@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_sorted_oldest"><a class="jump" href="index.html#@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_sorted_oldest"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Represents a family that lives in a household together.
+ * A family always has at least one person in it.
+ * Families are mutable.
+ */</span>
+<span class="hljs-keyword">class</span> Family {
+    <span class="hljs-comment">// the people in the family, sorted from oldest to youngest, with no duplicates.</span>
+    people: <span class="hljs-built_in">Array</span>&lt;Person&gt;;
+
+    <span class="hljs-comment">/**
+     * @returns an array containing all the members of the family, with no duplicates.
+     */</span>
+    <span class="hljs-keyword">public</span> getMembers(): <span class="hljs-built_in">Array</span>&lt;Person&gt; {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.people;
+    }
+}</code></pre>
+
+<p id="@notice_particular_neglected"><a class="jump" href="index.html#@notice_particular_neglected"></a>Notice in particular that we have neglected to make its representation, the <code>people</code> field, private.
+Our <em>intent</em> was for it to be private, but in TypeScript, <a href="https://www.typescriptlang.org/docs/handbook/2/classes.html#public">字段和方法默认是公开的</a>.</p>
+
+<p id="@so_means_louis"><a class="jump" href="index.html#@so_means_louis"></a>So that means Louis Reasoner can write the following client code, which uses <code>Family</code> ：</p>
+
+<pre id="@function_client1-f_family"><a class="jump" href="index.html#@function_client1-f_family"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">client1</span>(<span class="hljs-params">f: Family</span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-comment">// get youngest person in the family</span>
+    <span class="hljs-keyword">const</span> baby = f.people[f.people.length<span class="hljs-number">-1</span>];
+    ...
+}</code></pre>
+
+<p id="@assume_all_code"><a class="jump" href="index.html#@assume_all_code"></a>假设所有这些代码最初都能正确运行（ <code>Family</code> and <code>client1</code>）并通过所有测试。</p>
+
+<p id="@but_now_decide"><a class="jump" href="index.html#@but_now_decide"></a>但现在我们决定将 <code>Family</code>’s representation from <code>Array</code> to <code>Set</code>, as shown:</p>
+
+<pre id="@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_set-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_array-from-this-people_0"><a class="jump" href="index.html#@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_set-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_array-from-this-people_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Represents a family that lives in a household together.
+ * A family always has at least one person in it.
+ * Families are mutable.
+ */</span>
+<span class="hljs-keyword">class</span> Family {
+    <span class="hljs-comment">// the people in the family.</span>
+    people: Set&lt;Person&gt;;
+
+    <span class="hljs-comment">/**
+     * @returns an array containing all the members of the family, with no duplicates.
+     */</span>
+    <span class="hljs-keyword">public</span> getMembers(): <span class="hljs-built_in">Array</span>&lt;Person&gt; {
+        <span class="hljs-keyword">return</span> <span class="hljs-built_in">Array</span>.from(<span class="hljs-keyword">this</span>.people);
+    }
+}</code></pre>
+
+<p id="@assume_family_compiles"><a class="jump" href="index.html#@assume_family_compiles"></a>假设 <code>Family</code> 在更改后编译正确。</p>
+
+<label class="exercise-part-heading" id="@which_following_statements_true_about_client1"><a class="jump" href="index.html#@which_following_statements_true_about_client1"></a>关于 <code>client1</code> after <code>Family</code> 更改后，以下哪些陈述是正确的？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="client1 is independent of Family’s representation, so it keeps working correctly."><label for="md_converted_choice_2_0"><input type="radio" id="md_converted_choice_2_0" name="md_converted_radio_2"><code>client1</code> 独立于 <code>Family</code>’s representation, so it keeps working correctly.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client1 depends on Family’s representation, and the dependency would be caught as a static error."><label for="md_converted_choice_2_1"><input type="radio" id="md_converted_choice_2_1" name="md_converted_radio_2"><code>client1</code> 依赖 <code>Family</code>’s representation, 该依赖关系会被捕获为静态错误。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client1 depends on Family’s representation, and the dependency would be caught as a dynamic error."><label for="md_converted_choice_2_2"><input type="radio" id="md_converted_choice_2_2" name="md_converted_radio_2"><code>client1</code> 依赖 <code>Family</code>’s representation, 该依赖关系会被捕获为动态错误。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client1 depends on Family’s representation, and the dependency would not be caught but would produce a wrong answer at runtime."><label for="md_converted_choice_2_3"><input type="radio" id="md_converted_choice_2_3" name="md_converted_radio_2"><code>client1</code> 依赖 <code>Family</code>’s representation, 该依赖关系不会被捕获，但会在运行时产生错误答案。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client1 depends on Family’s representation, and the dependency would not be caught but would (luckily) still produce the same answer."><label for="md_converted_choice_2_4"><input type="radio" id="md_converted_choice_2_4" name="md_converted_radio_2"><code>client1</code> 依赖 <code>Family</code>’s representation, 该依赖关系不会被捕获，但会（幸运地）仍然产生相同的答案。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-representation_independence-representation_2" data-target="#ex-representation_independence-representation_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-representation_independence-representation_2"></a><span class="panel-title">表示 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-representation_independence-representation_2" data-outline="representation_2" data-ex-id="example_different_representations_for_strings/representation_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<table class="side-by-side"><tbody><tr><td><p id="@original_version_0"><a class="jump" href="index.html#@original_version_0"></a>原始版本：</p>
+
+<pre id="@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_array-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_this-people_0"><a class="jump" href="index.html#@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_array-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_this-people_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Represents a family that lives in a 
+ * household together. A family always 
+ * has at least one person in it.
+ * Families are mutable.
+ */</span>
+<span class="hljs-keyword">class</span> Family {
+    <span class="hljs-comment">// the people in the family</span>
+    people: <span class="hljs-built_in">Array</span>&lt;Person&gt;;
+
+    <span class="hljs-comment">/**
+     * @returns an array containing all 
+     *          the members of the family, 
+     *          with no duplicates.
+     */</span>
+    <span class="hljs-keyword">public</span> getMembers(): <span class="hljs-built_in">Array</span>&lt;Person&gt; {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.people;
+    }
+}</code></pre></td><td><p id="@changed_version_0"><a class="jump" href="index.html#@changed_version_0"></a>更改后的版本：</p>
+
+<pre id="@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_nuclear"><a class="jump" href="index.html#@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_nuclear"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Represents a family that lives in a 
+ * household together. A family always 
+ * has at least one person in it.
+ * Families are mutable.
+ */</span>
+<span class="hljs-keyword">class</span> Family {
+    <span class="hljs-comment">// the nuclear family</span>
+    <span class="hljs-comment">// (just parents and their children)</span>
+    people: <span class="hljs-built_in">Array</span>&lt;Person&gt;;
+
+    <span class="hljs-comment">// the extended family</span>
+    <span class="hljs-comment">// (grandparents, aunts/uncles, cousins, etc.)</span>
+    <span class="hljs-keyword">public</span> others: <span class="hljs-built_in">Array</span>&lt;Person&gt;;
+
+    <span class="hljs-comment">/**
+     * @returns an array containing all 
+     *          the members of the family, 
+     *          with no duplicates.
+     */</span>
+    <span class="hljs-keyword">public</span> getMembers(): <span class="hljs-built_in">Array</span>&lt;Person&gt; {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.people.concat(<span class="hljs-keyword">this</span>.others);
+    }
+}</code></pre></td></tr></tbody></table>
+
+<p id="@now_consider_client2"><a class="jump" href="index.html#@now_consider_client2"></a>现在考虑： <code>client2</code>:</p>
+
+<pre id="@function_client2-f_family"><a class="jump" href="index.html#@function_client2-f_family"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">client2</span>(<span class="hljs-params">f: Family</span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-comment">// get size of the family</span>
+    <span class="hljs-keyword">const</span> familySize = f.people.length;
+    ...
+}</code></pre>
+
+<label class="exercise-part-heading" id="@which_following_statements_true_about_client2"><a class="jump" href="index.html#@which_following_statements_true_about_client2"></a>关于 client2 after Family 更改后，以下哪些陈述是正确的？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="client2 is independent of Family’s representation, so it keeps working correctly."><label for="md_converted_choice_3_0"><input type="radio" id="md_converted_choice_3_0" name="md_converted_radio_3"><code>client2</code> 独立于 <code>Family</code>’s representation, so it keeps working correctly.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client2 depends on Family’s representation, and the dependency would be caught as a static error."><label for="md_converted_choice_3_1"><input type="radio" id="md_converted_choice_3_1" name="md_converted_radio_3"><code>client2</code> 依赖 <code>Family</code>’s representation, 该依赖关系会被捕获为静态错误。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client2 depends on Family’s representation, and the dependency would be caught as a dynamic error."><label for="md_converted_choice_3_2"><input type="radio" id="md_converted_choice_3_2" name="md_converted_radio_3"><code>client2</code> 依赖 <code>Family</code>’s representation, 该依赖关系会被捕获为动态错误。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client2 depends on Family’s representation, and the dependency would not be caught but would produce a wrong answer at runtime."><label for="md_converted_choice_3_3"><input type="radio" id="md_converted_choice_3_3" name="md_converted_radio_3"><code>client2</code> 依赖 <code>Family</code>’s representation, 该依赖关系不会被捕获，但会在运行时产生错误答案。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client2 depends on Family’s representation, and the dependency would not be caught but would (luckily) still produce the same answer."><label for="md_converted_choice_3_4"><input type="radio" id="md_converted_choice_3_4" name="md_converted_radio_3"><code>client2</code> 依赖 <code>Family</code>’s representation, 该依赖关系不会被捕获，但会（幸运地）仍然产生相同的答案。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-representation_independence-representation_3" data-target="#ex-representation_independence-representation_3" data-toggle="collapse"><a class="jump" href="index.html#@ex-representation_independence-representation_3"></a><span class="panel-title">表示 3</span></div><div class="panel-collapse collapse exercise-panel" id="ex-representation_independence-representation_3" data-outline="representation_3" data-ex-id="example_different_representations_for_strings/representation_3" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<table class="side-by-side"><tbody><tr><td><p id="@original_version_1"><a class="jump" href="index.html#@original_version_1"></a>原始版本：</p>
+
+<pre id="@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_array-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_this-people_1"><a class="jump" href="index.html#@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_array-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_this-people_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Represents a family that lives in a 
+ * household together. A family always 
+ * has at least one person in it.
+ * Families are mutable.
+ */</span>
+<span class="hljs-keyword">class</span> Family {
+    <span class="hljs-comment">// the people in the family</span>
+    people: <span class="hljs-built_in">Array</span>&lt;Person&gt;;
+
+    <span class="hljs-comment">/**
+     * @returns an array containing all 
+     *          the members of the family, 
+     *          with no duplicates.
+     */</span>
+    <span class="hljs-keyword">public</span> getMembers(): <span class="hljs-built_in">Array</span>&lt;Person&gt; {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.people;
+    }
+}</code></pre></td><td><p id="@changed_version_1"><a class="jump" href="index.html#@changed_version_1"></a>更改后的版本：</p>
+
+<pre id="@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_set-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_array-from-this-people_1"><a class="jump" href="index.html#@represents_family_lives_household_together_family_always_least_one_person_families_mutable_class_family_people_family_people_set-person_returns_array_containing_all_members_family_no_duplicates_public_getmembers_array-person_return_array-from-this-people_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Represents a family that lives in a 
+ * household together. A family always 
+ * has at least one person in it.
+ * Families are mutable.
+ */</span>
+<span class="hljs-keyword">class</span> Family {
+    <span class="hljs-comment">// the people in the family</span>
+    people: Set&lt;Person&gt;;
+
+    <span class="hljs-comment">/**
+     * @returns an array containing all 
+     *          the members of the family, 
+     *          with no duplicates.
+     */</span>
+    <span class="hljs-keyword">public</span> getMembers(): <span class="hljs-built_in">Array</span>&lt;Person&gt; {
+        <span class="hljs-keyword">return</span> <span class="hljs-built_in">Array</span>.from(<span class="hljs-keyword">this</span>.people);
+    }
+}</code></pre></td></tr></tbody></table>
+
+<p id="@now_consider_client3"><a class="jump" href="index.html#@now_consider_client3"></a>现在考虑： <code>client3</code>:</p>
+
+<pre id="@function_client3-f_family"><a class="jump" href="index.html#@function_client3-f_family"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">client3</span>(<span class="hljs-params">f: Family</span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-comment">// get any person in the family</span>
+    <span class="hljs-keyword">const</span> anybody: Person = f.getMembers()[<span class="hljs-number">0</span>];
+    ...
+}</code></pre>
+
+<label class="exercise-part-heading" id="@which_following_statements_true_about_client3"><a class="jump" href="index.html#@which_following_statements_true_about_client3"></a>关于 <code>client3</code> after <code>Family</code> 更改后，以下哪些陈述是正确的？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="client3 is independent of Family’s representation, so it keeps working correctly."><label for="md_converted_choice_4_0"><input type="radio" id="md_converted_choice_4_0" name="md_converted_radio_4"><code>client3</code> 独立于 <code>Family</code>’s representation, so it keeps working correctly.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client3 depends on Family’s representation, and the dependency would be caught as a static error."><label for="md_converted_choice_4_1"><input type="radio" id="md_converted_choice_4_1" name="md_converted_radio_4"><code>client3</code> 依赖 <code>Family</code>’s representation, 该依赖关系会被捕获为静态错误。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client3 depends on Family’s representation, and the dependency would be caught as a dynamic error."><label for="md_converted_choice_4_2"><input type="radio" id="md_converted_choice_4_2" name="md_converted_radio_4"><code>client3</code> 依赖 <code>Family</code>’s representation, 该依赖关系会被捕获为动态错误。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client3 depends on Family’s representation, and the dependency would not be caught but would produce a wrong answer at runtime."><label for="md_converted_choice_4_3"><input type="radio" id="md_converted_choice_4_3" name="md_converted_radio_4"><code>client3</code> 依赖 <code>Family</code>’s representation, 该依赖关系不会被捕获，但会在运行时产生错误答案。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="client3 depends on Family’s representation, and the dependency would not be caught but would (luckily) still produce the same answer."><label for="md_converted_choice_4_4"><input type="radio" id="md_converted_choice_4_4" name="md_converted_radio_4"><code>client3</code> 依赖 <code>Family</code>’s representation, 该依赖关系不会被捕获，但会（幸运地）仍然产生相同的答案。</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-representation_independence-representation_4" data-target="#ex-representation_independence-representation_4" data-toggle="collapse"><a class="jump" href="index.html#@ex-representation_independence-representation_4"></a><span class="panel-title">表示 4</span></div><div class="panel-collapse collapse exercise-panel" id="ex-representation_independence-representation_4" data-outline="representation_4" data-ex-id="example_different_representations_for_strings/representation_4" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@each_section_family"><a class="jump" href="index.html#@each_section_family"></a>对于 Family data type’s code shown below, is it part of the ADT’s specification, its representation, or its implementation?</p>
+
+<table><tbody><tr><td><p id="@1"><a class="jump" href="index.html#@1"></a>1</p></td>
+    <td><div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; specification; representation; implementation"><select class="form-control"><option selected="selected"></option><option>specification</option>,<option>representation</option>,<option>implementation</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></td>
+    <td><pre id="@represents_family_lives_household_together_family_always_least_one_person_families_mutable_1"><a class="jump" href="index.html#@represents_family_lives_household_together_family_always_least_one_person_families_mutable_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Represents a family that lives in a household together.
+ * A family always has at least one person in it.
+ * Families are mutable.
+ */</span></code></pre></td></tr>
+
+  <tr><td><p id="@2"><a class="jump" href="index.html#@2"></a>2</p></td>
+    <td><div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; specification; representation; implementation"><select class="form-control"><option selected="selected"></option><option>specification</option>,<option>representation</option>,<option>implementation</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></td>
+    <td><pre id="@class_family"><a class="jump" href="index.html#@class_family"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> Family {</code></pre></td></tr><tr></tr><tr><td><p id="@3"><a class="jump" href="index.html#@3"></a>3</p></td>
+    <td><div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; specification; representation; implementation"><select class="form-control"><option selected="selected"></option><option>specification</option>,<option>representation</option>,<option>implementation</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></td>
+    <td><pre id="@people_family_sorted"><a class="jump" href="index.html#@people_family_sorted"></a><code class="language-ts hljs typescript">    <span class="hljs-comment">// the people in the family, sorted from oldest to youngest, with no duplicates.</span></code></pre></td></tr><tr></tr><tr><td><p id="@4"><a class="jump" href="index.html#@4"></a>4</p></td>
+    <td><div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; specification; representation; implementation"><select class="form-control"><option selected="selected"></option><option>specification</option>,<option>representation</option>,<option>implementation</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></td>
+    <td><pre id="@private_people_array-person"><a class="jump" href="index.html#@private_people_array-person"></a><code class="language-ts hljs typescript">    <span class="hljs-keyword">private</span> people: <span class="hljs-built_in">Array</span>&lt;Person&gt;;</code></pre></td></tr><tr></tr><tr><td><p id="@5"><a class="jump" href="index.html#@5"></a>5</p></td>
+    <td><div class="form-group exercise-part" data-outline="e"><div class="dropdown exercise-choice" data-outline="; specification; representation; implementation"><select class="form-control"><option selected="selected"></option><option>specification</option>,<option>representation</option>,<option>implementation</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></td>
+    <td><pre id="@returns_array_containing"><a class="jump" href="index.html#@returns_array_containing"></a><code class="language-ts hljs typescript">    <span class="hljs-comment">/**
+     * @returns an array containing all the members of the family, with no duplicates.
+     */</span></code></pre></td></tr><tr></tr><tr><td><p id="@6"><a class="jump" href="index.html#@6"></a>6</p></td>
+    <td><div class="form-group exercise-part" data-outline="f"><div class="dropdown exercise-choice" data-outline="; specification; representation; implementation"><select class="form-control"><option selected="selected"></option><option>specification</option>,<option>representation</option>,<option>implementation</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></td>
+    <td><pre id="@public_getmembers_array-person"><a class="jump" href="index.html#@public_getmembers_array-person"></a><code class="language-ts hljs typescript">    <span class="hljs-keyword">public</span> getMembers(): <span class="hljs-built_in">Array</span>&lt;Person&gt; {</code></pre></td></tr><tr></tr><tr><td><p id="@7"><a class="jump" href="index.html#@7"></a>7</p></td>
+    <td><div class="form-group exercise-part" data-outline="g"><div class="dropdown exercise-choice" data-outline="; specification; representation; implementation"><select class="form-control"><option selected="selected"></option><option>specification</option>,<option>representation</option>,<option>implementation</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></td>
+    <td><pre id="@return_people"><a class="jump" href="index.html#@return_people"></a><code class="language-ts hljs typescript">        <span class="hljs-keyword">return</span> people;</code></pre></td></tr><tr></tr><tr><td></td>
+    <td></td>
+    <td><pre><code class="hljs">    }
+}</code></pre></td></tr><tr></tr></tbody></table>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="realizing_adt_concepts_in_typescript"><a class="jump" href="index.html#realizing_adt_concepts_in_typescript"></a>在 TypeScript 中实现 ADT 概念</h2><div data-outline="realizing_adt_concepts_in_typescript">
+
+<p id="@summarize_some_general"><a class="jump" href="index.html#@summarize_some_general"></a>Let’s summarize some of the general ideas we’ve discussed in this reading, which are applicable in general to programming in any language, and their specific realization using TypeScript language features.  The point is that there are several ways to do it, and it’s important to both understand the big idea, like a creator operation, and different ways to achieve that idea in practice.
+We’ll also include three items that haven’t yet been discussed in this reading, with notes about them below:</p>
+
+<table class="adt-implementation-table pull-margin"><tbody><tr><th><p id="@adt_concept"><a class="jump" href="index.html#@adt_concept"></a>ADT 概念</p></th>
+    <th><p id="@ways_do_typescript"><a class="jump" href="index.html#@ways_do_typescript"></a>在 TypeScript 中的实现方式</p></th>
+    <th><p id="@examples"><a class="jump" href="index.html#@examples"></a>Examples</p></th></tr>
+
+  <tr class="new-row"><td><p id="@abstract_data_type_1"><a class="jump" href="index.html#@abstract_data_type_1"></a>抽象数据类型</p></td>
+    <td><p id="@class_1"><a class="jump" href="index.html#@class_1"></a>Class</p></td>
+    <td><p id="@date"><a class="jump" href="index.html#@date"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date"><code>Date</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@interface_class-es_1"><a class="jump" href="index.html#@interface_class-es_1"></a>接口 + 类 <sup>1</sup></p></td>
+    <td><p id="@arraylike_array"><a class="jump" href="index.html#@arraylike_array"></a><a href="https://typhonjs-typedoc.github.io/ts-lib-docs/2023/esm/interfaces/ArrayLike.html"><code>ArrayLike</code></a> and <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array"><code>Array</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@enum_2"><a class="jump" href="index.html#@enum_2"></a>Enum <sup>2</sup></p></td>
+    <td><p id="@pencolor"><a class="jump" href="index.html#@pencolor"></a><a href="../../psets/ps0/doc/enums/turtle.PenColor.html"><code>PenColor</code></a></p></td></tr>
+
+  <tr class="new-row"><td><p id="@creator_operation"><a class="jump" href="index.html#@creator_operation"></a>创建者操作</p></td>
+    <td><p>构造函数</p></td>
+    <td><p id="@array_1"><a class="jump" href="index.html#@array_1"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/Array"><code>Array()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_factory_method"><a class="jump" href="index.html#@static_factory_method"></a>静态（工厂）方法</p></td>
+    <td colspan="2"><p id="@array-of"><a class="jump" href="index.html#@array-of"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/of"><code>Array.of()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@constant_3"><a class="jump" href="index.html#@constant_3"></a>Constant <sup>3</sup></p></td>
+    <td><p id="@number-positive_infinity"><a class="jump" href="index.html#@number-positive_infinity"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/POSITIVE_INFINITY"><code>Number.POSITIVE_INFINITY</code></a></p></td></tr>
+
+  <tr class="new-row"><td><p id="@observer_operation"><a class="jump" href="index.html#@observer_operation"></a>观察者操作</p></td>
+    <td><p id="@instance_method_0"><a class="jump" href="index.html#@instance_method_0"></a>实例方法</p></td>
+    <td><p id="@string-charat"><a class="jump" href="index.html#@string-charat"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/charAt"><code>String.charAt()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_method_0"><a class="jump" href="index.html#@static_method_0"></a>静态方法</p></td>
+    <td><p id="@object-entries"><a class="jump" href="index.html#@object-entries"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries"><code>Object.entries()</code></a></p></td></tr>
+
+
+  <tr class="new-row"><td><p id="@producer_operation"><a class="jump" href="index.html#@producer_operation"></a>生产者操作</p></td>
+    <td><p id="@instance_method_1"><a class="jump" href="index.html#@instance_method_1"></a>实例方法</p></td>
+    <td><p id="@string-trim"><a class="jump" href="index.html#@string-trim"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/Trim"><code>String.trim()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_method_1"><a class="jump" href="index.html#@static_method_1"></a>静态方法</p></td>
+    <td colspan="2"><p id="@math-floor"><a class="jump" href="index.html#@math-floor"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor"><code class="no-markdown">Math.<wbr>floor()</code></a></p></td></tr>
+
+
+  <tr class="new-row"><td><p id="@mutator_operation"><a class="jump" href="index.html#@mutator_operation"></a>变化者操作</p></td>
+    <td><p id="@instance_method_2"><a class="jump" href="index.html#@instance_method_2"></a>实例方法</p></td>
+    <td><p id="@array-push"><a class="jump" href="index.html#@array-push"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push"><code>Array.push()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_method_2"><a class="jump" href="index.html#@static_method_2"></a>静态方法</p></td>
+    <td><p id="@object-assign"><a class="jump" href="index.html#@object-assign"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign"><code>Object.assign()</code></a></p></td></tr>
+
+  <tr class="new-row"><td><p id="@representation_5"><a class="jump" href="index.html#@representation_5"></a>表示</p></td>
+    <td><p id="@private_fields"><a class="jump" href="index.html#@private_fields"></a><code>private</code> fields</p></td>
+    <td></td></tr></tbody></table>
+
+<p id="@notes"><a class="jump" href="index.html#@notes"></a>Notes:</p>
+
+<ol id="@defining_abstract_data">
+<li><a class="jump" href="index.html#@defining_abstract_data"></a>使用<em>接口 + 类</em>定义抽象数据类型。 <em>interface + class(es)</em>.
+We’ll discuss interfaces in a future reading.</li>
+<li>使用<em>接口 + 类</em>定义抽象数据类型。 <em>enumeration</em> (<code>enum</code>).
+Enums are ideal for ADTs that have a small fixed set of values, like the days of the week.
+We’ve already seen <a href="../../tools/typescript/index.html#enumerations">TypeScript 中的枚举</a>, and we’ll discuss enumerations further in a future reading.   </li>
+<li>Using a <em>constant</em> object as a creator 操作。
+This pattern is commonly seen in immutable types, where the simplest or emptiest value of the type is simply a public constant, and producers are used to build up more complex values from it.</li>
+</ol>
+
+</div><h2 id="testing_an_abstract_data_type"><a class="jump" href="index.html#testing_an_abstract_data_type"></a>测试抽象数据类型</h2><div data-outline="testing_an_abstract_data_type">
+
+<p id="@build_test_suite"><a class="jump" href="index.html#@build_test_suite"></a>我们通过为每个操作创建测试来构建抽象数据类型的测试套件。
+These tests inevitably interact with each other.  The only way to test creators, producers, and mutators is by calling observers on the objects that result, and likewise, the only way to test observers is by creating objects for them to observe.</p>
+
+<p id="@here-s_might_partition"><a class="jump" href="index.html#@here-s_might_partition"></a>Here’s how we might partition the input spaces of the four operations in our <a href="index.html#example_different_representations_for_strings"><code>MyString</code></a> type:</p>
+
+<pre id="@testing_strategy_each_operation_mystring_constructor_partition_string_length"><a class="jump" href="index.html#@testing_strategy_each_operation_mystring_constructor_partition_string_length"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// testing strategy for each operation of MyString:</span>
+<span class="hljs-comment">//</span>
+<span class="hljs-comment">// constructor:</span>
+<span class="hljs-comment">//    partition on string length: 0, 1, &gt;1</span>
+<span class="hljs-comment">// length(): </span>
+<span class="hljs-comment">//    partition on string length: 0, 1, &gt;1</span>
+<span class="hljs-comment">//    partition on this: produced by constructor, produced by substring()</span>
+<span class="hljs-comment">// charAt(): </span>
+<span class="hljs-comment">//    partition on string length: 0, 1, &gt;1</span>
+<span class="hljs-comment">//    partition on i=0, 0&lt;i&lt;len-1, i=len-1</span>
+<span class="hljs-comment">//    partition on this: produced by constructor, produced by substring()</span>
+<span class="hljs-comment">// substring():</span>
+<span class="hljs-comment">//    partition on string length: 0, 1, &gt;1</span>
+<span class="hljs-comment">//    partition on start=0, 0&lt;start&lt;len, start=len</span>
+<span class="hljs-comment">//    partition on end=0, 0&lt;end&lt;len, end=len</span>
+<span class="hljs-comment">//    partition on end-start: 0, &gt;0</span>
+<span class="hljs-comment">//    partition on this: produced by constructor, produced by substring()</span></code></pre>
+
+<p id="@since_several_operations"><a class="jump" href="index.html#@since_several_operations"></a>Since several operations share the same partitions, we can also write this more DRYly:</p>
+
+<pre id="@testing_strategy_each_operation_mystring_constructor_length_charat_substring"><a class="jump" href="index.html#@testing_strategy_each_operation_mystring_constructor_length_charat_substring"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// testing strategy for each operation of MyString:</span>
+<span class="hljs-comment">//</span>
+<span class="hljs-comment">// constructor, length(), charAt(), substring():</span>
+<span class="hljs-comment">//    partition on string length: 0, 1, &gt;1</span>
+<span class="hljs-comment">// length(), charAt(), substring():</span>
+<span class="hljs-comment">//    partition on this: produced by constructor, produced by substring()</span>
+<span class="hljs-comment">// charAt(): </span>
+<span class="hljs-comment">//    partition on i=0, 0&lt;i&lt;len-1, i=len-1</span>
+<span class="hljs-comment">// substring():</span>
+<span class="hljs-comment">//    partition on start=0, 0&lt;start&lt;len, start=len</span>
+<span class="hljs-comment">//    partition on end=0, 0&lt;end&lt;len, end=len</span>
+<span class="hljs-comment">//    partition on end-start: 0, &gt;0</span></code></pre>
+
+<p id="@now_want_test"><a class="jump" href="index.html#@now_want_test"></a>现在我们需要覆盖这些划分的测试用例。
+注意，直接在 <code>assert.strictEqual</code> or <code>assert.deepStrictEqual</code> directly on <code>MyString</code> objects wouldn’t be appropriate, because we haven’t defined the notion of equality for <code>MyString</code>.
+We’ll talk about how to implement equality carefully in a later reading.
+For now, the only operations we can perform with MyStrings are the ones we’ve defined above: the constructor, <code>length</code>, <code>charAt</code>, and <code>substring</code>.</p>
+
+<p id="@given_constraint_compact"><a class="jump" href="index.html#@given_constraint_compact"></a>Given that constraint, a compact test suite that covers all these partitions might look like:</p>
+
+<pre id="@it-should_work_n-character"><a class="jump" href="index.html#@it-should_work_n-character"></a><code class="language-ts hljs typescript">it(<span class="hljs-string">'should work for n-character string'</span>, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">'yes'</span>)
+  assert.strictEqual(s.length(), <span class="hljs-number">3</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">0</span>), <span class="hljs-string">'y'</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">1</span>), <span class="hljs-string">'e'</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">2</span>), <span class="hljs-string">'s'</span>);
+});
+
+it(<span class="hljs-string">'should work for 1-character string'</span>, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">'L'</span>);
+  assert.strictEqual(s.length(), <span class="hljs-number">1</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">0</span>), <span class="hljs-string">'L'</span>);
+});
+
+it(<span class="hljs-string">'should work for empty string'</span>, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">''</span>);
+  assert.strictEqual(s.length(), <span class="hljs-number">0</span>);
+  <span class="hljs-keyword">const</span> t = s.substring(<span class="hljs-number">0</span>,<span class="hljs-number">0</span>);
+  assert.strictEqual(t.length(), <span class="hljs-number">0</span>);
+});
+
+it(<span class="hljs-string">'should work for substring() of middle of string'</span>, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">'hello'</span>).substring(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>);
+  assert.strictEqual(s.length(), <span class="hljs-number">1</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">0</span>), <span class="hljs-string">'e'</span>);
+});
+
+it(<span class="hljs-string">'should work for substring() of whole string'</span>, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">'bye'</span>).substring(<span class="hljs-number">0</span>, <span class="hljs-number">3</span>);
+  assert.strictEqual(s.length(), <span class="hljs-number">3</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">0</span>), <span class="hljs-string">'b'</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">1</span>), <span class="hljs-string">'y'</span>);
+  assert.strictEqual(s.charAt(<span class="hljs-number">2</span>), <span class="hljs-string">'e'</span>);
+});
+
+it(<span class="hljs-string">'should work for substring() of empty string returned by substring()'</span>, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-keyword">const</span> s = <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">'again'</span>).substring(<span class="hljs-number">1</span>, <span class="hljs-number">1</span>).substring(<span class="hljs-number">0</span>, <span class="hljs-number">0</span>);
+  assert.strictEqual(s.length(), <span class="hljs-number">0</span>);
+});</code></pre>
+
+<p id="@try_match_each"><a class="jump" href="index.html#@try_match_each"></a>尝试将每个测试用例与其覆盖的子域匹配。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-testing_an_abstract_data_type"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-testing_an_abstract_data_type-partition_covering" data-target="#ex-testing_an_abstract_data_type-partition_covering" data-toggle="collapse"><a class="jump" href="index.html#@ex-testing_an_abstract_data_type-partition_covering"></a><span class="panel-title">划分覆盖</span></div><div class="panel-collapse collapse exercise-panel" id="ex-testing_an_abstract_data_type-partition_covering" data-outline="partition_covering" data-ex-id="testing_an_abstract_data_type/partition_covering" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@which_test_cases_cover_subdomain_charat"><a class="jump" href="index.html#@which_test_cases_cover_subdomain_charat"></a>哪些测试用例覆盖子域 “<code>charAt()</code> with string length = 1”?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="should work for n-character string"><label for="md_converted_choice_5_0"><input type="checkbox" id="md_converted_choice_5_0"><code>should work for n-character string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for 1-character string"><label for="md_converted_choice_5_1"><input type="checkbox" id="md_converted_choice_5_1"><code>should work for 1-character string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for empty string"><label for="md_converted_choice_5_2"><input type="checkbox" id="md_converted_choice_5_2"><code>should work for empty string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of middle of string"><label for="md_converted_choice_5_3"><input type="checkbox" id="md_converted_choice_5_3"><code>should work for substring() of middle of string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of whole string"><label for="md_converted_choice_5_4"><input type="checkbox" id="md_converted_choice_5_4"><code>should work for substring() of whole string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of empty string returned by substring()"><label for="md_converted_choice_5_5"><input type="checkbox" id="md_converted_choice_5_5"><code>should work for substring() of empty string returned by substring()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_test_cases_cover_subdomain_substring"><a class="jump" href="index.html#@which_test_cases_cover_subdomain_substring"></a>哪些测试用例覆盖子域 “<code>substring()</code> 产生的字符串的 by <code>substring()</code>“?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="should work for n-character string"><label for="md_converted_choice_6_0"><input type="checkbox" id="md_converted_choice_6_0"><code>should work for n-character string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for 1-character string"><label for="md_converted_choice_6_1"><input type="checkbox" id="md_converted_choice_6_1"><code>should work for 1-character string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for empty string"><label for="md_converted_choice_6_2"><input type="checkbox" id="md_converted_choice_6_2"><code>should work for empty string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of middle of string"><label for="md_converted_choice_6_3"><input type="checkbox" id="md_converted_choice_6_3"><code>should work for substring() of middle of string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of whole string"><label for="md_converted_choice_6_4"><input type="checkbox" id="md_converted_choice_6_4"><code>should work for substring() of whole string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of empty string returned by substring()"><label for="md_converted_choice_6_5"><input type="checkbox" id="md_converted_choice_6_5"><code>should work for substring() of empty string returned by substring()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p>哪些测试用例覆盖子域 “构造函数返回字符串长度 &gt; 1”?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="should work for n-character string"><label for="md_converted_choice_7_0"><input type="checkbox" id="md_converted_choice_7_0"><code>should work for n-character string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for 1-character string"><label for="md_converted_choice_7_1"><input type="checkbox" id="md_converted_choice_7_1"><code>should work for 1-character string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for empty string"><label for="md_converted_choice_7_2"><input type="checkbox" id="md_converted_choice_7_2"><code>should work for empty string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() for middle of string"><label for="md_converted_choice_7_3"><input type="checkbox" id="md_converted_choice_7_3"><code>should work for substring() for middle of string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of whole string"><label for="md_converted_choice_7_4"><input type="checkbox" id="md_converted_choice_7_4"><code>should work for substring() of whole string</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="should work for substring() of empty string returned by substring()"><label for="md_converted_choice_7_5"><input type="checkbox" id="md_converted_choice_7_5"><code>should work for substring() of empty string returned by substring()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-testing_an_abstract_data_type-unit_testing_an_adt" data-target="#ex-testing_an_abstract_data_type-unit_testing_an_adt" data-toggle="collapse"><a class="jump" href="index.html#@ex-testing_an_abstract_data_type-unit_testing_an_adt"></a><span class="panel-title">ADT 的单元测试</span></div><div class="panel-collapse collapse exercise-panel" id="ex-testing_an_abstract_data_type-unit_testing_an_adt" data-outline="unit_testing_an_adt" data-ex-id="testing_an_abstract_data_type/unit_testing_an_adt" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@units_being_unit-tested"><a class="jump" href="index.html#@units_being_unit-tested"></a>What “units” are being unit-tested by ‘应该适用于 n 个字符的字符串’?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="constructor operation"><label for="md_converted_choice_8_0"><input type="checkbox" id="md_converted_choice_8_0">构造函数操作</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="length operation"><label for="md_converted_choice_8_1"><input type="checkbox" id="md_converted_choice_8_1"><code>length</code> operation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="charAt operation"><label for="md_converted_choice_8_2"><input type="checkbox" id="md_converted_choice_8_2"><code>charAt</code> operation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="substring operation"><label for="md_converted_choice_8_3"><input type="checkbox" id="md_converted_choice_8_3"><code>substring</code> operation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="assert.strictEqual operation"><label for="md_converted_choice_8_4"><input type="checkbox" id="md_converted_choice_8_4"><code>assert.strictEqual</code> operation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-testing_an_abstract_data_type-why_not_just_use_equality" data-target="#ex-testing_an_abstract_data_type-why_not_just_use_equality" data-toggle="collapse"><a class="jump" href="index.html#@ex-testing_an_abstract_data_type-why_not_just_use_equality"></a><span class="panel-title">为什么不直接使用相等性？</span></div><div class="panel-collapse collapse exercise-panel" id="ex-testing_an_abstract_data_type-why_not_just_use_equality" data-outline="why_not_just_use_equality" data-ex-id="testing_an_abstract_data_type/why_not_just_use_equality" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@louis_reasoner_says"><a class="jump" href="index.html#@louis_reasoner_says"></a>Louis Reasoner says: “为什么我们使用 <code>length()</code> and <code>charAt()</code> to test <code>substring()</code>?  为什么不直接检查 <code>substring()</code> directly?”</p>
+
+<p id="@he_rewrites_one"><a class="jump" href="index.html#@he_rewrites_one"></a>他重写了一个测试用例来说明他的意思：</p>
+
+<pre id="@it-should_work_substring"><a class="jump" href="index.html#@it-should_work_substring"></a><code class="language-ts hljs typescript">it(<span class="hljs-string">'should work for substring() of whole string'</span>, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  assert.strictEqual(<span class="hljs-keyword">new</span> MyString(<span class="hljs-string">'bye'</span>).substring(<span class="hljs-number">0</span>, <span class="hljs-number">3</span>), <span class="hljs-keyword">new</span> MyString(<span class="hljs-string">'bye'</span>));
+});</code></pre>
+
+<p id="@he_surprised_find"><a class="jump" href="index.html#@he_surprised_find"></a>He is surprised to find that his test case doesn’t work.</p>
+
+<p id="@which_following_true_0"><a class="jump" href="index.html#@which_following_true_0"></a>以下哪些是正确的？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="assert.strictEqual() uses === to compare"><label for="md_converted_choice_10_0"><input type="radio" id="md_converted_choice_10_0" name="md_converted_radio_10"><code>assert.strictEqual()</code> uses <code>===</code> 进行比较</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="assert.strictEqual() uses == to compare"><label for="md_converted_choice_10_1"><input type="radio" id="md_converted_choice_10_1" name="md_converted_radio_10"><code>assert.strictEqual()</code> uses <code>==</code> 进行比较</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="assert.strictEqual() uses Object.is() to compare"><label for="md_converted_choice_10_2"><input type="radio" id="md_converted_choice_10_2" name="md_converted_radio_10"><code>assert.strictEqual()</code> uses <code>Object.is()</code> 进行比较</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@louis_tries_few"><a class="jump" href="index.html#@louis_tries_few"></a>Louis 尝试了他的测试的几个更多变体：</p>
+
+<ul id="@assert-new_mystring-bye-substring-0_3">
+<li><a class="jump" href="index.html#@assert-new_mystring-bye-substring-0_3"></a><code>assert(new MyString('bye').substring(0, 3) === new MyString('bye'));</code></li>
+<li><code>assert(new MyString('bye').substring(0, 3) == new MyString('bye'));</code></li>
+</ul>
+
+<p id="@neither_them_work"><a class="jump" href="index.html#@neither_them_work"></a>它们都不起作用。</p>
+
+<p id="@which_following_true_1"><a class="jump" href="index.html#@which_following_true_1"></a>以下哪些是正确的？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="== converts two MyString objects into string objects automatically, using toString()"><label for="md_converted_choice_11_0"><input type="radio" id="md_converted_choice_11_0" name="md_converted_radio_11"><code>==</code> 将两个 <code>MyString</code> 对象转换为 <code>string</code> objects automatically, using <code>toString()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="=== converts two MyString objects into string objects automatically, using toString()"><label for="md_converted_choice_11_1"><input type="radio" id="md_converted_choice_11_1" name="md_converted_radio_11"><code>===</code> 将两个 <code>MyString</code> 对象转换为 <code>string</code> objects automatically, using <code>toString()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Object.is() converts two MyString objects into string objects automatically, using toString()"><label for="md_converted_choice_11_2"><input type="radio" id="md_converted_choice_11_2" name="md_converted_radio_11"><code>Object.is()</code> 将两个 <code>MyString</code> 对象转换为 <code>string</code> objects automatically, using <code>toString()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="none of these automatic conversions happen"><label for="md_converted_choice_11_3"><input type="radio" id="md_converted_choice_11_3" name="md_converted_radio_11">这些自动转换都不会发生</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@louis_tries_one"><a class="jump" href="index.html#@louis_tries_one"></a>Louis 又尝试了一件事：</p>
+
+<ul id="@assert-new_mystring-bye-substring-0_3-tostring">
+<li><a class="jump" href="index.html#@assert-new_mystring-bye-substring-0_3-tostring"></a><code>assert(new MyString('bye').substring(0, 3).toString() === 'bye');</code></li>
+</ul>
+
+<p id="@doesn-t_work_either"><a class="jump" href="index.html#@doesn-t_work_either"></a>This doesn’t work either.</p>
+
+<p id="@alyssa_p_hacker"><a class="jump" href="index.html#@alyssa_p_hacker"></a>Alyssa P. Hacker 质疑 Louis 在测试中替换 <code>charAt()</code> and <code>length()</code> 的基本假设。
+以下哪些是正确的？</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="equality is an ADT operation, just like charAt() and length()"><label for="md_converted_choice_9_0"><input type="checkbox" id="md_converted_choice_9_0">equality is an ADT operation, just like <code>charAt()</code> and <code>length()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="toString() is an ADT operation, just like charAt() and length() "><label for="md_converted_choice_9_1"><input type="checkbox" id="md_converted_choice_9_1"><code>toString()</code> is an ADT operation, just like <code>charAt()</code> and <code>length()</code> </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<p id="@notice_test_adt"><a class="jump" href="index.html#@notice_test_adt"></a>Notice that when we test ADT operations, we can and should partition on the state of input <code>this</code>.
+的状态进行划分。我们<em>不</em>按 rep 的状态进行划分。
+In the example above:</p>
+
+<ul id="@partition_abstract_length">
+<li><a class="jump" href="index.html#@partition_abstract_length"></a>我们按 abstract length of the string, not the length of rep array <code>a</code>.</li>
+<li>我们按 <code>start</code> and <code>end</code> inputs to <code>substring()</code>, not <code>start</code> or <code>end</code> 在 rep 中的</li>
+</ul>
+
+<p id="@also_example"><a class="jump" href="index.html#@also_example"></a>同样在那个例子中：</p>
+
+<ul id="@partition_using_our">
+<li><a class="jump" href="index.html#@partition_using_our"></a>We partition using our knowledge, as a client, of how an instance has been created, produced, and mutated.</li>
+</ul>
+
+<p id="@without_knowing_anything"><a class="jump" href="index.html#@without_knowing_anything"></a>Without knowing anything about the representation, we can hypothesize that bugs might be hiding in the different code paths taken by different sequences of actions on a type.
+对于可变的 ADT 尤其如此。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-testing_an_abstract_data_type_2"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-testing_an_abstract_data_type_2-partitions_for_a_mutable_adt" data-target="#ex-testing_an_abstract_data_type_2-partitions_for_a_mutable_adt" data-toggle="collapse"><a class="jump" href="index.html#@ex-testing_an_abstract_data_type_2-partitions_for_a_mutable_adt"></a><span class="panel-title">可变 ADT 的划分</span></div><div class="panel-collapse collapse exercise-panel" id="ex-testing_an_abstract_data_type_2-partitions_for_a_mutable_adt" data-outline="partitions_for_a_mutable_adt" data-ex-id="testing_an_abstract_data_type/partitions_for_a_mutable_adt" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-06-abstract-data-types"><div class="panel-body">
+
+<p id="@suppose_now_implementing"><a class="jump" href="index.html#@suppose_now_implementing"></a>Suppose we’re now implementing <code>MutableMyString</code>:</p>
+
+<pre id="@mutablemystring_represents_mutable"><a class="jump" href="index.html#@mutablemystring_represents_mutable"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** MutableMyString represents a mutable sequence of characters. */</span>
+<span class="hljs-keyword">class</span> MutableMyString {
+    <span class="hljs-comment">// back to the simple rep (question: why can't we use the sharing rep any more?)</span>
+    <span class="hljs-keyword">private</span> a: <span class="hljs-built_in">Uint16Array</span>;
+
+    <span class="hljs-comment">// same creator, observers, and producer as before</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>) { ... }
+    <span class="hljs-keyword">public</span> length(): <span class="hljs-built_in">number</span> { ... }
+    <span class="hljs-keyword">public</span> charAt(i: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">string</span> { ... }
+    <span class="hljs-keyword">public</span> substring(start: <span class="hljs-built_in">number</span>, end: <span class="hljs-built_in">number</span>): MutableMyString { ... }
+
+    <span class="hljs-comment">// now with a mutator:</span>
+    <span class="hljs-comment">/**
+     * Reverse the order of characters in this string.
+     */</span>
+    <span class="hljs-keyword">public</span> reverse(): <span class="hljs-built_in">void</span> { ... }
+}</code></pre>
+
+<p id="@specs_constructor_length"><a class="jump" href="index.html#@specs_constructor_length"></a><a href="index.html#example_different_representations_for_strings">The specs for the constructor, <code>length</code>, <code>charAt</code>, and <code>substring</code> 的规范保持不变</a>.</p>
+
+<p id="@which_following_might"><a class="jump" href="index.html#@which_following_might"></a>对于操作 <em>substring : MutableMyString × number × number → MutableMyString</em>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="whether start ≤ end"><label for="md_converted_choice_12_0"><input type="checkbox" id="md_converted_choice_12_0">whether <code>start</code> ≤ <code>end</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="whether this is the empty string"><label for="md_converted_choice_12_1"><input type="checkbox" id="md_converted_choice_12_1">whether <code>this</code> 是空字符串</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="whether this is the result of taking a substring"><label for="md_converted_choice_12_2"><input type="checkbox" id="md_converted_choice_12_2">whether <code>this</code> 是取 <code>substring</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="whether this is the result of being reverse’d"><label for="md_converted_choice_12_3"><input type="checkbox" id="md_converted_choice_12_3">whether <code>this</code> 是被 <code>reverse</code>’d</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="whether start ≤ a.length"><label for="md_converted_choice_12_4"><input type="checkbox" id="md_converted_choice_12_4">whether <code>start</code> ≤ <code>a.length</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="whether end ≤ a.length"><label for="md_converted_choice_12_5"><input type="checkbox" id="md_converted_choice_12_5">whether <code>end</code> ≤ <code>a.length</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="summary"><a class="jump" href="index.html#summary"></a>Summary</h2><div data-outline="summary">
+
+<ul id="@abstract_data_types_characterized_their_operations">
+<li><a class="jump" href="index.html#@abstract_data_types_characterized_their_operations"></a>抽象数据类型 are characterized by their operations.</li>
+<li>Operations can be classified into creators, producers, observers, and mutators.</li>
+<li>An ADT’s specification is its set of operations and their specs.</li>
+<li>A good ADT is simple, coherent, adequate, and representation independent.</li>
+<li>An ADT is tested by generating tests for each of its operations, but using the creators, producers, mutators, and observers together in the same tests.</li>
+</ul>
+
+<p id="@these_ideas_connect"><a class="jump" href="index.html#@these_ideas_connect"></a>这些概念与我们优秀软件的三个关键属性关联如下：</p>
+
+<ul>
+<li><p id="@safe_bugs_good"><a class="jump" href="index.html#@safe_bugs_good"></a><strong>免于 bug.</strong>  A good ADT offers a well-defined contract for a data type, so that clients know what to expect from the data type, and implementers have well-defined freedom to vary.</p></li>
+<li><p id="@easy_understand_good"><a class="jump" href="index.html#@easy_understand_good"></a><strong>易于理解.</strong> A good ADT hides its implementation behind a set of simple operations, so that programmers using the ADT only need to understand the operations, not the details of the implementation.</p></li>
+<li><p id="@ready_change_representation"><a class="jump" href="index.html#@ready_change_representation"></a><strong>适应变化.</strong>  表示独立性 allows the implementation of an abstract data type to change without requiring changes from its clients.</p></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 年春季课程网站存档  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-06-abstract-data-types"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:29:34 GMT+0000 (Coordinated Universal Time)
+--></html>

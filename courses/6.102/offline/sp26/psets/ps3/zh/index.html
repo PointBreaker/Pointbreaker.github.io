@@ -1,0 +1,846 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+
+<title>问题集 3：Memely</title>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件工程</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#problem_set_3_memely">问题集 3：Memely</a></li><li><a href="index.html#get_the_code">获取代码</a></li><li><a href="index.html#overview">概述</a></li><li><a href="index.html#provided_code">提供的代码</a></li><li><a href="index.html#problem_1_representing_expressions">问题 1：表示表达式</a></li><li><a href="index.html#problem_2_parsing_expressions">问题 2：解析表达式</a></li><li><a href="index.html#problem_3_size">问题 3：大小</a></li><li><a href="index.html#problem_4_image_generation">问题 4：图像生成</a></li><li><a href="index.html#before_youre_done">完成之前</a></li><li><a href="index.html#submitting">提交</a></li><li><a href="index.html#grading">评分</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="problem_set_3_memely"><a class="jump" href="index.html#problem_set_3_memely"></a>问题集 3：Memely</h1><div data-outline="problem_set_3_memely">
+
+<style>
+h2 + div[data-outline^=problem_] ol {
+  list-style-type: lower-alpha;
+}
+p img[src*=icon] {
+  padding-bottom: 2px;
+}
+.panel-default.pull-right.pull-margin {
+  font-size: 90%;
+  max-width: 33%;
+}
+.panel-default.pull-right.pull-margin .panel-heading {
+  padding: 6px 8px;
+}
+.panel-default.pull-right.pull-margin .panel-body {
+  padding: 8px;
+}
+
+.userin { color: #006600; background: #eeffee; }
+
+blockquote .tooltip.in { opacity: 1; }
+blockquote .tooltip-inner { max-width: 750px; }
+blockquote .tooltip-inner .image-size {
+  display: inline-block;
+  background: white;
+  color: black;
+  margin: 0 2px;
+}
+</style>
+<script>
+window.onHandoutWillRender = function() {
+  $('.example-outputs').append($('<div>').addClass('panel-heading').text('这些是示例输出，并非完全确定的输出')).append($('<div>').addClass('panel-body').text(" 你的系统的输出可能在规范范围内有所不同。差异示例包括空白字符、括号、化简、运算符表示、数字表示、字体、文本颜色、文本大小和错误消息。"));
+};
+window.onHandoutDidRender = function() {
+  var images = {
+    'black.png': [30, 30],
+    'white.png': [30, 30],
+    'tech1.png': [200, 150],
+    'tech2.png': [200, 140],
+    'tech3.png': [200, 150],
+    'tech4.png': [200, 160],
+    'tech5.png': [200, 150],
+    'tech6.png': [200, 160],
+    'boromir.jpg': [550, 325],
+  };
+  $('.show-size-on-hover blockquote p code:first-of-type:not(:has(*))').each(function(idx, elt) {
+    var tip = false;
+    var text = elt.innerHTML.split(/(\w+\.(?:png|jpg))/).map(function(token) {
+      if (images[token]) {
+        tip = true;
+        var padhigh = images[token][1]/3.5+1;
+        var padwide = Math.max(images[token][0]/3.5-8, 2);
+        return '<span class="image-size" style="padding: '+padhigh+'px '+padwide+'px">'+images[token].join('x')+'</span>';
+      }
+      return token;
+    }).join('');
+    if (tip) { $(elt).attr({ title: text }); }
+  });
+  $('blockquote > p > .jump + em').remove();
+};
+window.onHandoutReady = function() {
+  $('blockquote code[title]').tooltip({ html: true });
+};
+</script>
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><div class="handout-due alert alert-danger"><p id="@deadlines_problem_set"><a class="jump" href="index.html#@deadlines_problem_set"></a>本问题集的截止日期显示在<a class="no-markdown alert-link" href="../../calendar-agenda.html">课程日历</a>上。</p></div>
+
+<p id="@problem_set_explore"><a class="jump" href="index.html#@problem_set_explore"></a>在本问题集中，我们将探索解析器、递归数据类型和不可变类型的相等性。</p>
+
+<p id="@compared_previous_problem"><a class="jump" href="index.html#@compared_previous_problem"></a>与之前的问题集相比，我们对代码结构的限制较少。
+此外，你在本问题集中为各问题编写的大部分代码将取决于你决定如何实现问题集的前面部分。
+在编写任何代码之前，请先通读整个作业，并计划好对解决方案进行迭代。</p>
+
+<div class="panel panel-info"><div class="panel-heading"><p id="@design_freedom_restrictions"><a class="jump" href="index.html#@design_freedom_restrictions"></a><strong>设计自由与限制</strong></p></div>
+<div class="panel-body"><p id="@several_parts_problem"><a class="jump" href="index.html#@several_parts_problem"></a>在本问题集的若干部分中，类和方法将由你来指定和创建，但你必须注意所提供文档中的 <strong>PS3 说明</strong> 部分。</p>
+
+<p id="@you_must_satisfy"><a class="jump" href="index.html#@you_must_satisfy"></a><strong>你必须满足所提供接口和方法的规格说明。</strong>
+不过，你可以加强所提供的规格说明或添加新方法。
+在本问题集上，与之前的问题集不同，我们不会针对任何其他实现来运行你的测试。</p>
+
+<p id="@problem_set_didit"><a class="jump" href="index.html#@problem_set_didit"></a>在本问题集上，Didit 提供的关于代码正确性的反馈较少：</p>
+
+<ul id="@your_responsibility_examine">
+<li><a class="jump" href="index.html#@your_responsibility_examine"></a>检查 Didit 反馈并确保你的代码能够正确编译和运行以供评分，这是你自己的责任。</li>
+<li>但是，<strong>正确性完全由你负责</strong>，你必须依靠自己严谨的规格说明、测试和实现来保证正确性。</li>
+</ul>
+
+<p id="@please_remember_push"><a class="jump" href="index.html#@please_remember_push"></a>请记得尽早 push：我们无法保证 Didit 及时构建，尤其是在问题集截止日期临近时。</p></div></div>
+
+<h2 id="get_the_code"><a class="jump" href="index.html#get_the_code"></a>获取代码</h2><div data-outline="get_the_code">
+
+<p id="@get_started"><a class="jump" href="index.html#@get_started"></a>要开始，</p>
+
+<ol>
+<li><p id="@ask_didit_create"><a class="jump" href="index.html#@ask_didit_create"></a>让 Didit 在 github.mit.edu 上为你<a href="https://didit.mit.edu/6.102/sp26/psets/ps3">创建一个远程 <code>psets/ps3</code> 仓库</a>。</p></li>
+<li><p id="@clone_repo_find"><a class="jump" href="index.html#@clone_repo_find"></a>克隆仓库。
+在你的 Didit 作业页面顶部找到 <code>git clone</code> 命令，将其完整复制，粘贴到终端中并运行。</p></li>
+<li><p id="@cd_ps3-username_run"><a class="jump" href="index.html#@cd_ps3-username_run"></a><code>cd ps3-«username»</code>，运行 <code>npm install</code>，然后在 Visual Studio Code 中打开。
+如果你需要复习如何创建、克隆或设置仓库，请参见<a href="../ps0/index.html#clone">问题集 0</a>。</p>
+
+<div class="panel panel-default panel-warning"><div class="panel-heading"><p id="@installing_canvas_macos"><a class="jump" href="index.html#@installing_canvas_macos"></a>在 macOS 上安装 canvas</p></div>
+  <div class="panel-body"><p id="@macos_users_get"><a class="jump" href="index.html#@macos_users_get"></a>对于 macOS 用户，如果 <code>npm install</code> 给出了一个似乎与安装 canvas 相关的错误，请尝试安装 <a href="https://brew.sh/">Homebrew</a>，然后使用<a href="https://flaviocopes.com/fix-node-canvas-error-pre-gyp-macos/">此解决方法</a>来安装 <code>canvas</code> 所需的一些库。如果你的 macOS 版本仍然是 10.x.x，那么你可能还需要升级 macOS。</p></div></div></li>
+</ol>
+
+</div><h2 id="overview"><a class="jump" href="index.html#overview"></a>概述</h2><div data-outline="overview">
+
+<p id="@memes_fun_they"><a class="jump" href="index.html#@memes_fun_they"></a>表情包很有趣。
+如果我们能<em>用编程方式</em>制作它们，那会更有趣。
+在本问题集中，我们将实现一种生成带标题图像表情包的语言！</p>
+
+<p id="@meaning_expression_language"><a class="jump" href="index.html#@meaning_expression_language"></a>该语言中一个表达式的含义是一张生成的图像，即一个具有特定宽度和高度的二维像素数组。
+该语言中所有的宽度和高度都是正整数。</p>
+
+<p id="@two_primitives_language"><a class="jump" href="index.html#@two_primitives_language"></a>该语言的两个基本元素是图像文件，由<strong>文件名</strong>表示，<em>例如</em>：</p>
+
+<div class="row"><div class="col-xs-4"><pre id="@myroom-jpg"><a class="jump" href="index.html#@myroom-jpg"></a><code>myroom.jpg</code></pre></div>
+<div class="col-xs-4"><pre id="@portrait-png"><a class="jump" href="index.html#@portrait-png"></a><code>portrait.png</code></pre></div>
+<div class="col-xs-4"><pre id="@image-file_3"><a class="jump" href="index.html#@image-file_3"></a><code>image-file_3</code></pre></div></div>
+
+<p id="@captions_represented_quoted"><a class="jump" href="index.html#@captions_represented_quoted"></a>以及<strong>标题</strong>，由带引号的字符串表示，<em>例如</em>：</p>
+
+<div class="row"><div class="col-xs-4"><pre id="@my_room"><a class="jump" href="index.html#@my_room"></a><code>"This is my room"</code></pre></div>
+<div class="col-xs-4"><pre><code>"~:┐)"</code></pre></div>
+<div class="col-xs-4"><pre id="@secret"><a class="jump" href="index.html#@secret"></a><code>"it's a secret"</code></pre></div></div>
+
+<div id="filenames_allowed"><p id="@image_filename_loads"><a class="jump" href="index.html#@image_filename_loads"></a>图像文件名从以文件形式存储的图像库中加载指定名称的图像。
+尽管操作系统允许文件名中包含多种字符，但在本语言中，文件名只能由字母、数字或句点组成，还可以包含连字符 <code>-</code> 和下划线 <code>_</code>，只要它们不是文件名的第一个字符。
+图像文件格式可以是<a href="https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img#supported_image_formats">Web 浏览器广泛支持的</a>任何格式。
+如果文件中的图像宽度为零或高度为零（大多数图像格式实际上禁止这种情况），则行为未定义。</p></div>
+
+<p id="@caption_produces_image"><a class="jump" href="index.html#@caption_produces_image"></a>标题生成一张图像，将给定文本显示为单行，不进行自动换行。
+标题可以包含除换行符和双引号之外的任何字符（尽管字体实际显示表情符号等特殊字符的方式未规定）。
+文本的字体、颜色和大小未规定，但必须具有合理的可读性。
+（如果你选择使用默认字体以外的字体，请确保所有公开测试在 Didit 上都能正确渲染。）
+宽度和高度必须为正数，并且足够大以不裁剪任何文本。
+允许有额外的边距或内边距，但未作规定。
+标题的背景应该是透明的，以便在需要时可以放置在其他图像之上。</p>
+
+<p id="@language_includes_several"><a class="jump" href="index.html#@language_includes_several"></a>该语言包含若干用于并置、叠加和调整图像大小的运算符，下文将逐一描述。</p>
+
+<p id="@operator_glues_images_together_side-by-side_e-g"><a class="jump" href="index.html#@operator_glues_images_together_side-by-side_e-g"></a><code>|</code> 运算符将图像<strong>左右</strong>拼接在一起，<em>例如</em>：</p>
+
+<pre id="@a-jpg_b-jpg_c-jpg_0"><a class="jump" href="index.html#@a-jpg_b-jpg_c-jpg_0"></a><code>A.jpg | B.jpg | C.jpg</code></pre>
+
+<p id="@produces_horizontal_three-panel"><a class="jump" href="index.html#@produces_horizontal_three-panel"></a>生成一个水平的三格漫画条。</p>
+
+<p id="@operator_glues_images_together_top-to-bottom_e-g"><a class="jump" href="index.html#@operator_glues_images_together_top-to-bottom_e-g"></a><code>---</code> 运算符将图像<strong>上下</strong>拼接在一起，<em>例如</em>：</p>
+
+<pre id="@1-jpg_2-jpg_3-jpg_0"><a class="jump" href="index.html#@1-jpg_2-jpg_3-jpg_0"></a><code>1.jpg --- 2.jpg --- 3.jpg</code></pre>
+
+<p id="@produces_vertical_three-panel"><a class="jump" href="index.html#@produces_vertical_three-panel"></a>生成一个垂直的三格条。</p>
+
+<p id="@space_tab_carriage"><a class="jump" href="index.html#@space_tab_carriage"></a>符号周围的空格、制表符、回车符和换行符无关紧要，会被忽略，任何至少包含 3 个 <code>-</code> 字符的字符串都可以用来表示单个 <span style="white-space:nowrap"><code>---</code></span> 运算符，所以上例也可以写成：</p>
+
+<pre id="@1-jpg_2-jpg_3-jpg_1"><a class="jump" href="index.html#@1-jpg_2-jpg_3-jpg_1"></a><code>1.jpg
+--------
+2.jpg
+------
+3.jpg</code></pre>
+
+<p id="@side-by-side_gluing_higher"><a class="jump" href="index.html#@side-by-side_gluing_higher"></a>左右拼接的优先级高于上下拼接。
+例如：</p>
+
+<pre id="@a1-jpg_b1-jpg_c1-jpg"><a class="jump" href="index.html#@a1-jpg_b1-jpg_c1-jpg"></a><code>A1.jpg  |  B1.jpg  |  C1.jpg
+-----------------------------
+A2.jpg  |  B2.jpg  |  C2.jpg</code></pre>
+
+<p id="@produces_6-panel_cartoon"><a class="jump" href="index.html#@produces_6-panel_cartoon"></a>生成一个 6 格漫画，排列为 2 行，每行 3 张图像。
+可以使用括号对表达式进行分组并覆盖优先级，因此如果六个图像文件大小都相同，下面是书写相同布局的另一种方式：</p>
+
+<pre id="@a1-jpg_a2-jpg_b1-jpg"><a class="jump" href="index.html#@a1-jpg_a2-jpg_b1-jpg"></a><code>(A1.jpg --- A2.jpg) | (B1.jpg --- B2.jpg) | (C1.jpg --- C2.jpg)</code></pre>
+
+<p id="@images_different_sizes"><a class="jump" href="index.html#@images_different_sizes"></a>当不同大小的图像左右拼接时，较短的图像相对于较高的图像垂直居中，所得组合的高度等于较高图像的高度。
+类似地，当不同大小的图像上下拼接时，较窄的图像相对于较宽的图像水平居中。
+在两种情况下，如果将较小的图像居中需要将其放置在分数像素位置，则可以将其放置在 ±1 像素范围内的整数位置。
+较小图像周围的"空白区域"应该是透明的。</p>
+
+<p id="@language_two_more"><a class="jump" href="index.html#@language_two_more"></a>该语言还有两个组合运算符，用于将一张图像<strong>叠加</strong>到另一张图像上。
+插入符 <code>^</code> 将其第二个参数放置在第一个参数的上部，使得两张图像的顶部对齐，如下所示：</p>
+
+<pre id="@boromir-jpg_one_does_not_simply_0"><a class="jump" href="index.html#@boromir-jpg_one_does_not_simply_0"></a><code>boromir.jpg ^ "One does not simply"</code></pre>
+
+<p id="@similarly_underscore__"><a class="jump" href="index.html#@similarly_underscore__"></a>类似地，下划线 <code>_</code> 将其第二个参数放置在第一个参数的下部，使得底部对齐：</p>
+
+<pre id="@boromir-jpg___walk"><a class="jump" href="index.html#@boromir-jpg___walk"></a><code>boromir.jpg _ "walk into Mordor"</code></pre>
+
+<p id="@arguments___can"><a class="jump" href="index.html#@arguments___can"></a><code>^</code> 和 <code>_</code> 的参数当然可以是任何表达式，尽管它们最常与标题一起使用。
+对于这两个运算符，如果两张图像的宽度不同，则较窄的图像相对于较宽的图像水平居中，分数像素的处理规则与上述相同。
+所得图像的宽度是两张图像宽度的最大值，高度同理。</p>
+
+<p id="@finally_any_expression"><a class="jump" href="index.html#@finally_any_expression"></a>最后，可以使用 <code>@</code> 运算符显式地<strong>调整</strong>任何表达式的大小：</p>
+
+<pre id="@red-jpg_300x200"><a class="jump" href="index.html#@red-jpg_300x200"></a><code>red.jpg @ 300x200</code></pre>
+
+<p id="@which_rescales_image"><a class="jump" href="index.html#@which_rescales_image"></a>这将重新缩放图像（即拉伸或缩小），使其宽度为 300 像素，高度为 200 像素。
+宽度和高度必须是正整数，或者是 <code>?</code>，表示对应的维度应是一个合法的宽度或高度，尽可能保持图像的宽高比。
+例如：</p>
+
+<pre id="@boromir-jpg_100x"><a class="jump" href="index.html#@boromir-jpg_100x"></a><code>boromir.jpg @ 100x?</code></pre>
+
+<p id="@expression_resizes_boromir-jpg"><a class="jump" href="index.html#@expression_resizes_boromir-jpg"></a>此表达式将 <code>boromir.jpg</code> 从其原始尺寸 550x325 调整为 100x59，因为所得的宽高比 100/59 ≅ 1.6949 尽可能接近原始宽高比 550/325 ≅ 1.6923。
+如果宽度和高度都是 <code>?</code>，则该表达式无效，应产生语法错误。
+保持宽高比的 <code>?</code> 对于标题特别有用，例如：</p>
+
+<pre id="@boromir-jpg_one_does_not_simply_550x"><a class="jump" href="index.html#@boromir-jpg_one_does_not_simply_550x"></a><code>boromir.jpg ^ ( "One does not simply" @ 550x? )</code></pre>
+
+<p id="@expression_resizes_caption"><a class="jump" href="index.html#@expression_resizes_caption"></a>此表达式调整标题的大小以填充 <code>boromir.jpg</code> 的宽度，而不会使文本看起来被拉伸或挤压。</p>
+
+<p id="@precedence_operators_goes"><a class="jump" href="index.html#@precedence_operators_goes"></a>运算符的优先级顺序为：<code>@</code> <code>^</code> <code>_</code> <code>|</code> <span style="white-space:nowrap"><code>---</code></span>。
+调整大小的 <code>@</code> 运算符优先级最高，最先应用。
+顶部叠加运算符 <code>^</code> 的优先级次之，其次是底部叠加运算符 <code>_</code>，因此 <code>A _ B ^ C</code> 等价于 <code>A _ (B ^ C)</code>。
+然后应用左右拼接运算符 <code>|code>，最后上下拼接运算符 <code>---</code> 优先级最低。
+优先级可以通过括号覆盖。</p>
+
+<p id="@note_characters__"><a class="jump" href="index.html#@note_characters__"></a>请注意，字符 <code>_</code> 和 <code>-</code> 也可能出现在文件名内部。
+为了在文件名后立即使用 <code>_</code> 和 <code>---</code> 等运算符，运算符必须与文件名用括号分隔，如 <code>(cat.jpg)_"meow"</code>，或用空白字符分隔，如 <code>cat.jpg _ "meow"</code>。
+如果没有这样的分隔，<code>_</code> 和 <code>-</code> 字符将被视为文件名的一部分。</p>
+
+<p><br></p>
+
+<p id="@system_console_user"><a class="jump" href="index.html#@system_console_user"></a>系统有一个控制台用户界面，用户可以输入表达式并查看其结果。
+当用户在控制台输入一个表达式时，该表达式就成为<strong>当前表达式</strong>，并回显给用户，可能会经过重新格式化（用户输入以<span class="userin no-markdown">绿色</span>显示）：</p>
+
+<div class="panel panel-default panel-warning pull-right pull-margin example-outputs"><div class="panel-heading"><p id="@these_example_outputs_not_fully-determined_outputs_0"><a class="jump" href="index.html#@these_example_outputs_not_fully-determined_outputs_0"></a>这些是示例输出，并非完全确定的输出</p></div><div class="panel-body"><p id="@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_0"><a class="jump" href="index.html#@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_0"></a>你的系统的输出可能在规范范围内有所不同。差异示例包括空白字符、括号、化简、运算符表示、数字表示、字体、文本颜色、文本大小和错误消息。</p></div></div>
+
+<pre class="no-markdown" id="@boromir-jpg_one_does_not_simply__"><a class="jump" href="index.html#@boromir-jpg_one_does_not_simply__"></a>&gt; <span class="userin">boromir.jpg ^ "One does not simply" _ "walk into Mordor"</span>
+(boromir.jpg ^ "One does not simply") _ "walk into Mordor"
+
+&gt; <span class="userin">tech1.png ---------- tech2.png ---------- tech3.png</span>
+tech1.png --- (tech2.png --- tech3.png)
+</pre>
+
+<p id="@command_starts_command"><a class="jump" href="index.html#@command_starts_command"></a><em>命令</em>以 <code>!</code> 开头。
+命令对当前表达式进行操作。
+有效的命令有：</p>
+
+<blockquote>
+  <p id="@size_prints_final"><a class="jump" href="index.html#@size_prints_final"></a><strong><code>!size</code></strong> <br>
+  以 <code>WxH</code> 的形式打印当前表达式的最终大小。此命令<strong>不会</strong>更新当前表达式。</p>
+
+  <p id="@image_generates_image"><a class="jump" href="index.html#@image_generates_image"></a><strong><code>!image</code></strong> <br>
+  生成当前表达式所表示的图像并在窗口中显示。此命令<strong>不会</strong>更新当前表达式。</p>
+
+  <p id="@quit_exits_program"><a class="jump" href="index.html#@quit_exits_program"></a><strong><code>!quit</code></strong> <br>
+  退出程序。</p>
+</blockquote>
+
+<p id="@entering_invalid_expression"><a class="jump" href="index.html#@entering_invalid_expression"></a>输入无效表达式会打印错误，但不会更新当前表达式。
+错误应包含人类可读的消息，除此之外没有其他规定。</p>
+
+<p id="@more_examples"><a class="jump" href="index.html#@more_examples"></a>更多示例：</p>
+
+<div class="panel panel-default panel-warning pull-right pull-margin example-outputs"><div class="panel-heading"><p id="@these_example_outputs_not_fully-determined_outputs_1"><a class="jump" href="index.html#@these_example_outputs_not_fully-determined_outputs_1"></a>这些是示例输出，并非完全确定的输出</p></div><div class="panel-body"><p id="@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_1"><a class="jump" href="index.html#@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_1"></a>你的系统的输出可能在规范范围内有所不同。差异示例包括空白字符、括号、化简、运算符表示、数字表示、字体、文本颜色、文本大小和错误消息。</p></div></div>
+
+<pre class="no-markdown" id="@tech1-png_tech2-png_tech1-png-tech2-png"><a class="jump" href="index.html#@tech1-png_tech2-png_tech1-png-tech2-png"></a>&gt; <span class="userin">tech1.png | tech2.png</span>
+tech1.png|tech2.png
+
+&gt; <span class="userin">tech3.png -|-|- tech4.png</span>
+unknown expression
+
+&gt; <span class="userin">!size</span>
+400x150
+
+&gt; <span class="userin">!image</span>
+<img src="figures/example1.png">
+
+</pre>
+
+<p id="@system_also_web"><a class="jump" href="index.html#@system_also_web"></a>系统还有一个 Web 用户界面。
+用户可以输入表达式并点击 <em>Generate</em> 来查看回显的解析后表达式、大小以及生成的图像。</p>
+
+<img src="figures/web.png" width="907" style="max-width:100%; border: 1px solid #ccc; border-radius: 10px;">
+
+<p><br></p>
+
+<p id="@both_user_interfaces"><a class="jump" href="index.html#@both_user_interfaces"></a>两个用户界面都依赖于本问题集代码中提供的这三个函数规格说明：</p>
+
+<ul id="@parse_expression-ts_size">
+<li><a class="jump" href="index.html#@parse_expression-ts_size"></a><code>expression.ts</code> 中的 <a href="doc/functions/expression.parse.html"><code>parse()</code></a></li>
+<li><code>commands.ts</code> 中的 <a href="doc/functions/commands.size.html"><code>size()</code></a></li>
+<li><code>commands.ts</code> 中的 <a href="doc/functions/commands.image.html"><code>image()</code></a></li>
+</ul>
+
+<p id="@there_two_more"><a class="jump" href="index.html#@there_two_more"></a><code>expression.ts</code> 中还有两个必需的规格说明：</p>
+
+<ul id="@tostring_equalvalue">
+<li><a class="jump" href="index.html#@tostring_equalvalue"></a><a href="doc/interfaces/expression.MemeExpression.html#toString"><code>toString()</code></a></li>
+<li><a href="doc/interfaces/expression.MemeExpression.html#equalValue"><code>equalValue()</code></a></li>
+</ul>
+
+<p id="@problem_1_create"><a class="jump" href="index.html#@problem_1_create"></a><strong>问题 1：</strong>我们将创建 <code>MemeExpression</code> 数据类型来表示程序中的表达式。</p>
+
+<p id="@problem_2_create"><a class="jump" href="index.html#@problem_2_create"></a><strong>问题 2：</strong>我们将创建将字符串转换为 <code>MemeExpression</code> 的解析器，并实现 <code>parse()</code>。</p>
+
+<p id="@problems_3-4_add"><a class="jump" href="index.html#@problems_3-4_add"></a><strong>问题 3-4：</strong>我们将为 <code>MemeExpression</code> 添加新的操作，用于计算表达式的大小和从表达式生成图像，并实现相应的命令 <code>size()</code> 和 <code>image()</code>。</p>
+
+<div id="iterate" class="panel panel-warning"><div class="panel-heading"><p id="@iterative_development_recommendation"><a class="jump" href="index.html#@iterative_development_recommendation"></a><strong>迭代开发建议</strong></p></div>
+<div class="panel-body"><p id="@first_do_problems"><a class="jump" href="index.html#@first_do_problems"></a>首先，针对语言的一个子集完成问题 1-4，该子集<strong>仅包含三个特性</strong>：文件名、左右拼接 <code>|</code> 和使用数字（而非 <code>?</code>）的调整大小 <code>@</code>。</p>
+
+<ul id="@didit_public_tests">
+<li><a class="jump" href="index.html#@didit_public_tests"></a>Didit 的公开测试仅使用这些运算符，<a href="index.html#grading">alpha 自动评分</a>将大部分权重放在这些运算符上。
+先让这个最小子集正常工作，将帮助你理解问题集各部分如何协同工作。</li>
+<li>在你使用这些特性完成问题 1 和 2，使 <code>parse()</code> 返回你的 <code>MemeExpression</code> ADT 的可工作实例之前，自动评分器无法给你任何分数。</li>
+</ul>
+
+<p id="@after_completing_problem"><a class="jump" href="index.html#@after_completing_problem"></a>在用这三个特性完成问题集之后，再回头扩展你已经完成的内容，以支持额外的特性：标题、上下<span style="white-space:nowrap">拼接 <code>---</code></span>、叠加运算符 <code>^</code> 和 <code>_</code>，以及使用 <code>?</code> 的调整大小 <code>@</code>。</p></div></div>
+
+</div><h2 id="provided_code"><a class="jump" href="index.html#provided_code"></a>提供的代码</h2><div data-outline="provided_code">
+
+<p id="@starting_code_includes"><a class="jump" href="index.html#@starting_code_includes"></a>起始代码包含一个 <code>examples.ts</code> 文件，其中有示例代码演示如何使用 <a href="https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API">Canvas API</a> 来：</p>
+
+<ul id="@read_image_file">
+<li><a class="jump" href="index.html#@read_image_file"></a>将图像文件读入内存</li>
+<li>在内存中创建用于绘制的新图像</li>
+<li>在图像中绘制文本</li>
+<li>以特定位置和大小绘制图像</li>
+<li>检查图像的像素以进行单元测试</li>
+</ul>
+
+<p id="@staff-provided_code_which"><a class="jump" href="index.html#@staff-provided_code_which"></a>这是教员提供的代码，这意味着<a href="../../general/collaboration.html#collaboration_and_sharing">你可以自由使用而无需注明出处</a>。</p>
+
+<p id="@starting_code_also"><a class="jump" href="index.html#@starting_code_also"></a>起始代码还包含 <code>imagelibrary.ts</code>，它提供了你在实现中必须使用的 API：</p>
+
+<ul id="@createcanvas_get_new">
+<li><a class="jump" href="index.html#@createcanvas_get_new"></a>用于获取新的 <code>Canvas</code> 实例的 <a href="doc/functions/imagelibrary.createCanvas.html"><code>createCanvas(..)</code></a></li>
+<li>用于从图像库获取文件名对应图像数据的 <code>ImageLibrary</code> 方法 <a href="doc/classes/imagelibrary.ImageLibrary.html#getImage"><code>getImage(..)</code></a></li>
+</ul>
+
+<p id="@allow_your_memeexpression"><a class="jump" href="index.html#@allow_your_memeexpression"></a>这将使你的 <code>MemeExpression</code> 类型既能在 Node.js（用于测试和控制台用户界面）中运行，也能在浏览器（用于 Web 用户界面）中运行。</p>
+
+<hr>
+
+</div><h2 id="problem_1_representing_expressions"><a class="jump" href="index.html#problem_1_representing_expressions"></a>问题 1：表示表达式</h2><div data-outline="problem_1_representing_expressions">
+
+<p id="@define_immutable_recursive"><a class="jump" href="index.html#@define_immutable_recursive"></a>定义一个不可变的、递归的抽象数据类型，用于将表达式表示为抽象语法树。</p>
+
+<p id="@your_ast_should"><a class="jump" href="index.html#@your_ast_should"></a>你的 AST 应该在所提供的 <code>MemeExpression</code> 接口（在 <code>expression.ts</code> 中）中定义，并由若干具体变体实现，每种表达式对应一个变体。
+你应该为语言中的每个运算符分别创建变体类，写在 <code>expression-impls.ts</code> 中。</p>
+
+<p id="@concrete_syntax_input"><a class="jump" href="index.html#@concrete_syntax_input"></a>输入中的具体语法，例如括号和空白字符，不应在你的 AST 中有所表示。</p>
+
+<p id="@must_be_legal"><a class="jump" href="index.html#@must_be_legal"></a>创建和使用包含当前不存在或尚未添加到图像库中的文件名的抽象语法树必须是合法的。
+只有实际需要图像数据的操作（<code>size</code> 和 <code>image</code>）才应尝试读取图像数据。
+其他操作（如 <code>toString</code> 或 <code>equalValue</code>）不应读取。</p>
+
+<p id="@creating_your_ast"><a class="jump" href="index.html#@creating_yast"></a>关于创建你的 AST 类型，你可能会发现以下示例很有用：</p>
+
+<ul id="@reading_recursive_data">
+<li><a class="jump" href="index.html#@reading_recursive_data"></a>关于<a href="../../classes/11-recursive-data-types/index.html">递归数据类型</a>的阅读材料</li>
+<li><a href="../../classes/12-grammars-parsing/code.html">课堂上 IntegerExpression 的示例代码</a></li>
+</ul>
+
+<h4 id="@1-1_memeexpression"><a class="jump" href="index.html#@1-1_memeexpression"></a>1.1 <code>MemeExpression</code></h4>
+
+<p id="@repeat_your_data"><a class="jump" href="index.html#@repeat_your_data"></a>重复一下，你的数据类型必须是<strong>不可变的</strong>和<strong>递归的</strong>。
+请按照创建 ADT 的步骤进行：</p>
+
+<ul>
+<li><p id="@spec_choose_specify"><a class="jump" href="index.html#@spec_choose_specify"></a><strong>规格说明</strong>。
+选择并指定操作。
+对于本问题集的这一部分，<code>MemeExpression</code> 需要的操作只有用于构建表达式的创建者和生产者，加上标准的观察者 <code>toString()</code> 和 <code>equalValue()</code>。
+我们正在加强对这些标准方法的规格说明；见下文。</p></li>
+<li><p id="@test_partition_test"><a class="jump" href="index.html#@test_partition_test"></a><strong>测试</strong>。
+在 <code>expression.test.ts</code> 中对你的操作进行划分和测试，包括对 <code>toString()</code> 和 <code>equalValue()</code> 的测试。
+请注意，我们不会针对任何其他实现来运行你的测试。</p></li>
+<li><p id="@code_write_rep"><a class="jump" href="index.html#@code_write_rep"></a><strong>代码</strong>。
+在 <code>expression-impls.ts</code> 中 <code>// Data type definition</code> 的位置，将你的 <code>MemeExpression</code> 的 rep 编写为<a href="../../classes/11-recursive-data-types/index.html#recursive_data_type_definitions">数据类型定义</a>。
+实现你数据类型的各个变体类。</p></li>
+</ul>
+
+<p id="@some_notes"><a class="jump" href="index.html#@some_notes"></a>一些注意事项：</p>
+
+<ul>
+<li><p id="@variant_classes_considered"><a class="jump" href="index.html#@variant_classes_considered"></a>变体类被视为 <code>MemeExpression</code> 类型 rep 的一部分，因此一套针对 <code>MemeExpression</code> 的良好测试套件即可覆盖这些变体。</p></li>
+<li><p id="@since_those_variant"><a class="jump" href="index.html#@since_those_variant"></a>由于这些变体类是 rep 的一部分，我们希望我们的测试不要直接引用它们。
+我们可以通过在测试中使用 <code>parse(..)</code> 来创建 <code>MemeExpression</code> 值来实现这一点。
+但使用 <code>parse</code> 也意味着在问题 2 中构建解析器之前，我们根本无法运行测试。</p>
+
+<p id="@instead_again_recommend"><a class="jump" href="index.html#@instead_again_recommend"></a>因此，我们再次建议采用迭代方式：</p>
+
+<ul><li><p id="@option_1_now"><a class="jump" href="index.html#@option_1_now"></a>选项 1：目前，编写直接创建变体类实例的测试。
+你将需要在 <code>expression.test.ts</code> 中导入你的变体。
+给自己写一个 <strong><code>TODO</code></strong>，以便在实现 <code>parse()</code> 后删除这些导入。
+届时，重构你的测试以改用 <code>parse()</code>。</p></li>
+<li><p id="@option_2_define"><a class="jump" href="index.html#@option_2_define"></a>选项 2：为 <code>MemeExpression</code> 定义其他创建者和生产者操作，在 <code>expression.ts</code> 中实现为调用变体构造函数的函数，并在测试中使用这些函数。
+你将需要在 <code>expression.ts</code> 中导入你的变体。
+这些函数的规格说明必须用抽象的图像表情包表达式来表达，而不是用具体的表示！
+之后再决定是保留这些函数还是改用 <code>parse()</code>。</p></li></ul></li>
+<li><p id="@since_can_create"><a class="jump" href="index.html#@since_can_create"></a>由于我们可以在不读取图像数据的情况下创建和使用 AST，<strong>本问题中的任何规格说明、测试或实现都不应使用 <code>ImageLibrary</code></strong>。
+问题 2 同样如此。</p></li>
+<li><p id="@remember_include_typedoc"><a class="jump" href="index.html#@remember_include_typedoc"></a>记得在你编写的每个类和每个方法上方包含 TypeDoc 注释；定义抽象函数和 rep 不变量，并编写 <code>checkRep()</code>；同时记录对 rep 暴露的防护。</p></li>
+</ul>
+
+<div id="iterate" class="panel panel-warning"><div class="panel-heading"><p id="@iterate_0"><a class="jump" href="index.html#@iterate_0"></a><strong>迭代！</strong></p></div>
+<div class="panel-body"><p id="@remember_advice_about"><a class="jump" href="index.html#@remember_advice_about"></a>记住关于迭代的建议。
+<strong>不要</strong>仅仅为了问题 1 就花费数小时，实现你将需要的每个变体，或者让你的测试划分完美无缺。</p>
+
+<p id="@instead_plan_iterate"><a class="jump" href="index.html#@instead_plan_iterate"></a>相反，计划进行迭代。
+从你数据类型的仅几个变体开始，配合几个测试，以及 <code>toString()</code> 和 <code>equalValue()</code> 的初步实现。
+然后继续做问题 2-4，仅使用语言中包含这些变体的子集。
+接着进行迭代，回到问题 1 来完善你的规格说明，添加更多测试，并增加更多实现以支持更多的表达式语言。</p></div></div>
+
+<h4 id="@1-2_tostring"><a class="jump" href="index.html#@1-2_tostring"></a>1.2 <code>toString()</code></h4>
+
+<p id="@define_tostring_operation"><a class="jump" href="index.html#@define_tostring_operation"></a>按照规格说明/测试/代码的步骤，为 <code>MemeExpression</code> 定义 <code>toString()</code> 操作。</p>
+
+<p id="@output_string_must"><a class="jump" href="index.html#@output_string_must"></a>输出字符串必须是上文定义的有效表达式。
+你可以自由决定如何使用空白字符和括号来格式化输出以提高可读性，但该表达式必须具有与图像相同的含义。
+<code>toString()</code> 所需的加强规格说明已在 <code>expression.ts</code> 中给出。
+如果你愿意，可以进一步加强规格说明，但规格说明不一定是确定性的。</p>
+
+<p id="@your_tostring_implementation"><a class="jump" href="index.html#@your_tostring_implementation"></a>你的 <code>toString()</code> 实现必须是递归的，且不得使用 <code>instanceof</code>。</p>
+
+<p id="@remember_your_tests"><a class="jump" href="index.html#@remember_your_tests"></a>记住，你的测试必须遵守规格说明。如果你的 <code>toString()</code> 测试期望特定的空白字符和括号格式，你必须在规格说明中指明这种格式。</p>
+
+<h4 id="@1-3_equalvalue"><a class="jump" href="index.html#@1-3_equalvalue"></a>1.3 <code>equalValue()</code></h4>
+
+<p id="@define_equalvalue_operation"><a class="jump" href="index.html#@define_equalvalue_operation"></a>为你的 AST 定义 <code>equalValue()</code> 操作以实现<em>结构相等</em>。
+<code>equalValue()</code> 所需的规格说明已在 <code>expression.ts</code> 中给出。
+如果你愿意，可以进一步加强。</p>
+
+<p id="@structural_equality_defines"><a class="jump" href="index.html#@structural_equality_defines"></a><strong>结构相等</strong>将两个表达式定义为相等，当且仅当：</p>
+
+<ol id="@expressions_contain_same">
+<li><a class="jump" href="index.html#@expressions_contain_same"></a>表达式包含相同的文件名、标题、尺寸（数字和 <code>?</code>）和运算符；</li>
+<li>这些文件名、标题、尺寸和运算符从左到右的读取顺序相同；</li>
+<li>并且它们的分组方式相同。</li>
+</ol>
+
+<p id="@example_ast_a-jpg"><a class="jump" href="index.html#@example_ast_a-jpg"></a>例如，<code class="no-markdown"><span style="white-space:nowrap">a.jpg</span> ^ <span style="white-space:nowrap">"title"</span></code> 的 AST <em>不</em>等于 <code class="no-markdown"><span style="white-space:nowrap">"title"</span> ^ <span style="white-space:nowrap">a.jpg</span></code> 的 AST，但它等于 <code class="no-markdown"><span style="white-space:nowrap">a.jpg^"title"</span></code>、<code class="no-markdown"><span style="white-space:nowrap">(a.jpg</span> ^ <span style="white-space:nowrap">"title")</span></code> 和 <code class="no-markdown"><span style="white-space:nowrap">(a.jpg)</span> ^ <span style="white-space:nowrap">("title")</span></code> 的 AST。
+<code class="no-markdown"><span style="white-space:nowrap">(A | B)</span> <span style="white-space:nowrap">--- <span style="white-space:nowrap">(C | D)</span></span></code> 的 AST <em>不</em>等于 <code class="no-markdown"><span style="white-space:nowrap">(A --- C)</span> | <span style="white-space:nowrap">(B --- D)</span></code> 的 AST，尽管它们可能生成相同的 2×2 格表情包。</p>
+
+<p id="@n-ary_groupings_n"><a class="jump" href="index.html#@n-ary_groupings_n"></a>对于 <em>n</em> 元分组，其中 <em>n</em> 大于 2：</p>
+
+<ul id="@such_expressions_must">
+<li><a class="jump" href="index.html#@such_expressions_must"></a>这样的表达式必须等于其自身。
+例如，<code>A | B | C</code> 和 <code>(A | B | C)</code> 的 AST 必须相等。</li>
+<li>然而，它们与具有相同图像含义的不同分组是否相等并<em>未作规定</em>，你应该为你的 AST 选择合适的规格说明和实现。
+例如，你需要确定 <code>(A | B) | C</code> 和 <code>A | (B | C)</code> 的 AST 是否相等。</li>
+</ul>
+
+<p id="@remember_concrete_syntax"><a class="jump" href="index.html#@remember_concrete_syntax"></a>记住：具体语法，包括括号，不应在你的 AST 中表示。
+例如，分组应该反映在 AST 的结构中。</p>
+
+<p id="@be_sure_ast"><a class="jump" href="index.html#@be_sure_ast"></a>确保根据此定义和根据 <code>equalValue()</code> 被认为相等的 AST 实例也满足<a href="../../classes/09-equality/index.html#equality_of_immutable_types">观察相等性</a>。</p>
+
+<p id="@your_equalvalue_must"><a class="jump" href="index.html#@your_equalvalue_must"></a>你的 <code>equalValue()</code> 必须是递归的，并且它<strong><em>应该</em></strong>使用 <code>instanceof</code> 来测试它所比较的表达式的变体：参见<a href="../../classes/11-recursive-data-types/index.html#equality">《递归数据类型》中"相等性"一节</a>。</p>
+
+<p id="@commit_git_once_you-re_happy_your_solution_problem_minimal"><a class="jump" href="index.html#@commit_git_once_you-re_happy_your_solution_problem_minimal"></a><strong>提交到 Git。</strong>一旦你对这个问题<a href="index.html#iterate">在最小语言上的</a>解决方案满意，就提交、push 并继续。</p>
+
+<p id="@iterate_after_completing"><a class="jump" href="index.html#@iterate_after_completing"></a><strong>迭代。</strong>在用这些特性完成问题集之后，回过头来更新你的工作，从 <code>MemeExpression</code> 的规格说明开始。</p>
+
+<hr>
+
+</div><h2 id="problem_2_parsing_expressions"><a class="jump" href="index.html#problem_2_parsing_expressions"></a>问题 2：解析表达式</h2><div data-outline="problem_2_parsing_expressions">
+
+<p id="@now_create_parser"><a class="jump" href="index.html#@now_create_parser"></a>现在我们将创建解析器，它接收一个字符串并从中产生一个 <code>MemeExpression</code> 值。
+你的解析器的入口点应该是 <code>expression.ts</code> 中的 <a href="doc/functions/expression.parse.html"><code>parse()</code></a>。</p>
+
+<p id="@examples_valid_inputs"><a class="jump" href="index.html#@examples_valid_inputs"></a>有效输入的示例：</p>
+
+<blockquote>
+  <p id="@a-jpg_b-jpg_c-jpg_d-jpg_a-jpg_b-jpg"><a class="jump" href="index.html#@a-jpg_b-jpg_c-jpg_d-jpg_a-jpg_b-jpg"></a><code>A.jpg | B.jpg --- C.jpg | D.jpg</code> <br>
+  <code>A.jpg     ---  B.jpg ---    C.jpg</code> <br>
+  <code>((A _ B)^C)---D</code> <br>
+  <code>base.jpg _ ("all your base"---"are belong to us")</code> <br>
+  <code>A@1x2@?x3@4x?</code></p>
+</blockquote>
+
+<p id="@examples_invalid_inputs"><a class="jump" href="index.html#@examples_invalid_inputs"></a>无效输入的示例：</p>
+
+<style class="no-markdown">
+.incorrect-answers td {
+  vertical-align: top;
+  padding-right: 10px;
+}
+</style>
+
+<blockquote>
+  <table class="incorrect-answers"><tbody><tr><td style="white-space:nowrap"><p id="@b_c"><a class="jump" href="index.html#@b_c"></a><code>A - B - C</code></p></td>    <td><p id="@operator_must_least"><a class="jump" href="index.html#@operator_must_least"></a><em><code>---</code> 运算符必须至少有三个短横线</em></p></td></tr><tr><td style="white-space:nowrap"><p id="@b_1"><a class="jump" href="index.html#@b_1"></a><code>A --- --- B</code></p></td>  <td><p id="@no_spaces_within"><a class="jump" href="index.html#@no_spaces_within"></a><em><code>---</code> 运算符内部不能有空格</em></p></td></tr><tr><td style="white-space:nowrap"><p id="@a-b"><a class="jump" href="index.html#@a-b"></a><code>|A|B|</code></p></td>        <td><p id="@operator_must_be"><a class="jump" href="index.html#@operator_must_be"></a><em><code>|</code> 运算符必须是二元的</em></p></td></tr><tr><td style="white-space:nowrap"><p id="@no_1"><a class="jump" href="index.html#@no_1"></a><code>"no</code></p></td>          <td><p id="@unterminated_caption"><a class="jump" href="index.html#@unterminated_caption"></a><em>未终止的标题</em></p></td></tr><tr><td style="white-space:nowrap"><p id="@a-jpg_-b"><a class="jump" href="index.html#@a-jpg_-b"></a><code>A.jpg_"B"</code></p></td>  <td><p id="@filenames_can_dashes"><a class="jump" href="index.html#@filenames_can_dashes"></a><em>文件名可以包含短横线和下划线，因此 <code>A.jpg_</code> 被解析为文件名</em></p></td></tr><tr><td style="white-space:nowrap"><p id="@a-jpg-x"><a class="jump" href="index.html#@a-jpg-x"></a><code>A.jpg@?x?</code></p></td>  <td><p id="@resize_operator_must"><a class="jump" href="index.html#@resize_operator_must"></a><em>调整大小运算符必须至少指定一个维度</em></p></td></tr></tbody></table>
+</blockquote>
+
+<p id="@examples_optional_inputs"><a class="jump" href="index.html#@examples_optional_inputs"></a>可选输入的示例（你可能想要设计和支持的语言扩展）：</p>
+
+<blockquote>
+  <table><tbody><tr><td style="white-space:nowrap"><p id="@caption_1"><a class="jump" href="index.html#@caption_1"></a><code>'caption'</code>  </p></td>        <td><p id="@single-quoted_captions"><a class="jump" href="index.html#@single-quoted_captions"></a><em>单引号标题</em></p></td></tr><tr><td style="white-space:nowrap"><p id="@one_does_not"><a class="jump" href="index.html#@one_does_not"></a><code>"One does not simply"{Helvetica 96pt black}</code>  </p></td>    <td><p id="@font_face_size"><a class="jump" href="index.html#@font_face_size"></a><em>文本的字体、大小、颜色</em></p></td></tr><tr><td style="white-space:nowrap"><p id="@ghost-jpg_50"><a class="jump" href="index.html#@ghost-jpg_50"></a><code>ghost.jpg * 50%</code>  </p></td>  <td><p id="@make_image_translucent"><a class="jump" href="index.html#@make_image_translucent"></a><em>使图像半透明</em></p></td></tr></tbody></table>
+</blockquote>
+
+<p id="@you_may_consider"><a class="jump" href="index.html#@you_may_consider"></a>你可以将可选输入视为无效，也可以选择支持输入中的附加功能（如新运算符）。
+但是，<em>你的系统不得在输入中未出现某项新特性时产生包含该特性的输出</em>。
+这样，了解你的扩展功能的客户端可以触发它们，而不了解这些扩展的客户端不会意外地遇到它们。
+你不能在附加功能中使用任何被必需语法（<em>例如</em> <code>-</code>、<code>|</code> 等）或控制台 UI（<code>!</code>）保留的字符。</p>
+
+<h4 id="@2-1_write_grammar"><a class="jump" href="index.html#@2-1_write_grammar"></a>2.1 编写语法</h4>
+
+<p id="@write_parserlib_grammar"><a class="jump" href="index.html#@write_parserlib_grammar"></a>按照<a href="index.html#overview">概述</a>中的描述，为表达式编写 ParserLib 语法。
+你可以在 <code>expressionparser.ts</code> 中找到 ParserLib 语法的起点。
+该起始语法能够识别文件名、左右拼接，以及使用数字（而非 <code>?</code>）的 <code>@</code> 调整大小。</p>
+
+<p id="@more_information_parserlib"><a class="jump" href="index.html#@more_information_parserlib"></a>有关 ParserLib 的更多信息，请参见：</p>
+
+<ul id="@reading_parsers_example">
+<li><a class="jump" href="index.html#@reading_parsers_example"></a>关于<a href="../../classes/12-grammars-parsing/index.html">解析器</a>的阅读材料</li>
+<li><a href="../../classes/12-grammars-parsing/code.html#parserts">编译解析器并处理解析树的示例代码</a></li>
+<li><a href="https://web.mit.edu/6.102/www/parserlib/4.0.2/typedoc/">ParserLib 文档</a></li>
+</ul>
+
+<p id="@starting_grammar_already"><a class="jump" href="index.html#@starting_grammar_already"></a>起始语法已经包含一个正则表达式，足以识别该语言所允许的文件名。
+这种图像表情包语言支持的<a href="index.html#filenames_allowed">文件名集合</a>比你的操作系统可能支持的更为受限，因为该语言必须是跨平台的。</p>
+
+<h4 id="@2-2_implement_parse"><a class="jump" href="index.html#@2-2_implement_parse"></a>2.2 实现 <code>parse()</code></h4>
+
+<p id="@implement_parse_following"><a class="jump" href="index.html#@implement_parse_following"></a>按照以下步骤实现 <a href="doc/functions/expression.parse.html"><code>parse()</code></a>：</p>
+
+<ul>
+<li><p id="@spec_spec_method"><a class="jump" href="index.html#@spec_spec_method"></a><strong>规格说明</strong>。
+该方法的规格说明已给出，但你可以加强它，以使测试更容易。
+记住，解析包含当前不存在或尚未添加到库中的文件名的表达式必须是合法的，因为解析不依赖于文件中的图像数据。</p>
+
+<p id="@problem_1_none"><a class="jump" href="index.html#@problem_1_none"></a>与问题 1 一样，本问题中的任何规格说明、测试或实现都不应使用 <code>ImageLibrary</code>。</p></li>
+<li><p id="@test_write_tests"><a class="jump" href="index.html#@test_write_tests"></a><strong>测试</strong>。
+为 <code>parse()</code> 编写测试并放入 <code>expression.test.ts</code> 中。
+请注意，我们不会针对任何其他实现来运行你的测试。</p>
+
+<p id="@now_you_implementing"><a class="jump" href="index.html#@now_you_implementing"></a>既然你正在实现 <code>parse()</code>，现在是复习 <code>MemeExpression.toString()</code> 规格说明的好时机，它规定了 <code>parse()</code>、<code>equalValue()</code> 和 <code>toString()</code> 之间可测试的关系。</p>
+
+<p id="@if_you_followed"><a class="jump" href="index.html#@if_you_followed"></a>如果你在问题 1 中采纳了我们的建议，先在没有 <code>parse()</code> 的情况下编写测试…</p>
+
+<ul><li><p id="@if_you_went_option_1_wrote"><a class="jump" href="index.html#@if_you_went_option_1_wrote"></a>如果你选择了选项 1，编写了直接构造变体类的测试，请重构那些测试以使用 <code>parse()</code>。
+注意，它们现在正在覆盖 <code>parse()</code> 测试策略中的划分。
+停止在 <code>expression.test.ts</code> 中导入你的变体：它不应再引用 <code>expression-impls.ts</code>。</p></li>
+<li><p id="@if_you_went_option_2_wrote"><a class="jump" href="index.html#@if_you_went_option_2_wrote"></a>如果你选择了选项 2，编写了使用你定义的其他创建者和生产者操作的测试，请决定是保留这些操作还是改用 <code>parse()</code>。
+注意，根据它们的规格说明和 <code>parse()</code> 的规格说明，它们可能帮助你独立于其他操作测试 <code>parse()</code>，并独立于 <code>parse()</code> 测试其他操作。
+如果你删除它们，请停止在 <code>expression.ts</code> 中导入你的变体。</p></li></ul></li>
+<li><p id="@code_implement_parse"><a class="jump" href="index.html#@code_implement_parse"></a><strong>代码</strong>。
+在 <code>expression.ts</code> 中实现 <code>parse()</code>，使其调用由你的 ParserLib 语法生成的解析器。
+关于如何调用解析器并从中构建抽象语法树，包括代码示例，请参见关于<a href="../../classes/12-grammars-parsing/index.html">解析器</a>的阅读材料。
+本问题集的起始代码包含一个框架性的 <code>expressionparser.ts</code>，你可以在此基础上进行开发。
+保持 <code>parse()</code> 本身极其简单：它不应超过<em>粘合代码</em>，调用 <code>expressionparser.ts</code> 中包含所有实现的 <code>parseExpression</code> 之类的函数。</p></li>
+</ul>
+
+<h4 id="@2-3_run_console"><a class="jump" href="index.html#@2-3_run_console"></a>2.3 运行控制台界面</h4>
+
+<p id="@now_memeexpression_values"><a class="jump" href="index.html#@now_memeexpression_values"></a>既然 <code>MemeExpression</code> 值既可以通过 <code>parse()</code> 从字符串解析，又可以通过 <code>toString()</code> 转换回字符串，你可以尝试在控制台界面中输入表达式。</p>
+
+<p id="@run_console_interface"><a class="jump" href="index.html#@run_console_interface"></a>使用 <code>npm start</code> 运行控制台界面。
+其提示符将允许你输入表达式并查看结果。
+尝试本讲义顶部的一些表达式。</p>
+
+<p id="@commit_git_once_you-re_happy_your_solution_problem_first_minimal_language_later_full_language_commit_push_0"><a class="jump" href="index.html#@commit_git_once_you-re_happy_your_solution_problem_first_minimal_language_later_full_language_commit_push_0"></a><strong>提交到 Git。</strong>一旦你对这个问题的解决方案（先针对最小语言，再针对完整语言）满意，就提交并 push！</p>
+
+<hr>
+
+</div><h2 id="problem_3_size"><a class="jump" href="index.html#problem_3_size"></a>问题 3：大小</h2><div data-outline="problem_3_size">
+
+<p id="@size_command_takes"><a class="jump" href="index.html#@size_command_takes"></a><code>!size</code> 命令接收一个表达式，并以 <code>WxH</code> 的形式打印它将生成的图像的宽度 <code>W</code> 和高度 <code>H</code>。
+它应遵循<a href="index.html#overview">概述</a>中描述的大小计算规则。</p>
+
+<p id="@example_following_correct"><a class="jump" href="index.html#@example_following_correct"></a>例如，以下是正确的大小结果。
+（将鼠标悬停或点击输入表达式可查看其图像文件的大小。）</p>
+
+<div class="panel panel-default panel-warning pull-right pull-margin example-outputs"><div class="panel-heading"><p id="@these_example_outputs_not_fully-determined_outputs_2"><a class="jump" href="index.html#@these_example_outputs_not_fully-determined_outputs_2"></a>这些是示例输出，并非完全确定的输出</p></div><div class="panel-body"><p id="@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_2"><a class="jump" href="index.html#@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_2"></a>你的系统的输出可能在规范范围内有所不同。差异示例包括空白字符、括号、化简、运算符表示、数字表示、字体、文本颜色、文本大小和错误消息。</p></div></div>
+
+<div class="show-size-on-hover"><blockquote>
+  <p id="@size_ex_vertical"><a class="jump" href="index.html#@size_ex_vertical"></a> <code title="<span class=&quot;image-size&quot; style=&quot;padding: 43.857142857142854px 49.142857142857146px&quot;>200x150</span> --- <span class=&quot;image-size&quot; style=&quot;padding: 46.714285714285715px 49.142857142857146px&quot;>200x160</span>">tech3.png --- tech4.png</code> <br>
+  → <code>200x310</code></p>
+
+  <p id="@size_ex_vertical-resize"><a class="jump" href="index.html#@size_ex_vertical-resize"></a> <code title="(<span class=&quot;image-size&quot; style=&quot;padding: 43.857142857142854px 49.142857142857146px&quot;>200x150</span> --- <span class=&quot;image-size&quot; style=&quot;padding: 46.714285714285715px 49.142857142857146px&quot;>200x160</span>)@1000x1000">(tech3.png --- tech4.png)@1000x1000</code> <br>
+  → <code>1000x1000</code></p>
+
+  <p id="@size_ex_overlay"><a class="jump" href="index.html#@size_ex_overlay"></a> <code title="(<span class=&quot;image-size&quot; style=&quot;padding: 43.857142857142854px 49.142857142857146px&quot;>200x150</span> --- <span class=&quot;image-size&quot; style=&quot;padding: 46.714285714285715px 49.142857142857146px&quot;>200x160</span>) _ <span class=&quot;image-size&quot; style=&quot;padding: 9.571428571428571px 2px&quot;>30x30</span>">(tech3.png --- tech4.png) _ black.png</code> <br>
+  → <code>200x310</code></p>
+
+  <p id="@size_ex_caption"><a class="jump" href="index.html#@size_ex_caption"></a> <code>"tech support"</code> <br>
+  → <em>···数字···</em><code>x</code><em>···数字···</em> <br>
+    <em>标题的宽度和高度可能因平台和字体选择而异</em></p>
+</blockquote>
+
+<p id="@incorrect_sizes"><a class="jump" href="index.html#@incorrect_sizes"></a>不正确的大小：</p>
+
+<blockquote>
+  <p id="@size_ex_aspect-ratio-incorrect"><a class="jump" href="index.html#@size_ex_aspect-ratio-incorrect"></a> <code title="<span class=&quot;image-size&quot; style=&quot;padding: 43.857142857142854px 49.142857142857146px&quot;>200x150</span>@50x?">tech3.png@50x?</code> <br>
+    <em>不正确：</em> <code>50x37.5</code> <br>
+    <em>正确：</em> <code>50x38</code> <br>
+    （<em>因为大小必须是整数，而 50/38 最接近原始宽高比 200/150</em>）  </p>
+</blockquote></div>
+
+<p id="@getting_sizes_image"><a class="jump" href="index.html#@getting_sizes_image"></a>为了获取图像文件和文本标题的大小，你可能会发现以下内容有用：</p>
+
+<ul id="@examples-ts_which_you_can_find_starting_code_problem_set_canvas_api_0">
+<li><a class="jump" href="index.html#@examples-ts_which_you_can_find_starting_code_problem_set_canvas_api_0"></a>你可以在问题集的起始代码中找到的 <code>examples.ts</code></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API">Canvas API</a></li>
+</ul>
+
+<p id="@warning_you_must"><a class="jump" href="index.html#@warning_you_must"></a>警告：你必须使用导出 <a href="doc/classes/imagelibrary.ImageLibrary.html"><code>ImageLibrary</code></a> 和 <a href="doc/functions/imagelibrary.createCanvas.html"><code>createCanvas(..)</code></a> 的 <code>imagelibrary.ts</code> API。
+不要直接导入或使用 <code>canvas</code> 或 <code>fs</code> 模块。</p>
+
+<h4 id="@3-1_add_operation"><a class="jump" href="index.html#@3-1_add_operation"></a>3.1. 为 <code>MemeExpression</code> 添加操作</h4>
+
+<p id="@you_should_implement_size_method_your"><a class="jump" href="index.html#@you_should_implement_size_method_your"></a>你应该将大小实现为你 <code>MemeExpression</code> 类型上的一个方法，以递归方式定义。
+该方法的签名和规格说明由你来设计，但是：</p>
+
+<ul id="@would_be_wise">
+<li><a class="jump" href="index.html#@would_be_wise"></a>对于你的大小操作，返回比 <code>string</code> 更有用的数据类型将是明智的——或许是你自己设计的简单<a href="../../tools/typescript/index.html#object_literals_and_object_types">记录类型</a>。</li>
+<li>大小操作应将 <code>ImageLibrary</code> 作为参数，并使用该库来获取命名图像。</li>
+</ul>
+
+<p id="@whenever_possible_do"><a class="jump" href="index.html#@whenever_possible_do"></a>尽可能<strong>不要读取任何图像数据</strong>来计算大小。
+事实上，有些表达式的大小你无需读取任何图像数据就能确定，我们鼓励你设计操作，使得即使表达式引用了不在图像库中的文件名，也能为其生成大小。</p>
+
+<p id="@follow_recipe_0"><a class="jump" href="index.html#@follow_recipe_0"></a>按照以下步骤进行：</p>
+
+<ul id="@spec_define_your_operation_memeexpression_write_spec_test_put_your_tests_expression-test-ts_note_not_run_your_tests_any_implementations_other_than_yours_code_implementation_must_be_recursive_must_not_use">
+<li><a class="jump" href="index.html#@spec_define_your_operation_memeexpression_write_spec_test_put_your_tests_expression-test-ts_note_not_run_your_tests_any_implementations_other_than_yours_code_implementation_must_be_recursive_must_not_use"></a><strong>规格说明</strong>。
+在 <code>MemeExpression</code> 中定义你的操作并编写规格说明。</li>
+<li><strong>测试</strong>。
+将你的测试放入 <code>expression.test.ts</code> 中。
+请注意，我们不会针对任何其他实现来运行你的测试。</li>
+<li><strong>代码</strong>。
+实现必须是递归的。
+它不得使用 <code>instanceof</code>，也不得使用你定义的任何检查变体类型的等效操作。</li>
+</ul>
+
+<p id="@provided_expression-test-ts_creates"><a class="jump" href="index.html#@provided_expression-test-ts_creates"></a>所提供的 <code>expression.test.ts</code> 在文件顶部创建了 <code>library: ImageLibrary</code>。
+如有必要，你可以在测试中创建其他 <code>ImageLibrary</code> 实例。</p>
+
+<p id="@any_part_problem"><a class="jump" href="index.html#@any_part_problem"></a>对于问题集的任何部分，如果你的测试使用了额外的图像，请将它们添加到 <code>img</code> 目录中。
+不要将大型图像文件提交到 Git！
+请保持图像小巧，以确保 Didit 能够克隆和构建你的仓库。</p>
+
+<h4 id="@3-2_implement_size"><a class="jump" href="index.html#@3-2_implement_size"></a>3.2 实现 <code>size</code> 命令</h4>
+
+<p id="@order_connect_your_size_operation_user"><a class="jump" href="index.html#@order_connect_your_size_operation_user"></a>为了将你的大小操作连接到用户界面，以及 Didit 自动评分器，你需要实现 <code>commands.ts</code> 中的 <a href="doc/functions/commands.size.html"><code>size()</code></a> 函数。</p>
+
+<p id="@keep_size_extremely"><a class="jump" href="index.html#@keep_size_extremely"></a>保持 <code>size()</code> 极其简单。
+它不应超过<em>粘合代码</em>，调用你的大小操作并将结果转换为字符串。
+保持简短，这样你就不需要为它编写单独的测试套件：你现有的大小操作测试应该足够了。</p>
+
+<p id="@specifically_body_size"><a class="jump" href="index.html#@specifically_body_size"></a>具体来说，<code>size()</code> 的函数体最多为 3 行，由最多几个简单的方法调用组成，可能使用局部变量，加上一个 <code>return</code> 语句。
+它调用的所有方法应该已经被充分测试过，无论是通过你的 <code>MemeExpression</code> 测试套件还是 TypeScript 本身。</p>
+
+<p id="@if_your_size"><a class="jump" href="index.html#@if_your_size"></a>如果你的 <code>size()</code> 方法比这更复杂——例如，包含 <code>if</code> 或 <code>while</code> 等控制语句，或 <code>+</code> 或 <code>&lt;</code> 或 <code>Math.max</code> 等算术运算，或对自身的递归调用——那么<strong>停下来！</strong> 并与课程工作人员讨论你的设计，因为这是一个信号，表明你为 <code>MemeExpression</code> 类型设计的大小操作功能不够强大。
+在上面迭代改进你的大小操作的设计和测试。</p>
+
+<ul id="@spec_spec_operation_given_but_you_may_strengthen_if_you_want_test_keep_operation_extremely_simple_so_you_don-t_test_separately_code_implement_size">
+<li><a class="jump" href="index.html#@spec_spec_operation_given_but_you_may_strengthen_if_you_want_test_keep_operation_extremely_simple_so_you_don-t_test_separately_code_implement_size"></a><strong>规格说明</strong>。
+该操作的规格说明已给出，但如果你愿意，可以加强。</li>
+<li><strong>测试</strong>。
+保持该操作极其简单，这样你就不必单独测试它。</li>
+<li><strong>代码</strong>。
+尽可能简单地实现 <code>size()</code>。</li>
+</ul>
+
+<h4 id="@3-3_run_console"><a class="jump" href="index.html#@3-3_run_console"></a>3.3 运行控制台界面</h4>
+
+<p id="@we-ve_now_implemented_size_command_console"><a class="jump" href="index.html#@we-ve_now_implemented_size_command_console"></a>我们现在已经实现了控制台界面中的 <code>!size</code> 命令。
+运行 <code>npm start</code>，在提示符处尝试一些大小。</p>
+
+<p id="@commit_git_once_you-re_happy_your_solution_problem_first_minimal_language_later_full_language_commit_push_1"><a class="jump" href="index.html#@commit_git_once_you-re_happy_your_solution_problem_first_minimal_language_later_full_language_commit_push_1"></a><strong>提交到 Git。</strong>一旦你对这个问题的解决方案（先针对最小语言，再针对完整语言）满意，就提交并 push！</p>
+
+<hr>
+
+</div><h2 id="problem_4_image_generation"><a class="jump" href="index.html#problem_4_image_generation"></a>问题 4：图像生成</h2><div data-outline="problem_4_image_generation">
+
+<p id="@image_operation_takes"><a class="jump" href="index.html#@image_operation_takes"></a>图像操作接收一个表达式并从中生成一张图像。
+如果你愿意，可以加强此规格说明。</p>
+
+<div class="panel panel-default panel-warning pull-right pull-margin example-outputs"><div class="panel-heading"><p id="@these_example_outputs_not_fully-determined_outputs_3"><a class="jump" href="index.html#@these_example_outputs_not_fully-determined_outputs_3"></a>这些是示例输出，并非完全确定的输出</p></div><div class="panel-body"><p id="@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_3"><a class="jump" href="index.html#@your_system-s_output_may_vary_within_bounds_spec_examples_variation_include_whitespace_parentheses_simplification_operator_representation_number_representation_font_face_text_color_text_size_error_messages_3"></a>你的系统的输出可能在规范范围内有所不同。差异示例包括空白字符、括号、化简、运算符表示、数字表示、字体、文本颜色、文本大小和错误消息。</p></div></div>
+
+<p id="@example_following_representative"><a class="jump" href="index.html#@example_following_representative"></a>例如，以下是生成图像的代表性输出。
+为了纳入本讲义，它们的大小已被更改：此处显示的图像尺寸<em>不符合规格说明</em>。</p>
+
+<blockquote>
+  <p id="@image_ex_tech12"><a class="jump" href="index.html#@image_ex_tech12"></a> <code>tech1.png|tech2.png</code> <br>
+  → <img src="figures/example1.png" width="300"></p>
+
+  <p id="@image_ex_boromir"><a class="jump" href="index.html#@image_ex_boromir"></a> <code>boromir.jpg ^ "ONE DOES NOT SIMPLY"@550x? _ "WALK INTO MORDOR"@550x?</code> <br>
+  → <img src="figures/example2.png" width="350" height="207"></p>
+</blockquote>
+
+<style class="no-markdown">
+#linebreak::before {
+  content: "\A";
+}
+</style>
+
+<blockquote>
+  <pre id="@image_ex_tech-support" class="no-markdown"><a class="jump" href="index.html#@image_ex_tech-support"></a><code>black.png@600x50 ^ "TECH SUPPORT"@?x50 <span id="linebreak"></span>---------------------------------- <span id="linebreak"></span>tech1.png | tech2.png@200x150 | tech3.png <span id="linebreak"></span>---------------------------------- <span id="linebreak"></span>(  black.png@200x25 ^ "What my friends think I do"@?x15 <span id="linebreak"></span> | black.png@200x25 ^ "What my mom thinks I do"@?x15 <span id="linebreak"></span> | black.png@200x25 ^ "What society thinks I do"@?x15   ) <span id="linebreak"></span>---------------------------------- <span id="linebreak"></span>black.png@600x25 <span id="linebreak"></span>---------------------------------- <span id="linebreak"></span>tech4.png | tech5.png@200x160 | tech6.png <span id="linebreak"></span>---------------------------------- <span id="linebreak"></span>(  black.png@200x25 ^ "What my boss thinks I do"@?x15  <span id="linebreak"></span> | black.png@200x25 ^ "What I think I do"@?x15 <span id="linebreak"></span> | black.png@200x25 ^ "What I actually do"@?x15       ) <span id="linebreak"></span>---------------------------------- <span id="linebreak"></span>black.png@600x25</code></pre>
+
+  <p>→ <img src="figures/example3.png" width="600" height="454"></p>
+</blockquote>
+
+<p id="@generating_images_you"><a class="jump" href="index.html#@generating_images_you"></a>关于生成图像，你可能会发现以下内容有用：</p>
+
+<ul id="@examples-ts_which_you_can_find_starting_code_problem_set_canvas_api_1">
+<li><a class="jump" href="index.html#@examples-ts_which_you_can_find_starting_code_problem_set_canvas_api_1"></a>你可以在问题集的起始代码中找到的 <code>examples.ts</code></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API">Canvas API</a></li>
+</ul>
+
+<p id="@you_must_use"><a class="jump" href="index.html#@you_must_use"></a>你必须使用提供 <a href="doc/classes/imagelibrary.ImageLibrary.html"><code>ImageLibrary</code></a> 和 <a href="doc/functions/imagelibrary.createCanvas.html"><code>createCanvas(..)</code></a> 的 <code>imagelibrary.ts</code> API。
+不要直接导入或使用 <code>canvas</code> 或 <code>fs</code> 模块。</p>
+
+<div class="panel panel-default panel-warning"><div class="panel-heading"><p id="@canvas_vs_image"><a class="jump" href="index.html#@canvas_vs_image"></a><strong>Canvas 与 Image</strong></p></div>
+<div class="panel-body"><p id="@other_than_image"><a class="jump" href="index.html#@other_than_image"></a>除了 <code>getImage(..)</code> 返回的 <code>Image</code> 实例之外，你应该构建代码使其完全使用 <code>Canvas</code> 实例。
+Canvas 2D 渲染上下文的 <code>drawImage(..)</code> 方法可以将 <code>Canvas</code> 实例作为其第一个参数：你不需要在任何时候转换为 <code>Image</code>。</p></div></div>
+
+<h4 id="@4-1_add_operation"><a class="jump" href="index.html#@4-1_add_operation"></a>4.1 为 <code>MemeExpression</code> 添加操作</h4>
+
+<p id="@you_should_implement_image_generation_method"><a class="jump" href="index.html#@you_should_implement_image_generation_method"></a>你应该将图像生成实现为你 <code>MemeExpression</code> 类型上的一个方法，以递归方式定义。
+该方法的签名和规格说明由你来设计，但是：</p>
+
+<ul id="@operation_should_take">
+<li><a class="jump" href="index.html#@operation_should_take"></a>该操作应将 <code>ImageLibrary</code> 作为参数，并使用该库来获取命名图像。</li>
+<li>如上所述，不要转换为 <code>Image</code> ——尽管它的类型名称很诱人！</li>
+</ul>
+
+<p id="@follow_recipe_1"><a class="jump" href="index.html#@follow_recipe_1"></a>按照以下步骤进行：</p>
+
+<ul id="@spec_define_your_operation_memeexpression_write_spec_test_put_your_tests_expression-test-ts_note_not_run_your_tests_any_implementations_other_than_yours_code_implementation_must_be_recursive_perhaps_calling_recursive">
+<li><a class="jump" href="index.html#@spec_define_your_operation_memeexpression_write_spec_test_put_your_tests_expression-test-ts_note_not_run_your_tests_any_implementations_other_than_yours_code_implementation_must_be_recursive_perhaps_calling_recursive"></a><strong>规格说明</strong>。
+在 <code>MemeExpression</code> 中定义你的操作并编写规格说明。</li>
+<li><strong>测试</strong>。
+将你的测试放入 <code>expression.test.ts</code> 中。
+请注意，我们不会针对任何其他实现来运行你的测试。</li>
+<li><strong>代码</strong>。
+实现必须是递归的（可能通过调用递归的辅助方法）。
+它不得使用 <code>instanceof</code>，也不得使用你定义的任何检查变体类类型的等效操作。</li>
+</ul>
+
+<p id="@you_may_find"><a class="jump" href="index.html#@you_may_find"></a>你可能会发现为 <code>MemeExpression</code> 添加更多操作以帮助实现图像操作是有用的。
+使用相同的步骤对它们进行规格说明、测试和编码，并在适当时使它们也是递归的。
+你的辅助操作不应仅仅是使用 <code>instanceof</code> 检查变体类的变体。</p>
+
+<p id="@since_your_image"><a class="jump" href="index.html#@since_your_image"></a>由于你的图像操作会产生一张图像，你的测试可能需要检查该图像的某些属性，如宽度、高度，以及可能的一些像素值。
+起始代码中包含的 <code>examples.ts</code> 有进行此类检查的示例。</p>
+
+<h4 id="@4-2_implement_image"><a class="jump" href="index.html#@4-2_implement_image"></a>4.2 实现 <code>image</code> 命令</h4>
+
+<p id="@order_connect_your_image_operation_user"><a class="jump" href="index.html#@order_connect_your_image_operation_user"></a>为了将你的图像操作连接到用户界面，我们需要实现 <code>commands.ts</code> 中的 <a href="doc/functions/commands.image.html"><code>image()</code></a> 函数。</p>
+
+<p id="@like_size_discussed"><a class="jump" href="index.html#@like_size_discussed"></a>与上文讨论的 <code>size()</code> 一样，此函数应该是简单的粘合代码，调用你的 <code>MemeExpression</code> 数据类型的图像生成操作。
+<code>image()</code> 的函数体最多为 3 行，由最多几个对已被充分测试的方法的调用组成，可能使用局部变量，加上一个 <code>return</code> 语句。
+保持简短，这样你就不需要为此函数编写单独的测试。</p>
+
+<ul id="@spec_spec_operation_given_but_you_may_strengthen_if_you_want_test_keep_operation_extremely_simple_so_you_don-t_test_separately_code_implement_image">
+<li><a class="jump" href="index.html#@spec_spec_operation_given_but_you_may_strengthen_if_you_want_test_keep_operation_extremely_simple_so_you_don-t_test_separately_code_implement_image"></a><strong>规格说明</strong>。
+该操作的规格说明已给出，但如果你愿意，可以加强。</li>
+<li><strong>测试</strong>。
+保持该操作极其简单，这样你就不必单独测试它。</li>
+<li><strong>代码</strong>。
+尽可能简单地实现 <code>image()</code>。</li>
+</ul>
+
+<h4 id="@4-3_run_console"><a class="jump" href="index.html#@4-3_run_console"></a>4.3 运行控制台界面</h4>
+
+<p id="@we-ve_now_implemented_image_command_console"><a class="jump" href="index.html#@we-ve_now_implemented_image_command_console"></a>我们现在已经实现了控制台界面中的 <code>!image</code> 命令。
+运行 <code>npm start</code>，在提示符处尝试使用一些命令。</p>
+
+<h4 id="@4-4_run_web"><a class="jump" href="index.html#@4-4_run_web"></a>4.4 运行 Web 界面</h4>
+
+<p id="@so_far_been"><a class="jump" href="index.html#@so_far_been"></a>到目前为止，我们一直在 Node.js 中运行图像表情包系统，通过运行控制台界面和测试。
+但是，TypeScript 编译器生成的 JavaScript 也可以在 Web 浏览器中运行。</p>
+
+<p id="@first_start_provided"><a class="jump" href="index.html#@first_start_provided"></a>首先，使用 <code>npm run web</code> 启动所提供的 Web 服务器。
+这个小型 Node.js Web 服务器会将代码和图像文件发送到你的浏览器。
+它<em>不会</em>运行代码：所有的解析和图像生成都将由浏览器的 JavaScript 引擎完成。</p>
+
+<p id="@then_navigate_localhost-8080"><a class="jump" href="index.html#@then_navigate_localhost-8080"></a>然后，在浏览器中导航到 <a href="http://localhost:8080/"><code>localhost:8080</code></a>。
+输入一个表达式，然后点击 <em>Generate</em> 查看结果。</p>
+
+<p id="@you_change_your"><a class="jump" href="index.html#@you_change_your"></a>当你更改代码时，不需要重启 Web 服务器。
+当然，你需要将 TypeScript 重新编译为 JavaScript（<em>例如</em> <code>npm run compile</code>），但完成后你可以重新加载网页来使用更新后的代码。
+如果你不想每次手动重新编译，可以在另一个终端中运行 <code>npm run watch</code>。
+该命令将持续运行，当你编辑<strong>并保存</strong> <code>.ts</code> 文件时自动重新编译你的代码。</p>
+
+<p id="@if_you_imported"><a class="jump" href="index.html#@if_you_imported"></a>（如果你直接导入了 <code>canvas</code>、<code>fs</code> 或其他模块，你的代码可能在 Web 界面中无法工作。
+请确保你只使用 <code>imagelibrary.ts</code> 的导出。）</p>
+
+<p id="@commit_git_once_you-re_happy_your_solution_problem_first_minimal_language_later_full_language_commit_push_2"><a class="jump" href="index.html#@commit_git_once_you-re_happy_your_solution_problem_first_minimal_language_later_full_language_commit_push_2"></a><strong>提交到 Git。</strong>一旦你对这个问题的解决方案（先针对最小语言，再针对完整语言）满意，就提交并 push！</p>
+
+<hr>
+
+</div><h2 id="before_youre_done"><a class="jump" href="index.html#before_youre_done"></a>完成之前</h2><div data-outline="before_youre_done">
+
+<ul>
+<li><p id="@make_sure_you_documented_specifications_form"><a class="jump" href="index.html#@make_sure_you_documented_specifications_form"></a>确保你已经为所有类型和操作<strong>记录了规格说明</strong>，形式为格式正确的 TypeDoc 注释。</p></li>
+<li><p id="@make_sure_you_documented_abstraction_functions"><a class="jump" href="index.html#@make_sure_you_documented_abstraction_functions"></a>确保你已经为所有实现<strong>记录了抽象函数和 rep 不变量</strong>，形式为字段声明附近的注释。</p>
+
+<p id="@addition_document_type"><a class="jump" href="index.html#@addition_document_type"></a>此外，<strong>记录该类型如何防止 rep 暴露</strong>。
+参见<a href="../../classes/07-abstraction-functions-rep-invariants/index.html#documenting_the_af_ri_and_safety_from_rep_exposure"><em>记录 AF、RI 和 SRE</em></a>。</p>
+
+<p id="@make_sure_all"><a class="jump" href="index.html#@make_sure_all"></a>确保所有类型都使用 <code>checkRep()</code> 来检查 rep 不变量，并实现 <code>toString()</code> 以有用地表示抽象值。
+记住，<a href="doc/interfaces/expression.MemeExpression.html#toString"><code>MemeExpression.toString()</code></a> 的规格说明比 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/toString"><code>Object.toString()</code></a> 更强。</p></li>
+<li><p id="@make_sure_you_specify_test_implement"><a class="jump" href="index.html#@make_sure_you_specify_test_implement"></a>确保你为所有不可变类型指定、测试并实现了 <code>equalValue()</code>。
+记住，<a href="doc/interfaces/expression.MemeExpression.html#equalValue"><code>MemeExpression.equalValue()</code></a> 的规格说明你可以加强但不能削弱。</p></li>
+<li><p id="@method_specified_interface"><a class="jump" href="index.html#@method_specified_interface"></a>当方法在接口中指定，然后由具体类实现时，使用 <a href="https://jsdoc.app/tags-inheritdoc.html"><code>@inheritdoc</code></a> 指向接口的规格说明，以指示该方法具有相同的规格说明。</p></li>
+<li><p id="@make_sure_you_thorough_principled_test"><a class="jump" href="index.html#@make_sure_you_thorough_principled_test"></a>确保你对每个抽象数据类型都有一套全面的、有原则的<strong>测试套件</strong>。
+注意，<code>MemeExpression</code> 类型的变体类被视为其 rep 的一部分，因此一套针对 <code>MemeExpression</code> 的良好测试套件也涵盖了这些变体。</p></li>
+</ul>
+
+<hr>
+
+</div><h2 id="submitting"><a class="jump" href="index.html#submitting"></a>提交</h2><div data-outline="submitting">
+
+<p id="@make_sure_you_commit_push_your"><a class="jump" href="index.html#@make_sure_you_commit_push_your"></a><strong>确保你将工作提交并 push</strong> 到你在 github.mit.edu 上的仓库。
+我们将以截止日期当天美国东部时间晚上 9:00 时你在 github.mit.edu 上仓库的状态为准。
+当你 <code>git push</code> 时，持续构建系统会尝试编译你的代码并运行公开测试（这些测试只是自动评分器测试的一个<em>子集</em>）。
+你可以随时在 <a href="https://didit.mit.edu/6.102/sp26">didit.mit.edu/6.102/sp26</a> 查看你的构建结果。</p>
+
+<p id="@didit_feedback_provided"><a class="jump" href="index.html#@didit_feedback_provided"></a>Didit 反馈的提供尽力而为：</p>
+
+<ul id="@there_no_guarantee">
+<li><a class="jump" href="index.html#@there_no_guarantee"></a>不保证 Didit 测试会在任何特定时间范围内运行，甚至不保证会运行。
+如果你在截止日期临近时 push 代码，提交数量过多会减慢代码被检测之前的周转时间。</li>
+<li>如果你在截止日期前提交并 push，即使 Didit 构建在截止日期后完成也没关系，因为提交和 push 是及时的。</li>
+<li>在 Didit 上通过部分或全部<em>公开测试</em>并不保证你能通过全部自动评分测试——但未能通过几乎肯定意味着在问题集上失分。</li>
+</ul>
+
+</div><h2 id="grading"><a class="jump" href="index.html#grading"></a>评分</h2><div data-outline="grading">
+
+<p id="@your_overall_ps3"><a class="jump" href="index.html#@your_overall_ps3"></a>你的 ps3 总评成绩将大致按以下方式计算：<br>
+~30% alpha 自动评分（包括在线练习）+ ~20% alpha 手动评分 + ~25% beta 自动评分 + ~25% beta 手动评分（包括代码审查）</p>
+
+<p id="@same_autograder_test"><a class="jump" href="index.html#@same_autograder_test"></a>从 alpha 到 beta 将使用相同的自动评分测试用例，但它们的分值会有所不同。
+为了鼓励<a href="../../classes/13-debugging/index.html#incremental_development">增量开发</a>，alpha 自动评分将把大部分权重放在仅使用文件名、<code>|</code> 和使用数字（而非 <code>?</code>）的 <code>@</code> 的测试上，而对使用语言其他特性（标题、使用 <code>?</code> 的 <code>@</code>、<span style="white-space:nowrap"><code>---</code></span>、<code>^</code> 和 <code>_</code>）的测试给予较少权重。
+在 beta 中，自动评分将把权重均匀分布在整个语言上。</p>
+
+<p id="@manual_grading_alpha"><a class="jump" href="index.html#@manual_grading_alpha"></a>alpha 的手动评分将检查你的表达式操作的规格说明、表达式数据类型的内部文档（数据类型定义、AF、RI 等），以及表达式变体的实现。
+beta 的手动评分可能检查任何部分，包括重新检查 ADT 实现，以及你如何处理代码审查反馈。</p></div></div>
+
+</div></main>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="psets-ps3"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:33:20 GMT+0000 (Coordinated Universal Time)
+--></html>

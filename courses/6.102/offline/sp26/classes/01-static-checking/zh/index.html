@@ -1,0 +1,702 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>阅读 1：静态检查</title>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件构造</a><div>2026 年春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_1_static_checking">阅读 1：静态检查</a></li><li><a href="index.html#hailstone_sequence">Hailstone 序列</a></li><li><a href="index.html#types">类型</a></li><li><a href="index.html#static_typing">静态类型</a></li><li><a href="index.html#static_checking_dynamic_checking_no_checking">静态检查、动态检查、不检查</a></li><li><a href="index.html#arrays">数组</a></li><li><a href="index.html#functions">函数</a></li><li><a href="index.html#mutating_values_vs_reassigning_variables">更改变量值 vs. 重新赋值变量</a></li><li><a href="index.html#documenting_assumptions">记录假设</a></li><li><a href="index.html#hacking_vs_engineering">黑客行为 vs. 工程实践</a></li><li><a href="index.html#the_goals_of_6102">6.102 的目标</a></li><li><a href="index.html#summary">总结</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_1_static_checking"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-01-static-checking"></iframe><a class="jump" href="index.html#reading_1_static_checking"></a>阅读 1：静态检查</h1><div data-outline="reading_1_static_checking">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<p id="@today-s_class_two"><a class="jump" href="index.html#@today-s_class_two"></a>今天的课程有两个主题：</p>
+
+<ul id="@static_typing_big">
+<li><a class="jump" href="index.html#@static_typing_big"></a>静态类型</li>
+<li>优秀软件的三大属性</li>
+</ul>
+
+<h2 id="hailstone_sequence"><a class="jump" href="index.html#hailstone_sequence"></a>Hailstone 序列</h2><div data-outline="hailstone_sequence">
+
+<p id="@running_example_going"><a class="jump" href="index.html#@running_example_going"></a>作为一个贯穿始终的示例，我们将探索 Hailstone 序列，其定义如下：
+从一个数字 <em>n</em> 开始，序列中的下一个数字是 <em>n/2</em>（如果 <em>n</em> 是偶数），或者 <em>3n+1</em>（如果 <em>n</em> 是奇数）。
+当序列到达 1 时结束。
+以下是一些示例：</p>
+
+<pre><p id="@2_1_3"><a class="jump" href="index.html#@2_1_3"></a>2, 1
+3, 10, 5, 16, 8, 4, 2, 1
+4, 2, 1
+2<sup>n</sup>, 2<sup>n-1</sup> , … , 4, 2, 1
+5, 16, 8, 4, 2, 1
+7, 22, 11, 34, 17, 52, 26, 13, 40, …? （这个序列在哪里停止？）</p></pre>
+
+<p id="@because_odd-number_rule"><a class="jump" href="index.html#@because_odd-number_rule"></a>由于奇数规则，序列在递减到 1 之前可能会上下波动。
+人们推测所有的 Hailstone 最终都会落地——即对于所有起始值 <em>n</em>，Hailstone 序列都会到达 1——但这仍然是一个<a href="https://en.wikipedia.org/wiki/Collatz_conjecture">未解决的问题</a>。
+为什么叫 Hailstone 序列？
+因为冰雹在云层中形成时，会上下翻滚，直到最终积累足够的重量落到地面。</p>
+
+<h3 id="computing_hailstones"><a class="jump" href="index.html#computing_hailstones"></a>计算 Hailstone</h3><div data-outline="computing_hailstones">
+
+<p id="@here-s_some_code"><a class="jump" href="index.html#@here-s_some_code"></a>下面是一些用于计算和打印 Hailstone 序列的代码，对于给定的起始值 <em>n</em>。
+我们将同时编写 JavaScript 和 Python 版本的代码进行比较：</p>
+
+<table><tbody><tr><td style="vertical-align: top; padding-right: 10px"><pre id="@python_n_3"><a class="jump" href="index.html#@python_n_3"></a><code class="language-python hljs"><span class="hljs-comment"># Python</span>
+n = <span class="hljs-number">3</span>
+<span class="hljs-keyword">while</span> n != <span class="hljs-number">1</span>:
+    print(n)
+    <span class="hljs-keyword">if</span> n % <span class="hljs-number">2</span> == <span class="hljs-number">0</span>:
+        n = n / <span class="hljs-number">2</span>
+    <span class="hljs-keyword">else</span>:
+        n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>
+
+
+print(n)</code></pre></td><td style="vertical-align: top"><pre id="@javascript_typescript_code"><a class="jump" href="index.html#@javascript_typescript_code"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// JavaScript（或 TypeScript，这段代码在两种语言中都能运行）</span>
+<span class="hljs-keyword">let</span> n = <span class="hljs-number">3</span>;
+<span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+    <span class="hljs-built_in">console</span>.log(n);
+    <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+        n = n / <span class="hljs-number">2</span>;
+    } <span class="hljs-keyword">else</span> {
+        n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+    }
+}
+<span class="hljs-built_in">console</span>.log(n);</code></pre></td></tr></tbody></table>
+
+<p id="@basic_semantics_expressions"><a class="jump" href="index.html#@basic_semantics_expressions"></a>JavaScript 中表达式和语句的基本语义与 Python 非常相似。例如，<code>while</code> 和 <code>if</code> 关键字的行为是相同的。</p>
+
+<p id="@few_points_syntax"><a class="jump" href="index.html#@few_points_syntax"></a>这里有几个语法要点值得注意：</p>
+
+<ul>
+<li><p id="@javascript_requires_parentheses"><a class="jump" href="index.html#@javascript_requires_parentheses"></a>JavaScript 要求在 <code>if</code> 和 <code>while</code> 的条件周围加上括号。</p></li>
+<li><p id="@javascript_statement_ends"><a class="jump" href="index.html#@javascript_statement_ends"></a>JavaScript 语句以分号结尾。
+这在技术上是可选的，因为 JavaScript 有在行尾<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#automatic_semicolon_insertion">自动插入分号</a>的规则。但这些规则存在一些隐蔽的陷阱，可能导致意外的行为和错误，因此始终使用分号是一个好习惯。</p></li>
+<li><p id="@javascript_uses_curly"><a class="jump" href="index.html#@javascript_uses_curly"></a>JavaScript 使用花括号来包围代码块，而不是使用缩进。
+但你仍然应该始终缩进代码块，即使 JavaScript 不会关注你额外的空格。编程是一种交流形式，你不仅要与编译器交流，还要与人类交流。人类需要那些缩进。我们稍后会回到这个话题。</p></li>
+</ul>
+
+<span id="triple-equals"></span>
+
+<p id="@you_may_also"><a class="jump" href="index.html#@you_may_also"></a>你可能还会注意到，JavaScript 版本使用 <code>===</code> 和 <code>!==</code>，而 Python 使用 <code>==</code> 和 <code>!=</code>。
+这是因为 JavaScript 中的 <code>==</code> 和 <code>!=</code> 会进行各种<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Equality#description">自动类型转换</a>，试图使左侧和右侧的值可以相互比较。
+例如，<code>0 == ""</code> 在 JavaScript 中为 true，这令人惊讶且困惑。
+这些操作符的三等号版本更安全、更可预测：<code>0 === ""</code> 为 false。
+优秀的 JavaScript 程序员只会使用 <code>===</code> 和 <code>!==</code>。
+这是从 Python 迁移时的一个潜在陷阱。</p>
+
+</div></div><h2 id="types"><a class="jump" href="index.html#types"></a>类型</h2><div data-outline="types">
+
+<p id="@but_not_using"><a class="jump" href="index.html#@but_not_using"></a>但严格来说，我们在这门课中并没有使用 JavaScript。
+我们使用的是 <em>TypeScript</em>，它扩展了 JavaScript，增加了在程序中声明类型的能力。
+在这个例子中，我们可以指定变量 <code>n</code> 的类型为 <code>number</code>：</p>
+
+<pre id="@let_n_number_3"><a class="jump" href="index.html#@let_n_number_3"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">3</span>;</code></pre>
+
+<p id="@type_set_values"><a class="jump" href="index.html#@type_set_values"></a>一个 <mark data-structure-text="type" id="^type"><strong>类型</strong></mark>是一组值以及可以在这些值上执行的操作。</p>
+
+<p id="@typescript_several_built-in"><a class="jump" href="index.html#@typescript_several_built-in"></a>TypeScript 有几种内置类型，包括：</p>
+
+<ul id="@number_which_represents">
+<li><a class="jump" href="index.html#@number_which_represents"></a><code>number</code>，表示整数和浮点数</li>
+<li><code>boolean</code>，表示真或假</li>
+<li><code>string</code>，表示字符序列</li>
+</ul>
+
+<p id="@operations_functions_take"><a class="jump" href="index.html#@operations_functions_take"></a><mark data-structure-text="operation" id="^operation"><strong>操作</strong></mark>是接收输入并产生输出的函数（有时也会更改输入值本身）。操作的语法各不相同，但无论它们如何书写，我们仍然将其视为函数。以下是 Python 或 TypeScript 中一个操作的几种不同语法：</p>
+
+<ul>
+<li><p id="@operator_example_b"><a class="jump" href="index.html#@operator_example_b"></a><em>作为操作符。</em>例如，<code>a + b</code> 调用操作 <code>+ : number × number → number</code>。
+（在这种表示法中：<code>+</code> 是操作名称，箭头前面的 <code>number × number</code> 给出两个输入的类型，箭头后面的 <code>number</code> 给出输出的类型。）</p></li>
+<li><p id="@function_example_math-sin-theta"><a class="jump" href="index.html#@function_example_math-sin-theta"></a><em>作为函数。</em>例如，<code>Math.sin(theta)</code> 调用操作 <code>sin: number → number</code>。这里，<code>Math</code> 不是一个对象，而是包含 <code>sin</code> 函数的类。</p></li>
+<li><p id="@method_object_example"><a class="jump" href="index.html#@method_object_example"></a><em>作为对象的方法。</em>例如，<code>str1.concat(str2)</code> 调用操作 <code>concat: string × string → string</code>。</p></li>
+<li><p id="@property_object_example"><a class="jump" href="index.html#@property_object_example"></a><em>作为对象的属性。</em>例如，<code>str.length</code> 调用操作 <code>length: string → number</code>。注意 <code>str.length</code> 后面没有括号。</p></li>
+</ul>
+
+<p id="@contrast_typescript-s_str-length"><a class="jump" href="index.html#@contrast_typescript-s_str-length"></a>将 TypeScript 的 <code>str.length</code> 与 Python 的 <code>len(str)</code> 进行比较。在两种语言中，这是同一个操作——接收一个字符串并返回其长度——但它使用了不同的语法。</p>
+
+<p id="@some_operations_overloaded"><a class="jump" href="index.html#@some_operations_overloaded"></a>有些操作是<mark data-mark-text="overloading" data-structure-text="overloading" id="^overloading"><strong>重载的</strong></mark>，这意味着相同的操作名称用于接收不同类型参数的函数。
+操作符 <code>+</code> 在 TypeScript 中是重载的。
+对于数字，5 + 3 自然产生 8。
+但当 <code>+</code> 用于字符串时，它执行的是字符串拼接，因此 "5" + "3" 产生 "53"。
+重载不仅限于 <code>+</code> 这样的操作符；方法和函数也可以被重载
+（至少在<a href="https://en.wikipedia.org/wiki/Function_overloading#Languages_supporting_overloading">某些编程语言</a>中，包括 TypeScript）。</p>
+
+</div><h2 id="static_typing"><a class="jump" href="index.html#static_typing"></a>静态类型</h2><div data-outline="static_typing">
+
+<p id="@typescript_statically-typed_language"><a class="jump" href="index.html#@typescript_statically-typed_language"></a>TypeScript 是一种<strong><mark data-mark-text="static typing" data-structure-text="static typing" id="^static_typing">静态类型</mark>语言</strong>。变量可以在<mark data-structure-text="compile time" id="^compile_time"><strong>编译时</strong></mark>（程序运行之前）被赋予一个类型，因此编译器可以推导出使用这些变量的表达式的类型。如果 <code>a</code> 和 <code>b</code> 被声明为 <code>number</code>，那么编译器会得出结论 <code>a+b</code> 也是 <code>number</code>。事实上，VS Code 环境在你编写代码时就会这样做，所以你可以在输入时看到所有相关的错误。</p>
+
+<p id="@javascript_python_contrast"><a class="jump" href="index.html#@javascript_python_contrast"></a>相比之下，JavaScript 和 Python 是<strong><mark data-mark-text="dynamic typing" data-structure-text="dynamic typing" id="^dynamic_typing">动态类型</mark>语言</strong>，因为这种检查被延迟到<mark data-structure-text="runtime" id="^runtime"><strong>运行时</strong></mark>（程序运行时）。</p>
+
+<p id="@static_typing_particular"><a class="jump" href="index.html#@static_typing_particular"></a>静态类型是一种特殊类型的<strong>静态检查</strong>，即在编译时检查错误。错误是编程的祸害。本课程中的许多思想都旨在消除代码中的错误，而静态检查是我们为此看到的第一个思想。静态类型防止了大量错误感染你的程序：确切地说，是由将操作应用于错误类型的参数引起的错误。如果你写了一行像下面这样的错误代码：</p>
+
+<pre id="@5_6"><a class="jump" href="index.html#@5_6"></a><code class="language-ts hljs typescript"><span class="hljs-string">"5"</span> * <span class="hljs-string">"6"</span></code></pre>
+
+<p id="@tries_multiply_two"><a class="jump" href="index.html#@tries_multiply_two"></a>试图将两个字符串相乘，那么静态检查会在你编程时捕获这个错误，而不是等到执行时才被发现。</p>
+
+<h3 id="static_types_at_compile_time_dynamic_types_at_runtime"><a class="jump" href="index.html#static_types_at_compile_time_dynamic_types_at_runtime"></a>编译时的静态类型，运行时的动态类型</h3><div data-outline="static_types_at_compile_time_dynamic_types_at_runtime">
+
+<p id="@static_type_declarations"><a class="jump" href="index.html#@static_type_declarations"></a>静态类型声明在编译时用于执行静态检查。
+添加静态类型不会改变这样一个事实：我们程序在运行时的行为由实际值驱动。
+在 Hailstone 程序中，如果我们声明 <code>let&nbsp;n:&nbsp;number&nbsp;=&nbsp;3;</code> 来指定 <code>n</code> 的静态类型，运行时的初始值仍然是 <code>3</code>，而不是其他任何 <code>number</code>。
+当我们声明的静态类型包含多种可能的运行时类型时，我们需要记住这个区别：一个静态类型为 <code>Animal</code> 的变量（让我们想象一下）在运行时实际上可能是 <code>Dog</code>、<code>Fish</code> 或 <code>SpottedOwl</code>。</p>
+
+<p id="@fact_typescript_like"><a class="jump" href="index.html#@fact_typescript_like"></a>事实上，TypeScript——像许多静态类型语言一样——在编译后会<em>丢弃</em>静态类型信息。
+TypeScript 编译器生成的是什么？JavaScript！
+下面是一段类型良好的 TypeScript 代码，以及生成的 JavaScript：</p>
+
+<table><tbody><tr><td style="vertical-align: top; padding-right: 10px"><pre id="@typescript_compile_function"><a class="jump" href="index.html#@typescript_compile_function"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// 待编译的 TypeScript</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">string</span> </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-string">'Hi, '</span> + name;
+}
+<span class="hljs-keyword">let</span> greeting: <span class="hljs-built_in">string</span> = hello(<span class="hljs-string">'types'</span>);</code></pre></td><td style="vertical-align: top"><pre id="@javascript_generated_function"><a class="jump" href="index.html#@javascript_generated_function"></a><code class="language-javascript hljs"><span class="hljs-comment">// 生成的 JavaScript</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>(<span class="hljs-params">name</span>) </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-string">'Hi, '</span> + name;
+}
+<span class="hljs-keyword">let</span> greeting = hello(<span class="hljs-string">'types'</span>);&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</code></pre></td></tr></tbody></table>
+
+</div><h3 id="support_for_static_typing_in_dynamically-typed_languages"><a class="jump" href="index.html#support_for_static_typing_in_dynamically-typed_languages"></a>动态类型语言中对静态类型的支持</h3><div data-outline="support_for_static_typing_in_dynamically-typed_languages">
+
+<p id="@just_like_typescript"><a class="jump" href="index.html#@just_like_typescript"></a>正如 TypeScript 为动态类型的 JavaScript 语言添加了静态类型一样，Python 也有支持静态类型的扩展。
+Python 3.5 及更高版本允许你在代码中声明<a href="https://www.python.org/dev/peps/pep-0484/">类型提示</a>，例如：</p>
+
+<pre id="@python_function_declared"><a class="jump" href="index.html#@python_function_declared"></a><code class="language-python hljs"><span class="hljs-comment"># 使用类型提示声明的 Python 函数</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">hello</span><span class="hljs-params">(name: str)</span> -&gt; str:</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-string">'Hi, '</span> + name</code></pre>
+
+<p id="@declared_types_can"><a class="jump" href="index.html#@declared_types_can"></a>声明的类型可以被 <a href="https://mypy-lang.org/">Mypy</a> 或 <a href="https://microsoft.github.io/pyright/">Pyright</a> 等检查器使用，以在无需运行代码的情况下静态地查找类型错误。</p>
+
+<p id="@addition_static_types"><a class="jump" href="index.html#@addition_static_types"></a>为 Python 和 JavaScript 等动态类型语言添加静态类型，反映了软件工程师中普遍存在的信念，即使用静态类型对于构建和维护大型软件系统至关重要。
+本阅读材料的其余部分，实际上整个课程，都将展示这一信念的理由。</p>
+
+<p id="@adding_static_types"><a class="jump" href="index.html#@adding_static_types"></a>为动态类型语言添加静态类型实现了一种称为<a href="https://en.wikipedia.org/wiki/Gradual_typing">渐进类型</a>的编程方法，其中代码的某些部分有静态类型声明，而其他部分则省略了它们。
+渐进类型可以为小型实验性原型成长为大型、稳定、可维护的系统提供更平滑的路径。</p>
+
+</div></div><h2 id="static_checking_dynamic_checking_no_checking"><a class="jump" href="index.html#static_checking_dynamic_checking_no_checking"></a>静态检查、动态检查、不检查</h2><div data-outline="static_checking_dynamic_checking_no_checking">
+
+<p id="@useful_think_about"><a class="jump" href="index.html#@useful_think_about"></a>思考语言可以提供的三种自动检查是很有用的：</p>
+
+<ul id="@static_checking_bug">
+<li><a class="jump" href="index.html#@static_checking_bug"></a><mark data-structure-text="static checking" id="^static_checking"><strong>静态检查</strong></mark>：在程序运行之前自动发现错误。</li>
+<li><mark data-structure-text="dynamic checking" id="^dynamic_checking"><strong>动态检查</strong></mark>：在执行过程中自动发现错误。</li>
+<li><strong>不检查</strong>：语言根本不帮助你发现错误。你必须自己留意，或者最终得到错误的答案。</li>
+</ul>
+
+<p id="@needless_say_catching"><a class="jump" href="index.html#@needless_say_catching"></a>不用说，静态捕获错误比动态捕获更好，而动态捕获又比根本不捕获要好。</p>
+
+<p id="@here_some_rules"><a class="jump" href="index.html#@here_some_rules"></a>以下是一些关于在每个阶段可以预期捕获哪些错误的经验法则。</p>
+
+<p id="@static_checking_can"><a class="jump" href="index.html#@static_checking_can"></a><strong>静态检查</strong>可以捕获：</p>
+
+<ul id="@syntax_errors_like">
+<li><a class="jump" href="index.html#@syntax_errors_like"></a>语法错误，如多余的标点符号或无关的词语。即使是 Python 这样的动态类型语言也会进行这种静态检查。如果你的 Python 程序中有缩进错误，你会在程序开始运行之前就发现。</li>
+<li>拼写错误的名称，如 <code>Math.sine(2)</code>。（正确的拼写是 <code>sin</code>。）</li>
+<li>参数数量错误，如 <code>Math.sin(30, 20)</code>。</li>
+<li>参数类型错误，如 <code>Math.sin("30")</code>。</li>
+<li>返回类型错误，如从声明为返回 <code>number</code> 的函数中 <code>return "30";</code>。</li>
+</ul>
+
+<p id="@general_static_checking"><a class="jump" href="index.html#@general_static_checking"></a>一般来说，静态检查可以检测与变量的<em>类型</em>相关的错误——即它允许拥有的值集，在 TypeScript 等静态类型语言中，这在编译时是已知的——但通常无法发现与该类型中特定值相关的错误。</p>
+
+<p id="@dynamic_checking_can"><a class="jump" href="index.html#@dynamic_checking_can"></a><strong>动态检查</strong>可以捕获，例如：</p>
+
+<ul id="@specific_illegal_argument">
+<li><a class="jump" href="index.html#@specific_illegal_argument"></a>特定的非法参数值。例如，当 <code>y</code> 为零时，表达式 <code>x/y</code> 是错误的，但对于 <code>y</code> 的其他值则是定义良好的。因此除零不是静态错误，因为在运行时之前你无法知道 <code>y</code> 是否确实为零。但除零可以作为动态错误被捕获；Python 会在发生除零时抛出 <code>ZeroDivisionError</code>。</li>
+<li>非法转换，即当特定值无法转换为目标类型或无法在目标类型中表示时。
+例如，在 Python 中，<code>int("hello")</code> 抛出 <code>ValueError</code>，因为字符串 <code>"hello"</code> 无法解析为十进制整数。</li>
+<li>越界索引或缺失的键，例如对字符串或数组使用过大的索引。
+在 Python 中，<code>"hello"[13]</code> 抛出 <code>IndexError</code>，<code>{'a': 1}['b']</code> 抛出 <code>KeyError</code>。</li>
+</ul>
+
+<span id="no-checking-in-JS"></span>
+
+<p id="@but_you_may"><a class="jump" href="index.html#@but_you_may"></a>但你可能已经注意到，上面的动态检查示例都来自 Python。
+那 TypeScript 中的动态检查呢？
+TypeScript 进行静态检查，但其运行时行为完全由 <em>JavaScript</em> 提供，而 JavaScript 的设计者决定对许多情况<strong>不进行检查</strong>。
+因此，例如，当字符串或数组索引越界，或者在映射中找不到键时，JavaScript 返回特殊值 <code>undefined</code>，而不是像 Python 那样抛出错误。
+当除以零时，JavaScript 返回表示无穷大的特殊值，而不是抛出错误。
+不检查使得错误比本来更难发现，因为这些特殊值可以通过进一步的计算传播，直到最终在离代码中原始错误很远的地方才发生故障。</p>
+
+<h3 id="surprise_number_is_not_a_true_number"><a class="jump" href="index.html#surprise_number_is_not_a_true_number"></a>意外发现：<code>number</code> 不是真正的数字</h3><div data-outline="surprise_number_is_not_a_true_number">
+
+<p id="@another_trap_typescript"><a class="jump" href="index.html#@another_trap_typescript"></a>TypeScript 中的另一个陷阱——许多其他编程语言也有同样的陷阱——是其数字类型具有一些不像我们习惯的整数和实数的边界情况。因此，一些确实应该被动态检查的错误根本没有被检查。以下是隐藏在 TypeScript 中的一些陷阱：</p>
+
+<ul>
+<li><p id="@limited_precision_integers"><a class="jump" href="index.html#@limited_precision_integers"></a><strong>整数的精度有限</strong>。TypeScript 中的所有数字都是浮点数，这意味着大数值的整数只能被近似表示。-2<sup>53</sup> 到 2<sup>53</sup> 之间（不含）的整数可以被精确表示，但超出该范围后，浮点表示只保留数字的最高有效二进制位。
+如果你有比如说 2<sup>60</sup> 并尝试将其加 1，会发生什么？你会得到相同的数字：在 TypeScript 中，<code>2**60 + 1 === 2**60</code>。
+所以这是一个例子，说明我们可能希望是动态错误的情况（因为我们编写的计算无法被正确表示）反而产生了错误的答案。</p>
+
+<p id="@these_limits_representable"><a class="jump" href="index.html#@these_limits_representable"></a>这些可表示整数的限制可以作为内置常量使用：</p>
+
+<ul><li><code>Number.MAX_SAFE_INTEGER</code>（大约 2<sup>53</sup> 或 10<sup>16</sup>）是最大可精确表示的整数</li>
+<li><code>Number.MIN_SAFE_INTEGER</code>（大约 -2<sup>53</sup> 或 -10<sup>16</sup>）是最小可精确表示的整数</li></ul>
+
+<p id="@arithmetic_integers_within"><a class="jump" href="index.html#@arithmetic_integers_within"></a><br>
+在这些安全范围内的整数运算保证保持精确。</p></li>
+<li><p id="@special_values_number"><a class="jump" href="index.html#@special_values_number"></a><strong>特殊值</strong>。<code>number</code> 类型有几个不是实数的特殊值：</p>
+
+<ul><li><code>Number.NaN</code>（表示"不是一个数字"）</li>
+<li><code>Number.POSITIVE_INFINITY</code>（打印为 <code>"Infinity"</code>）</li>
+<li><code>Number.NEGATIVE_INFINITY</code>（打印为 <code>"-Infinity"</code>）</li></ul>
+
+<p id="@you_apply_certain"><a class="jump" href="index.html#@you_apply_certain"></a><br>
+当你对 <code>number</code> 应用某些你期望会产生动态错误的操作时，比如除以零或对负数取平方根，你会得到这些特殊值之一。如果你继续用它计算，你最终会得到错误的最终答案。</p></li>
+<li><p id="@overflow_underflow_typescript"><a class="jump" href="index.html#@overflow_underflow_typescript"></a><strong>上溢和下溢</strong>。TypeScript 也无法表示太大（远离零）或太小（接近零）的数字：</p>
+
+<ul><li><code>Number.MAX_VALUE</code>（大约 10<sup>308</sup>）是能够安全表示的最大数字</li>
+<li><code>Number.MIN_VALUE</code>（大约 10<sup>-324</sup>）是能够安全表示的最小正数</li></ul>
+
+<p id="@happens_you_do"><a class="jump" href="index.html#@happens_you_do"></a><br>
+当你进行一个计算，其答案太大或太小而无法容纳在该有限范围内时，会发生什么？计算会静默地<em>上溢</em>（变为 <code>POSITIVE_INFINITY</code> 或 <code>NEGATIVE_INFINITY</code>）或<em>下溢</em>（变为零）。</p></li>
+</ul>
+
+<p id="@these_special_constant"><a class="jump" href="index.html#@these_special_constant"></a>这些特殊的常量值以大写的 <code>Number</code> 开头，它是 <code>number</code> 的类包装器。
+不要将 <code>Number</code> 用作类型——只使用它来访问这些常量。
+当你声明类型时，<a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#the-primitives-string-number-and-boolean">始终使用小写的 <code>number</code></a>。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-static_checking_dynamic_checking_no_checking"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><p id="@try_some_examples"><a class="jump" href="index.html#@try_some_examples"></a>让我们尝试一些有错误的代码示例，看看它们在 TypeScript 中的行为如何。
+这些错误是被静态捕获、动态捕获，还是完全没有被检测到？</p>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-1" data-target="#ex-static_checking_dynamic_checking_no_checking-1" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-1"></a><span class="panel-title">1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-1" data-outline="1" data-ex-id="surprise_number_is_not_a_true_number/1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_n_number_5_n_n"><a class="jump" href="index.html#@let_n_number_5_n_n"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">5</span>;
+n = n + <span class="hljs-string">".0"</span>;</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_1_0"><input type="radio" id="md_converted_choice_1_0" name="md_converted_radio_1">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_1_1"><input type="radio" id="md_converted_choice_1_1" name="md_converted_radio_1">动态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_1_2"><input type="radio" id="md_converted_choice_1_2" name="md_converted_radio_1">没有错误，答案错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-2" data-target="#ex-static_checking_dynamic_checking_no_checking-2" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-2"></a><span class="panel-title">2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-2" data-outline="2" data-ex-id="surprise_number_is_not_a_true_number/2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_odd_number"><a class="jump" href="index.html#@let_odd_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> odd: <span class="hljs-built_in">number</span> = <span class="hljs-number">2</span>**<span class="hljs-number">30</span> - <span class="hljs-number">1</span>;         <span class="hljs-comment">// 一个奇数</span>
+<span class="hljs-keyword">let</span> oddSquared: <span class="hljs-built_in">number</span> = odd * odd;  <span class="hljs-comment">// 奇数的平方应该是奇数</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_2_0"><input type="radio" id="md_converted_choice_2_0" name="md_converted_radio_2">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_2_1"><input type="radio" id="md_converted_choice_2_1" name="md_converted_radio_2">动态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_2_2"><input type="radio" id="md_converted_choice_2_2" name="md_converted_radio_2">没有错误，答案错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-3" data-target="#ex-static_checking_dynamic_checking_no_checking-3" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-3"></a><span class="panel-title">3</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-3" data-outline="3" data-ex-id="surprise_number_is_not_a_true_number/3" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_sum_number"><a class="jump" href="index.html#@let_sum_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> sum: <span class="hljs-built_in">number</span> = <span class="hljs-number">7</span>;
+<span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">0</span>;
+<span class="hljs-keyword">let</span> average: <span class="hljs-built_in">number</span> = sum/n;</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_3_0"><input type="radio" id="md_converted_choice_3_0" name="md_converted_radio_3">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_3_1"><input type="radio" id="md_converted_choice_3_1" name="md_converted_radio_3">动态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_3_2"><input type="radio" id="md_converted_choice_3_2" name="md_converted_radio_3">没有错误，答案错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-4" data-target="#ex-static_checking_dynamic_checking_no_checking-4" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-4"></a><span class="panel-title">4</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-4" data-outline="4" data-ex-id="surprise_number_is_not_a_true_number/4" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_x_number"><a class="jump" href="index.html#@let_x_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> x: <span class="hljs-built_in">number</span> = <span class="hljs-number">0</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+<span class="hljs-comment">// x 应该等于 1.0</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_4_0"><input type="radio" id="md_converted_choice_4_0" name="md_converted_radio_4">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_4_1"><input type="radio" id="md_converted_choice_4_1" name="md_converted_radio_4">动态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_4_2"><input type="radio" id="md_converted_choice_4_2" name="md_converted_radio_4">没有错误，答案错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-5" data-target="#ex-static_checking_dynamic_checking_no_checking-5" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-5"></a><span class="panel-title">5</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-5" data-outline="5" data-ex-id="surprise_number_is_not_a_true_number/5" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_n_number_2-53_1000_while"><a class="jump" href="index.html#@let_n_number_2-53_1000_while"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">2</span>**<span class="hljs-number">53</span> - <span class="hljs-number">1000</span>;
+<span class="hljs-keyword">while</span> (n !== <span class="hljs-number">2</span>**<span class="hljs-number">53</span> + <span class="hljs-number">1000</span>) {
+    n = n + <span class="hljs-number">1</span>;
+}</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_5_0"><input type="radio" id="md_converted_choice_5_0" name="md_converted_radio_5">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_5_1"><input type="radio" id="md_converted_choice_5_1" name="md_converted_radio_5">动态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, infinite loop"><label for="md_converted_choice_5_2"><input type="radio" id="md_converted_choice_5_2" name="md_converted_radio_5">没有错误，无限循环</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<div class="handout-solo alert alert-warning"><p id="@note_these_readings"><a class="jump" href="index.html#@note_these_readings"></a>请注意，这些阅读材料不会记录你之前做过的练习。
+当你重新加载页面时，所有练习都会重置。</p>
+
+<p id="@if_you-re_registered"><a class="jump" href="index.html#@if_you-re_registered"></a>如果你是注册学生，你可以通过查看 <a href="https://omni.mit.edu/6.102/sp26/user/classes/" class="alert-link">Omnivore</a> 来了解你已经完成了哪些练习。</p></div>
+
+</div></div><h2 id="arrays"><a class="jump" href="index.html#arrays"></a>数组</h2><div data-outline="arrays">
+
+<p id="@change_our_hailstone"><a class="jump" href="index.html#@change_our_hailstone"></a>让我们修改 Hailstone 计算，使其将序列存储在数据结构中，而不仅仅是打印出来。</p>
+
+<p id="@can_use_array"><a class="jump" href="index.html#@can_use_array"></a>为此，我们可以使用数组类型。数组是另一种类型的可变长度序列，类似于 Python 列表。以下是如何声明一个数字数组并创建一个空数组值：</p>
+
+<pre id="@let_array_array-number_0"><a class="jump" href="index.html#@let_array_array-number_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];</code></pre>
+
+<p id="@here-s_hailstone_code"><a class="jump" href="index.html#@here-s_hailstone_code"></a>下面是使用数组编写的 Hailstone 代码：</p>
+
+<pre id="@let_array_array-number_let_n_number"><a class="jump" href="index.html#@let_array_array-number_let_n_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+<span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">3</span>;
+<span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+    array.push(n);
+    <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+        n = n / <span class="hljs-number">2</span>;
+    } <span class="hljs-keyword">else</span> {
+        n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+    }
+}
+array.push(n);</code></pre>
+
+</div><h2 id="functions"><a class="jump" href="index.html#functions"></a>函数</h2><div data-outline="functions">
+
+<p id="@if_want_wrap"><a class="jump" href="index.html#@if_want_wrap"></a>如果我们想将这段代码包装成可重用的模块，我们可以编写一个函数：</p>
+
+<pre id="@compute_hailstone_sequence"><a class="jump" href="index.html#@compute_hailstone_sequence"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 计算 Hailstone 序列。
+ * @param n  序列的起始数字。假设 n &gt; 0。
+ * @returns 以 n 开始、以 1 结束的 Hailstone 序列。
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+    <span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+        array.push(n);
+        <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+            n = n / <span class="hljs-number">2</span>;
+        } <span class="hljs-keyword">else</span> {
+            n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+        }
+    }
+    array.push(n);
+    <span class="hljs-keyword">return</span> array;
+}</code></pre>
+
+<p id="@take_note_comment"><a class="jump" href="index.html#@take_note_comment"></a>请注意函数前面的 <code>/** ... */</code> 注释，因为它非常重要。这个注释是函数的规范，描述了操作的输入和输出。规范应该简洁、清晰、精确。注释提供了函数类型中尚未明确的信息。例如，它没有说返回值是一个数字数组，因为下面的 <code>Array&lt;number&gt;</code> 返回类型声明已经说明了这一点。但它确实说明了序列以 <code>n</code> 开始并以 1 结束，这是类型声明没有涵盖但对调用者来说很重要的信息。</p>
+
+<p id="@lot_more_say"><a class="jump" href="index.html#@lot_more_say"></a>我们将在接下来的几节课中详细讨论如何编写好的规范，但你现在就需要开始阅读和使用它们。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-functions"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-functions-static_checking_of_function_return" data-target="#ex-functions-static_checking_of_function_return" data-toggle="collapse"><a class="jump" href="index.html#@ex-functions-static_checking_of_function_return"></a><span class="panel-title">函数返回值的静态检查</span></div><div class="panel-collapse collapse exercise-panel" id="ex-functions-static_checking_of_function_return" data-outline="static_checking_of_function_return" data-ex-id="functions/static_checking_of_function_return" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@code_wrote_above"><a class="jump" href="index.html#@code_wrote_above"></a>在我们上面编写的代码中，注意函数的返回类型被显式声明为数字数组：</p>
+
+<pre id="@function_hailstonesequence-n_number_array-number_0"><a class="jump" href="index.html#@function_hailstonesequence-n_number_array-number_0"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{ ... }</code></pre>
+
+<p id="@means_typescript_statically"><a class="jump" href="index.html#@means_typescript_statically"></a>这意味着 TypeScript 将静态检查你是否从函数返回了正确类型的值。
+如果以下每个 <code>return</code> 语句出现在 <code>hailstoneSequence()</code> 函数体的末尾，TypeScript 编译器会如何判断？</p>
+
+<p id="@return_array"><a class="jump" href="index.html#@return_array"></a><code>return array;</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_6_0"><input type="radio" id="md_converted_choice_6_0" name="md_converted_radio_6">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_6_1"><input type="radio" id="md_converted_choice_6_1" name="md_converted_radio_6">合法</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_1"><a class="jump" href="index.html#@return_1"></a><code>return [];</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_7_0"><input type="radio" id="md_converted_choice_7_0" name="md_converted_radio_7">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_7_1"><input type="radio" id="md_converted_choice_7_1" name="md_converted_radio_7">合法</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_8_4"><a class="jump" href="index.html#@return_8_4"></a><code>return ["8", "4", "2", "1"];</code></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_8_0"><input type="radio" id="md_converted_choice_8_0" name="md_converted_radio_8">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_8_1"><input type="radio" id="md_converted_choice_8_1" name="md_converted_radio_8">合法</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_array-number"><a class="jump" href="index.html#@return_array-number"></a><code>return Array&lt;number&gt;;</code></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_9_0"><input type="radio" id="md_converted_choice_9_0" name="md_converted_radio_9">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_9_1"><input type="radio" id="md_converted_choice_9_1" name="md_converted_radio_9">合法</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_new_array-number"><a class="jump" href="index.html#@return_new_array-number"></a><code>return new Array&lt;number&gt;();</code></p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_10_0"><input type="radio" id="md_converted_choice_10_0" name="md_converted_radio_10">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_10_1"><input type="radio" id="md_converted_choice_10_1" name="md_converted_radio_10">合法</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_5"><a class="jump" href="index.html#@return_5"></a><code>return;</code></p>
+
+<div class="form-group exercise-part" data-outline="f"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_11_0"><input type="radio" id="md_converted_choice_11_0" name="md_converted_radio_11">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_11_1"><input type="radio" id="md_converted_choice_11_1" name="md_converted_radio_11">合法</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@no_return_statement"><a class="jump" href="index.html#@no_return_statement"></a>在 <code>hailstoneSequence()</code> 函数体末尾完全没有 return 语句</p>
+
+<div class="form-group exercise-part" data-outline="g"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_12_0"><input type="radio" id="md_converted_choice_12_0" name="md_converted_radio_12">静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_12_1"><input type="radio" id="md_converted_choice_12_1" name="md_converted_radio_12">合法</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="mutating_values_vs_reassigning_variables"><a class="jump" href="index.html#mutating_values_vs_reassigning_variables"></a>更改变量值 vs. 重新赋值变量</h2><div data-outline="mutating_values_vs_reassigning_variables">
+
+<p id="@change_necessary_evil"><a class="jump" href="index.html#@change_necessary_evil"></a>变化是必要的邪恶。
+但优秀的程序员尽量避免变化的事物，因为它们可能会发生意外的改变。
+不可变性——有意禁止某些事物在运行时发生变化——将是本课程中的一个重要设计原则。</p>
+
+<p id="@there_two_aspects"><a class="jump" href="index.html#@there_two_aspects"></a>不可变性有两个方面：值是可变的还是不可变的，以及引用（如变量）是否可以被重新赋值。</p>
+
+<p id="@mutation_refers_changing"><a class="jump" href="index.html#@mutation_refers_changing"></a><mark data-structure-text="mutation" id="^mutation"><strong>变更（Mutation）</strong></mark>指的是改变值的内容。
+不可变类型是指其值一旦创建就永远不能改变的类型。
+字符串类型在 Python 和 TypeScript 中都是不可变的。
+一旦创建了字符串，你就不能使其变短、变长或替换其中的任何字符。
+你必须创建一个包含你想要更改的新字符串。</p>
+
+<p id="@contrast_array_type"><a class="jump" href="index.html#@contrast_array_type"></a>相比之下，数组类型在 TypeScript 中是<em>可变的</em>，就像列表在 Python 中是可变的样。
+你可以更改数组或列表的内容——添加元素、删除元素或替换元素。</p>
+
+<p id="@python_also_immutable"><a class="jump" href="index.html#@python_also_immutable"></a>Python 也有不可变序列，即 <em>元组（tuple）</em>，一旦创建就不能更改。
+TypeScript 没有不可变元组，但它有 <code>ReadonlyArray</code>，这是一种省略了变更操作的数组类型。
+当你在代码中使用 <code>ReadonlyArray</code> 作为类型时，你不能调用 <code>push()</code> 来添加元素，也不能调用 <code>splice()</code> 来删除元素，也不能像 <code>arr[i] = ...</code> 那样重新赋值元素。
+TypeScript 会报告编译器错误，因为它在 <code>ReadonlyArray</code> 类型中找不到这些操作。</p>
+
+<p id="@reassignment_means_changing"><a class="jump" href="index.html#@reassignment_means_changing"></a><mark data-structure-text="reassignment" id="^reassignment"><strong>重新赋值（Reassignment）</strong></mark>指的是改变变量指向的位置。
+Python 允许任何变量被重新赋值，但 TypeScript 允许我们声明<em>常量</em>，即不可重新赋值的变量：只被赋值一次，之后永远不能被重新赋值。为了使引用不可重新赋值，使用关键字 <mark data-mark-text="const (TypeScript)" data-structure-text="const (TypeScript)" id="^const_typescript"><code>const</code></mark> 而不是 <code>let</code> 来声明：</p>
+
+<pre id="@const_n_number"><a class="jump" href="index.html#@const_n_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">5</span>;</code></pre>
+
+<p id="@if_typescript_compiler"><a class="jump" href="index.html#@if_typescript_compiler"></a>如果 TypeScript 编译器不相信你的 <code>const</code> 变量在运行时只会被赋值一次，那么它会产生编译器错误。因此，<code>const</code> 为你提供了对不可重新赋值引用的静态检查。</p>
+
+<p id="@good_practice_use"><a class="jump" href="index.html#@good_practice_use"></a>尽可能使用 <code>const</code> 是一个好习惯。与变量的类型一样，这些声明是重要的文档，对代码的读者有用，并由编译器进行静态检查。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-mutating_values_vs_reassigning_variables"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-mutating_values_vs_reassigning_variables-const" data-target="#ex-mutating_values_vs_reassigning_variables-const" data-toggle="collapse"><a class="jump" href="index.html#@ex-mutating_values_vs_reassigning_variables-const"></a><span class="panel-title">const</span></div><div class="panel-collapse collapse exercise-panel" id="ex-mutating_values_vs_reassigning_variables-const" data-outline="const" data-ex-id="mutating_values_vs_reassigning_variables/const" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@consider_variables_our"><a class="jump" href="index.html#@consider_variables_our"></a>考虑我们 <code>hailstoneSequence</code> 函数中的变量：</p>
+
+<pre id="@function_hailstonesequence-n_number_array-number_let_array"><a class="jump" href="index.html#@function_hailstonesequence-n_number_array-number_let_array"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+    <span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+        array.push(n);
+        <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+            n = n / <span class="hljs-number">2</span>;
+        } <span class="hljs-keyword">else</span> {
+            n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+        }
+    }
+    array.push(n);
+    <span class="hljs-keyword">return</span> array;
+}</code></pre>
+
+<p id="@which_variables_might"><a class="jump" href="index.html#@which_variables_might"></a>哪些变量我们可以声明为 <code>const</code>，因为它们在代码中从未被重新赋值？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="n: number"><label for="md_converted_choice_13_0"><input type="checkbox" id="md_converted_choice_13_0"><code>n: number</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="array: Array<number>"><label for="md_converted_choice_13_1"><input type="checkbox" id="md_converted_choice_13_1"><code>array: Array&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-mutating_values_vs_reassigning_variables-readonlyarray" data-target="#ex-mutating_values_vs_reassigning_variables-readonlyarray" data-toggle="collapse"><a class="jump" href="index.html#@ex-mutating_values_vs_reassigning_variables-readonlyarray"></a><span class="panel-title">ReadonlyArray</span></div><div class="panel-collapse collapse exercise-panel" id="ex-mutating_values_vs_reassigning_variables-readonlyarray" data-outline="readonlyarray" data-ex-id="mutating_values_vs_reassigning_variables/readonlyarray" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@suppose_change_all"><a class="jump" href="index.html#@suppose_change_all"></a>假设我们将函数中所有使用 <code>Array</code> 的地方改为 <code>ReadonlyArray</code>：</p>
+
+<pre id="@function_hailstonesequence-n_number_readonlyarray-number_let_array"><a class="jump" href="index.html#@function_hailstonesequence-n_number_readonlyarray-number_let_array"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">ReadonlyArray</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">let</span> array: ReadonlyArray&lt;<span class="hljs-built_in">number</span>&gt; = [];
+    <span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+        array.push(n);
+        <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+            n = n / <span class="hljs-number">2</span>;
+        } <span class="hljs-keyword">else</span> {
+            n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+        }
+    }
+    array.push(n);
+    <span class="hljs-keyword">return</span> array;
+}</code></pre>
+
+<p id="@which_lines_static"><a class="jump" href="index.html#@which_lines_static"></a>哪些行会有静态错误？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="let array: ReadonlyArray<number> = [];"><label for="md_converted_choice_14_0"><input type="checkbox" id="md_converted_choice_14_0"><code>let array: ReadonlyArray&lt;number&gt; = [];</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="while (n !== 1) {"><label for="md_converted_choice_14_1"><input type="checkbox" id="md_converted_choice_14_1"><code>while (n !== 1) {</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="array.push(n)"><label for="md_converted_choice_14_2"><input type="checkbox" id="md_converted_choice_14_2"><code>array.push(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="return array"><label for="md_converted_choice_14_3"><input type="checkbox" id="md_converted_choice_14_3"><code>return array</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="documenting_assumptions"><a class="jump" href="index.html#documenting_assumptions"></a>记录假设</h2><div data-outline="documenting_assumptions">
+
+<p id="@writing_type_variable"><a class="jump" href="index.html#@writing_type_variable"></a>写下变量的类型记录了一个关于它的假设：例如，变量 <code>n</code> 将始终引用一个数字。TypeScript 实际上会在编译时检查这个假设，并保证在你的程序中没有违反这个假设的地方。</p>
+
+<p id="@declaring_variable_const"><a class="jump" href="index.html#@declaring_variable_const"></a>将变量声明为 <code>const</code> 也是一种文档形式：一个声明该变量在初始赋值后永远不会被重新赋值的声明。TypeScript 也会静态地检查这一点。</p>
+
+<p id="@documented_another_assumption"><a class="jump" href="index.html#@documented_another_assumption"></a>我们记录了另一个 TypeScript（不幸的是）不会自动检查的假设：<code>n</code> 必须为正数。</p>
+
+<p id="@why_do_need"><a class="jump" href="index.html#@why_do_need"></a>为什么我们需要写下我们的假设？因为编程充满了假设，如果我们不写下来，我们就会忘记它们，其他将来需要阅读或修改我们程序的人也不会知道它们。他们将不得不猜测。</p>
+
+<p id="@programs_be_written"><a class="jump" href="index.html#@programs_be_written"></a>编写程序必须牢记两个目标：</p>
+
+<ul id="@communicating_computer_first">
+<li><a class="jump" href="index.html#@communicating_computer_first"></a>与计算机交流。首先说服编译器你的程序是合理的——语法正确且类型正确。然后确保逻辑正确，以便在运行时产生正确的结果。</li>
+<li>与其他人交流。使程序易于理解，以便当某人（可能是你自己）将来必须修复、改进或调整它时，他们能够做到。</li>
+</ul>
+
+</div><h2 id="hacking_vs_engineering"><a class="jump" href="index.html#hacking_vs_engineering"></a>黑客行为 vs. 工程实践</h2><div data-outline="hacking_vs_engineering">
+
+<p id="@we-ve_written_some"><a class="jump" href="index.html#@we-ve_written_some"></a>我们在本阅读材料中写了一些粗糙的代码。黑客行为通常以无节制的乐观为特征：</p>
+
+<ul id="@bad_writing_lots">
+<li><a class="jump" href="index.html#@bad_writing_lots"></a>不好：在测试任何代码之前编写大量代码。</li>
+<li>不好：把所有细节都记在脑子里，假设你（以及每个使用你代码的人）会永远记住它们，而不是把它们写在代码中。</li>
+<li>不好：假设错误不存在，或者即使存在也很容易发现和修复。</li>
+</ul>
+
+<p id="@but_software_engineering"><a class="jump" href="index.html#@but_software_engineering"></a>但软件工程不是黑客行为。工程师是悲观主义者：</p>
+
+<ul id="@good_write_little">
+<li><a class="jump" href="index.html#@good_write_little"></a>好：一次写一点，边写边测试。在以后的课程中，我们将讨论测试优先编程。</li>
+<li>好：记录你的代码所依赖的假设。</li>
+<li>好：保护你的代码免受愚蠢行为的侵害——尤其是我们自己的愚蠢！静态检查在这方面有帮助。</li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-hacking_vs_engineering"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>阅读练习</h4><p id="@consider_following_simple"><a class="jump" href="index.html#@consider_following_simple"></a>考虑以下简单的 Python 函数：</p>
+
+<pre id="@math_import_sqrt"><a class="jump" href="index.html#@math_import_sqrt"></a><code class="language-python hljs"><span class="hljs-keyword">from</span> math <span class="hljs-keyword">import</span> sqrt
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">fun_fact_about</span><span class="hljs-params">(person)</span>:</span>
+    <span class="hljs-keyword">if</span> sqrt(person.age) == int(sqrt(person.age)):
+        print(<span class="hljs-string">"The age of "</span> + person.name + <span class="hljs-string">" is a perfect square: "</span> + str(person.age))</code></pre>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-hacking_vs_engineering-assumptions" data-target="#ex-hacking_vs_engineering-assumptions" data-toggle="collapse"><a class="jump" href="index.html#@ex-hacking_vs_engineering-assumptions"></a><span class="panel-title">假设</span></div><div class="panel-collapse collapse exercise-panel" id="ex-hacking_vs_engineering-assumptions" data-outline="assumptions" data-ex-id="hacking_vs_engineering/assumptions" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_assumptions"><a class="jump" href="index.html#@which_following_assumptions"></a>以下哪些是这段代码所做的假设——即为了使代码能够无错误地运行，它们必须为真？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="person must be an object with age and name instance variables"><label for="md_converted_choice_15_0"><input type="checkbox" id="md_converted_choice_15_0"><code>person</code> 必须是一个具有 <code>age</code> 和 <code>name</code> 实例变量的对象</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be a nonnegative number"><label for="md_converted_choice_15_1"><input type="checkbox" id="md_converted_choice_15_1"><code>person.age</code> 必须是一个非负数</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be an integer"><label for="md_converted_choice_15_2"><input type="checkbox" id="md_converted_choice_15_2"><code>person.age</code> 必须是一个整数</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.name must be a string"><label for="md_converted_choice_15_3"><input type="checkbox" id="md_converted_choice_15_3"><code>person.name</code> 必须是一个字符串</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-hacking_vs_engineering-checkable_assumptions" data-target="#ex-hacking_vs_engineering-checkable_assumptions" data-toggle="collapse"><a class="jump" href="index.html#@ex-hacking_vs_engineering-checkable_assumptions"></a><span class="panel-title">可检查的假设</span></div><div class="panel-collapse collapse exercise-panel" id="ex-hacking_vs_engineering-checkable_assumptions" data-outline="checkable_assumptions" data-ex-id="hacking_vs_engineering/checkable_assumptions" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@if_code_written"><a class="jump" href="index.html#@if_code_written"></a>如果这段代码是用 TypeScript 编写的，以下哪些假设可以通过类型声明来记录并由 TypeScript 编译器静态检查？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="person must be an object with age and name instance variables"><label for="md_converted_choice_16_0"><input type="checkbox" id="md_converted_choice_16_0"><code>person</code> 必须是一个具有 <code>age</code> 和 <code>name</code> 实例变量的对象</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be a nonnegative number"><label for="md_converted_choice_16_1"><input type="checkbox" id="md_converted_choice_16_1"><code>person.age</code> 必须是一个非负数</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be a number"><label for="md_converted_choice_16_2"><input type="checkbox" id="md_converted_choice_16_2"><code>person.age</code> 必须是一个数字</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.name must be a string"><label for="md_converted_choice_16_3"><input type="checkbox" id="md_converted_choice_16_3"><code>person.name</code> 必须是一个字符串</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="the_goals_of_6102"><a class="jump" href="index.html#the_goals_of_6102"></a>6.102 的目标</h2><div data-outline="the_goals_of_6102">
+
+<p id="@our_primary_goal"><a class="jump" href="index.html#@our_primary_goal"></a>我们在这门课程中的主要目标是学习如何生产具有以下特性的软件：</p>
+
+<ul id="@safe_bugs_correctness">
+<li><a class="jump" href="index.html#@safe_bugs_correctness"></a><strong>免受错误影响</strong>。正确性（当前的正确行为）和防御性（未来的正确行为）是我们构建的任何软件所必需的。</li>
+<li><strong>易于理解</strong>。代码必须能够与需要理解它并进行更改的未来程序员交流（修复错误或添加新功能）。那个未来的程序员可能是几个月或几年后的你。如果你不写下来，你会惊讶于自己会忘记这么多，而一个好的设计对你自己的未来帮助有多大。</li>
+<li><strong>适应变化</strong>。软件总是在变化。一些设计使更改变得容易；另一些则需要抛弃并重写大量代码。</li>
+</ul>
+
+<p id="@there_other_important"><a class="jump" href="index.html#@there_other_important"></a>软件还有其他重要属性（如性能、可用性、安全性），它们可能与这三个属性存在权衡。但这些都是我们在 6.102 中关注的三大属性，也是软件开发人员在构建软件实践中最重视的。值得思考我们在本课程中学习的每种语言特性、每种编程实践、每种设计模式，并理解它们与这三大属性的关系。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-the_goals_of_6102"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-the_goals_of_6102-sfb" data-target="#ex-the_goals_of_6102-sfb" data-toggle="collapse"><a class="jump" href="index.html#@ex-the_goals_of_6102-sfb"></a><span class="panel-title">SFB</span></div><div class="panel-collapse collapse exercise-panel" id="ex-the_goals_of_6102-sfb" data-outline="sfb" data-ex-id="the_goals_of_6102/sfb" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_ideas_discussed_reading_generally_help_make_your_code_more_safe"><a class="jump" href="index.html#@which_following_ideas_discussed_reading_generally_help_make_your_code_more_safe"></a>以下在本阅读材料中讨论的哪些思想通常有助于使你的代码更加<strong>免受错误影响</strong>？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="dynamic checking"><label for="md_converted_choice_17_0"><input type="checkbox" id="md_converted_choice_17_0">动态检查</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="const variables"><label for="md_converted_choice_17_1"><input type="checkbox" id="md_converted_choice_17_1">const 变量</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="overflow"><label for="md_converted_choice_17_2"><input type="checkbox" id="md_converted_choice_17_2">溢出</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typing"><label for="md_converted_choice_17_3"><input type="checkbox" id="md_converted_choice_17_3">静态类型</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-the_goals_of_6102-etu" data-target="#ex-the_goals_of_6102-etu" data-toggle="collapse"><a class="jump" href="index.html#@ex-the_goals_of_6102-etu"></a><span class="panel-title">ETU</span></div><div class="panel-collapse collapse exercise-panel" id="ex-the_goals_of_6102-etu" data-outline="etu" data-ex-id="the_goals_of_6102/etu" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_ideas_discussed_reading_generally_help_make_your_code_more_easy"><a class="jump" href="index.html#@which_following_ideas_discussed_reading_generally_help_make_your_code_more_easy"></a>以下在本阅读材料中讨论的哪些思想通常有助于使你的代码更加<strong>易于理解</strong>？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="documented assumptions in comments"><label for="md_converted_choice_18_0"><input type="checkbox" id="md_converted_choice_18_0">注释中记录的假设</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="const variables"><label for="md_converted_choice_18_1"><input type="checkbox" id="md_converted_choice_18_1">const 变量</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="overloading"><label for="md_converted_choice_18_2"><input type="checkbox" id="md_converted_choice_18_2">重载</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typing"><label for="md_converted_choice_18_3"><input type="checkbox" id="md_converted_choice_18_3">静态类型</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-the_goals_of_6102-rfc" data-target="#ex-the_goals_of_6102-rfc" data-toggle="collapse"><a class="jump" href="index.html#@ex-the_goals_of_6102-rfc"></a><span class="panel-title">RFC</span></div><div class="panel-collapse collapse exercise-panel" id="ex-the_goals_of_6102-rfc" data-outline="rfc" data-ex-id="the_goals_of_6102/rfc" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_ideas_discussed_reading_generally_help_make_your_code_more_ready"><a class="jump" href="index.html#@which_following_ideas_discussed_reading_generally_help_make_your_code_more_ready"></a>以下在本阅读材料中讨论的哪些思想通常有助于使你的代码更加<strong>适应变化</strong>？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="documented assumptions in comments"><label for="md_converted_choice_19_0"><input type="checkbox" id="md_converted_choice_19_0">注释中记录的假设</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="functions"><label for="md_converted_choice_19_1"><input type="checkbox" id="md_converted_choice_19_1">函数</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typing"><label for="md_converted_choice_19_2"><input type="checkbox" id="md_converted_choice_19_2">静态类型</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="why_we_use_typescript_in_this_course"><a class="jump" href="index.html#why_we_use_typescript_in_this_course"></a>为什么我们在这门课中使用 TypeScript</h3><div data-outline="why_we_use_typescript_in_this_course">
+
+<p id="@since_you-ve_had"><a class="jump" href="index.html#@since_you-ve_had"></a>由于你已经学过 6.101 [原 6.009]，我们假设你对 Python 感到舒适。那么我们为什么在这门课中不使用 Python 呢？为什么我们在 6.102 中使用 TypeScript/JavaScript？</p>
+
+<p id="@safety_first_reason"><a class="jump" href="index.html#@safety_first_reason"></a><strong>安全性</strong>是第一个原因。TypeScript 具有静态检查（主要是类型检查，但也有其他类型的静态检查，比如检查你的代码是否从声明为返回值的函数中返回了值）。我们在这门课程中学习软件工程，而免受错误影响是该方法的核心原则。TypeScript 将安全性调到了很高的水平，这使它成为学习良好软件工程实践的好语言。当然，在 Python 或 JavaScript 等动态语言中编写安全代码也是可能的，但如果你在安全的、静态检查的语言中学习需要做什么，就会更容易理解。</p>
+
+<p id="@ubiquity_another_reason"><a class="jump" href="index.html#@ubiquity_another_reason"></a><strong>普遍性</strong>是另一个原因。TypeScript 编译成纯 JavaScript，后者在研究、教育和行业中广泛使用。JavaScript 可以在许多平台上运行，不仅限于最初广泛使用的网络浏览器，现在还可以在网络服务器甚至 Windows/Mac/Linux 的桌面应用程序中运行。</p>
+
+<p id="@compared_java_typescript"><a class="jump" href="index.html#@compared_java_typescript"></a>与 Java 相比，TypeScript 具有更丰富的类型系统，编写程序需要更少的样板代码，并且是创建现代用户界面和 Web 应用程序的更好选择。事实上，TypeScript 的类型系统相当<a href="https://www.typescriptlang.org/docs/handbook/2/types-from-types.html">先进</a>，使用它能够创建出令人意料的<a href="https://mattrickard.com/typescript-type-system-hacks">程序</a>（其中一些<a href="https://www.youtube.com/watch?v=0mCsluv5FXA">相当非凡</a>）。</p>
+
+<p id="@any_case_good"><a class="jump" href="index.html#@any_case_good"></a>无论如何，优秀的程序员必须是<strong>多语言的</strong>。编程语言是工具，你必须为工作使用正确的工具。在你完成 MIT 的学业之前，你很可能会因为课程、实习或 UROPs 而不得不学习其他编程语言（如 Java、C/C++、Scheme、Ruby 或 Haskell），所以我们现在让你开始学习第二门语言。</p>
+
+<p id="@result_ubiquity_javascript"><a class="jump" href="index.html#@result_ubiquity_javascript"></a>由于其普遍性，JavaScript 拥有大量有趣且有用的<strong>库</strong>和优秀的免费开发<strong>工具</strong>（如 VS Code 等 IDE、编辑器、编译器、测试框架、分析器、代码覆盖率工具、代码风格检查器）。JavaScript 和 Python 在生态系统丰富度方面是势均力敌的竞争者，而 TypeScript 可以充分利用 JavaScript 库。</p>
+
+<p id="@there_some_reasons"><a class="jump" href="index.html#@there_some_reasons"></a>使用 JavaScript 有一些令人遗憾的原因。它很庞大，在最初设计以来的几十年里积累了许多功能。它背负着 C/C++ 等较旧语言的包袱——<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/switch"><code>switch</code> 语句</a>是从 C 继承的过时且不安全的语言结构的一个很好的例子。JavaScript 本身也有一些糟糕的设计决策，包括使 <a href="index.html#triple-equals"><code>0 == ""</code> 返回 true</a> 和 <a href="https://www.destroyallsoftware.com/talks/wat"><code>[] + []</code> 以某种方式产生空字符串</a> 的类型转换规则，以及<a href="index.html#no-checking-in-JS">比其他语言更少的动态检查</a>。
+TypeScript 修复了 JavaScript 中的一些缺陷，但不是全部。
+JavaScript 中有许多部分现在已被弃用，程序员避免使用它们，因为它们使用起来有风险。</p>
+
+<p id="@but_whole_typescript"><a class="jump" href="index.html#@but_whole_typescript"></a>但总体而言，TypeScript 是目前学习如何编写免受错误影响、易于理解和适应变化的代码的合理选择。这就是我们的目标。</p>
+
+<p id="@real_skills_you-ll"><a class="jump" href="index.html#@real_skills_you-ll"></a>你从这门课程中获得的真正技能不是特定于某种语言的，而是可以迁移到你可能编程的任何语言中。这门课程最重要的经验教训将经受住语言潮流的考验：安全性、清晰性、抽象能力、工程直觉。</p>
+
+</div></div><h2 id="summary"><a class="jump" href="index.html#summary"></a>总结</h2><div data-outline="summary">
+
+<p id="@main_idea_introduced"><a class="jump" href="index.html#@main_idea_introduced"></a>我们今天介绍的主要思想是<strong>静态检查</strong>。以下是这个思想与课程目标的关系：</p>
+
+<ul>
+<li><p id="@safe_bugs_static"><a class="jump" href="index.html#@safe_bugs_static"></a><strong>免受错误影响。</strong>
+静态检查通过在运行时之前捕获类型错误和其他错误来帮助提高安全性。</p></li>
+<li><p id="@easy_understand_helps"><a class="jump" href="index.html#@easy_understand_helps"></a><strong>易于理解。</strong>
+它有助于理解，因为类型在代码中被明确说明。</p></li>
+<li><p id="@ready_change_static"><a class="jump" href="index.html#@ready_change_static"></a><strong>适应变化。</strong>
+静态检查通过识别需要同时更改的其他位置，使更改代码变得更容易。</p></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>由 Rob Miller 和 Max Goldman 主要撰写，Saman Amarasinghe、Adam Chlipala、Srini Devadas、Gabriella Ecanow、Michael Ernst、John Guttag、Daniel Jackson、Josiah McMenamy、Martin Rinard 和 Armando Solar-Lezama 做出贡献，以及 Robert Durfee、Jenna Himawan、Stacia Johanna、Jessica Shi、Daniel Whatley 和 Elizabeth Zhou 做出贡献。本作品采用 <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a> 许可协议。</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 年春季课程网站存档  |  最新网站在 <a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |   <a href="http://accessibility.mit.edu/">无障碍访问</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-01-static-checking"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:28:39 GMT+0000 (Coordinated Universal Time)
+--></html>

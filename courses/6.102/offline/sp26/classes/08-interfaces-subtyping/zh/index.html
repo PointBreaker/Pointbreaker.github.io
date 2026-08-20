@@ -1,0 +1,1753 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>阅读 8：使用接口、泛型、枚举和函数定义抽象数据类型（ADT）</title>
+
+
+
+<style>
+.adt-implementation-table th, .adt-implementation-table td {
+  vertical-align: top;
+  padding: 0 10px 0;
+}
+.adt-implementation-table tr:last-child td {
+  padding-bottom: 10px;
+}
+.adt-implementation-table p {
+  margin: 0px;
+}
+.adt-implementation-table .new-row td {
+  padding-top: 10px;
+}
+.adt-implementation-table .new-row td:first-child {
+  white-space: nowrap;
+}
+
+</style>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — 软件构造</a><div>2026 春季</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li class="active"><a href="index.html#reading_8_defining_adts_with_interfaces_generics_enums_and_functions">阅读 8：使用接口、泛型、枚举和函数定义抽象数据类型（ADT）</a></li><li><a href="index.html#interfaces">接口</a></li><li><a href="index.html#subtypes">子类型</a></li><li><a href="index.html#example_mystring">示例：MyString</a></li><li><a href="index.html#why_interfaces">为什么使用接口？</a></li><li><a href="index.html#subclassing">子类化</a></li><li><a href="index.html#generic_types">泛型</a></li><li><a href="index.html#enumerations">枚举</a></li><li><a href="index.html#getters_and_setters">Getter 和 setter</a></li><li><a href="index.html#adts_in_non-oop_languages">非面向对象语言中的 ADT</a></li><li><a href="index.html#adts_in_typescript">TypeScript 中的 ADT</a></li><li><a href="index.html#summary">总结</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_8_defining_adts_with_interfaces_generics_enums_and_functions"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-08-interfaces-subtyping"></iframe><a class="jump" href="index.html#reading_8_defining_adts_with_interfaces_generics_enums_and_functions"></a>阅读 8：使用接口、泛型、枚举和函数定义抽象数据类型（ADT）</h1><div data-outline="reading_8_defining_adts_with_interfaces_generics_enums_and_functions">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@praxis_tutor_exercises"><a class="jump" href="index.html#@praxis_tutor_exercises"></a>Praxis Tutor 练习</h4>
+
+<p id="@keep_making_progress"><a class="jump" href="index.html#@keep_making_progress"></a>通过在 Praxis Tutor 中完成以下类别，继续推进你的 TypeScript 学习：</p>
+
+<div class="tutorProgress no-markdown">
+    <img class="ideWindow" src="../../tools/typescript/figures/small-vscode-window.png">
+    <div class="callout">
+
+      <div class="level">
+        <div class="conceptGroup completed">
+            <button class="conceptGroupButton" disabled="">
+                <span class="checkMark">✓</span>
+                <span class="conceptGroupUiLabel">对象</span>
+                <span class="numberSetsLeft">2/2</span>
+            </button>
+            <div class="conceptBoxes">
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+            </div>
+        </div>
+        <div class="conceptGroup completed">
+            <button class="conceptGroupButton" disabled="">
+                <span class="checkMark">✓</span>
+                <span class="conceptGroupUiLabel">接口与枚举</span>
+                <span class="numberSetsLeft">1/1</span>
+            </button>
+            <div class="conceptBoxes">
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+                <div class="conceptBox"></div>
+            </div>
+        </div>
+      </div>
+
+  </div>
+</div>
+
+<h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>6.102 中的软件</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>摆脱 Bug</th><th>易于理解</th><th>为更改做好准备</th></tr>
+<tr><td>
+  在当前正确，在未来未知的情况下也正确。
+</td><td>
+  与未来的程序员（包括未来的你自己）清晰地沟通。
+</td><td>
+  设计为无需重写即可适应变化。</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>学习目标</h4>
+
+<p id="@today-s_class_about"><a class="jump" href="index.html#@today-s_class_about"></a>今天的课程讨论实现抽象数据类型的多种方式，包括：</p>
+
+<ul id="@interfaces_separating_interface">
+<li><a class="jump" href="index.html#@interfaces_separating_interface"></a>接口：将 ADT 的接口与其实现分离；</li>
+<li>泛型：使用泛型类型参数定义一族 ADT；</li>
+<li>枚举：用一个小而有限的值集定义 ADT；</li>
+<li>对不透明类型进行操作的全局函数：在 TypeScript 中很少见，但在非面向对象语言中很常见。</li>
+</ul>
+
+<p id="@also_discuss_subtyping"><a class="jump" href="index.html#@also_discuss_subtyping"></a>我们还讨论了<em>子类型</em>，即由规约决定的两种类型之间的关系，并将其与<em>子类化</em>区分开来——子类化还涉及表示。</p>
+
+<p id="@after_today-s_class"><a class="jump" href="index.html#@after_today-s_class"></a>今天的课程结束后，你应该能够：</p>
+
+<ul id="@define_adts_using">
+<li><a class="jump" href="index.html#@define_adts_using"></a>使用类、接口、泛型和枚举定义 ADT</li>
+<li>判断一个类型是否为另一个类型的子类型</li>
+</ul>
+
+<h2 id="interfaces"><a class="jump" href="index.html#interfaces"></a>接口</h2><div data-outline="interfaces">
+
+<p id="@typescript-s_interface_useful"><a class="jump" href="index.html#@typescript-s_interface_useful"></a>TypeScript 的 <code>interface</code> 是表达抽象数据类型的一种有用语言机制。
+TypeScript 中的<mark data-mark-text="interface (TypeScript)" data-structure-text="interface (TypeScript)" id="^interface_typescript">接口</mark>是一系列不带方法体的方法签名列表。
+如果一个类在其 <code>implements</code> 子句中声明了该接口，并为接口的所有方法提供了方法体，则称该类<em>实现</em>了该接口。
+因此，在 TypeScript 中定义抽象数据类型的一种方式就是使用接口。
+该类型的实现就是实现该接口的一个类。</p>
+
+<p id="@one_advantage_approach"><a class="jump" href="index.html#@one_advantage_approach"></a>这种方法的一个优点是，接口可以为客户指定契约，仅此而已。
+接口是客户程序员理解 ADT 所需阅读的全部内容。
+客户不会无意中对 ADT 的表示产生依赖，因为表示并不存在于接口中（甚至不作为私有字段）。
+实现被完全分离地保留在一个完全不同的类中。</p>
+
+<p id="@another_advantage_multiple"><a class="jump" href="index.html#@another_advantage_multiple"></a>另一个优点是，抽象数据类型的多种不同表示可以作为实现该接口的不同类，在同一程序中共存。
+当抽象数据类型仅表示为一个没有接口的单一类时，就更难拥有多种表示。
+在 <a href="../06-abstract-data-types/index.html#example_different_representations_for_strings"><code>MyString</code> 示例（出自《抽象数据类型》）</a>中，<code>MyString</code> 是一个单一类。
+我们探讨了 <code>MyString</code> 的两种不同表示，但无法在同一程序中同时拥有该 ADT 的两种表示。</p>
+
+<p id="@typescript-s_static_type"><a class="jump" href="index.html#@typescript-s_static_type"></a>TypeScript 的静态类型检查允许编译器捕获实现 ADT 契约时的许多错误。
+例如，省略某个必需的方法，或给方法错误的返回类型，都是编译时错误。
+不幸的是，编译器不会替我们检查代码是否遵守了那些写在文档注释中方法的规约。</p>
+
+<h3 id="about_interfaces_in_typescript"><a class="jump" href="index.html#about_interfaces_in_typescript"></a>关于 TypeScript 中的接口</h3><div data-outline="about_interfaces_in_typescript">
+
+<p id="@syntactically_typescript_interface"><a class="jump" href="index.html#@syntactically_typescript_interface"></a>在语法上，TypeScript 的 <code>interface</code> 包含 ADT 的规约，即其公共方法签名和公共实例方法。
+每个实例方法签名以分号结尾。</p>
+
+<p id="@interface_does_not"><a class="jump" href="index.html#@interface_does_not"></a>接口不包含关于表示的信息，因此它不应声明任何私有实例变量，也不应包含实例方法体。
+它也不应包含任何抽象函数、表示不变量或防止表示暴露的论证，因为这些都依赖于拥有一个表示。</p>
+
+<p id="@because_interface_no"><a class="jump" href="index.html#@because_interface_no"></a>因为接口没有表示，TypeScript 不允许用 <code>new</code> 对其进行实例化。
+表达式 <code>new ArrayLike&lt;number&gt;()</code> 是一个静态错误。
+要创建 <a href="https://typhonjs-typedoc.github.io/ts-lib-docs/2023/esm/interfaces/ArrayLike.html"><code>ArrayLike</code></a> 类型的实例，你需要改为实例化一个为其提供表示的类，例如 <code>new Array&lt;number&gt;()</code>。</p>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-interfaces"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-interfaces-typescript_interfaces" data-target="#ex-interfaces-typescript_interfaces" data-toggle="collapse"><a class="jump" href="index.html#@ex-interfaces-typescript_interfaces"></a><span class="panel-title">TypeScript 接口</span></div><div class="panel-collapse collapse exercise-panel" id="ex-interfaces-typescript_interfaces" data-outline="typescript_interfaces" data-ex-id="about_interfaces_in_typescript/typescript_interfaces" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@consider_typescript_interface"><a class="jump" href="index.html#@consider_typescript_interface"></a>考虑以下旨在表示二维平面中一条曲线的 TypeScript 接口和 TypeScript 类：</p>
+
+<pre id="@represents_immutable_curve"><a class="jump" href="index.html#@represents_immutable_curve"></a><code class="language-ts hljs typescript">      <span class="hljs-comment">/** 表示平面上一条不可变的曲线。 */</span>
+      <span class="hljs-keyword">interface</span> Curve {
+
+          <span class="hljs-comment">/** @returns 若点 (x,y) 位于该曲线上则返回 true */</span>
+          contains(x: <span class="hljs-built_in">number</span>, y: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">boolean</span>;
+
+          <span class="hljs-comment">/** @returns 由连接 this 与 that 形成的曲线 */</span>
+<span class="hljs-comment">/* A */</span>   join(that: Curve): ArrayCurve;
+
+      }
+
+      <span class="hljs-comment">/** Curve 的实现。 */</span>
+      <span class="hljs-keyword">class</span> ArrayCurve <span class="hljs-keyword">implements</span> Curve {
+
+          <span class="hljs-comment">/** 创建一条单点的曲线 */</span>
+          <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">x: <span class="hljs-built_in">number</span>, y: <span class="hljs-built_in">number</span></span>) { ... }
+
+          <span class="hljs-comment">/** @returns 由连接 this 与 that 形成的曲线 */</span>
+          <span class="hljs-keyword">public</span> join(that: Curve): ArrayCurve { ... }
+
+          <span class="hljs-comment">/** @returns 该曲线的总路径长度 */</span>
+          <span class="hljs-keyword">public</span> pathLength(): <span class="hljs-built_in">number</span> { ... }
+
+      }</code></pre>
+
+<label class="exercise-part-heading" id="@which_following_statements"><a class="jump" href="index.html#@which_following_statements"></a>关于 <code>Curve</code> 和 <code>ArrayCurve</code>，以下哪些陈述是正确的？</label>
+
+<p id="@line_labeled_problem_because_curve_mentions"><a class="jump" href="index.html#@line_labeled_problem_because_curve_mentions"></a>标记为 <code>A</code> 的行是个问题，因为 <code>Curve</code> 提到了 <code>ArrayCurve</code>，而 <code>ArrayCurve</code> 也提到了 <code>Curve</code>，这是循环的。</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_1_0"><input type="radio" id="md_converted_choice_1_0" name="md_converted_radio_1">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_1_1"><input type="radio" id="md_converted_choice_1_1" name="md_converted_radio_1">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@line_labeled_problem_because_isn-t_representation-independent"><a class="jump" href="index.html#@line_labeled_problem_because_isn-t_representation-independent"></a>标记为 <code>A</code> 的行是个问题，因为它不是表示无关的。</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_2_0"><input type="radio" id="md_converted_choice_2_0" name="md_converted_radio_2">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_2_1"><input type="radio" id="md_converted_choice_2_1" name="md_converted_radio_2">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@arraycurve_doesn-t_correctly_implement_curve_because_missing_contains_method"><a class="jump" href="index.html#@arraycurve_doesn-t_correctly_implement_curve_because_missing_contains_method"></a><code>ArrayCurve</code> 没有正确实现 <code>Curve</code>，因为它缺少 <code>contains()</code> 方法。</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_3_0"><input type="radio" id="md_converted_choice_3_0" name="md_converted_radio_3">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_3_1"><input type="radio" id="md_converted_choice_3_1" name="md_converted_radio_3">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@arraycurve_doesn-t_correctly_implement_curve_because_includes_method_pathlength"><a class="jump" href="index.html#@arraycurve_doesn-t_correctly_implement_curve_because_includes_method_pathlength"></a><code>ArrayCurve</code> 没有正确实现 <code>Curve</code>，因为它包含了 <code>Curve</code> 所没有的 <code>pathLength</code> 方法。</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_4_0"><input type="radio" id="md_converted_choice_4_0" name="md_converted_radio_4">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_4_1"><input type="radio" id="md_converted_choice_4_1" name="md_converted_radio_4">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="subtypes"><a class="jump" href="index.html#subtypes"></a>子类型</h2><div data-outline="subtypes">
+
+<p id="@recall_type_set"><a class="jump" href="index.html#@recall_type_set"></a>回顾一下，<em>类型</em>是一组值，带有相关的操作。
+例如，TypeScript 的 <a href="https://typhonjs-typedoc.github.io/ts-lib-docs/2023/esm/interfaces/ArrayLike.html"><code>ArrayLike</code></a> 类型由一个接口定义，该接口具有 <code>length</code> 和 <code>[..]</code> 索引操作。</p>
+
+<p id="@if_think_about"><a class="jump" href="index.html#@if_think_about"></a>如果我们考虑所有可能的 <code>ArrayLike</code> 值，其中没有一个实际上是 <code>ArrayLike</code> 类型的对象：我们无法创建接口的实例。
+相反，这些值可能是 <code>string</code> 对象，或 <code>Array</code> 对象，或任何提供 <code>ArrayLike</code> 所期望操作（即 <code>length</code> 和 <code>[..]</code> 索引）的类的对象。</p>
+
+<p id="@subtype_simply_subset"><a class="jump" href="index.html#@subtype_simply_subset"></a><mark data-structure-text="subtype" id="^subtype"><em>子类型</em></mark>仅仅是<mark data-structure-text="supertype" id="^supertype"><em>超类型</em></mark>的一个子集：<code>string</code> 和 <code>Array</code> 都是 <code>ArrayLike</code> 的子类型。</p>
+
+<p id="@b_subtype_means"><a class="jump" href="index.html#@b_subtype_means"></a>“B 是 A 的子类型”意味着“每个 B 都是一个 A。”
+就规约而言：“每个 B 都满足 A 的规约。”</p>
+
+<p id="@means_b_only"><a class="jump" href="index.html#@means_b_only"></a>这意味着，只有当 B 的规约至少与 A 的规约一样强时，B 才是 A 的子类型。
+当我们声明一个实现接口的类时，TypeScript 编译器会自动强制执行这一要求的一部分：例如，它确保 A 中的每个方法都出现在 B 中，并具有<a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html#comparing-two-functions">兼容的</a>类型签名。
+类 B 无法在不实现 A 中声明的所有操作的情况下实现接口 A。</p>
+
+<p id="@but_compiler_cannot"><a class="jump" href="index.html#@but_compiler_cannot"></a>但是编译器无法检查我们是否在其他方面削弱了规约：加强某个方法对某些输入的前置条件，削弱后置条件，或削弱接口抽象类型向客户宣传的保证。
+如果你在 TypeScript 中声明一个子类型——实现接口是我们当前的重点——那么你必须确保子类型的规约至少与超类型的一样强。</p>
+
+<h4 id="@declare_subtypes_typescript"><a class="jump" href="index.html#@declare_subtypes_typescript"></a>如何在 TypeScript 中声明子类型</h4>
+
+<p id="@declare_class_b"><a class="jump" href="index.html#@declare_class_b"></a>要声明类 B 是接口 A 的子类型，请使用 <mark data-mark-text="implements (TypeScript)" data-structure-text="implements (TypeScript)" id="^implements_typescript"><code>implements</code></mark>：</p>
+
+<pre id="@class_myarray-element_implements"><a class="jump" href="index.html#@class_myarray-element_implements"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> MyArray&lt;Element&gt; <span class="hljs-keyword">implements</span> ArrayLike&lt;Element&gt; {
+    ...
+}</code></pre>
+
+<p id="@declaration_requires_myarray"><a class="jump" href="index.html#@declaration_requires_myarray"></a>此声明要求 <code>MyArray</code> 实现（为……提供方法体）<code>ArrayLike</code> 中找到的所有操作，且其规约至少与 <code>ArrayLike</code> 中的规约一样强。
+TypeScript 静态地检查类型，但人类程序员必须检查规约的其余部分。</p>
+
+<p id="@note_even_though"><a class="jump" href="index.html#@note_even_though"></a>注意，即使我们无法创建 <code>ArrayLike</code> 接口的实例，仍然可以用它来声明变量、参数和返回类型，只要它们最终用来自具体子类型类（如 <code>MyArray</code>）的对象初始化即可。</p>
+
+<p id="@you_can_also"><a class="jump" href="index.html#@you_can_also"></a>你也可以声明一个接口是另一个接口的子类型，使用 <mark data-mark-text="extends (TypeScript)" data-structure-text="extends (TypeScript)" id="^extends_typescript"><code>extends</code></mark>：</p>
+
+<pre id="@interface_reversiblearraylike-element_extends"><a class="jump" href="index.html#@interface_reversiblearraylike-element_extends"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> ReversibleArrayLike&lt;Element&gt; <span class="hljs-keyword">extends</span> ArrayLike&lt;Element&gt; {
+    <span class="hljs-comment">// 继承现有 ArrayLike 操作的签名和规约，并添加新操作：</span>
+
+    <span class="hljs-comment">/** 反转该数组，就地变更它。 */</span>
+    reverse(): <span class="hljs-built_in">void</span>;
+}</code></pre>
+
+<p id="@because_reversiblearraylike_also"><a class="jump" href="index.html#@because_reversiblearraylike_also"></a>因为 <code>ReversibleArrayLike</code> 也是一个接口，它不提供任何 <code>ArrayLike</code> 操作的实现。
+但它可以通过加强现有 <code>ArrayLike</code> 操作或添加新操作来加强类型的规约。
+例如，这里 <code>ReversibleArrayLike</code> 添加了一个 <code>reverse</code> 操作。</p>
+
+<h4 id="@structural_subtyping_typescript"><a class="jump" href="index.html#@structural_subtyping_typescript"></a>TypeScript 中的结构化子类型</h4>
+
+<p id="@typescript_there_one"><a class="jump" href="index.html#@typescript_there_one"></a>在 TypeScript 中，类型 B 成为另一个类型 A 的子类型还有一种方式：<a href="https://www.typescriptlang.org/docs/handbook/type-compatibility.html"><mark data-structure-text="structural subtyping" id="^structural_subtyping"><strong>结构化子类型</strong></mark></a>。
+使用结构化子类型，B 不必在其声明中提到 A（没有 <code>B implements A</code> 或 <code>B extends A</code>）。
+但如果 B 至少提供了 A 所需的所有操作——相同的公共方法和公共实例变量，且具有兼容的类型——那么 TypeScript 就会将 B 视为 A 的子类型。</p>
+
+<p id="@structural_subtyping_convenient"><a class="jump" href="index.html#@structural_subtyping_convenient"></a>结构化子类型很方便，在 TypeScript 中经常是必要的，但它在类型安全性上打开了一个漏洞，因为它允许 B 成为 A 的子类型，即使 B 具有不兼容的规约。
+可变性和不可变性在这里提供了一个很好的例子，既展示了优点也展示了陷阱。
+回顾一下，TypeScript 提供了一个 <a href="https://typhonjs-typedoc.github.io/ts-lib-docs/2023/esm/interfaces/ReadonlyArray.html"><code>ReadonlyArray</code></a> 接口，它具有 <code>Array</code> 的所有观测操作和生产操作，但省略了变更操作。
+因此，<code>Array</code> 是 <code>ReadonlyArray</code> 的结构化子类型，所以 TypeScript 允许我们编写如下有用且良好的代码：</p>
+
+<pre id="@const_readonlyarr_readonlyarray-number"><a class="jump" href="index.html#@const_readonlyarr_readonlyarray-number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> readonlyArr: ReadonlyArray&lt;<span class="hljs-built_in">number</span>&gt; = [ <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span> ];</code></pre>
+
+<p id="@initializer_declaration_1"><a class="jump" href="index.html#@initializer_declaration_1"></a>此声明中的初始化符 <code>[ 1, 2, 3 ]</code> 生成一个 <code>Array</code> 对象。
+因为 <code>Array</code> 是 <code>ReadonlyArray</code> 的结构化子类型，我们可以然后将其赋值给一个 <code>ReadonlyArray</code> 类型的变量，此后将其视为不可变值。在 <code>readonlyArr</code> 上调用诸如 <code>push()</code> 之类的变更操作将导致静态错误：</p>
+
+<pre id="@readonlyarr-push-5_static_error"><a class="jump" href="index.html#@readonlyarr-push-5_static_error"></a><code class="language-ts hljs typescript">readonlyArr.push(<span class="hljs-number">5</span>);
+<span class="hljs-comment">// 静态错误：类型 'readonly number[]' 上不存在属性 'push'</span></code></pre>
+
+<p id="@additionally_typescript-s_static"><a class="jump" href="index.html#@additionally_typescript-s_static"></a>此外，TypeScript 的静态检查将确保我们不会意外地以<em>相反</em>方式进行：</p>
+
+<pre id="@const_arr_array-number_readonlyarr_static_error"><a class="jump" href="index.html#@const_arr_array-number_readonlyarr_static_error"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> arr: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = readonlyArr;
+<span class="hljs-comment">// 静态错误！ReadonlyArray *不是* Array 的结构化子类型，</span>
+<span class="hljs-comment">// 因为它不提供 Array 的变更操作</span></code></pre>
+
+<p id="@so_that-s_structural"><a class="jump" href="index.html#@so_that-s_structural"></a>这就是结构化子类型如何帮助我们的方式。但这是类型安全性上的漏洞。假设我们保留了对原始可变 <code>Array</code> 的一个别名：</p>
+
+<pre id="@const_arr_array-number_1_2_3"><a class="jump" href="index.html#@const_arr_array-number_1_2_3"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> arr: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [ <span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span> ];
+<span class="hljs-keyword">const</span> readonlyArr: ReadonlyArray&lt;<span class="hljs-built_in">number</span>&gt; = arr;</code></pre>
+
+<p id="@now_can_mutate"><a class="jump" href="index.html#@now_can_mutate"></a>现在我们可以使用其别名 <code>arr</code> 来变更 <code>readonlyArr</code>：</p>
+
+<pre id="@arr-push-4_console-log-readonlyarr_prints"><a class="jump" href="index.html#@arr-push-4_console-log-readonlyarr_prints"></a><code class="language-ts hljs typescript">arr.push(<span class="hljs-number">4</span>);
+<span class="hljs-built_in">console</span>.log(readonlyArr); <span class="hljs-comment">// 输出 1,2,3,4</span></code></pre>
+
+<p id="@using_alias_broken"><a class="jump" href="index.html#@using_alias_broken"></a>使用这个别名，我们已经破坏了 <code>ReadonlyArray</code> 最好的部分：它的不可变性！
+尽管 <code>Array</code> 是 <code>ReadonlyArray</code> 的<em>结构化</em>子类型，它并不是一个真正的子类型，因为 <code>Array</code> 契约不提供不可变性。</p>
+
+<p id="@so_structural_subtyping"><a class="jump" href="index.html#@so_structural_subtyping"></a>因此，结构化子类型很方便，但应谨慎使用。
+此示例展示了它的一种常见用法——使用可变类型构造列表、映射或集合，然后将其赋值给 <code>ReadonlyArray</code>、<code>ReadonlyMap</code> 或 <code>ReadonlySet</code>，此后将其视为不可变。
+重要的是丢弃所有使用原始可变类型的别名，以避免此处展示的风险。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-subtypes"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-subtypes-immutable_shapes" data-target="#ex-subtypes-immutable_shapes" data-toggle="collapse"><a class="jump" href="index.html#@ex-subtypes-immutable_shapes"></a><span class="panel-title">不可变形状</span></div><div class="panel-collapse collapse exercise-panel" id="ex-subtypes-immutable_shapes" data-outline="immutable_shapes" data-ex-id="subtypes/immutable_shapes" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@define_interface_rectangles"><a class="jump" href="index.html#@define_interface_rectangles"></a>让我们为矩形定义一个接口：</p>
+
+<pre id="@immutable_rectangle_interface"><a class="jump" href="index.html#@immutable_rectangle_interface"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** 一个不可变的矩形。 */</span>
+<span class="hljs-keyword">interface</span> ImmutableRectangle {
+    <span class="hljs-comment">/** @returns 该矩形的宽度 */</span>
+    getWidth(): <span class="hljs-built_in">number</span>;
+    <span class="hljs-comment">/** @returns 该矩形的高度 */</span>
+    getHeight(): <span class="hljs-built_in">number</span>;
+}</code></pre>
+
+<p id="@would_like_say"><a class="jump" href="index.html#@would_like_say"></a>我们想说的是每个正方形都是矩形：</p>
+
+<pre id="@immutable_square_class"><a class="jump" href="index.html#@immutable_square_class"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** 一个不可变的正方形。 */</span>
+<span class="hljs-keyword">class</span> ImmutableSquare <span class="hljs-keyword">implements</span> ImmutableRectangle {
+    <span class="hljs-keyword">private</span> readonly side: <span class="hljs-built_in">number</span>;
+    <span class="hljs-comment">/** 创建一个新的 side x side 正方形。 */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">side: <span class="hljs-built_in">number</span></span>) { <span class="hljs-keyword">this</span>.side = side; }
+    <span class="hljs-comment">/** @returns 该正方形的宽度 */</span>
+    <span class="hljs-keyword">public</span> getWidth(): <span class="hljs-built_in">number</span> { <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.side; }
+    <span class="hljs-comment">/** @returns 该正方形的高度 */</span>
+    <span class="hljs-keyword">public</span> getHeight(): <span class="hljs-built_in">number</span> { <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.side; }
+}</code></pre>
+
+<p id="@does_immutablesquare-getwidth_satisfy"><a class="jump" href="index.html#@does_immutablesquare-getwidth_satisfy"></a><code>ImmutableSquare.getWidth()</code> 是否满足 <code>ImmutableRectangle.getWidth()</code> 的规约？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_5_0"><input type="radio" id="md_converted_choice_5_0" name="md_converted_radio_5">是</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_5_1"><input type="radio" id="md_converted_choice_5_1" name="md_converted_radio_5">否</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@does_immutablesquare-getheight_satisfy"><a class="jump" href="index.html#@does_immutablesquare-getheight_satisfy"></a><code>ImmutableSquare.getHeight()</code> 是否满足 <code>ImmutableRectangle.getHeight()</code> 的规约？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_6_0"><input type="radio" id="md_converted_choice_6_0" name="md_converted_radio_6">是</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_6_1"><input type="radio" id="md_converted_choice_6_1" name="md_converted_radio_6">否</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@does_whole_immutablesquare"><a class="jump" href="index.html#@does_whole_immutablesquare"></a>整个 <code>ImmutableSquare</code> 规约是否满足 <code>ImmutableRectangle</code> 规约？</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="Yes"><label for="md_converted_choice_7_0"><input type="radio" id="md_converted_choice_7_0" name="md_converted_radio_7">是</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="No"><label for="md_converted_choice_7_1"><input type="radio" id="md_converted_choice_7_1" name="md_converted_radio_7">否</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-subtypes-mutable_shapes" data-target="#ex-subtypes-mutable_shapes" data-toggle="collapse"><a class="jump" href="index.html#@ex-subtypes-mutable_shapes"></a><span class="panel-title">可变形状</span></div><div class="panel-collapse collapse exercise-panel" id="ex-subtypes-mutable_shapes" data-outline="mutable_shapes" data-ex-id="subtypes/mutable_shapes" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@now_look_mutable"><a class="jump" href="index.html#@now_look_mutable"></a>现在让我们看看矩形和正方形的可变版本。</p>
+
+<pre id="@mutable_rectangle_interface"><a class="jump" href="index.html#@mutable_rectangle_interface"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** 一个可变的矩形。 */</span>
+<span class="hljs-keyword">interface</span> MutableRectangle {
+    <span class="hljs-comment">// ... 与上面 ImmutableRectangle 相同的方法 ...</span>
+    <span class="hljs-comment">/** 将此矩形的尺寸设置为 width x height。 */</span>
+    setSize(width: <span class="hljs-built_in">number</span>, height: <span class="hljs-built_in">number</span>);
+}</code></pre>
+
+<p id="@surely_every_square"><a class="jump" href="index.html#@surely_every_square"></a>当然，每个正方形仍然是矩形吧？</p>
+
+<pre id="@mutable_square_class"><a class="jump" href="index.html#@mutable_square_class"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** 一个可变的正方形。 */</span>
+<span class="hljs-keyword">class</span> MutableSquare <span class="hljs-keyword">implements</span> MutableRectangle <span class="hljs-comment">/* 希望如此？ */</span> {
+    <span class="hljs-keyword">private</span> side: <span class="hljs-built_in">number</span>;
+    <span class="hljs-comment">// ... 与上面 ImmutableSquare 相同的构造函数和方法 ...</span>
+    <span class="hljs-comment">// TODO 实现 setSize(..)</span>
+}</code></pre>
+
+<p id="@each_possible_mutablesquare-setsize"><a class="jump" href="index.html#@each_possible_mutablesquare-setsize"></a>对于下面每一个可能的 <code>MutableSquare.setSize(..)</code> 规约，它是否是 <code>MutableRectangle.setSize()</code> 的有效强化？</p>
+
+<pre id="@set_square-s_dimensions_width_x_height_requires_width_height"><a class="jump" href="index.html#@set_square-s_dimensions_width_x_height_requires_width_height"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 将此正方形的尺寸设置为 width x height。
+ * 要求 width = height。
+ */</span>
+<span class="hljs-keyword">public</span> setSize(width: <span class="hljs-built_in">number</span>, height: <span class="hljs-built_in">number</span>) { ... }</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; No – stronger precondition; Yes – weaker precondition; Yes – stronger postcondition; No – weaker postcondition; No – specifications are incomparable"><select class="form-control"><option selected="selected"></option><option>否 —— 更强的前置条件</option>,<option>是 —— 更弱的前置条件</option>,<option>是 —— 更强的后置条件</option>,<option>否 —— 更弱的后置条件</option>,<option>否 —— 规约不可比较</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<pre id="@set_square-s_dimensions_width_x_height_throws_error_if"><a class="jump" href="index.html#@set_square-s_dimensions_width_x_height_throws_error_if"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 将此正方形的尺寸设置为 width x height。
+ * @throws 如果 width != height 则抛出 Error
+ */</span>
+<span class="hljs-keyword">public</span> setSize(width: <span class="hljs-built_in">number</span>, height: <span class="hljs-built_in">number</span>) { ... }</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; No – stronger precondition; Yes – weaker precondition; Yes – stronger postcondition; No – weaker postcondition; No – specifications are incomparable"><select class="form-control"><option selected="selected"></option><option>否 —— 更强的前置条件</option>,<option>是 —— 更弱的前置条件</option>,<option>是 —— 更强的后置条件</option>,<option>否 —— 更弱的后置条件</option>,<option>否 —— 规约不可比较</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<pre id="@if_width_height"><a class="jump" href="index.html#@if_width_height"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 如果 width = height，将此正方形的尺寸设置为 width x height。
+ * 否则，新尺寸未指定。
+ */</span>
+<span class="hljs-keyword">public</span> setSize(width: <span class="hljs-built_in">number</span>, height: <span class="hljs-built_in">number</span>) { ... }</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; No – stronger precondition; Yes – weaker precondition; Yes – stronger postcondition; No – weaker postcondition; No – specifications are incomparable"><select class="form-control"><option selected="selected"></option><option>否 —— 更强的前置条件</option>,<option>是 —— 更弱的前置条件</option>,<option>是 —— 更强的后置条件</option>,<option>否 —— 更弱的后置条件</option>,<option>否 —— 规约不可比较</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="example_mystring"><a class="jump" href="index.html#example_mystring"></a>示例：<code>MyString</code></h2><div data-outline="example_mystring">
+
+<p id="@revisit_mystring_using"><a class="jump" href="index.html#@revisit_mystring_using"></a>让我们重新审视 <a href="../06-abstract-data-types/index.html#example_different_representations_for_strings"><code>MyString</code></a>。
+使用接口而非类作为 ADT，我们可以支持多种实现：</p>
+
+<pre id="@mystring_represents_immutable"><a class="jump" href="index.html#@mystring_represents_immutable"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * MyString 表示一个不可变的字符序列。
+ */</span>
+<span class="hljs-keyword">interface</span> MyString {
+
+    <span class="hljs-comment">// 我们现在将跳过这个创建操作</span>
+    <span class="hljs-comment">// /**</span>
+    <span class="hljs-comment">//  * @param s</span>
+    <span class="hljs-comment">//  * @returns 表示 s 中字符序列的 MyString</span>
+    <span class="hljs-comment">//  */</span>
+    <span class="hljs-comment">// public constructor(s: string) { ... }</span>
+
+    <span class="hljs-comment">/**
+     * @returns 此字符串中的字符数量
+     */</span>
+    length(): <span class="hljs-built_in">number</span>;
+
+    <span class="hljs-comment">/**
+     * @param i 字符位置（要求 0 &lt;= i &lt; 字符串长度）
+     * @returns 位置 i 处的字符
+     */</span>
+    charAt(i: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">string</span>;
+
+    <span class="hljs-comment">/**
+     * 获取 start（包含）与 end（不包含）之间的子字符串。
+     * @param start 起始索引
+     * @param end 结束索引。要求 0 &lt;= start &lt;= end &lt;= 字符串长度。
+     * @returns 由 charAt(start)...charAt(end-1) 组成的字符串
+     */</span>
+    substring(start: <span class="hljs-built_in">number</span>, end: <span class="hljs-built_in">number</span>): MyString;
+}</code></pre>
+
+<p id="@here-s_our_first"><a class="jump" href="index.html#@here-s_our_first"></a>这是我们的第一个实现：</p>
+
+<pre id="@class_simplemystring_implements_mystring_private_uint16array"><a class="jump" href="index.html#@class_simplemystring_implements_mystring_private_uint16array"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> SimpleMyString <span class="hljs-keyword">implements</span> MyString {
+
+    <span class="hljs-keyword">private</span> a: <span class="hljs-built_in">Uint16Array</span>;
+
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>) {
+        <span class="hljs-keyword">this</span>.a = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Uint16Array</span>(s.length);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; s.length; ++i) {
+           <span class="hljs-keyword">this</span>.a[i] = s.charCodeAt(i);
+        }
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> length(): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.a.length;
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> charAt(i: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">string</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-built_in">String</span>.fromCharCode(<span class="hljs-keyword">this</span>.a[i]);
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> substring(start: <span class="hljs-built_in">number</span>, end: <span class="hljs-built_in">number</span>): MyString {
+        <span class="hljs-keyword">const</span> that = <span class="hljs-keyword">new</span> SimpleMyString(<span class="hljs-string">""</span>);  <span class="hljs-comment">// 创建一个暂时为空的对象</span>
+        that.a = <span class="hljs-keyword">this</span>.a.slice(start, end);    <span class="hljs-comment">// ... 并立即替换其数组</span>
+        <span class="hljs-keyword">return</span> that;
+    }
+}</code></pre>
+
+<p id="@notice_used_inheritdoc"><a class="jump" href="index.html#@notice_used_inheritdoc"></a>（注意，我们在 <code>length</code>、<code>charAt</code> 和 <code>substring</code> 的规约注释中使用了 <a href="https://typedoc.org/documents/Tags.__inheritdoc_.html"><code>@inheritdoc</code></a>。这是一个标记，表示这些方法实现了 <code>MyString</code> 接口中相应的规约，TypeDoc 将从这些规约生成文档。）</p>
+
+<p id="@here-s_optimized_implementation"><a class="jump" href="index.html#@here-s_optimized_implementation"></a>这是优化后的实现：</p>
+
+<pre id="@class_fastmystring_implements_mystring_private_uint16array"><a class="jump" href="index.html#@class_fastmystring_implements_mystring_private_uint16array"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> FastMyString <span class="hljs-keyword">implements</span> MyString {
+
+    <span class="hljs-keyword">private</span> a: <span class="hljs-built_in">Uint16Array</span>;
+    <span class="hljs-keyword">private</span> start: <span class="hljs-built_in">number</span>;
+    <span class="hljs-keyword">private</span> end: <span class="hljs-built_in">number</span>;
+
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>) {
+        <span class="hljs-keyword">this</span>.a = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Uint16Array</span>(s.length);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; s.length; ++i) {
+            <span class="hljs-keyword">this</span>.a[i] = s.charCodeAt(i);
+        }
+        <span class="hljs-keyword">this</span>.start = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">this</span>.end = <span class="hljs-keyword">this</span>.a.length;
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> length(): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.end - <span class="hljs-keyword">this</span>.start;
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> charAt(i: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">string</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-built_in">String</span>.fromCharCode(<span class="hljs-keyword">this</span>.a[<span class="hljs-keyword">this</span>.start + i]);
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> substring(start: <span class="hljs-built_in">number</span>, end: <span class="hljs-built_in">number</span>): MyString {
+        <span class="hljs-keyword">const</span> that = <span class="hljs-keyword">new</span> FastMyString(<span class="hljs-string">""</span>); <span class="hljs-comment">// 创建一个暂时为空的对象</span>
+        that.a = <span class="hljs-keyword">this</span>.a;                   <span class="hljs-comment">// ... 并立即替换其实例变量 </span>
+        that.start = <span class="hljs-keyword">this</span>.start + start;
+        that.end = <span class="hljs-keyword">this</span>.start + end;
+        <span class="hljs-keyword">return</span> that;
+    }
+}</code></pre>
+
+<p id="@clients_use_adt"><a class="jump" href="index.html#@clients_use_adt"></a>客户将如何使用这个 ADT？
+这是一个示例：</p>
+
+<pre id="@const_s_mystring_new_fastmystring-good_morning"><a class="jump" href="index.html#@const_s_mystring_new_fastmystring-good_morning"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> s: MyString = <span class="hljs-keyword">new</span> FastMyString(<span class="hljs-string">"good morning"</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"The first character is: "</span> + s.charAt(<span class="hljs-number">0</span>));</code></pre>
+
+<div id="constructor_dependence"><p id="@unfortunately_pattern_breaks"><a class="jump" href="index.html#@unfortunately_pattern_breaks"></a>不幸的是，这种模式<strong>打破了抽象屏障</strong>——我们如此努力地在抽象类型与其具体表示之间构建的这道屏障。
+客户必须知道具体表示类的名称。
+因为 TypeScript 中的接口没有构造函数，客户必须直接调用某个具体类的构造函数。
+该构造函数的规约不会出现在接口的任何地方，因此无法静态保证不同的实现甚至会提供相同的构造函数。</p></div>
+
+<span id="factory_function"></span>
+
+<p id="@instead_using_constructor"><a class="jump" href="index.html#@instead_using_constructor"></a>因此，我们可以将创建操作实现为<a href="../06-abstract-data-types/index.html#factory_method">工厂函数</a>，而不是使用构造函数：</p>
+
+<pre id="@param_s_returns"><a class="jump" href="index.html#@param_s_returns"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param s
+ * @returns 表示 s 中字符序列的 MyString
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">makeMyString</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">MyString</span> </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> FastMyString(s);
+}</code></pre>
+
+<p id="@now_client_can"><a class="jump" href="index.html#@now_client_can"></a>现在客户可以使用 ADT 而不会打破抽象屏障：</p>
+
+<pre id="@const_s_mystring_makemystring-good_morning_console-log-the"><a class="jump" href="index.html#@const_s_mystring_makemystring-good_morning_console-log-the"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> s: MyString = makeMyString(<span class="hljs-string">"good morning"</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"The first character is: "</span> + s.charAt(<span class="hljs-number">0</span>));</code></pre>
+
+<p id="@hiding_implementation_completely"><a class="jump" href="index.html#@hiding_implementation_completely"></a>完全隐藏实现是一种权衡，因为有时客户希望选择具有不同特征的实现。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-example_mystring"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-example_mystring-code_review" data-target="#ex-example_mystring-code_review" data-toggle="collapse"><a class="jump" href="index.html#@ex-example_mystring-code_review"></a><span class="panel-title">代码审查</span></div><div class="panel-collapse collapse exercise-panel" id="ex-example_mystring-code_review" data-outline="code_review" data-ex-id="example_mystring/code_review" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@review_code_fastmystring"><a class="jump" href="index.html#@review_code_fastmystring"></a>让我们审查 <code>FastMyString</code> 的代码。
+以下哪些是有用的批评：</p>
+
+<p id="@abstraction_function_should"><a class="jump" href="index.html#@abstraction_function_should"></a>抽象函数应该被记录（文档化）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_8_0"><input type="radio" id="md_converted_choice_8_0" name="md_converted_radio_8">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_8_1"><input type="radio" id="md_converted_choice_8_1" name="md_converted_radio_8">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@representation_invariant_should"><a class="jump" href="index.html#@representation_invariant_should"></a>表示不变量应该被记录（文档化）</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_9_0"><input type="radio" id="md_converted_choice_9_0" name="md_converted_radio_9">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_9_1"><input type="radio" id="md_converted_choice_9_1" name="md_converted_radio_9">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@rep_fields_should"><a class="jump" href="index.html#@rep_fields_should"></a>表示字段应该是 <code>readonly</code>，这样它们就不能被重新赋值</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_10_0"><input type="radio" id="md_converted_choice_10_0" name="md_converted_radio_10">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_10_1"><input type="radio" id="md_converted_choice_10_1" name="md_converted_radio_10">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@charat_specification_exposes"><a class="jump" href="index.html#@charat_specification_exposes"></a><code>charAt</code> 规约暴露了表示包含单个字符，它不应该这样。</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_11_0"><input type="radio" id="md_converted_choice_11_0" name="md_converted_radio_11">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_11_1"><input type="radio" id="md_converted_choice_11_1" name="md_converted_radio_11">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@charat_implementation_should"><a class="jump" href="index.html#@charat_implementation_should"></a>当 <code>i</code> 大于字符串长度时，<code>charAt</code> 实现应表现得更有帮助</p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="radio exercise-choice" data-outline="True"><label for="md_converted_choice_12_0"><input type="radio" id="md_converted_choice_12_0" name="md_converted_radio_12">真</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="False"><label for="md_converted_choice_12_1"><input type="radio" id="md_converted_choice_12_1" name="md_converted_radio_12">假</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="why_interfaces"><a class="jump" href="index.html#why_interfaces"></a>为什么使用接口？</h2><div data-outline="why_interfaces">
+
+<p id="@interfaces_used_frequently"><a class="jump" href="index.html#@interfaces_used_frequently"></a>接口在真实代码中经常使用。
+并非每个类都与接口相关联，但有几个很好的理由让接口进入画面。</p>
+
+<ul id="@documentation_both_compiler">
+<li><a class="jump" href="index.html#@documentation_both_compiler"></a><strong>同时为编译器和人类提供文档</strong>。
+接口不仅帮助编译器捕获 ADT 实现错误，而且供人类阅读也比具体实现的代码有用得多。
+这样的实现将 ADT 级别的类型和规约与实现细节交织在一起。</li>
+<li><strong>允许性能权衡</strong>。
+ADT 的不同实现可以提供具有非常不同性能特征的方法。
+不同的应用可能更适合不同的选择，但我们希望以表示无关的方式编写这些应用的代码。
+从正确性的角度来看，应该可以通过简单、局部的代码更改来加入任何关键 ADT 的新实现。</li>
+<li><strong>具有有意不确定规约的方法</strong>。
+有限集的 ADT 可以不确定转换为数组时获得的元素顺序。
+某些实现可能使用较慢的方法实现，同时设法将集合表示保持为某种排序顺序，从而允许快速转换为排序后的数组。
+其他实现可能通过不支持转换为排序数组来使许多方法更快。</li>
+<li><strong>一个类的多个视图</strong>。
+TypeScript 类可以实现多个接口。
+例如，显示下拉列表的用户界面控件很自然地既可视为控件也可视为列表。
+此控件的类可以实现这两个接口。
+换句话说，我们并不总是仅仅因为选择了不同的数据结构而多次实现 ADT。
+这些实现可能是各种不同类型的对象，可以视为该 ADT 的特殊情况。</li>
+<li><strong>更可信和较不可信的实现</strong>。
+多次实现接口的另一个原因可能是，构建一个你认为正确的简单实现很容易，而你可以更努力地构建一个更花哨、更可能包含错误的版本。
+你可以根据被错误咬伤的严重程度来为应用选择实现。</li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-why_interfaces"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>阅读练习</h4><p id="@suppose_you_abstract"><a class="jump" href="index.html#@suppose_you_abstract"></a>假设你有一个用于有理数的抽象数据类型，它当前表示为一个 TypeScript 类：</p>
+
+<pre id="@class_rational"><a class="jump" href="index.html#@class_rational"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> Rational {
+    ...
+}</code></pre>
+
+<p id="@you_decide_change"><a class="jump" href="index.html#@you_decide_change"></a>你决定将 <code>Rational</code> 改为 TypeScript 接口，以及一个名为 <code>IntFraction</code> 的实现类：</p>
+
+<pre id="@interface_rational_class"><a class="jump" href="index.html#@interface_rational_class"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> Rational {
+    ...
+}
+
+<span class="hljs-keyword">class</span> IntFraction <span class="hljs-keyword">implements</span> Rational {
+    ...
+}</code></pre>
+
+<p id="@each_piece_code"><a class="jump" href="index.html#@each_piece_code"></a>对于下面每一段代码（取自你原来的 <code>Rational</code> 类），首先确定它在 ADT 中扮演的角色。然后决定它在你新的 ADT 设计中应该放在哪里：在接口 <code>Rational</code> 中，在实现类 <code>IntFraction</code> 中，还是两者都放？</p>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_interfaces-interface_implementation_1" data-target="#ex-why_interfaces-interface_implementation_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_interfaces-interface_implementation_1"></a><span class="panel-title">接口 + 实现 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_interfaces-interface_implementation_1" data-outline="interface_implementation_1" data-ex-id="why_interfaces/interface_implementation_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@private_readonly_numerator"><a class="jump" href="index.html#@private_readonly_numerator"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">private</span> readonly numerator: <span class="hljs-built_in">number</span>;
+<span class="hljs-keyword">private</span> readonly denominator: <span class="hljs-built_in">number</span>;</code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@piece_code_part_check_all_apply_0"><a class="jump" href="index.html#@piece_code_part_check_all_apply_0"></a>这段代码是，或它是……的一部分：<br>
+（勾选所有适用的选项）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="abstraction function"><label for="md_converted_choice_13_0"><input type="checkbox" id="md_converted_choice_13_0">抽象函数</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="creator"><label for="md_converted_choice_13_1"><input type="checkbox" id="md_converted_choice_13_1">创建操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mutator"><label for="md_converted_choice_13_2"><input type="checkbox" id="md_converted_choice_13_2">变更操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="observer"><label for="md_converted_choice_13_3"><input type="checkbox" id="md_converted_choice_13_3">观测操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="producer"><label for="md_converted_choice_13_4"><input type="checkbox" id="md_converted_choice_13_4">生产操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep"><label for="md_converted_choice_13_5"><input type="checkbox" id="md_converted_choice_13_5">表示</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep invariant"><label for="md_converted_choice_13_6"><input type="checkbox" id="md_converted_choice_13_6">表示不变量</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="specification"><label for="md_converted_choice_13_7"><input type="checkbox" id="md_converted_choice_13_7">规约</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td><td><p id="@should_be_put_0"><a class="jump" href="index.html#@should_be_put_0"></a>它应该被放在：<br>
+&nbsp;</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="the interface"><label for="md_converted_choice_14_0"><input type="radio" id="md_converted_choice_14_0" name="md_converted_radio_14">接口</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="the implementation class"><label for="md_converted_choice_14_1"><input type="radio" id="md_converted_choice_14_1" name="md_converted_radio_14">实现类</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="both"><label for="md_converted_choice_14_2"><input type="radio" id="md_converted_choice_14_2" name="md_converted_radio_14">两者都放</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td></tr></tbody></table>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_interfaces-interface_implementation_2" data-target="#ex-why_interfaces-interface_implementation_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_interfaces-interface_implementation_2"></a><span class="panel-title">接口 + 实现 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_interfaces-interface_implementation_2" data-outline="interface_implementation_2" data-ex-id="why_interfaces/interface_implementation_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@denominator_0_numerator"><a class="jump" href="index.html#@denominator_0_numerator"></a><code class="language-ts hljs typescript"><span class="hljs-comment">//   分母 &gt; 0</span>
+<span class="hljs-comment">//   分子和分母互质</span></code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@piece_code_part_check_all_apply_1"><a class="jump" href="index.html#@piece_code_part_check_all_apply_1"></a>这段代码是，或它是……的一部分：<br>
+（勾选所有适用的选项）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="abstraction function"><label for="md_converted_choice_15_0"><input type="checkbox" id="md_converted_choice_15_0">抽象函数</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="creator"><label for="md_converted_choice_15_1"><input type="checkbox" id="md_converted_choice_15_1">创建操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mutator"><label for="md_converted_choice_15_2"><input type="checkbox" id="md_converted_choice_15_2">变更操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="observer"><label for="md_converted_choice_15_3"><input type="checkbox" id="md_converted_choice_15_3">观测操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="producer"><label for="md_converted_choice_15_4"><input type="checkbox" id="md_converted_choice_15_4">生产操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep"><label for="md_converted_choice_15_5"><input type="checkbox" id="md_converted_choice_15_5">表示</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep invariant"><label for="md_converted_choice_15_6"><input type="checkbox" id="md_converted_choice_15_6">表示不变量</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="specification"><label for="md_converted_choice_15_7"><input type="checkbox" id="md_converted_choice_15_7">规约</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td><td><p id="@should_be_put_1"><a class="jump" href="index.html#@should_be_put_1"></a>它应该被放在：<br>
+&nbsp;</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="the interface"><label for="md_converted_choice_16_0"><input type="radio" id="md_converted_choice_16_0" name="md_converted_radio_16">接口</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="the implementation class"><label for="md_converted_choice_16_1"><input type="radio" id="md_converted_choice_16_1" name="md_converted_radio_16">实现类</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="both"><label for="md_converted_choice_16_2"><input type="radio" id="md_converted_choice_16_2" name="md_converted_radio_16">两者都放</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td></tr></tbody></table>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_interfaces-interface_implementation_3" data-target="#ex-why_interfaces-interface_implementation_3" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_interfaces-interface_implementation_3"></a><span class="panel-title">接口 + 实现 3</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_interfaces-interface_implementation_3" data-outline="interface_implementation_3" data-ex-id="why_interfaces/interface_implementation_3" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@af-numerator_denominator_numerator"><a class="jump" href="index.html#@af-numerator_denominator_numerator"></a><code class="language-ts hljs typescript"><span class="hljs-comment">//   AF(numerator, denominator) = numerator / denominator</span></code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@piece_code_part_check_all_apply_2"><a class="jump" href="index.html#@piece_code_part_check_all_apply_2"></a>这段代码是，或它是……的一部分：<br>
+（勾选所有适用的选项）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="abstraction function"><label for="md_converted_choice_17_0"><input type="checkbox" id="md_converted_choice_17_0">抽象函数</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="creator"><label for="md_converted_choice_17_1"><input type="checkbox" id="md_converted_choice_17_1">创建操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mutator"><label for="md_converted_choice_17_2"><input type="checkbox" id="md_converted_choice_17_2">变更操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="observer"><label for="md_converted_choice_17_3"><input type="checkbox" id="md_converted_choice_17_3">观测操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="producer"><label for="md_converted_choice_17_4"><input type="checkbox" id="md_converted_choice_17_4">生产操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep"><label for="md_converted_choice_17_5"><input type="checkbox" id="md_converted_choice_17_5">表示</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep invariant"><label for="md_converted_choice_17_6"><input type="checkbox" id="md_converted_choice_17_6">表示不变量</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="specification"><label for="md_converted_choice_17_7"><input type="checkbox" id="md_converted_choice_17_7">规约</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td><td><p id="@should_be_put_2"><a class="jump" href="index.html#@should_be_put_2"></a>它应该被放在：<br>
+&nbsp;</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="the interface"><label for="md_converted_choice_18_0"><input type="radio" id="md_converted_choice_18_0" name="md_converted_radio_18">接口</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="the implementation class"><label for="md_converted_choice_18_1"><input type="radio" id="md_converted_choice_18_1" name="md_converted_radio_18">实现类</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="both"><label for="md_converted_choice_18_2"><input type="radio" id="md_converted_choice_18_2" name="md_converted_radio_18">两者都放</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td></tr></tbody></table>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_interfaces-interface_implementation_4" data-target="#ex-why_interfaces-interface_implementation_4" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_interfaces-interface_implementation_4"></a><span class="panel-title">接口 + 实现 4</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_interfaces-interface_implementation_4" data-outline="interface_implementation_4" data-ex-id="why_interfaces/interface_implementation_4" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@param_another_rational"><a class="jump" href="index.html#@param_another_rational"></a><code class="language-ts hljs typescript">    <span class="hljs-comment">/**
+     * @param that 另一个 Rational
+     * @returns 一个等于 (this / that) 的 Rational
+     */</span></code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@piece_code_part_check_all_apply_3"><a class="jump" href="index.html#@piece_code_part_check_all_apply_3"></a>这段代码是，或它是……的一部分：<br>
+（勾选所有适用的选项）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="abstraction function"><label for="md_converted_choice_19_0"><input type="checkbox" id="md_converted_choice_19_0">抽象函数</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="creator"><label for="md_converted_choice_19_1"><input type="checkbox" id="md_converted_choice_19_1">创建操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mutator"><label for="md_converted_choice_19_2"><input type="checkbox" id="md_converted_choice_19_2">变更操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="observer"><label for="md_converted_choice_19_3"><input type="checkbox" id="md_converted_choice_19_3">观测操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="producer"><label for="md_converted_choice_19_4"><input type="checkbox" id="md_converted_choice_19_4">生产操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep"><label for="md_converted_choice_19_5"><input type="checkbox" id="md_converted_choice_19_5">表示</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep invariant"><label for="md_converted_choice_19_6"><input type="checkbox" id="md_converted_choice_19_6">表示不变量</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="specification"><label for="md_converted_choice_19_7"><input type="checkbox" id="md_converted_choice_19_7">规约</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td><td><p id="@should_be_put_3"><a class="jump" href="index.html#@should_be_put_3"></a>它应该被放在：<br>
+&nbsp;</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="the interface"><label for="md_converted_choice_20_0"><input type="radio" id="md_converted_choice_20_0" name="md_converted_radio_20">接口</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="the implementation class"><label for="md_converted_choice_20_1"><input type="radio" id="md_converted_choice_20_1" name="md_converted_radio_20">实现类</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="both"><label for="md_converted_choice_20_2"><input type="radio" id="md_converted_choice_20_2" name="md_converted_radio_20">两者都放</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td></tr></tbody></table>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_interfaces-interface_implementation_5" data-target="#ex-why_interfaces-interface_implementation_5" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_interfaces-interface_implementation_5"></a><span class="panel-title">接口 + 实现 5</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_interfaces-interface_implementation_5" data-outline="interface_implementation_5" data-ex-id="why_interfaces/interface_implementation_5" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@iszero_boolean"><a class="jump" href="index.html#@iszero_boolean"></a><code class="language-ts hljs typescript">    isZero(): <span class="hljs-built_in">boolean</span></code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@piece_code_part_check_all_apply_4"><a class="jump" href="index.html#@piece_code_part_check_all_apply_4"></a>这段代码是，或它是……的一部分：<br>
+（勾选所有适用的选项）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="abstraction function"><label for="md_converted_choice_21_0"><input type="checkbox" id="md_converted_choice_21_0">抽象函数</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="creator"><label for="md_converted_choice_21_1"><input type="checkbox" id="md_converted_choice_21_1">创建操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mutator"><label for="md_converted_choice_21_2"><input type="checkbox" id="md_converted_choice_21_2">变更操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="observer"><label for="md_converted_choice_21_3"><input type="checkbox" id="md_converted_choice_21_3">观测操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="producer"><label for="md_converted_choice_21_4"><input type="checkbox" id="md_converted_choice_21_4">生产操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep"><label for="md_converted_choice_21_5"><input type="checkbox" id="md_converted_choice_21_5">表示</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep invariant"><label for="md_converted_choice_21_6"><input type="checkbox" id="md_converted_choice_21_6">表示不变量</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="specification"><label for="md_converted_choice_21_7"><input type="checkbox" id="md_converted_choice_21_7">规约</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td><td><p id="@should_be_put_4"><a class="jump" href="index.html#@should_be_put_4"></a>它应该被放在：<br>
+&nbsp;</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="the interface"><label for="md_converted_choice_22_0"><input type="radio" id="md_converted_choice_22_0" name="md_converted_radio_22">接口</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="the implementation class"><label for="md_converted_choice_22_1"><input type="radio" id="md_converted_choice_22_1" name="md_converted_radio_22">实现类</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="both"><label for="md_converted_choice_22_2"><input type="radio" id="md_converted_choice_22_2" name="md_converted_radio_22">两者都放</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td></tr></tbody></table>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_interfaces-interface_implementation_6" data-target="#ex-why_interfaces-interface_implementation_6" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_interfaces-interface_implementation_6"></a><span class="panel-title">接口 + 实现 6</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_interfaces-interface_implementation_6" data-outline="interface_implementation_6" data-ex-id="why_interfaces/interface_implementation_6" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@return_this-numerator_0"><a class="jump" href="index.html#@return_this-numerator_0"></a><code class="language-ts hljs typescript">    <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.numerator === <span class="hljs-number">0</span>;</code></pre>
+
+<table class="side-by-side"><tbody><tr><td><p id="@piece_code_part_check_all_apply_5"><a class="jump" href="index.html#@piece_code_part_check_all_apply_5"></a>这段代码是，或它是……的一部分：<br>
+（勾选所有适用的选项）</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="abstraction function"><label for="md_converted_choice_23_0"><input type="checkbox" id="md_converted_choice_23_0">抽象函数</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="creator"><label for="md_converted_choice_23_1"><input type="checkbox" id="md_converted_choice_23_1">创建操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="mutator"><label for="md_converted_choice_23_2"><input type="checkbox" id="md_converted_choice_23_2">变更操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="observer"><label for="md_converted_choice_23_3"><input type="checkbox" id="md_converted_choice_23_3">观测操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="producer"><label for="md_converted_choice_23_4"><input type="checkbox" id="md_converted_choice_23_4">生产操作</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep"><label for="md_converted_choice_23_5"><input type="checkbox" id="md_converted_choice_23_5">表示</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="rep invariant"><label for="md_converted_choice_23_6"><input type="checkbox" id="md_converted_choice_23_6">表示不变量</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="specification"><label for="md_converted_choice_23_7"><input type="checkbox" id="md_converted_choice_23_7">规约</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td><td><p id="@should_be_put_5"><a class="jump" href="index.html#@should_be_put_5"></a>它应该被放在：<br>
+&nbsp;</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="the interface"><label for="md_converted_choice_24_0"><input type="radio" id="md_converted_choice_24_0" name="md_converted_radio_24">接口</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="the implementation class"><label for="md_converted_choice_24_1"><input type="radio" id="md_converted_choice_24_1" name="md_converted_radio_24">实现类</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="both"><label for="md_converted_choice_24_2"><input type="radio" id="md_converted_choice_24_2" name="md_converted_radio_24">两者都放</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div></td></tr></tbody></table>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="subclassing"><a class="jump" href="index.html#subclassing"></a>子类化</h2><div data-outline="subclassing">
+
+<p id="@implementing_interface_one"><a class="jump" href="index.html#@implementing_interface_one"></a>实现接口是创建另一种类型的子类型的一种方式。
+另一种你以前可能见过的技术是<mark data-structure-text="subclassing" id="^subclassing"><em>子类化</em></mark>。
+子类化意味着将一个类定义为另一个类的扩展，即<em>子类</em>，以便：</p>
+
+<ul id="@subclass_automatically_inherits">
+<li><a class="jump" href="index.html#@subclass_automatically_inherits"></a>子类自动<mark data-mark-text="inheritance" data-structure-text="inheritance" id="^inheritance"><em>继承</em></mark>其超类的实例方法，<strong>包括它们的方法体</strong>
+
+<ul><li>子类可以用自己的方法体替换任何这些被继承的方法体，从而<mark data-structure-text="override" id="^override"><em>重写</em></mark>它们</li></ul></li>
+<li>子类还<strong>继承其超类的私有表示</strong></li>
+<li>子类还可以为自己的目的添加新的实例方法和表示字段</li>
+</ul>
+
+<p id="@boldfaced_parts_list"><a class="jump" href="index.html#@boldfaced_parts_list"></a>上面列表中的粗体部分显示了子类化与实现接口的不同之处。
+接口既没有方法体也没有表示，所以在实现接口时不可能继承它们。</p>
+
+<p id="@subclassing_common_feature"><a class="jump" href="index.html#@subclassing_common_feature"></a>子类化是面向对象编程语言的一个常见特性。
+你可能已经在 Python 中遇到过它，在 Python 中你可以编写 <code>class SpottedTurtle(Turtle): ...</code> 来将新类 <code>SpottedTurtle</code> 定义为类 <code>Turtle</code> 的子类。
+TypeScript 用语法 <code>class SpottedTurtle extends Turtle { ... }</code> 提供相同的效果。</p>
+
+<p id="@just_like_implementing"><a class="jump" href="index.html#@just_like_implementing"></a>就像实现接口一样，子类化应当蕴含子类型关系。
+如果 <code>SpottedTurtle</code> 是 <code>Turtle</code> 的子类，那么 <code>SpottedTurtle</code> 需要具有至少与 <code>Turtle</code> 一样强的规约，因为 TypeScript 将允许 <code>SpottedTurtle</code> 对象被用在任何可能期望 <code>Turtle</code> 的地方。</p>
+
+<p id="@but_unlike_implementing"><a class="jump" href="index.html#@but_unlike_implementing"></a>但与实现接口不同，子类不仅继承其超类的规约，还继承其<em>表示</em>——实现它的字段。
+起初这似乎是个很棒的主意。
+重用实现应当使我们的代码更 DRY，并更易于更改。</p>
+
+<p id="@but_years_experience"><a class="jump" href="index.html#@but_years_experience"></a>但 API 设计者多年来的经验揭示了使子类化在免于错误和易于更改方面面临微妙的挑战。
+如果你感兴趣可以<a href="http://web.mit.edu/6.005/www/fa14/classes/14-inheritance/#subclassing">阅读更多</a>，但本质上，继承表示意味着：</p>
+
+<ul id="@rep_exposure_between">
+<li><a class="jump" href="index.html#@rep_exposure_between"></a>超类与其所有子类之间的表示暴露</li>
+<li>超类与子类之间的表示依赖</li>
+<li>超类和子类可能无意中破坏彼此的表示不变量</li>
+</ul>
+
+<p id="@designing_safe_subclassing"><a class="jump" href="index.html#@designing_safe_subclassing"></a>设计安全的子类化意味着超类现在必须提供<em>两个</em>契约：一个用于与客户交互，一个用于子类。
+这些问题在使用接口时根本不会出现。</p>
+
+<h3 id="overriding_and_dynamic_dispatch"><a class="jump" href="index.html#overriding_and_dynamic_dispatch"></a>重写与动态分派</h3><div data-outline="overriding_and_dynamic_dispatch">
+
+<p id="@one_respect_however"><a class="jump" href="index.html#@one_respect_however"></a>然而，在编写 TypeScript 类时，我们在一个方面无法回避对子类化的思考。
+每个 TypeScript 类自动是 <code>Object</code> 的子类，并自动继承诸如 <code>toString()</code> 之类的方法。
+我们经常需要重写这个被继承的实现，用我们自己的实现替换它，以便我们的类能正确行为。</p>
+
+<p id="@illustrate_look_simpler"><a class="jump" href="index.html#@illustrate_look_simpler"></a>为了说明，让我们看一个更简单的例子：为我们的 <code>FastMyString</code> 类重写 <code>toString()</code> 方法。
+<code>Object</code> 提供的默认 <code>toString()</code> 对于调试不是特别有用：</p>
+
+<pre id="@const_fms_fastmystring_new_fastmystring-hello_fms-tostring_object_object_not"><a class="jump" href="index.html#@const_fms_fastmystring_new_fastmystring-hello_fms-tostring_object_object_not"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> fms: FastMyString = <span class="hljs-keyword">new</span> FastMyString(<span class="hljs-string">"hello"</span>);
+fms.toString() → <span class="hljs-string">"[object Object]"</span> <span class="hljs-comment">// 没用！</span></code></pre>
+
+<p id="@method_multiple_implementations"><a class="jump" href="index.html#@method_multiple_implementations"></a>当一个方法有多个实现时，例如当一个类重写一个像 <code>toString()</code> 这样已在其超类 <code>Object</code> 中有实现的方法，那么 TypeScript 必须确定在调用该方法时使用哪个实现。
+这个过程称为方法的分派，TypeScript 的规则是<mark data-structure-text="dynamic dispatch" id="^dynamic_dispatch"><em>动态分派</em></mark>——它使用适合对象动态类型的实现，而不是指向该对象的引用的静态类型。</p>
+
+<p id="@make_better_overriding"><a class="jump" href="index.html#@make_better_overriding"></a>让我们通过重写 <code>toString()</code> 来使这更好：</p>
+
+<pre id="@class_fastmystring_public"><a class="jump" href="index.html#@class_fastmystring_public"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> FastMyString {
+    ...
+    <span class="hljs-keyword">public</span> toString(): <span class="hljs-built_in">string</span> {
+      <span class="hljs-keyword">let</span> s = <span class="hljs-string">""</span>;
+      <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-keyword">this</span>.length(); ++i) {
+          s += <span class="hljs-keyword">this</span>.charAt(i);
+      }
+      <span class="hljs-keyword">return</span> s;
+    }
+}</code></pre>
+
+<p id="@after_change_get"><a class="jump" href="index.html#@after_change_get"></a>在此更改后，我们得到：</p>
+
+<pre id="@const_fms_fastmystring_new_fastmystring-hello_fms-tostring_hello"><a class="jump" href="index.html#@const_fms_fastmystring_new_fastmystring-hello_fms-tostring_hello"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> fms: FastMyString = <span class="hljs-keyword">new</span> FastMyString(<span class="hljs-string">"hello"</span>);
+fms.toString() → <span class="hljs-string">"hello"</span></code></pre>
+
+<div class="panel panel-figure pull-right pull-margin"><script type="application/snapdown+json" class="no-markdown" id="-json-5jkcd" percentsize="100">{"stack":[],"heap":[{"name":{"ref":"fms: FastMyString"},"target":{"to":[{"id":3}]},"id":1,"independent":true,"source":1},{"immutable":true,"object":"FastMyString","fields":[{"val":"\"hello\"","inside":true}],"id":3},{"name":{"ref":"obj: Object"},"target":{"to":[{"id":4}]},"id":2,"independent":true,"source":2},{"immutable":true,"object":"FastMyString","fields":[{"val":"\"hello\"","inside":true}],"id":4}]}</script><svg class="no-markdown" width="303" height="155" id="-json-5jkcd-svg-3ensd" viewBox="0 0 303 155">
+    <defs>
+      <marker id="snap-arrowhead-qhgzk" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,8 L8,4 L0,0"></path>
+      </marker>
+      <filter id="snap-double-qhgzk" x="-150%" y="-150%" width="300%" height="300%" filterUnits="userSpaceOnUse">
+        <feMorphology in="SourceGraphic" result="Doubled" operator="dilate" radius="1"></feMorphology>
+        <feComposite in="SourceGraphic" in2="Doubled" result="Out" operator="xor"></feComposite>
+      </filter>
+    </defs>
+    <style>
+    rect.snap-obj { stroke: black; fill: none; }
+    path.snap-separator { stroke: black; fill: none; }
+    path.snap-container { stroke: black; fill: none; }
+    path.snap-arrow-qhgzk { stroke: black; fill: none; marker-end: url(index.html); }
+    path.snap-x { stroke: red; stroke-width: 2; fill: none }
+    #snap-arrowhead-qhgzk { stroke: black; fill: none; }
+    .snap-immutable-qhgzk { filter: url(index.html); }
+    text.object { font-family: sans-serif; font-size: 10pt; text-anchor: middle; transform: translateY(1.5ex); }
+    text.func { font-family: sans-serif; font-size: 10pt; text-anchor: middle; transform: translateY(1.5ex); }
+    text.value { font-family: sans-serif; font-size: 12pt; text-anchor: start; transform: translateY(1.5ex); }
+    </style>
+  <defs>
+      <marker id="snap-arrowhead-q0nrh" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,8 L8,4 L0,0"></path>
+      </marker>
+      <filter id="snap-double-q0nrh" x="-150%" y="-150%" width="300%" height="300%" filterUnits="userSpaceOnUse">
+        <feMorphology in="SourceGraphic" result="Doubled" operator="dilate" radius="1"></feMorphology>
+        <feComposite in="SourceGraphic" in2="Doubled" result="Out" operator="xor"></feComposite>
+      </filter>
+    </defs><style>
+    rect.snap-obj { stroke: black; fill: none; }
+    path.snap-separator { stroke: black; fill: none; }
+    path.snap-container { stroke: black; fill: none; }
+    path.snap-arrow-q0nrh { stroke: black; fill: none; marker-end: url(index.html); }
+    path.snap-x { stroke: red; stroke-width: 2; fill: none }
+    #snap-arrowhead-q0nrh { stroke: black; fill: none; }
+    .snap-immutable-q0nrh { filter: url(index.html); }
+    text.object { font-family: sans-serif; font-size: 10pt; text-anchor: middle; transform: translateY(1.5ex); }
+    text.func { font-family: sans-serif; font-size: 10pt; text-anchor: middle; transform: translateY(1.5ex); }
+    text.value { font-family: sans-serif; font-size: 12pt; text-anchor: start; transform: translateY(1.5ex); }
+    </style><g transform="translate(0,0)"></g><defs>
+      <marker id="snap-arrowhead-61ijg" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+        <path d="M0,8 L8,4 L0,0"></path>
+      </marker>
+      <filter id="snap-double-61ijg" x="-150%" y="-150%" width="300%" height="300%" filterUnits="userSpaceOnUse">
+        <feMorphology in="SourceGraphic" result="Doubled" operator="dilate" radius="1"></feMorphology>
+        <feComposite in="SourceGraphic" in2="Doubled" result="Out" operator="xor"></feComposite>
+      </filter>
+    </defs><style>
+    rect.snap-obj { stroke: black; fill: none; }
+    path.snap-separator { stroke: black; fill: none; }
+    path.snap-container { stroke: black; fill: none; }
+    path.snap-arrow-61ijg { stroke: black; fill: none; marker-end: url(index.html); }
+    path.snap-x { stroke: red; stroke-width: 2; fill: none }
+    #snap-arrowhead-61ijg { stroke: black; fill: none; }
+    .snap-immutable-61ijg { filter: url(index.html); }
+    text.object { font-family: sans-serif; font-size: 10pt; text-anchor: middle; transform: translateY(1.5ex); }
+    text.func { font-family: sans-serif; font-size: 10pt; text-anchor: middle; transform: translateY(1.5ex); }
+    text.value { font-family: sans-serif; font-size: 12pt; text-anchor: start; transform: translateY(1.5ex); }
+    </style><g transform="translate(24,0)"><g transform="translate(65.296875,12)"><text x="-53.296875" y="5" class="value"><tspan x="-53.296875" dy="0">fms: FastMyString</tspan></text></g><g transform="translate(28.6796875,55)"><rect class="snap-obj snap-immutable-61ijg" width="93.234375" height="64" rx="20"></rect><text x="46.6171875" y="5" class="object">FastMyString</text><g transform="translate(12,35)"><text x="0" y="0" class="value"><tspan x="0" dy="0">"hello"</tspan></text></g></g><g transform="translate(186.78182220458984,12)"><text x="-28.188072204589844" y="5" class="value"><tspan x="-28.188072204589844" dy="0">obj: Object</tspan></text></g><g transform="translate(150.16463470458984,55)"><rect class="snap-obj snap-immutable-61ijg" width="93.234375" height="64" rx="20"></rect><text x="46.6171875" y="5" class="object">FastMyString</text><g transform="translate(12,35)"><text x="0" y="0" class="value"><tspan x="0" dy="0">"hello"</tspan></text></g></g><path class="snap-arrow-61ijg" d="M 75.296875 32 L 75.296875 55"></path><path class="snap-arrow-61ijg" d="M 196.78182220458984 32 L 196.78182220458984 55"></path></g></svg><script type="application/snapdown" class="no-markdown">
+`fms: FastMyString`  -> ((FastMyString "hello"))
+`obj: Object`  -> ((FastMyString "hello"))
+</script></div>
+
+<p id="@example_fastmystring_type"><a class="jump" href="index.html#@example_fastmystring_type"></a>在此示例中，<code>FastMyString</code> 既是变量 <code>fms</code> 的类型，也是它指向的对象的类型。
+但它们不必是同一类型。
+变量可以是<em>超类型</em>，而对象本身来自<em>子类型</em>。
+当我们使用 <code>MyString</code> 类型的变量来持有对 <code>FastMyString</code> 的引用时，我们已经这样做了。
+但因为 <code>Object</code> 是 TypeScript 中所有类的超类型，我们也可以这样做：</p>
+
+<pre id="@const_obj_object_new_fastmystring-hello_obj-tostring_0"><a class="jump" href="index.html#@const_obj_object_new_fastmystring-hello_obj-tostring_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> obj: <span class="hljs-built_in">Object</span> = <span class="hljs-keyword">new</span> FastMyString(<span class="hljs-string">"hello"</span>);
+obj.toString() → ?</code></pre>
+
+<p id="@but_now_there"><a class="jump" href="index.html#@but_now_there"></a>但现在似乎存在一个歧义。
+<code>Object</code> 有自己的 <code>toString()</code> 实现。
+当我们调用 <code>obj.toString()</code> 时，它调用的是原始的 <code>Object</code> 实现，还是被重写的 <code>FastMyString</code> 实现？
+我们得到的是 <code>"[object Object]"</code> 还是 <code>"hello"</code>？</p>
+
+<p id="@dynamic_dispatch_rule"><a class="jump" href="index.html#@dynamic_dispatch_rule"></a><em>动态分派</em>规则指出，运行时对象的类型决定了要调用的方法实现。
+这种类型直到运行时才可知，因此有“动态”一词。
+相比之下，<code>obj</code> 变量的类型在编译时就已可知。</p>
+
+<p id="@using_dynamic_dispatch"><a class="jump" href="index.html#@using_dynamic_dispatch"></a>使用动态分派，这是我们得到的结果：</p>
+
+<pre id="@const_obj_object_new_fastmystring-hello_obj-tostring_hello"><a class="jump" href="index.html#@const_obj_object_new_fastmystring-hello_obj-tostring_hello"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> obj: <span class="hljs-built_in">Object</span> = <span class="hljs-keyword">new</span> FastMyString(<span class="hljs-string">"hello"</span>);
+obj.toString() → <span class="hljs-string">"hello"</span></code></pre>
+
+<p id="@same_would_get"><a class="jump" href="index.html#@same_would_get"></a>……与我们从 <code>fms.toString()</code> 得到的结果相同。</p>
+
+<p id="@effect_dynamic_dispatch"><a class="jump" href="index.html#@effect_dynamic_dispatch"></a>动态分派规则的效果是，无论指向对象的引用是什么类型，它总是使用对象的动态类型进行方法分派。</p>
+
+</div><h3 id="static_checking_uses_static_types"><a class="jump" href="index.html#static_checking_uses_static_types"></a>静态检查使用静态类型</h3><div data-outline="static_checking_uses_static_types">
+
+<p id="@since_now_looking"><a class="jump" href="index.html#@since_now_looking"></a>由于我们现在正在查看变量的静态类型与其指向的对象的动态类型不同的情况，值得重新审视静态检查能做什么和不能做什么。考虑这个示例：</p>
+
+<pre id="@const_obj_object_new_fastmystring-hello_obj-charat-0"><a class="jump" href="index.html#@const_obj_object_new_fastmystring-hello_obj-charat-0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> obj: <span class="hljs-built_in">Object</span> = <span class="hljs-keyword">new</span> FastMyString(<span class="hljs-string">"hello"</span>);
+obj.charAt(<span class="hljs-number">0</span>) → ?</code></pre>
+
+<p id="@happen_charat_method"><a class="jump" href="index.html#@happen_charat_method"></a>会发生什么？<code>charAt</code> 方法确实作为 <code>obj</code> 指向的 <code>FastMyString</code> 对象上的一个方法存在，所以这段代码在运行时理论上可能工作。
+但 <code>charAt</code> <em>不是</em> <code>Object</code> 上的方法。由于 <code>obj</code> 的静态类型是 <code>Object</code>，TypeScript 编译器会将 <code>obj.charAt(0)</code> 视为静态类型错误，因此它甚至不会编译这段代码。</p>
+
+<p id="@typescript_relies_static"><a class="jump" href="index.html#@typescript_relies_static"></a>TypeScript 在编译时依赖表达式的<em>静态类型</em>，以确保方法调用在运行时始终可能。
+因为 <code>obj</code> 的类型是 <code>Object</code>，在运行时它可能指向任何对象，包括 <code>Object</code>、<code>Set</code>、<code>Date</code> 或许多其他没有 <code>charAt</code> 方法的对象。
+静态类型检查要求 TypeScript 只允许那些在运行时保证有操作可调用的表达式。
+你不能使用超类型引用（这里是 <code>Object</code>）来调用只在子类型（<code>FastMyString</code>）上定义的方法。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-subclassing"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-subclassing-static_vs_dynamic_types" data-target="#ex-subclassing-static_vs_dynamic_types" data-toggle="collapse"><a class="jump" href="index.html#@ex-subclassing-static_vs_dynamic_types"></a><span class="panel-title">静态类型与动态类型</span></div><div class="panel-collapse collapse exercise-panel" id="ex-subclassing-static_vs_dynamic_types" data-outline="static_vs_dynamic_types" data-ex-id="static_checking_uses_static_types/static_vs_dynamic_types" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@let_arr_readonlyarray-string_abc_let_obj_object_arr_0"><a class="jump" href="index.html#@let_arr_readonlyarray-string_abc_let_obj_object_arr_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> arr: ReadonlyArray&lt;<span class="hljs-built_in">string</span>&gt; = [<span class="hljs-string">"abc"</span>];
+<span class="hljs-keyword">let</span> obj: <span class="hljs-built_in">Object</span> = arr;</code></pre>
+
+<p id="@static_type_arr"><a class="jump" href="index.html#@static_type_arr"></a><code>arr</code> 的静态类型是什么？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; ReadonlyArray<string>; Array<string>; Object"><select class="form-control"><option selected="selected"></option><option>ReadonlyArray&lt;string&gt;</option>,<option>Array&lt;string&gt;</option>,<option>Object</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@dynamic_type_arr"><a class="jump" href="index.html#@dynamic_type_arr"></a><code>arr</code> 的动态类型是什么？</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; ReadonlyArray<string>; Array<string>; Object"><select class="form-control"><option selected="selected"></option><option>ReadonlyArray&lt;string&gt;</option>,<option>Array&lt;string&gt;</option>,<option>Object</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@static_type_obj"><a class="jump" href="index.html#@static_type_obj"></a><code>obj</code> 的静态类型是什么？</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; ReadonlyArray<string>; Array<string>; Object"><select class="form-control"><option selected="selected"></option><option>ReadonlyArray&lt;string&gt;</option>,<option>Array&lt;string&gt;</option>,<option>Object</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@dynamic_type_obj"><a class="jump" href="index.html#@dynamic_type_obj"></a><code>obj</code> 的动态类型是什么？</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; ReadonlyArray<string>; Array<string>; Object"><select class="form-control"><option selected="selected"></option><option>ReadonlyArray&lt;string&gt;</option>,<option>Array&lt;string&gt;</option>,<option>Object</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-subclassing-static_typing_vs_dynamic_dispatch" data-target="#ex-subclassing-static_typing_vs_dynamic_dispatch" data-toggle="collapse"><a class="jump" href="index.html#@ex-subclassing-static_typing_vs_dynamic_dispatch"></a><span class="panel-title">静态类型与动态分派</span></div><div class="panel-collapse collapse exercise-panel" id="ex-subclassing-static_typing_vs_dynamic_dispatch" data-outline="static_typing_vs_dynamic_dispatch" data-ex-id="static_checking_uses_static_types/static_typing_vs_dynamic_dispatch" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@const_arr_readonlyarray-string"><a class="jump" href="index.html#@const_arr_readonlyarray-string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> arr: ReadonlyArray&lt;<span class="hljs-built_in">string</span>&gt; = [<span class="hljs-string">"abc"</span>];
+<span class="hljs-keyword">const</span> obj: <span class="hljs-built_in">Object</span> = arr;
+<span class="hljs-comment">/* 在此处放入下一个表达式 */</span></code></pre>
+
+<p id="@does_each_following_do_if_substituted_next_expression_here_code_above_0"><a class="jump" href="index.html#@does_each_following_do_if_substituted_next_expression_here_code_above_0"></a>以下各项如果替换上面代码中的 <code>/* 在此处放入下一个表达式 */</code>，分别会做什么？</p>
+
+<p id="@arr-tostring"><a class="jump" href="index.html#@arr-tostring"></a><code>arr.toString()</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; returns “abc”; returns “[object Array]”; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>返回 "abc"</option>,<option>返回 "[object Array]"</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@obj-tostring"><a class="jump" href="index.html#@obj-tostring"></a><code>obj.toString()</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; returns “abc”; returns “[object Array]”; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>返回 "abc"</option>,<option>返回 "[object Array]"</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@arr-length"><a class="jump" href="index.html#@arr-length"></a><code>arr.length</code></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; returns 1; returns null; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>返回 1</option>,<option>返回 null</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@obj-length"><a class="jump" href="index.html#@obj-length"></a><code>obj.length</code></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; returns 1; returns null; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>返回 1</option>,<option>返回 null</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-subclassing-assignment" data-target="#ex-subclassing-assignment" data-toggle="collapse"><a class="jump" href="index.html#@ex-subclassing-assignment"></a><span class="panel-title">赋值</span></div><div class="panel-collapse collapse exercise-panel" id="ex-subclassing-assignment" data-outline="assignment" data-ex-id="static_checking_uses_static_types/assignment" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<pre id="@let_arr_readonlyarray-string_abc_let_obj_object_arr_next"><a class="jump" href="index.html#@let_arr_readonlyarray-string_abc_let_obj_object_arr_next"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> arr: ReadonlyArray&lt;<span class="hljs-built_in">string</span>&gt; = [<span class="hljs-string">"abc"</span>];
+<span class="hljs-keyword">let</span> obj: <span class="hljs-built_in">Object</span> = arr;
+<span class="hljs-comment">/* 在此处放入下一个表达式 */</span></code></pre>
+
+<p id="@does_each_following_do_if_substituted_next_expression_here_code_above_1"><a class="jump" href="index.html#@does_each_following_do_if_substituted_next_expression_here_code_above_1"></a>以下各项如果替换上面代码中的 <code>/* 在此处放入下一个表达式 */</code>，分别会做什么？</p>
+
+<p id="@arr_obj_0"><a class="jump" href="index.html#@arr_obj_0"></a><code>arr = obj;</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; legal but no effect – arr and obj are aliases; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>合法但无效果 —— arr 和 obj 是别名</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@arr_obj_readonlyarray-string"><a class="jump" href="index.html#@arr_obj_readonlyarray-string"></a><code>arr = obj as ReadonlyArray&lt;string&gt;;</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; legal but no effect – arr and obj are aliases; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>合法但无效果 —— arr 和 obj 是别名</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@obj_abc"><a class="jump" href="index.html#@obj_abc"></a><code>obj = "abc";</code></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; obj now points to a string object; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>obj 现在指向一个字符串对象</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<p id="@arr_abc"><a class="jump" href="index.html#@arr_abc"></a><code>arr = "abc";</code></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; arr now points to a string object; static error – won’t compile; dynamic error – throws exception"><select class="form-control"><option selected="selected"></option><option>arr 现在指向一个字符串对象</option>,<option>静态错误 —— 无法编译</option>,<option>动态错误 —— 抛出异常</option></select><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="generic_types"><a class="jump" href="index.html#generic_types"></a>泛型</h2><div data-outline="generic_types">
+
+<p id="@useful_feature_typescript"><a class="jump" href="index.html#@useful_feature_typescript"></a>TypeScript 类型系统（以及其他现代静态类型语言）的一个有用特性是<mark data-structure-text="generic type" id="^generic_type"><em>泛型</em></mark>：一种其规约以待后续填充的占位类型表示的类型。</p>
+
+<p id="@collection_types_good"><a class="jump" href="index.html#@collection_types_good"></a>集合类型是这方面的好例子。
+<code>Set&lt;T&gt;</code> 是某种其他类型 <code>T</code> 的元素的有限集的 ADT。
+我们可以设计一个接口 <code>Set&lt;T&gt;</code> 来表示一整族集合 ADT，而不是为 <code>Set&lt;string&gt;</code>、<code>Set&lt;number&gt;</code> 等分别编写规约和实现。</p>
+
+<p id="@note_declare_set-t"><a class="jump" href="index.html#@note_declare_set-t"></a>注意，当我们声明 <code>Set&lt;T&gt;</code> 类型时，<mark data-structure-text="type parameter" id="^type_parameter"><em>类型参数</em></mark> <code>T</code> 是一个任意名称，就像函数声明中的参数是一个任意名称一样。
+因此我们常常使用更具描述性的类型参数名称，例如 <code>Set&lt;Element&gt;</code>。
+按照惯例，类型参数首字母大写，就像接口和类名一样。</p>
+
+<p id="@here_simplified_version"><a class="jump" href="index.html#@here_simplified_version"></a>这是 <code>Set</code> 接口 <code>MySet</code> 的一个简化版本：</p>
+
+<pre id="@mutable_set_template"><a class="jump" href="index.html#@mutable_set_template"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 一个可变的集合。
+ * @template Element 集合中元素的类型
+ */</span>
+<span class="hljs-keyword">interface</span> MySet&lt;Element&gt; {
+
+    <span class="hljs-comment">// 观测操作示例</span>
+
+    <span class="hljs-comment">/**
+     * 获取集合的大小。
+     * @returns 此集合中元素的数量
+     */</span>
+    size(): <span class="hljs-built_in">number</span>;
+
+    <span class="hljs-comment">/**
+     * 测试成员关系。
+     * @param e 一个元素
+     * @returns 当且仅当此集合包含 e 时返回 true
+     */</span>
+    has(e: Element): <span class="hljs-built_in">boolean</span>;
+
+    <span class="hljs-comment">// 变更操作示例</span>
+
+    <span class="hljs-comment">/**
+     * 通过将 e 添加到集合中来修改此集合。
+     * @param e 要添加的元素
+     */</span>
+    add(e: Element): <span class="hljs-built_in">void</span>;
+
+    <span class="hljs-comment">/**
+     * 通过移除 e（如果找到）来修改此集合。
+     * 如果集合中未找到 e，则无效果。
+     * @param e 要移除的元素
+     */</span>
+    <span class="hljs-keyword">delete</span>(e: Element): <span class="hljs-built_in">void</span>;
+
+}</code></pre>
+
+<p id="@notice_specs_terms"><a class="jump" href="index.html#@notice_specs_terms"></a>注意规约是如何基于我们对集合的抽象概念表达的；提及任何具有特定私有字段的特定集合实现的细节都是不合适的。
+这些规约应适用于 <code>MySet</code> ADT 的任何有效实现。</p>
+
+<p id="@also_want_creator"><a class="jump" href="index.html#@also_want_creator"></a>我们还将需要一个创建操作：</p>
+
+<pre id="@example_creator_operation"><a class="jump" href="index.html#@example_creator_operation"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// 创建操作示例</span>
+<span class="hljs-comment">/**
+ * 创建一个空集合。
+ * @template Element 集合中元素的类型
+ * @returns 一个新的集合实例，初始为空
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">makeMySet</span>&lt;<span class="hljs-title">Element</span>&gt;(<span class="hljs-params"></span>): <span class="hljs-title">MySet</span>&lt;<span class="hljs-title">Element</span>&gt; </span>{ ... }</code></pre>
+
+<p id="@make_operation_implemented"><a class="jump" href="index.html#@make_operation_implemented"></a><code>make</code> 操作被实现为一个工厂函数。
+客户将编写如下代码：<br>
+    <code>const strings: MySet&lt;string&gt; = makeMySet();</code> <br>
+编译器将推断新的 <code>MySet</code> 应该是一个 <code>string</code> 对象的集合。</p>
+
+<p id="@note_typescript_syntax"><a class="jump" href="index.html#@note_typescript_syntax"></a>注意，在上面的方法签名中出现了一个 TypeScript 语法要求：像 <code>makeMySet</code> 这样的函数需要在参数列表之前独立声明其类型参数，这里显示为 <code>function makeMySet&lt;Element&gt;</code>。
+上面的实例方法没有这个额外的 <code>&lt;...&gt;</code> 声明，因为类型参数 <code>Element</code> 已经由外围的类或接口 <code>interface MySet&lt;Element&gt;</code> 声明了。）</p>
+
+<p id="@generic_functions_can"><a class="jump" href="index.html#@generic_functions_can"></a>泛型函数本身也可以很有用，而不仅仅是在与 ADT 一起使用时。例如，回顾在<a href="../04-specifications/index.html#special_results">规格说明阅读中讨论的空值合并运算符</a>，用作断言一个值不是 undefined 的简写。
+如果我们想把这个放进一个辅助函数中以避免每次都重复 <code>assert.fail()</code>，我们可以使用泛型：</p>
+
+<pre id="@assert_value_isn-t"><a class="jump" href="index.html#@assert_value_isn-t"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * 断言一个值不是 undefined
+ * @template T 待缩窄的类型
+ * @param val 可能为 undefined 的值
+ * @param message 如果抛出错误时显示的信息
+ * @returns 已定义的值
+ * @throws 如果该值是 undefined 则抛出错误
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">assertDefined</span>&lt;<span class="hljs-title">T</span>&gt;(<span class="hljs-params">val: T | <span class="hljs-literal">undefined</span>, message?: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">T</span> </span>{
+  <span class="hljs-keyword">return</span> val ?? assert.fail(message);
+}
+
+<span class="hljs-keyword">const</span> temperatures = [<span class="hljs-number">99.4</span>, <span class="hljs-number">95.2</span>, <span class="hljs-number">100</span>];
+<span class="hljs-keyword">const</span> firstTemp: <span class="hljs-built_in">number</span> = assertDefined(temperatures[<span class="hljs-number">0</span>]); <span class="hljs-comment">// temperatures[0] 的类型为 number|undefined</span></code></pre>
+
+<h3 id="implementing_generic_interfaces"><a class="jump" href="index.html#implementing_generic_interfaces"></a>实现泛型接口</h3><div data-outline="implementing_generic_interfaces">
+
+<p id="@suppose_want_implement"><a class="jump" href="index.html#@suppose_want_implement"></a>假设我们想实现上面的泛型 <code>MySet&lt;Element&gt;</code> 接口。
+我们可以编写一个将 <code>Element</code> 替换为特定类型的非泛型实现，或者编写一个保留占位符的泛型实现。</p>
+
+<p id="@generic_interface_non-generic"><a class="jump" href="index.html#@generic_interface_non-generic"></a><strong>泛型接口，非泛型实现。</strong>
+让我们为一个<em>特定的</em>类型 <code>Element</code> 实现 <code>MySet&lt;Element&gt;</code>。
+我们将实现一个数字集合：</p>
+
+<pre id="@class_digitset_implements"><a class="jump" href="index.html#@class_digitset_implements"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> DigitSet <span class="hljs-keyword">implements</span> MySet&lt;<span class="hljs-built_in">number</span>&gt;</code></pre>
+
+<p id="@wherever_interface_mentions"><a class="jump" href="index.html#@wherever_interface_mentions"></a>凡接口提到占位类型 <code>Element</code> 的地方，<code>DigitSet</code> 的实现都将 <code>Element</code> 替换为 <code>number</code>。
+例如：</p>
+
+<table class="side-by-side pull-margin"><tbody><tr><td><pre id="@represents_mutable_set_elements_type_element"><a class="jump" href="index.html#@represents_mutable_set_elements_type_element"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** 表示一个元素类型为 Element 的可变集合 */</span>
+<span class="hljs-keyword">interface</span> MySet&lt;Element&gt; {
+
+    <span class="hljs-comment">// ...</span>
+
+    <span class="hljs-comment">/**
+     * 测试成员关系。
+     * @param e 一个元素
+     * @returns 当且仅当此集合包含 e 时返回 true
+     */</span>
+    has(e: Element): <span class="hljs-built_in">boolean</span>;
+
+    <span class="hljs-comment">/**
+     * 通过将 e 添加到集合中来修改此集合。
+     * @param e 要添加的元素
+     */</span>
+    add(e: Element): <span class="hljs-built_in">void</span>;
+
+    <span class="hljs-comment">// ...</span>
+}</code></pre></td><td><pre id="@represents_mutable_set_drawn_digits_0-9"><a class="jump" href="index.html#@represents_mutable_set_drawn_digits_0-9"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** 表示一个由数字 {0...9} 中取值的集合的可变集合 */</span>
+<span class="hljs-keyword">class</span> DigitSet <span class="hljs-keyword">implements</span> MySet&lt;<span class="hljs-built_in">number</span>&gt; {
+
+    <span class="hljs-keyword">private</span> readonly digitInSet: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">boolean</span>&gt; =
+        [ <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>,
+          <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span> ];
+
+
+    <span class="hljs-comment">/**
+     * 测试成员关系。
+     * @param e 一个元素，必须是 {0...9} 中的整数
+     * @returns 当且仅当此集合包含 e 时返回 true
+     */</span>
+    <span class="hljs-keyword">public</span> has(e: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">this</span>.checkRep();
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.digitInSet[e];
+    }
+
+    <span class="hljs-comment">/**
+     * 通过将 e 添加到集合中来修改此集合。
+     * @param e 要添加的元素，必须是 {0...9} 中的整数
+     */</span>
+    <span class="hljs-keyword">public</span> add(e: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">this</span>.digitInSet[e] = <span class="hljs-literal">true</span>;
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+    <span class="hljs-comment">// ...</span>
+}</code></pre></td></tr></tbody></table>
+
+<p id="@note_representation_digitset"><a class="jump" href="index.html#@note_representation_digitset"></a>注意，<code>DigitSet</code> 的这种表示不适合表示任意类型元素的集合。
+如果不仔细工作以定义能够处理任意字符串的新表示不变量和抽象函数，它的表示就无法表示 <code>MySet&lt;string&gt;</code>。</p>
+
+<p id="@generic_interface_generic"><a class="jump" href="index.html#@generic_interface_generic"></a><strong>泛型接口，泛型实现。</strong>
+我们也可以在不为 <code>Element</code> 选择类型的情况下实现泛型 <code>MySet&lt;Element&gt;</code> 接口。
+在那种情况下，我们编写代码时对客户将为 <code>Element</code> 选择的实际类型视而不见。</p>
+
+<table class="side-by-side pull-margin"><tbody><tr><td><pre id="@interface_myset-element_0"><a class="jump" href="index.html#@interface_myset-element_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> MySet&lt;Element&gt; {
+
+    <span class="hljs-comment">// ...</span>
+                                              &nbsp;</code></pre></td><td><pre id="@class_hashset-element_implements"><a class="jump" href="index.html#@class_hashset-element_implements"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> HashSet&lt;Element&gt; <span class="hljs-keyword">implements</span> MySet&lt;Element&gt; {
+
+    <span class="hljs-comment">// ...</span>
+    &nbsp;</code></pre></td></tr></tbody></table>
+
+<p id="@generic_implementation_can"><a class="jump" href="index.html#@generic_implementation_can"></a>泛型实现只能依赖于显式包含在泛型接口规约中的占位类型 <code>Element</code> 的细节。
+<code>HashSet</code> 不能对它的元素调用只为某些特定类型（如 <code>string</code>）声明的方法，因为 <code>Element</code> 可能是任何类型。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-generic_types"><h4 class="text-danger" id="@reading_exercises_5"><a class="jump" href="index.html#@reading_exercises_5"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-generic_types-implementing_generics" data-target="#ex-generic_types-implementing_generics" data-toggle="collapse"><a class="jump" href="index.html#@ex-generic_types-implementing_generics"></a><span class="panel-title">实现泛型</span></div><div class="panel-collapse collapse exercise-panel" id="ex-generic_types-implementing_generics" data-outline="implementing_generics" data-ex-id="implementing_generic_interfaces/implementing_generics" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@consider_again_our"><a class="jump" href="index.html#@consider_again_our"></a>再次考虑我们的 <code>MySet</code> 接口：</p>
+
+<pre id="@interface_myset-element_has-e"><a class="jump" href="index.html#@interface_myset-element_has-e"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> MySet&lt;Element&gt; {
+    has(e: Element): <span class="hljs-built_in">boolean</span>;
+    <span class="hljs-comment">// ...</span>
+}</code></pre>
+
+<p id="@wrong_if_anything"><a class="jump" href="index.html#@wrong_if_anything"></a>以下试图基于 <code>MySet</code> 创建新 ADT 的代码段有什么问题（如果有的话）？</p>
+
+<pre id="@represents_set_integers"><a class="jump" href="index.html#@represents_set_integers"></a><code class="language-ts hljs typescript">      <span class="hljs-comment">/** 表示一个整数集合。 */</span>
+<span class="hljs-comment">/*1*/</span> <span class="hljs-keyword">class</span> IntSet <span class="hljs-keyword">implements</span> MySet&lt;<span class="hljs-built_in">number</span>&gt; {
+<span class="hljs-comment">/*2*/</span>     <span class="hljs-keyword">public</span> has(e: Element): <span class="hljs-built_in">boolean</span> { ... }
+          <span class="hljs-comment">// ...</span>
+      }</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="error on line 1 – IntSet must be followed by <Element>"><label for="md_converted_choice_28_0"><input type="radio" id="md_converted_choice_28_0" name="md_converted_radio_28">第 1 行错误 —— <code>IntSet</code> 后面必须跟 <code>&lt;Element&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="error on line 2 – Element is not defined"><label for="md_converted_choice_28_1"><input type="radio" id="md_converted_choice_28_1" name="md_converted_radio_28">第 2 行错误 —— <code>Element</code> 未定义</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="no error – assuming every ... is correct, this will define a set-of-integer ADT"><label for="md_converted_choice_28_2"><input type="radio" id="md_converted_choice_28_2" name="md_converted_radio_28">无错误 —— 假设每个 <code>...</code> 都正确，这将定义一个整数集合 ADT</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<pre id="@represents_set_can"><a class="jump" href="index.html#@represents_set_can"></a><code class="language-ts hljs typescript">      <span class="hljs-comment">/** 表示一个只能增长但不能缩小的集合。 */</span>
+<span class="hljs-comment">/*1*/</span> <span class="hljs-keyword">interface</span> GrowingSet&lt;Z&gt; <span class="hljs-keyword">extends</span> MySet&lt;Element&gt; {
+<span class="hljs-comment">/*2*/</span>     has(z: Z): <span class="hljs-built_in">boolean</span>;
+          <span class="hljs-comment">// ...</span>
+      }</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="error on line 1 – GrowingSet<Z> should be GrowingSet<Element>"><label for="md_converted_choice_29_0"><input type="radio" id="md_converted_choice_29_0" name="md_converted_radio_29">第 1 行错误 —— <code>GrowingSet&lt;Z&gt;</code> 应该是 <code>GrowingSet&lt;Element&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="error on line 1 – MySet<Element> should be MySet<Z>"><label for="md_converted_choice_29_1"><input type="radio" id="md_converted_choice_29_1" name="md_converted_radio_29">第 1 行错误 —— <code>MySet&lt;Element&gt;</code> 应该是 <code>MySet&lt;Z&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="no error yet but problematic – has(e: Element) and has(z: Z) will both need to be implemented"><label for="md_converted_choice_29_2"><input type="radio" id="md_converted_choice_29_2" name="md_converted_radio_29">目前无错误但有问题 —— <code>has(e: Element)</code> 和 <code>has(z: Z)</code> 都需要被实现</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="no error – assuming every ... is correct, this will define a generic growing-set ADT"><label for="md_converted_choice_29_3"><input type="radio" id="md_converted_choice_29_3" name="md_converted_radio_29">无错误 —— 假设每个 <code>...</code> 都正确，这将定义一个泛型增长集合 ADT</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<pre id="@represents_set_whose"><a class="jump" href="index.html#@represents_set_whose"></a><code class="language-ts hljs typescript">      <span class="hljs-comment">/** 表示一个 for-迭代按添加顺序返回元素的集合。 */</span>
+<span class="hljs-comment">/*1*/</span> <span class="hljs-keyword">class</span> OrderedSet&lt;Element&gt; <span class="hljs-keyword">implements</span> MySet&lt;Element&gt; {
+<span class="hljs-comment">/*2*/</span>     <span class="hljs-keyword">public</span> has(e: Element): <span class="hljs-built_in">boolean</span> { ... }
+          <span class="hljs-comment">// ...</span>
+      }</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="error on line 1 – class cannot be generic, must be interface"><label for="md_converted_choice_30_0"><input type="radio" id="md_converted_choice_30_0" name="md_converted_radio_30">第 1 行错误 —— <code>class</code> 不能是泛型的，必须是 <code>interface</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="error on line 2 – Element is ambiguous, is it from OrderedSet or MySet?"><label for="md_converted_choice_30_1"><input type="radio" id="md_converted_choice_30_1" name="md_converted_radio_30">第 2 行错误 —— <code>Element</code> 有歧义，它来自 <code>OrderedSet</code> 还是 <code>MySet</code>？</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="no error – assuming every ... is correct, this will implement the generic set ADT"><label for="md_converted_choice_30_2"><input type="radio" id="md_converted_choice_30_2" name="md_converted_radio_30">无错误 —— 假设每个 <code>...</code> 都正确，这将实现泛型集合 ADT</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-generic_types-changing_the_spec" data-target="#ex-generic_types-changing_the_spec" data-toggle="collapse"><a class="jump" href="index.html#@ex-generic_types-changing_the_spec"></a><span class="panel-title">更改规约</span></div><div class="panel-collapse collapse exercise-panel" id="ex-generic_types-changing_the_spec" data-outline="changing_the_spec" data-ex-id="implementing_generic_interfaces/changing_the_spec" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@consider_another_possible"><a class="jump" href="index.html#@consider_another_possible"></a>考虑我们的 <code>MySet</code> 接口上另一个可能的操作：</p>
+
+<pre id="@interface_myset-element_picks"><a class="jump" href="index.html#@interface_myset-element_picks"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> MySet&lt;Element&gt; {
+    <span class="hljs-comment">/**
+     * 从集合中选取一个元素。
+     * @returns 集合中的一个元素
+     * @throws NoSuchElementError 如果集合为空
+     */</span>
+    pick(): Element;
+
+    <span class="hljs-comment">// ...</span>
+}</code></pre>
+
+<p id="@operation_underdetermined_may"><a class="jump" href="index.html#@operation_underdetermined_may"></a>此操作是<em>不确定的</em>——对于特定集合，它可能有许多合法的返回值。</p>
+
+<p id="@suppose_simpleset_implements"><a class="jump" href="index.html#@suppose_simpleset_implements"></a>假设 <code>SimpleSet</code> 实现了 <code>MySet</code>，并想为 <code>pick</code> 编写自己的规约：</p>
+
+<pre id="@class_simpleset-element_implements"><a class="jump" href="index.html#@class_simpleset-element_implements"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> SimpleSet&lt;Element&gt; <span class="hljs-keyword">implements</span> MySet&lt;Element&gt; {
+
+    <span class="hljs-keyword">private</span> readonly elementList: Array&lt;Element&gt; = [];
+    <span class="hljs-comment">// ...</span>
+
+    <span class="hljs-comment">/**
+     * &lt;新规约写在这里&gt;
+     */</span>
+    <span class="hljs-keyword">public</span> pick(): Element {
+        ...
+    }
+}</code></pre>
+
+<label class="exercise-part-heading" id="@new_simpleset-pick_spec"><a class="jump" href="index.html#@new_simpleset-pick_spec"></a>新的 <code>SimpleSet.pick()</code> 规约可能：</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="stronger than MySet.pick()"><label for="md_converted_choice_25_0"><input type="checkbox" id="md_converted_choice_25_0">比 <code>MySet.pick()</code> 更强</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="weaker than MySet.pick()"><label for="md_converted_choice_25_1"><input type="checkbox" id="md_converted_choice_25_1">比 <code>MySet.pick()</code> 更弱</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="the same as MySet.pick()"><label for="md_converted_choice_25_2"><input type="checkbox" id="md_converted_choice_25_2">与 <code>MySet.pick()</code> 相同</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="incomparable to MySet.pick()"><label for="md_converted_choice_25_3"><input type="checkbox" id="md_converted_choice_25_3">与 <code>MySet.pick()</code> 不可比较</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<label class="exercise-part-heading" id="@which_following_returns"><a class="jump" href="index.html#@which_following_returns"></a>以下哪些 <code>@returns</code> 子句适合 <code>SimpleSet.pick()</code> 的新规约？</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="@returns the element at the end of elementList"><label for="md_converted_choice_26_0"><input type="checkbox" id="md_converted_choice_26_0"><code>@returns elementList 末尾的元素</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="@returns the element at the end of the set"><label for="md_converted_choice_26_1"><input type="checkbox" id="md_converted_choice_26_1"><code>@returns 集合末尾的元素</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="@returns the element most recently added but not yet removed"><label for="md_converted_choice_26_2"><input type="checkbox" id="md_converted_choice_26_2"><code>@returns 最近添加但尚未移除的元素</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="@returns the smallest element in the set"><label for="md_converted_choice_26_3"><input type="checkbox" id="md_converted_choice_26_3"><code>@returns 集合中最小的元素</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="@returns an element in the set"><label for="md_converted_choice_26_4"><input type="checkbox" id="md_converted_choice_26_4"><code>@returns 集合中的一个元素</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<label class="exercise-part-heading" id="@which_following_throws"><a class="jump" href="index.html#@which_following_throws"></a>以下哪些 <code>@throws</code> 子句适合 <code>SimpleSet.pick()</code> 的新规约？</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="@throws TypeError if the set is empty"><label for="md_converted_choice_27_0"><input type="checkbox" id="md_converted_choice_27_0"><code>@throws 如果集合为空则抛出 TypeError</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="@throws NoSuchElementError if the set is empty"><label for="md_converted_choice_27_1"><input type="checkbox" id="md_converted_choice_27_1"><code>@throws 如果集合为空则抛出 NoSuchElementError</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="checkbox exercise-choice" data-outline="@throws SetIsEmptyError if the set is empty (where SetIsEmptyError is a subtype of NoSuchElementError)"><label for="md_converted_choice_27_2"><input type="checkbox" id="md_converted_choice_27_2"><code>@throws 如果集合为空则抛出 SetIsEmptyError</code>（其中 <code>SetIsEmptyError</code> 是 <code>NoSuchElementError</code> 的子类型）</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-generic_types-hiding_the_implementation_class" data-target="#ex-generic_types-hiding_the_implementation_class" data-toggle="collapse"><a class="jump" href="index.html#@ex-generic_types-hiding_the_implementation_class"></a><span class="panel-title">隐藏实现类</span></div><div class="panel-collapse collapse exercise-panel" id="ex-generic_types-hiding_the_implementation_class" data-outline="hiding_the_implementation_class" data-ex-id="implementing_generic_interfaces/hiding_the_implementation_class" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@suppose_wanted_myset"><a class="jump" href="index.html#@suppose_wanted_myset"></a>假设我们希望 <code>MySet</code> 有自己的创建操作 <code>emptySet()</code>，这样客户就不必知道像 <code>SimpleSet</code> 这样特定实现的存在。</p>
+
+<label class="exercise-part-heading" id="@which_following_correct"><a class="jump" href="index.html#@which_following_correct"></a>以下哪项是声明此操作的正确方式？</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="public constructor() in the MySet interface"><label for="md_converted_choice_31_0"><input type="radio" id="md_converted_choice_31_0" name="md_converted_radio_31"><code>MySet</code> 接口中的 <code>public constructor()</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="public emptySet(): MySet in the MySet interface"><label for="md_converted_choice_31_1"><input type="radio" id="md_converted_choice_31_1" name="md_converted_radio_31"><code>MySet</code> 接口中的 <code>public emptySet(): MySet</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="public emptySet(): MySet<Element> in the MySet interface"><label for="md_converted_choice_31_2"><input type="radio" id="md_converted_choice_31_2" name="md_converted_radio_31"><code>MySet</code> 接口中的 <code>public emptySet(): MySet&lt;Element&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="function emptySet<Element>(): MySet<Element> outside the MySet interface"><label for="md_converted_choice_31_3"><input type="radio" id="md_converted_choice_31_3" name="md_converted_radio_31"><code>MySet</code> 接口外部的 <code>function emptySet&lt;Element&gt;(): MySet&lt;Element&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="function emptySet(): MySet<string> outside the MySet interface"><label for="md_converted_choice_31_4"><input type="radio" id="md_converted_choice_31_4" name="md_converted_radio_31"><code>MySet</code> 接口外部的 <code>function emptySet(): MySet&lt;string&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<label class="exercise-part-heading" id="@which_following_would"><a class="jump" href="index.html#@which_following_would"></a>以下哪项是此操作的正确实现？</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="return new SimpleSet<string>();"><label for="md_converted_choice_32_0"><input type="radio" id="md_converted_choice_32_0" name="md_converted_radio_32"><code>return new SimpleSet&lt;string&gt;();</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="return new SimpleSet<Element>();"><label for="md_converted_choice_32_1"><input type="radio" id="md_converted_choice_32_1" name="md_converted_radio_32"><code>return new SimpleSet&lt;Element&gt;();</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="return new MySet();"><label for="md_converted_choice_32_2"><input type="radio" id="md_converted_choice_32_2" name="md_converted_radio_32"><code>return new MySet();</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="return this;"><label for="md_converted_choice_32_3"><input type="radio" id="md_converted_choice_32_3" name="md_converted_radio_32"><code>return this;</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="enumerations"><a class="jump" href="index.html#enumerations"></a>枚举</h2><div data-outline="enumerations">
+
+<p id="@sometimes_adt_small"><a class="jump" href="index.html#@sometimes_adt_small"></a>有时 ADT 有一个小而有限的不可变值集，例如：</p>
+
+<ul id="@months_year_january">
+<li><a class="jump" href="index.html#@months_year_january"></a>一年中的月份：January, February, …</li>
+<li>一周中的天：Monday, Tuesday, …</li>
+<li>罗盘点：north, south, east, west</li>
+<li><a href="https://www.w3.org/TR/svg-strokes/#LineCaps">线条绘制中的线帽</a>：butt, round, square</li>
+</ul>
+
+<p id="@type_like_may"><a class="jump" href="index.html#@type_like_may"></a>像这样的类型可以用作更复杂类型（如 <code>DateTime</code> 或 <code>Latitude</code>）的一部分，或者用作改变方法行为的参数（如 <code>drawLine</code>）。</p>
+
+<p id="@set_values_small"><a class="jump" href="index.html#@set_values_small"></a>当值集小而有限时，将所有值定义为命名常量是合理的，这称为<mark data-structure-text="enumeration" id="^enumeration"><strong>枚举</strong></mark>。
+TypeScript 有 <a href="https://www.typescriptlang.org/docs/handbook/enums.html"><code>enum</code> 构造</a>使这很方便：</p>
+
+<pre id="@enum_month_january"><a class="jump" href="index.html#@enum_month_january"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">enum</span> Month { JANUARY, FEBRUARY, MARCH, ..., DECEMBER };</code></pre>
+
+<p id="@enum_defines_new"><a class="jump" href="index.html#@enum_defines_new"></a>这个 <code>enum</code> 以与 <code>class</code> 和 <code>interface</code> 定义新类型名称相同的方式定义了一个新的类型名称 <code>Month</code>。
+它还定义了一组命名值，我们将它们写成全大写，因为它们实际上是 <code>public static readonly</code> 常量。
+所以现在你可以写：</p>
+
+<pre id="@const_thismonth_month-march"><a class="jump" href="index.html#@const_thismonth_month-march"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> thisMonth = Month.MARCH;</code></pre>
+
+<p id="@idea_called_enumeration"><a class="jump" href="index.html#@idea_called_enumeration"></a>这个想法被称为枚举，因为你显式地列出了集合的元素，而 TypeScript 正在为它们分配数字作为其默认表示值。</p>
+
+<p id="@simplest_use_case"><a class="jump" href="index.html#@simplest_use_case"></a>在枚举最简单的用例中，你需要的唯一操作是测试值之间的相等性：</p>
+
+<pre id="@if_day_day-saturday"><a class="jump" href="index.html#@if_day_day-saturday"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">if</span> (day === Day.SATURDAY || day === Day.SUNDAY) {
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"It's the weekend"</span>);
+}</code></pre>
+
+<p id="@sense_using_enumeration"><a class="jump" href="index.html#@sense_using_enumeration"></a>在那个意义上，使用枚举可能感觉就像你在使用原始 <code>number</code> 常量。
+TypeScript 甚至支持在 <code>switch</code> 语句中使用它们：</p>
+
+<pre id="@switch_direction_case"><a class="jump" href="index.html#@switch_direction_case"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">switch</span> (direction) {
+    <span class="hljs-keyword">case</span> Direction.NORTH: <span class="hljs-keyword">return</span> <span class="hljs-string">"polar bears"</span>;
+    <span class="hljs-keyword">case</span> Direction.SOUTH: <span class="hljs-keyword">return</span> <span class="hljs-string">"penguins"</span>;
+    <span class="hljs-keyword">case</span> Direction.EAST:  <span class="hljs-keyword">return</span> <span class="hljs-string">"elephants"</span>;
+    <span class="hljs-keyword">case</span> Direction.WEST:  <span class="hljs-keyword">return</span> <span class="hljs-string">"llamas"</span>;
+}</code></pre>
+
+<p id="@but_unlike_number"><a class="jump" href="index.html#@but_unlike_number"></a>但与 <code>number</code> 值不同，枚举有更多的静态检查：</p>
+
+<pre id="@const_firstmonth_month"><a class="jump" href="index.html#@const_firstmonth_month"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> firstMonth: Month = Day.MONDAY; <span class="hljs-comment">// 静态错误：MONDAY 的类型是 Day，而不是 Month </span></code></pre>
+
+<p id="@typescript_actually_offers"><a class="jump" href="index.html#@typescript_actually_offers"></a>TypeScript 实际上提供两种枚举：<a href="https://www.typescriptlang.org/docs/handbook/enums.html#numeric-enums">数字枚举</a>（其表示是数字）和 <a href="https://www.typescriptlang.org/docs/handbook/enums.html#string-enums">字符串枚举</a>（其表示是字符串）。
+默认是数字枚举，所以上面的 <code>Month</code> 枚举简单地使用一个数字来表示每个月，从 0 开始按顺序分配，所以 <code>JANUARY</code> 是 0，<code>FEBRUARY</code> 是 1，等等。
+要改为获得字符串枚举，只需将枚举的每个成员初始化为一个不同的字符串值：</p>
+
+<pre id="@enum_direction_north"><a class="jump" href="index.html#@enum_direction_north"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">enum</span> Direction {
+  NORTH = <span class="hljs-string">"north"</span>,
+  SOUTH = <span class="hljs-string">"south"</span>,
+  EAST = <span class="hljs-string">"east"</span>,
+  WEST = <span class="hljs-string">"west"</span>
+}</code></pre>
+
+<p id="@largely_implementation_detail"><a class="jump" href="index.html#@largely_implementation_detail"></a>这在很大程度上是一个实现细节，因为我们正在讨论枚举的表示。但它影响为这些枚举自动生成的 <code>toString()</code> 操作。打印数字枚举的值只会打印其数字（所以 <code>console.log(Month.FEBRUARY)</code> 打印 1），但对于字符串枚举，它打印字符串值（<code>console.log(Direction.EAST)</code> 打印 <code>east</code>）。
+因此，使用字符串枚举调试可能更容易。</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-enumerations"><h4 class="text-danger" id="@reading_exercises_6"><a class="jump" href="index.html#@reading_exercises_6"></a>阅读练习</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-enumerations-semesters" data-target="#ex-enumerations-semesters" data-toggle="collapse"><a class="jump" href="index.html#@ex-enumerations-semesters"></a><span class="panel-title">学期</span></div><div class="panel-collapse collapse exercise-panel" id="ex-enumerations-semesters" data-outline="semesters" data-ex-id="enumerations/semesters" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@consider_these_three"><a class="jump" href="index.html#@consider_these_three"></a>考虑这三种用来命名你正在注册的学期的不同方式：</p>
+
+<ul id="@string_literal">
+<li><a class="jump" href="index.html#@string_literal"></a>使用字符串字面量：</li>
+</ul>
+
+<pre id="@function_startregistrationfor-semester_string"><a class="jump" href="index.html#@function_startregistrationfor-semester_string"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">startRegistrationFor</span>(<span class="hljs-params">semester: <span class="hljs-built_in">string</span>, year: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span> </span>{ ... }
+...
+startRegistrationFor(<span class="hljs-string">"Fall"</span>, <span class="hljs-number">2023</span>);</code></pre>
+
+<ul id="@named_constant_type">
+<li><a class="jump" href="index.html#@named_constant_type"></a>使用类型为 <code>string</code> 的命名常量：</li>
+</ul>
+
+<pre id="@const_fall_fall"><a class="jump" href="index.html#@const_fall_fall"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> FALL = <span class="hljs-string">"Fall"</span>;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">startRegistrationFor</span>(<span class="hljs-params">semester: <span class="hljs-built_in">string</span>, year: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span> </span>{ ... }
+...
+startRegistrationFor(FALL, <span class="hljs-number">2023</span>);</code></pre>
+
+<ul id="@value_enumeration">
+<li><a class="jump" href="index.html#@value_enumeration"></a>使用枚举的值：</li>
+</ul>
+
+<pre id="@enum_semester_iap"><a class="jump" href="index.html#@enum_semester_iap"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">enum</span> Semester { IAP, SPRING, SUMMER, FALL };
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">startRegistrationFor</span>(<span class="hljs-params">semester: Semester, year: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span> </span>{ ... }
+...
+startRegistrationFor(Semester.FALL, <span class="hljs-number">2023</span>);</code></pre>
+
+<p id="@which_following_correctly-stated"><a class="jump" href="index.html#@which_following_correctly-stated"></a>以下哪些是关于每种方式的优势或劣势的正确陈述？</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="The string literal approach doesn’t fail fast, because the client can misspell the semester without getting a static error: startRegistrationFor(&quot;FAll&quot;, 2023)"><label for="md_converted_choice_33_0"><input type="checkbox" id="md_converted_choice_33_0">字符串字面量方法无法快速失败，因为客户端可能拼错学期而不会收到静态错误：<code>startRegistrationFor("FAll", 2023)</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="The named string constant approach isn’t safe from bugs, because the name can be reassigned: FALL = &quot;Spring&quot;"><label for="md_converted_choice_34_0"><input type="checkbox" id="md_converted_choice_34_0">命名字符串常量方法在免于错误方面不安全，因为名称可以被重新赋值：<code>FALL = "Spring"</code></label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="The named string constant approach doesn’t fail fast, because the client can call it with an incorrect string literal without getting a static error: startRegistrationFor(&quot;Autumn&quot;, 2023)."><label for="md_converted_choice_35_0"><input type="checkbox" id="md_converted_choice_35_0">命名字符串常量方法无法快速失败，因为客户端可以用错误的字符串字面量调用它而不会收到静态错误：<code>startRegistrationFor("Autumn", 2023)</code>。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-group exercise-part" data-outline="d"><div class="checkbox exercise-choice" data-outline="The enumeration approach isn’t safe from bugs, because the client can define new semesters without getting a static error: startRegistrationFor(new Semester(&quot;Autumn&quot;), 2023)."><label for="md_converted_choice_36_0"><input type="checkbox" id="md_converted_choice_36_0">枚举方法在免于错误方面不安全，因为客户端可以定义新的学期而不会收到静态错误：<code>startRegistrationFor(new Semester("Autumn"), 2023)</code>。</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-group exercise-part" data-outline="e"><div class="checkbox exercise-choice" data-outline="The enumeration approach isn’t safe from bugs, because the client can substitute a different enumeration type without getting a static error: startRegistrationFor(Month.JANUARY, 2023). "><label for="md_converted_choice_37_0"><input type="checkbox" id="md_converted_choice_37_0">枚举方法在免于错误方面不安全，因为客户端可以替换不同的枚举类型而不会收到静态错误：<code>startRegistrationFor(Month.JANUARY, 2023)</code>。 </label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-enumerations-rep_exposure_in_enums" data-target="#ex-enumerations-rep_exposure_in_enums" data-toggle="collapse"><a class="jump" href="index.html#@ex-enumerations-rep_exposure_in_enums"></a><span class="panel-title">枚举中的表示暴露</span></div><div class="panel-collapse collapse exercise-panel" id="ex-enumerations-rep_exposure_in_enums" data-outline="rep_exposure_in_enums" data-ex-id="enumerations/rep_exposure_in_enums" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-08-interfaces-subtyping"><div class="panel-body">
+
+<p id="@consider_following_uses"><a class="jump" href="index.html#@consider_following_uses"></a>根据它们最近的定义，考虑以下对 <code>Month</code> 和 <code>Direction</code> 枚举的使用。
+这些是正确的用法吗？</p>
+
+<pre id="@function_isstartofyear-month_month"><a class="jump" href="index.html#@function_isstartofyear-month_month"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">isStartOfYear</span>(<span class="hljs-params">month: Month</span>): <span class="hljs-title">boolean</span> </span>{
+  <span class="hljs-keyword">return</span> month === <span class="hljs-number">0</span>;
+}</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="allowed by TypeScript with no error"><label for="md_converted_choice_38_0"><input type="radio" id="md_converted_choice_38_0" name="md_converted_radio_38">被 TypeScript 允许，无错误</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="static error in TypeScript"><label for="md_converted_choice_38_1"><input type="radio" id="md_converted_choice_38_1" name="md_converted_radio_38">TypeScript 中的静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="exploits rep exposure (this code depends on the rep of Month)"><label for="md_converted_choice_39_0"><input type="radio" id="md_converted_choice_39_0" name="md_converted_radio_39">利用了表示暴露（这段代码依赖于 <code>Month</code> 的表示）</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="no rep exposure"><label for="md_converted_choice_39_1"><input type="radio" id="md_converted_choice_39_1" name="md_converted_radio_39">无表示暴露</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<pre id="@let_x_number"><a class="jump" href="index.html#@let_x_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> x: <span class="hljs-built_in">number</span> = Month.JANUARY + <span class="hljs-number">1</span>;</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="allowed by TypeScript with no error"><label for="md_converted_choice_40_0"><input type="radio" id="md_converted_choice_40_0" name="md_converted_radio_40">被 TypeScript 允许，无错误</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="static error in TypeScript"><label for="md_converted_choice_40_1"><input type="radio" id="md_converted_choice_40_1" name="md_converted_radio_40">TypeScript 中的静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="exploits rep exposure (this code depends on the rep of Month)"><label for="md_converted_choice_41_0"><input type="radio" id="md_converted_choice_41_0" name="md_converted_radio_41">利用了表示暴露（这段代码依赖于 <code>Month</code> 的表示）</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="no rep exposure"><label for="md_converted_choice_41_1"><input type="radio" id="md_converted_choice_41_1" name="md_converted_radio_41">无表示暴露</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div>
+
+<pre id="@let_s_number"><a class="jump" href="index.html#@let_s_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> s: <span class="hljs-built_in">number</span> = Direction.NORTH.length;</code></pre>
+
+<div class="form-group exercise-part" data-outline="e"><div class="radio exercise-choice" data-outline="allowed by TypeScript with no error"><label for="md_converted_choice_42_0"><input type="radio" id="md_converted_choice_42_0" name="md_converted_radio_42">被 TypeScript 允许，无错误</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="static error in TypeScript"><label for="md_converted_choice_42_1"><input type="radio" id="md_converted_choice_42_1" name="md_converted_radio_42">TypeScript 中的静态错误</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="f"><div class="radio exercise-choice" data-outline="exploits rep exposure (this code depends on the rep of Direction)"><label for="md_converted_choice_43_0"><input type="radio" id="md_converted_choice_43_0" name="md_converted_radio_43">利用了表示暴露（这段代码依赖于 <code>Direction</code> 的表示）</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+<div class="radio exercise-choice" data-outline="no rep exposure"><label for="md_converted_choice_43_1"><input type="radio" id="md_converted_choice_43_1" name="md_converted_radio_43">无表示暴露</label><span class="exercise-answer exercise-remote" style="display: none;">（缺少答案）</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>（缺少解释）</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">检查</button> <button class="btn btn-default exercise-reveal" style="display: none;">解释</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="getters_and_setters"><a class="jump" href="index.html#getters_and_setters"></a>Getter 和 setter</h2><div data-outline="getters_and_setters">
+
+<p id="@often_observer_operations"><a class="jump" href="index.html#@often_observer_operations"></a>我们经常有没有参数的观测操作，比如我们 <code>MyString</code> 接口的这一个：</p>
+
+<pre id="@interface_mystring_returns"><a class="jump" href="index.html#@interface_mystring_returns"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> MyString {
+    <span class="hljs-comment">/**
+     * @returns 此字符串中的字符数量
+     */</span>
+    length(): <span class="hljs-built_in">number</span>;
+
+    <span class="hljs-comment">// ...</span>
+}</code></pre>
+
+<p id="@if_instead_want"><a class="jump" href="index.html#@if_instead_want"></a>如果我们反而想（在语法上）将此观测操作表示得如同它是一个实例变量，会怎样？
+然后客户可以省略括号，在类型为 <code>MyString</code> 的变量 <code>s</code> 上使用 <code>s.length</code>，就像我们对那些内置类型使用 <code>Set.size</code> 或 <code>Array.length</code> 一样。
+在接口中声明此观测属性很直接：</p>
+
+<pre id="@interface_mystring_number"><a class="jump" href="index.html#@interface_mystring_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> MyString {
+    <span class="hljs-comment">/**
+     * 此字符串中的字符数量
+     */</span>
+    readonly length: <span class="hljs-built_in">number</span>;
+
+    <span class="hljs-comment">// ...</span>
+}</code></pre>
+
+<p id="@note_important_readonly"><a class="jump" href="index.html#@note_important_readonly"></a>（注意重要的 <code>readonly</code>——我们不想让客户试图通过给此属性赋值来调整字符串大小。）</p>
+
+<p id="@but_doesn-t_sacrifice"><a class="jump" href="index.html#@but_doesn-t_sacrifice"></a>但这不是牺牲了表示独立性吗？
+它不是通过强制我们在表示中拥有一个公共的 <code>length</code> 实例变量，来约束我们为 <code>MyString</code> 选择的表示吗？</p>
+
+<p id="@languages_like_typescript"><a class="jump" href="index.html#@languages_like_typescript"></a>在像 TypeScript 这样支持 <mark data-mark-text="getter/setter (TypeScript)" data-structure-text="getter/setter (TypeScript)" id="^gettersetter_typescript"><strong>getter 方法</strong></mark>的语言中，答案是否定的。
+使用关键字 <code>get</code>，我们可以定义一个 getter 方法，每当客户读取 <code>length</code> 实例变量时它就会被调用：</p>
+
+<pre id="@class_fastmystring_implements_mystring_public_get"><a class="jump" href="index.html#@class_fastmystring_implements_mystring_public_get"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> FastMyString <span class="hljs-keyword">implements</span> MyString {
+
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">get</span> length(): <span class="hljs-built_in">number</span> {
+        <span class="keyword">return</span> <span class="hljs-keyword">this</span>.end - <span class="hljs-keyword">this</span>.start;
+    }
+
+    <span class="hljs-comment">// ... </span>
+}</code></pre>
+
+<p id="@but_different_implementation"><a class="jump" href="index.html#@but_different_implementation"></a>但 <code>MyString</code> 的不同实现可能选择直接将 <code>length</code> 表示为一个实例变量：</p>
+
+<pre id="@class_simplemystring_implements_mystring_public_readonly"><a class="jump" href="index.html#@class_simplemystring_implements_mystring_public_readonly"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">class</span> SimpleMyString <span class="hljs-keyword">implements</span> MyString {
+
+    <span class="hljs-keyword">public</span> readonly length;
+
+    <span class="hljs-comment">// ...</span>
+}</code></pre>
+
+<p id="@important_thing_fastmystring"><a class="jump" href="index.html#@important_thing_fastmystring"></a>重要的是，<code>FastMyString</code> 和 <code>SimpleMyString</code> 可以决定该观测操作是由 getter 函数还是由变量实现，而不影响客户。
+从客户的角度来看，<code>length</code> 看起来就像一个实例变量。</p>
+
+<p id="@public_instance_variable"><a class="jump" href="index.html#@public_instance_variable"></a>对于一个旨在看起来可重新赋值的公共实例变量，我们可以同时定义一个 <a href="https://www.typescriptlang.org/docs/handbook/2/classes.html#getters--setters">getter 方法（观测操作）和一个 setter 方法（变更操作）</a>。
+setter 方法可以做任何必要的事情，使表示的其余部分与被重新赋值的值保持一致——甚至如果客户赋了一个坏值就抛出异常。</p>
+
+</div><h2 id="adts_in_non-oop_languages"><a class="jump" href="index.html#adts_in_non-oop_languages"></a>非面向对象语言中的 ADT</h2><div data-outline="adts_in_non-oop_languages">
+
+<p id="@one_more_way"><a class="jump" href="index.html#@one_more_way"></a>定义抽象数据类型的另一种方式是简单地作为一组对不透明数据类型进行操作的全局可访问函数。
+这种模式在像 TypeScript 和 Python 这样的面向对象语言中很少见，但经常出现在像 C 这样的较老编程语言中。
+这是 C 中一些文件 I/O 的示例：</p>
+
+<pre id="@file_f_fopen-out-txt"><a class="jump" href="index.html#@file_f_fopen-out-txt"></a><code class="language-c hljs cpp">FILE* f = fopen(<span class="hljs-string">"out.txt"</span>, <span class="hljs-string">"w"</span>); <span class="hljs-comment">// 打开一个文件用于写入</span>
+<span class="hljs-built_in">fputs</span>(<span class="hljs-string">"hello"</span>, f); <span class="hljs-comment">// 写入文件</span>
+fclose(f);  <span class="hljs-comment">// 关闭文件</span></code></pre>
+
+<p id="@code_abstract_data"><a class="jump" href="index.html#@code_abstract_data"></a>在此代码中，抽象数据类型是 <code>FILE</code>，表示一个打开的文件。
+函数 <code>fopen</code>、<code>fputs</code> 和 <code>fclose</code> 是该类型的操作，接受 <code>FILE</code> 作为参数或将其作为返回值返回。
+<code>fputs</code> 期望文件作为其第二个参数。</p>
+
+<p id="@because_c_not"><a class="jump" href="index.html#@because_c_not"></a>因为 C 不是面向对象的，所以没有类、方法、字段甚至 <code>private</code> 的概念，但表示独立性仍然实现了。
+客户没有办法查看 <code>FILE</code> 值的内部。
+使用 <code>FILE</code> 的唯一方法是将其传递给该类型提供的操作。</p>
+
+<p id="@one_key_takeaway"><a class="jump" href="index.html#@one_key_takeaway"></a>从这里得出的一个关键要点是，抽象数据类型的基本概念并不依赖于诸如类、接口或 <code>public</code>/<code>private</code> 访问控制等语言特性。
+数据抽象是软件工程中普遍存在的一种强大设计模式。</p>
+
+</div><h2 id="adts_in_typescript"><a class="jump" href="index.html#adts_in_typescript"></a>TypeScript 中的 ADT</h2><div data-outline="adts_in_typescript">
+
+<p id="@we-ve_now_completed"><a class="jump" href="index.html#@we-ve_now_completed"></a>现在我们已经完成了第一次 ADTs 阅读中的 <a href="../06-abstract-data-types/index.html#realizing_adt_concepts_in_typescript">TypeScript ADT 概念工具箱</a>。
+本次阅读中的新概念在下面以黄色高亮显示。</p>
+
+<table class="adt-implementation-table pull-margin"><tbody><tr><th><p id="@adt_concept"><a class="jump" href="index.html#@adt_concept"></a>ADT 概念</p></th>
+    <th><p id="@ways_do_typescript"><a class="jump" href="index.html#@ways_do_typescript"></a>在 TypeScript 中的实现方式</p></th>
+    <th><p id="@examples"><a class="jump" href="index.html#@examples"></a>示例</p></th></tr>
+
+  <tr class="new-row"><td><p id="@abstract_data_type"><a class="jump" href="index.html#@abstract_data_type"></a>抽象数据类型</p></td>
+    <td><p id="@class_7"><a class="jump" href="index.html#@class_7"></a>类</p></td>
+    <td><p id="@date"><a class="jump" href="index.html#@date"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date"><code>Date</code></a></p></td></tr>
+  <tr class="highlighted"><td></td>
+    <td><p id="@interface_class-es"><a class="jump" href="index.html#@interface_class-es"></a>接口 + 类</p></td>
+    <td><p id="@arraylike_array"><a class="jump" href="index.html#@arraylike_array"></a><a href="https://typhonjs-typedoc.github.io/ts-lib-docs/2023/esm/interfaces/ArrayLike.html"><code>ArrayLike</code></a> 和 <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array"><code>Array</code></a></p></td></tr>
+  <tr class="highlighted"><td></td>
+    <td><p id="@enum_4"><a class="jump" href="index.html#@enum_4"></a>枚举</p></td>
+    <td><p id="@pencolor"><a class="jump" href="index.html#@pencolor"></a><a href="../../psets/ps0/doc/enums/turtle.PenColor.html"><code>PenColor</code></a></p></td></tr>
+
+  <tr class="new-row"><td><p id="@creator_operation"><a class="jump" href="index.html#@creator_operation"></a>创建操作</p></td>
+    <td><p>构造函数</p></td>
+    <td><p id="@array"><a class="jump" href="index.html#@array"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/Array"><code>Array()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_factory_method"><a class="jump" href="index.html#@static_factory_method"></a>静态（工厂）方法</p></td>
+    <td colspan="2"><p id="@array-of"><a class="jump" href="index.html#@array-of"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/of"><code>Array.of()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@constant"><a class="jump" href="index.html#@constant"></a>常量</p></td>
+    <td><p id="@number-positive_infinity"><a class="jump" href="index.html#@number-positive_infinity"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/POSITIVE_INFINITY"><code>Number.POSITIVE_INFINITY</code></a></p></td></tr>
+
+  <tr class="new-row"><td><p id="@observer_operation"><a class="jump" href="index.html#@observer_operation"></a>观测操作</p></td>
+    <td><p id="@instance_method_0"><a class="jump" href="index.html#@instance_method_0"></a>实例方法</p></td>
+    <td><p id="@string-charat"><a class="jump" href="index.html#@string-charat"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/charAt"><code>String.charAt()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_method_0"><a class="jump" href="index.html#@static_method_0"></a>静态方法</p></td>
+    <td><p id="@object-entries"><a class="jump" href="index.html#@object-entries"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/entries"><code>Object.entries()</code></a></p></td></tr>
+  <tr class="highlighted"><td></td>
+    <td><p id="@getter"><a class="jump" href="index.html#@getter"></a>Getter</p></td>
+    <td><p id="@map-size"><a class="jump" href="index.html#@map-size"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/size"><code>Map.size</code></a></p></td></tr>
+
+
+  <tr class="new-row"><td><p id="@producer_operation"><a class="jump" href="index.html#@producer_operation"></a>生产操作</p></td>
+    <td><p id="@instance_method_1"><a class="jump" href="index.html#@instance_method_1"></a>实例方法</p></td>
+    <td><p id="@string-trim"><a class="jump" href="index.html#@string-trim"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/Trim"><code>String.trim()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_method_1"><a class="jump" href="index.html#@static_method_1"></a>静态方法</p></td>
+    <td colspan="2"><p id="@math-floor"><a class="jump" href="index.html#@math-floor"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/floor"><code class="no-markdown">Math.<wbr>floor()</code></a></p></td></tr>
+
+
+  <tr class="new-row"><td><p id="@mutator_operation"><a class="jump" href="index.html#@mutator_operation"></a>变更操作</p></td>
+    <td><p id="@instance_method_2"><a class="jump" href="index.html#@instance_method_2"></a>实例方法</p></td>
+    <td><p id="@array-push"><a class="jump" href="index.html#@array-push"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/push"><code>Array.push()</code></a></p></td></tr>
+  <tr><td></td>
+    <td><p id="@static_method_2"><a class="jump" href="index.html#@static_method_2"></a>静态方法</p></td>
+    <td><p id="@object-assign"><a class="jump" href="index.html#@object-assign"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/assign"><code>Object.assign()</code></a></p></td></tr>
+  <tr class="highlighted"><td></td>
+    <td><p id="@setter"><a class="jump" href="index.html#@setter"></a>Setter</p></td>
+    <td></td></tr>
+
+  <tr class="new-row"><td><p id="@representation_1"><a class="jump" href="index.html#@representation_1"></a>表示</p></td>
+    <td><p id="@private_fields"><a class="jump" href="index.html#@private_fields"></a><code>private</code> 字段</p></td>
+    <td></td></tr></tbody></table>
+
+</div><h2 id="summary"><a class="jump" href="index.html#summary"></a>总结</h2><div data-outline="summary">
+
+<p id="@typescript_interfaces_help"><a class="jump" href="index.html#@typescript_interfaces_help"></a>TypeScript 接口帮助我们将抽象数据类型的基本概念形式化为一组类型必须支持的操作。</p>
+
+<p id="@helps_make_our"><a class="jump" href="index.html#@helps_make_our"></a>这帮助我们的代码……</p>
+
+<ul>
+<li><p id="@safe_bugs_adt"><a class="jump" href="index.html#@safe_bugs_adt"></a><strong>摆脱 Bug。</strong>
+ADT 由其操作定义，接口正是这样做的。
+当客户使用接口类型时，静态检查确保他们只使用接口定义的方法。
+如果实现类暴露了其他方法——或者更糟，有可见的表示——客户就不会意外地看到或依赖它们。
+当我们有多种数据类型实现时，接口提供方法签名的静态检查。</p></li>
+<li><p id="@easy_understand_clients"><a class="jump" href="index.html#@easy_understand_clients"></a><strong>易于理解。</strong>
+客户和维护者确切地知道去哪里找 ADT 的规约。
+因为接口不包含字段或实例方法的实现，所以更容易将实现的细节排除在规约之外。</p></li>
+<li><p id="@ready_change_can"><a class="jump" href="index.html#@ready_change_can"></a><strong>为更改做好准备。</strong>
+我们可以通过添加实现接口的类来轻松地添加类型的新实现。
+如果我们避免构造函数而使用工厂函数，客户将只看到接口。
+这意味着我们可以切换客户正在使用的实现类，而完全不改变他们的代码。</p></li>
+</ul>
+
+<p id="@typescript_enumerations_allow"><a class="jump" href="index.html#@typescript_enumerations_allow"></a>TypeScript 枚举允许用一个小而有限的不可变值集定义 ADT。与特殊整数值或特殊字符串的过时替代方案相比，枚举帮助使我们的代码：</p>
+
+<ul>
+<li><p id="@safe_bugs_static"><a class="jump" href="index.html#@safe_bugs_static"></a><strong>摆脱 Bug。</strong>
+静态检查确保客户不能使用有限集之外的值，或混淆两个不同的枚举类型。</p></li>
+<li><p id="@easy_understand_named"><a class="jump" href="index.html#@easy_understand_named"></a><strong>易于理解。</strong>
+命名常量不像整数字面量那样神秘，命名类型比 <code>number</code> 或 <code>string</code> 更能自我解释。</p></li>
+<li><p id="@ready_change_code"><a class="jump" href="index.html#@ready_change_code"></a><strong>为更改做好准备。</strong>
+使用特定枚举的代码很容易通过搜索枚举的类型名来找到，以便在枚举更改时对其进行审查和更改。
+（IDE 重构工具甚至可以自动进行其中一些更改。）
+依赖于一组特定字符串或整数常量的代码更难与出于其他目的使用字符串和整数的代码区分开来。</p></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>由 Rob Miller 和 Max Goldman 合作撰写，Saman Amarasinghe、Adam Chlipala、Srini Devadas、Gabriella Ecanow、Michael Ernst、John Guttag、Daniel Jackson、Josiah McMenamy、Martin Rinard 和 Armando Solar-Lezama 做出贡献，Robert Durfee、Jenna Himawan、Stacia Johanna、Jessica Shi、Daniel Whatley 和 Elizabeth Zhou 也做出了贡献。本作品采用 <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a> 许可协议授权。</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<script src="../../web/snapdown-021721.js"></script>
+<script type="text/javascript">
+window.onHandoutDidRenderThen = function(done) {
+    Snapdown.renderAll(true, done);
+}
+</script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  2026 春季 课程网站存档  |  最新网站位于&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">无障碍访问</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-08-interfaces-subtyping"></script><script src="../../../i18n.js"></script></body><!--
+Handout delivered Tue May 26 2026 13:30:02 GMT+0000 (Coordinated Universal Time)
+--></html>
