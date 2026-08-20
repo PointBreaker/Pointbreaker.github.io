@@ -1,0 +1,1060 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>Reading 17: Callbacks and Graphical User Interfaces</title>
+
+
+<script>
+window.onHandoutReady = function() {
+    const sizeTextbox = document.getElementById('sizeTextbox');
+    const sizeSlider = document.getElementById('sizeSlider');
+    sizeTextbox.addEventListener('input', (event) => {
+        sizeSlider.value = sizeTextbox.value;
+    });
+    sizeSlider.addEventListener('input', (event) => {
+        sizeTextbox.value = sizeSlider.value;
+    });
+};
+</script>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — Software Construction</a><div>Spring 2026</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_17_callbacks_and_graphical_user_interfaces">Reading 17: Callbacks and Graphical User Interfaces</a></li><li><a href="index.html#callbacks">Callbacks</a></li><li><a href="index.html#timer_callbacks">Timer callbacks</a></li><li><a href="index.html#event_loop">Event loop</a></li><li><a href="index.html#using_callbacks_with_promises">Using callbacks with promises</a></li><li><a href="index.html#unpacking_an_asynchronous_function">Unpacking an asynchronous function</a></li><li><a href="index.html#html_and_the_document_object_model">HTML and the Document Object Model</a></li><li><a href="index.html#input_handling">Input handling</a></li><li><a href="index.html#event_sources">Event sources</a></li><li><a href="index.html#pitfalls_in_listeners">Pitfalls in listeners</a></li><li><a href="index.html#summary">Summary</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_17_callbacks_and_graphical_user_interfaces"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-17-callbacks-guis"></iframe><a class="jump" href="index.html#reading_17_callbacks_and_graphical_user_interfaces"></a>Reading 17: Callbacks and Graphical User Interfaces</h1><div data-outline="reading_17_callbacks_and_graphical_user_interfaces">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>Software in 6.102</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>Safe from bugs</th><th>Easy to understand</th><th>Ready for change</th></tr>
+<tr><td>
+  Correct today and correct in the unknown future.
+</td><td>
+  Communicating clearly with future programmers, including future you.
+</td><td>
+  Designed to accommodate change without rewriting.
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>Objectives</h4>
+
+<p id="@reading_talk_about"><a class="jump" href="index.html#@reading_talk_about"></a>In this reading we talk about <em>callbacks</em>, in which an implementer calls a function provided by the client.
+We discuss this idea in the context of promises, showing how <code>await</code> is implemented using callbacks.
+We’ll also explore how callbacks are used in graphical user interfaces (GUIs), where a kind of callback function called a <em>listener</em> is used to respond to incoming input events from the user.</p>
+
+<p id="@see_more_instances"><a class="jump" href="index.html#@see_more_instances"></a>We’ll see more instances of callbacks in the next class, when we talk about web servers.</p>
+
+<h1 id="callbacks"><a class="jump" href="index.html#callbacks"></a>Callbacks</h1><div data-outline="callbacks">
+
+<p id="@callback_function_client"><a class="jump" href="index.html#@callback_function_client"></a>A <mark data-structure-text="callback" id="^callback"><em>callback</em></mark> is a function that a client provides to a module for the module to call.
+This is in contrast to the normal flow of control, in which the client is doing all the calling: calling down into functions that the module provides.
+With a callback, the client is providing a piece of code for the implementer to call.</p>
+
+<p id="@already_saw_one"><a class="jump" href="index.html#@already_saw_one"></a>We already saw one kind of callback in <a href="../10-functional-programming/index.html">Functional Programming</a>: the function passed to <code>map</code> or <code>filter</code> or <code>reduce</code>, which is called repeatedly for each element of the sequence.
+This is a <em>synchronous</em> callback, because it is called only during the execution of the map/filter/reduce, and then not used thereafter.
+The use of the callback is <em>synchronized</em> within the call and return of the map/filter/reduce.</p>
+
+<p id="@reading_considers_asynchronous"><a class="jump" href="index.html#@reading_considers_asynchronous"></a>This reading considers <em>asynchronous</em> callbacks, which are saved by the module for a <em>future</em> call, after the function that received the callback has already returned.</p>
+
+<p id="@here-s_one_analogy"><a class="jump" href="index.html#@here-s_one_analogy"></a>Here’s one analogy for thinking about the difference between synchronous and asynchronous.
+Normal (synchronous) function calling is like picking up the phone and calling a service, like calling your bank to find out the balance of your account.
+You give the information that the bank operator needs to look up your account (analogous to <em>passing in arguments</em>), they read back the account balance to you over the phone (the <em>return value</em>), and you hang up (getting control back from the call).
+In this analogy, you are the client, and the bank is the module that you’re calling into.</p>
+
+<p id="@sometimes_bank_slow"><a class="jump" href="index.html#@sometimes_bank_slow"></a>Sometimes the bank is slow to give an answer.
+You’re put on hold, and you wait until they figure out the answer for you.
+This is like a synchronous function call that waits until it is ready to return.
+You don’t get control back for a little while; you’re stuck waiting on the phone until you get the answer.</p>
+
+<p id="@but_sometimes_task"><a class="jump" href="index.html#@but_sometimes_task"></a>But sometimes the task may take so long that the bank doesn’t even want to put you on hold.
+Then the bank will ask you for a callback phone number, and they will promise to call you back with the answer, at some unpredictable point in the future.
+Providing your phone number to the bank is analogous to a client providing an asynchronous callback function to a module.</p>
+
+<p id="@note_just_analogy"><a class="jump" href="index.html#@note_just_analogy"></a>Note that this is just an analogy; a callback phone number is very different from a callback function.
+But it provides some intuition about the difference between synchronous function calling (where you are stuck waiting on
+the phone for the answer) and asynchronous function calling (hanging up and doing something else until you get a call
+back).</p>
+
+<p id="@sometimes_callback_function"><a class="jump" href="index.html#@sometimes_callback_function"></a>Sometimes a callback function will be called only once (or at most once), as a response to a one-time request, as in this account-balance example.
+But a callback function may also be called repeatedly, whenever a certain event happens.
+An analogy for this kind of callback might be account fraud protection, where the bank calls you at your registered phone number whenever a suspicious transaction occurs on your account.
+We will see both kinds of asynchronous callbacks in this reading.</p>
+
+<h2 id="timer_callbacks"><a class="jump" href="index.html#timer_callbacks"></a>Timer callbacks</h2><div data-outline="timer_callbacks">
+
+<p id="@simple_example_uses"><a class="jump" href="index.html#@simple_example_uses"></a>A simple example that uses a callback is the built-in JavaScript function <a href="https://developer.mozilla.org/en-US/docs/Web/API/setTimeout"><code>setTimeout</code></a>, which takes two arguments: a callback function and the number of milliseconds to wait before executing the function:</p>
+
+<pre id="@settimeout_console-log-beep_3000_0"><a class="jump" href="index.html#@settimeout_console-log-beep_3000_0"></a><code class="language-ts hljs typescript">setTimeout(
+    <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"beep!"</span>),
+    <span class="hljs-number">3000</span>
+);</code></pre>
+
+<p id="@here_callback_function"><a class="jump" href="index.html#@here_callback_function"></a>Here, the callback function is the function object created by the lambda expression <code>() =&gt; console.log("beep!")</code>.</p>
+
+<p id="@now_consider_output"><a class="jump" href="index.html#@now_consider_output"></a>Now consider the output of running the following code at a TypeScript prompt:</p>
+
+<p id="@settimeout_console-log-beep_3000_console-log-boop_boop_3"><a class="jump" href="index.html#@settimeout_console-log-beep_3000_console-log-boop_boop_3"></a><code>&gt; setTimeout(() =&gt; console.log("beep!"), 3000); console.log("boop!");</code> <br>
+<code>boop!</code> <br>
+<code>&gt;</code> <br>
+<em>3 seconds later</em> <br>
+<code>beep!</code>  </p>
+
+<p id="@notice_callback_asynchronous"><a class="jump" href="index.html#@notice_callback_asynchronous"></a>Notice that the callback is asynchronous. The call to <code>setTimeout()</code> itself doesn’t wait for 3000 milliseconds (3 seconds) before printing <code>boop!</code>.
+Instead, it starts an internal timer, stores a reference to the callback function, and then prints <code>boop!</code>. Once the internal timer expires three seconds later, then the callback function is finally called, printing <code>beep!</code>.</p>
+
+<p id="@see_example_defining"><a class="jump" href="index.html#@see_example_defining"></a>To see an example of defining a function that takes a callback, let’s create a countdown timer:</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_0"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Start a timer that ticks once per second until it expires.
+ * @param ticks      duration of the timer in seconds, must be an integer &gt;= 0
+ * @param callback   callback function, initially called synchronously, 
+ *                   then called again after each tick of the timer, 
+ *                   each time passing the number of seconds left until the timer expires.
+ *                   ticksLeft must be an integer in [0, ticks].
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span></span></code></pre>
+
+<p id="@look_closely_type"><a class="jump" href="index.html#@look_closely_type"></a>Look closely at the type of the <code>callback</code> parameter: this is a <a href="https://www.typescriptlang.org/docs/handbook/2/functions.html#function-type-expressions"><em>function type</em></a>.
+In this case, <code>countdown()</code> is expecting a callback function that takes a single <code>number</code> argument and returns <code>void</code>.</p>
+
+<p id="@here-s_might_be"><a class="jump" href="index.html#@here-s_might_be"></a>Here’s how it might be called at a TypeScript prompt: </p>
+
+<p id="@countdown-3_n_number"><a class="jump" href="index.html#@countdown-3_n_number"></a><code>&gt; countdown(3, (n: number) =&gt; console.log(n));</code> <br>
+<code>3</code> <br>
+<code>&gt;</code> <br>
+<em>one second later</em> <br>
+<code>2</code> <br>
+<em>one second later</em> <br>
+<code>1</code> <br>
+<em>one second later</em> <br>
+<code>0</code>  </p>
+
+<p id="@notice_3_printed"><a class="jump" href="index.html#@notice_3_printed"></a>Notice where <code>3</code> is printed in the transcript above: <em>before</em> the next prompt <code>&gt;</code> was displayed, because the spec indicates that the first callback should be called <em>synchronously</em>, before <code>countdown()</code> returns.  The remaining calls to the callback happen asynchronously, as the timer counts down to completion.</p>
+
+<p id="@exercises_below_explore"><a class="jump" href="index.html#@exercises_below_explore"></a>The exercises below explore the behavior of the <code>setTimeout()</code> and <code>countdown()</code> callbacks, and show how to implement <code>countdown()</code> using <code>setTimeout()</code>.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-time_to_print" data-target="#ex-callbacks-time_to_print" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-time_to_print"></a><span class="panel-title">Time to print</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-time_to_print" data-outline="time_to_print" data-ex-id="timer_callbacks/time_to_print" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<pre id="@settimeout_console-log-a_4000"><a class="jump" href="index.html#@settimeout_console-log-a_4000"></a><code class="language-ts hljs typescript">setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"A"</span>), <span class="hljs-number">4000</span>);
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"B"</span>), <span class="hljs-number">1000</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"C"</span>);</code></pre>
+
+<p id="@order_b_c_printed_code_0"><a class="jump" href="index.html#@order_b_c_printed_code_0"></a>In what order are A, B, and C printed by this code?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="A, B, C"><label for="md_converted_choice_5_0"><input type="radio" id="md_converted_choice_5_0" name="md_converted_radio_5">A, B, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="A, C, B"><label for="md_converted_choice_5_1"><input type="radio" id="md_converted_choice_5_1" name="md_converted_radio_5">A, C, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, C, A"><label for="md_converted_choice_5_2"><input type="radio" id="md_converted_choice_5_2" name="md_converted_radio_5">B, C, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, A, C"><label for="md_converted_choice_5_3"><input type="radio" id="md_converted_choice_5_3" name="md_converted_radio_5">B, A, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, A, B"><label for="md_converted_choice_5_4"><input type="radio" id="md_converted_choice_5_4" name="md_converted_radio_5">C, A, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, B, A"><label for="md_converted_choice_5_5"><input type="radio" id="md_converted_choice_5_5" name="md_converted_radio_5">C, B, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@total_duration_program"><a class="jump" href="index.html#@total_duration_program"></a>What is the total duration of the program, from the start of the code to the final line printed, rounded to the nearest second?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="0 seconds"><label for="md_converted_choice_6_0"><input type="radio" id="md_converted_choice_6_0" name="md_converted_radio_6">0 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_6_1"><input type="radio" id="md_converted_choice_6_1" name="md_converted_radio_6">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="4 seconds"><label for="md_converted_choice_6_2"><input type="radio" id="md_converted_choice_6_2" name="md_converted_radio_6">4 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="5 seconds"><label for="md_converted_choice_6_3"><input type="radio" id="md_converted_choice_6_3" name="md_converted_radio_6">5 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-callback_type" data-target="#ex-callbacks-callback_type" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-callback_type"></a><span class="panel-title">Callback type</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-callback_type" data-outline="callback_type" data-ex-id="timer_callbacks/callback_type" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@recall_function_signature"><a class="jump" href="index.html#@recall_function_signature"></a>Recall the function signature for <code>countdown</code>, with particular attention to the <code>callback</code> parameter:</p>
+
+<pre id="@function_countdown-ticks_number"><a class="jump" href="index.html#@function_countdown-ticks_number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span></span></code></pre>
+
+<p id="@suppose_client_previously"><a class="jump" href="index.html#@suppose_client_previously"></a>and suppose the client has previously defined this function:</p>
+
+<pre id="@function_mycallback-ticksleft_number"><a class="jump" href="index.html#@function_mycallback-ticksleft_number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">myCallback</span>(<span class="hljs-params">ticksLeft: <span class="hljs-built_in">number</span></span>) </span>{ <span class="hljs-built_in">console</span>.log(ticksLeft); }</code></pre>
+
+<p id="@which_following_true"><a class="jump" href="index.html#@which_following_true"></a>Which of the following are true statements about the callback that the client can pass to <code>countdown</code>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="passing (n: number) => console.log(n) is not legal because the parameter must be named ticksLeft, not n"><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0">passing <code>(n: number) =&gt; console.log(n)</code> is not legal because the parameter must be named <code>ticksLeft</code>, not <code>n</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="passing (ticksLeft: bigint) => console.log(ticksLeft) is not legal because the parameter must have type number, not bigint"><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1">passing <code>(ticksLeft: bigint) =&gt; console.log(ticksLeft)</code> is not legal because the parameter must have type <code>number</code>, not <code>bigint</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="passing myCallback is not legal because the callback must use => as shown in the type"><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2">passing <code>myCallback</code> is not legal because the callback must use <code>=&gt;</code> as shown in the type</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="passing myCallback(5) is not legal because it does not match the type of callback"><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3">passing <code>myCallback(5)</code> is not legal because it does not match the type of <code>callback</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_following_legal"><a class="jump" href="index.html#@which_following_legal"></a>Which of the following are legal ways for the <em>implementation</em> of <code>countdown</code> to call the callback?  Assume that <code>n</code> is a local variable with the number of ticks remaining on the timer.</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="callback(n)"><label for="md_converted_choice_2_0"><input type="checkbox" id="md_converted_choice_2_0"><code>callback(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="callback()"><label for="md_converted_choice_2_1"><input type="checkbox" id="md_converted_choice_2_1"><code>callback()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="const f = callback; f(n)"><label for="md_converted_choice_2_2"><input type="checkbox" id="md_converted_choice_2_2"><code>const f = callback; f(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="myCallback(n)"><label for="md_converted_choice_2_3"><input type="checkbox" id="md_converted_choice_2_3"><code>myCallback(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-counting_down" data-target="#ex-callbacks-counting_down" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-counting_down"></a><span class="panel-title">Counting down</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-counting_down" data-outline="counting_down" data-ex-id="timer_callbacks/counting_down" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@consider_countdown_might"><a class="jump" href="index.html#@consider_countdown_might"></a>Let’s consider how <code>countdown()</code> might be implemented using <code>setTimeout()</code>.  Here is a recursive implementation:</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_if_ticks_0"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_if_ticks_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Start a timer that ticks once per second until it expires.
+ * @param ticks      duration of the timer in seconds, must be an integer &gt;= 0
+ * @param callback   callback function, initially called synchronously, 
+ *                   then called again after each tick of the timer, 
+ *                   each time passing the number of seconds left until the timer expires.
+ *                   ticksLeft must be an integer in [0, ticks].
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-keyword">const</span> millisecondsPerTick = <span class="hljs-number">1000</span>;
+    <span class="hljs-keyword">if</span> ( ticks &gt; <span class="hljs-number">0</span> ) {
+        setTimeout(_____________, millisecondsPerTick);
+    }
+    callback(ticks);
+}</code></pre>
+
+<p id="@which_following_expressions"><a class="jump" href="index.html#@which_following_expressions"></a>Which of the following expressions could be put in the blank for the recursive case, so that the implementation works for <code>ticks &gt; 0</code>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="callback "><label for="md_converted_choice_3_0"><input type="checkbox" id="md_converted_choice_3_0"><code>callback</code> </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="callback(ticksLeft)"><label for="md_converted_choice_3_1"><input type="checkbox" id="md_converted_choice_3_1"><code>callback(ticksLeft)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="countdown"><label for="md_converted_choice_3_2"><input type="checkbox" id="md_converted_choice_3_2"><code>countdown</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="countdown(ticks-1, callback)"><label for="md_converted_choice_3_3"><input type="checkbox" id="md_converted_choice_3_3"><code>countdown(ticks-1, callback)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="() => countdown(ticks-1, callback)"><label for="md_converted_choice_3_4"><input type="checkbox" id="md_converted_choice_3_4"><code>() =&gt; countdown(ticks-1, callback)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_0"><a class="jump" href="index.html#@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_0"></a>What does this code do when called with <code>countdown(0, (ticksLeft) =&gt; console.log(ticksLeft))</code>?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="prints 0 immediately and then returns"><label for="md_converted_choice_7_0"><input type="radio" id="md_converted_choice_7_0" name="md_converted_radio_7">prints <code>0</code> immediately and then returns</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 0 once a second for a very long time"><label for="md_converted_choice_7_1"><input type="radio" id="md_converted_choice_7_1" name="md_converted_radio_7">prints <code>0</code> once a second for a very long time</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="returns immediately, then prints 0 one second later"><label for="md_converted_choice_7_2"><input type="radio" id="md_converted_choice_7_2" name="md_converted_radio_7">returns immediately, then prints <code>0</code> one second later</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-counting_down_again" data-target="#ex-callbacks-counting_down_again" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-counting_down_again"></a><span class="panel-title">Counting down again</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-counting_down_again" data-outline="counting_down_again" data-ex-id="timer_callbacks/counting_down_again" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@now_consider_imperative"><a class="jump" href="index.html#@now_consider_imperative"></a>Now let’s consider an <a href="https://en.wikipedia.org/wiki/Imperative_programming">imperative</a> implementation of <code>countdown()</code>, which is currently buggy:</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_callback-ticks"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_callback-ticks"></a><code class="language-ts hljs typescript">    <span class="hljs-comment">/**
+     * Start a timer that ticks once per second until it expires.
+     * @param ticks      duration of the timer in seconds, must be an integer &gt;= 0
+     * @param callback   callback function, initially called synchronously, 
+     *                   then called again after each tick of the timer, 
+     *                   each time passing the number of seconds left until the timer expires.
+     *                   ticksLeft must be an integer in [0, ticks].
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span> </span>{
+        <span class="hljs-keyword">const</span> millisecondsPerTick = <span class="hljs-number">1000</span>;
+
+        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">doTick</span>(<span class="hljs-params"></span>) </span>{
+            callback(ticks);
+            <span class="hljs-keyword">if</span> ( ticks &gt; <span class="hljs-number">0</span> ) {
+                setTimeout(doTick, millisecondsPerTick);
+            }
+        }
+
+        doTick();
+    }</code></pre>
+
+<p id="@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_1"><a class="jump" href="index.html#@does_code_do_called_countdown-0_ticksleft_console-log-ticksleft_1"></a>What does this code do when called with <code>countdown(0, (ticksLeft) =&gt; console.log(ticksLeft))</code>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="prints 0 immediately and then returns"><label for="md_converted_choice_8_0"><input type="radio" id="md_converted_choice_8_0" name="md_converted_radio_8">prints <code>0</code> immediately and then returns</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 0 once a second for a very long time"><label for="md_converted_choice_8_1"><input type="radio" id="md_converted_choice_8_1" name="md_converted_radio_8">prints <code>0</code> once a second for a very long time</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="returns immediately, then prints 0 one second later"><label for="md_converted_choice_8_2"><input type="radio" id="md_converted_choice_8_2" name="md_converted_radio_8">returns immediately, then prints <code>0</code> one second later</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@does_code_do_called_countdown-1_ticksleft"><a class="jump" href="index.html#@does_code_do_called_countdown-1_ticksleft"></a>What does this code do when called with <code>countdown(1, (ticksLeft) =&gt; console.log(ticksLeft))</code>?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="prints 1 immediately and returns, then nothing more"><label for="md_converted_choice_9_0"><input type="radio" id="md_converted_choice_9_0" name="md_converted_radio_9">prints <code>1</code> immediately and returns, then nothing more</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 1 immediately and returns, then prints 0 one second later"><label for="md_converted_choice_9_1"><input type="radio" id="md_converted_choice_9_1" name="md_converted_radio_9">prints <code>1</code> immediately and returns, then prints <code>0</code> one second later</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints 1 once a second for a very long time"><label for="md_converted_choice_9_2"><input type="radio" id="md_converted_choice_9_2" name="md_converted_radio_9">prints <code>1</code> once a second for a very long time</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="returns immediately, then prints 1 one second later, and 0 one second after that"><label for="md_converted_choice_9_3"><input type="radio" id="md_converted_choice_9_3" name="md_converted_radio_9">returns immediately, then prints <code>1</code> one second later, and <code>0</code> one second after that</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks-counting_down_again_but_not_ad_infinitum" data-target="#ex-callbacks-counting_down_again_but_not_ad_infinitum" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks-counting_down_again_but_not_ad_infinitum"></a><span class="panel-title">Counting down again, but not ad infinitum</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks-counting_down_again_but_not_ad_infinitum" data-outline="counting_down_again_but_not_ad_infinitum" data-ex-id="timer_callbacks/counting_down_again_but_not_ad_infinitum" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@bug_imperative_implementation"><a class="jump" href="index.html#@bug_imperative_implementation"></a>The bug in the imperative implementation is that it never decrements <code>ticks</code>.  Let’s try fixing it:</p>
+
+<pre id="@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_b"><a class="jump" href="index.html#@start_timer_ticks_once_per_second_until_expires_param_ticks_duration_timer_seconds_must_be_integer_0_param_callback_callback_function_initially_called_synchronously_then_called_again_after_each_tick_timer_each_time_passing_number_seconds_left_until_timer_expires_ticksleft_must_be_integer_0_ticks_function_countdown-ticks_number_callback_ticksleft_number_void_void_const_millisecondspertick_1000_function_dotick_b"></a><code class="language-ts hljs typescript">    <span class="hljs-comment">/**
+     * Start a timer that ticks once per second until it expires.
+     * @param ticks      duration of the timer in seconds, must be an integer &gt;= 0
+     * @param callback   callback function, initially called synchronously, 
+     *                   then called again after each tick of the timer, 
+     *                   each time passing the number of seconds left until the timer expires.
+     *                   ticksLeft must be an integer in [0, ticks].
+     */</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">countdown</span>(<span class="hljs-params">ticks: <span class="hljs-built_in">number</span>, callback: (ticksLeft: <span class="hljs-built_in">number</span>) =&gt; <span class="hljs-built_in">void</span></span>): <span class="hljs-title">void</span> </span>{
+        <span class="hljs-keyword">const</span> millisecondsPerTick = <span class="hljs-number">1000</span>;
+<span class="hljs-comment">//A</span>
+        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">doTick</span>(<span class="hljs-params"></span>) </span>{
+<span class="hljs-comment">//B</span>
+            callback(ticks);
+<span class="hljs-comment">//C</span>
+            <span class="hljs-keyword">if</span> ( ticks &gt; <span class="hljs-number">0</span> ) {
+<span class="hljs-comment">//D</span>
+                setTimeout(doTick, millisecondsPerTick);
+<span class="hljs-comment">//E</span>
+            }
+        }
+<span class="hljs-comment">//F</span>
+        doTick();
+<span class="hljs-comment">//G</span>
+    }</code></pre>
+
+<p id="@suppose_you_insert"><a class="jump" href="index.html#@suppose_you_insert"></a>Suppose you insert the statement <code>--ticks;</code> at just <em>one</em> of the locations marked A-G.  Which of the possible insert locations would fix the bug, so that <code>countdown()</code> obeys its spec?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="A"><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0">A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="B"><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1">B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="C"><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2">C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="D"><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3">D</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="E"><label for="md_converted_choice_4_4"><input type="checkbox" id="md_converted_choice_4_4">E</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="F"><label for="md_converted_choice_4_5"><input type="checkbox" id="md_converted_choice_4_5">F</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="G"><label for="md_converted_choice_4_6"><input type="checkbox" id="md_converted_choice_4_6">G</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="none of these work, because ticks will always go back to its original value every time doTick() is called"><label for="md_converted_choice_4_7"><input type="checkbox" id="md_converted_choice_4_7">none of these work, because <code>ticks</code> will always go back to its original value every time <code>doTick()</code> is called</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="event_loop"><a class="jump" href="index.html#event_loop"></a>Event loop</h2><div data-outline="event_loop">
+
+<p id="@these_timer_callbacks"><a class="jump" href="index.html#@these_timer_callbacks"></a>These timer callbacks allow us to uncover a fundamental aspect of the TypeScript/JavaScript programming model.  At the core of the JavaScript runtime system is an <mark data-structure-text="event queue" id="^event_queue"><em>event queue</em></mark>, a first-in-first-out queue that stores events that have arrived from various sources.  The queue is serviced by an <mark data-structure-text="event loop" id="^event_loop"><em>event loop</em></mark> that repeatedly checks this queue for newly-arrived events, and calls appropriate callback functions.</p>
+
+<p id="@one_source_events"><a class="jump" href="index.html#@one_source_events"></a>One source of events are the timers created by <code>setTimeout</code>. The expiration of a timer causes a “timer done” event to be placed at the end of the queue, along with its callback function.  When the event loop eventually retrieves this event from the top of the queue, it calls the callback function, finally discharging the obligation of <code>setTimeout</code>’s contract.</p>
+
+<p id="@later_reading_see"><a class="jump" href="index.html#@later_reading_see"></a>Later in this reading, we will see another source of events: a graphical user interface.
+For JavaScript running in an HTML web page, the user’s keypresses, mouse movements and presses, or finger-touches are placed at the end of the event queue, and are eventually handled by their registered callback functions.</p>
+
+<p id="@still_another_source"><a class="jump" href="index.html#@still_another_source"></a>And still another source of events are input and output to the filesystem and network, which we will see in a future reading.</p>
+
+<p id="@all_our_typescript-javascript"><a class="jump" href="index.html#@all_our_typescript-javascript"></a>All our TypeScript/JavaScript code is actually running inside the event loop — even the start of the program is initiated from the event loop.
+In order for the program to work correctly, all our code must also return to the event loop in a timely way, so that the event loop can move on to the next event, and continue processing subsequent timer expirations or GUI/file/network events.</p>
+
+<p id="@if_any_our"><a class="jump" href="index.html#@if_any_our"></a>If any of our code <mark data-mark-text="blocking" data-structure-text="blocking" id="^blocking"><em>blocks</em></mark> — holding onto the flow of control and not returning to the caller for a significant period of time — then the event loop stops processing events.
+Timer callbacks don’t fire, the user interface stops responding, and network connections stop delivering data.
+If you have ever seen your mouse cursor turn into a spinning beach ball or an hourglass, that’s a sign of a program whose event loop has become blocked, so that it is no longer processing events.
+It’s bad.</p>
+
+<p id="@here-s_simple_function"><a class="jump" href="index.html#@here-s_simple_function"></a>Here’s a simple function that would block the JavaScript event loop:</p>
+
+<pre id="@wait_milliseconds_pass"><a class="jump" href="index.html#@wait_milliseconds_pass"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** Wait for `milliseconds` to pass before returning. */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">busyWait</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-keyword">const</span> now = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime(); <span class="hljs-comment">// new Date().getTime() is always the current clock time in milliseconds</span>
+    <span class="hljs-keyword">const</span> deadline = now + milliseconds;
+    <span class="hljs-keyword">while</span> (<span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime() &lt; deadline) {
+        <span class="hljs-comment">// do nothing, just wait until the clock reaches the deadline time</span>
+    }
+}</code></pre>
+
+<p id="@call_busywait-10000_spins"><a class="jump" href="index.html#@call_busywait-10000_spins"></a>A call to <code>busyWait(10000)</code> spins and spins around its <code>while</code> loop, watching the clock, until 10 seconds have passed.
+During that time, events will pile up in the event queue, but the event loop will not be able to process them, because <code>busyWait()</code> has not returned.
+Once <code>busyWait()</code> returns its caller (which then returns to its caller, and so forth all the way back up to the event loop, which is the original caller of everything in JavaScript), then the event loop can finally peel off the next waiting event and call its callback function, and life can return to normal.
+But all those timer callbacks that piled up will fire too late!</p>
+
+<p id="@recall_spinning_loop"><a class="jump" href="index.html#@recall_spinning_loop"></a>Recall that spinning in a loop waiting for something to change externally is called <a href="../15-promises/index.html#^busy-waiting">busy-waiting</a>, and it is a very bad code smell for an event-loop runtime system like JavaScript.
+Code like <code>busyWait()</code> needs to be rewritten.  It should use a callback triggered by the change (as the built-in JavasScript function <code>setTimeout()</code> does), or a promise triggered by the change (like our asynchronous version <code>timeout()</code>).</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_2"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-blocking_the_event_loop" data-target="#ex-callbacks_2-blocking_the_event_loop" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-blocking_the_event_loop"></a><span class="panel-title">Blocking the event loop</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-blocking_the_event_loop" data-outline="blocking_the_event_loop" data-ex-id="event_loop/blocking_the_event_loop" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@busywait_function_definitely"><a class="jump" href="index.html#@busywait_function_definitely"></a>The <code>busyWait()</code> function is definitely a bad design for TypeScript/JavaScript.  But even well-meaning functions can inadvertently block the event loop:</p>
+
+<pre id="@returns_random_prime"><a class="jump" href="index.html#@returns_random_prime"></a><code class="hljs php"><span class="hljs-comment">/** <span class="hljs-doctag">@returns</span> a random prime number with `n` decimal digits. */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">randomPrime</span><span class="hljs-params">( n: number )</span>: <span class="hljs-title">bigint</span></span>;</code></pre>
+
+<p id="@suppose_randomprime_implemented"><a class="jump" href="index.html#@suppose_randomprime_implemented"></a>Suppose <code>randomPrime()</code> is implemented by a guess-and-test strategy, generating <em>n</em>-digit numbers at random and testing them for primality until it finds a prime one.
+So <code>randomPrime(1000)</code> may take an unpredictable amount of time to run.</p>
+
+<p id="@which_possible_behaviors"><a class="jump" href="index.html#@which_possible_behaviors"></a>Which possible behaviors might you see from the example code below?  Choose all that apply.</p>
+
+<pre id="@settimeout_console-log-a_1000"><a class="jump" href="index.html#@settimeout_console-log-a_1000"></a><code class="language-ts hljs typescript">setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"A"</span>), <span class="hljs-number">1000</span>);
+<span class="hljs-built_in">console</span>.log(randomPrime(<span class="hljs-number">1000</span>));
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"B"</span>), <span class="hljs-number">2000</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="prints A after one second; then prints a prime number after some time; then prints B two seconds after that"><label for="md_converted_choice_10_0"><input type="checkbox" id="md_converted_choice_10_0">prints <code>A</code> after one second; then prints a prime number after some time; then prints <code>B</code> two seconds after that</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="prints a prime number almost immediately; then prints A one second later; then prints B one second after that"><label for="md_converted_choice_10_1"><input type="checkbox" id="md_converted_choice_10_1">prints a prime number almost immediately; then prints <code>A</code> one second later; then prints <code>B</code> one second after that</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="prints a prime number after two seconds, then prints A and B together"><label for="md_converted_choice_10_2"><input type="checkbox" id="md_converted_choice_10_2">prints a prime number after two seconds, then prints <code>A</code> and <code>B</code> together</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="nothing printed for five minutes, then prints a prime number and A together, then prints B two seconds later"><label for="md_converted_choice_10_3"><input type="checkbox" id="md_converted_choice_10_3">nothing printed for five minutes, then prints a prime number and <code>A</code> together, then prints <code>B</code> two seconds later</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-exceptions_from_synchronous_callbacks" data-target="#ex-callbacks_2-exceptions_from_synchronous_callbacks" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-exceptions_from_synchronous_callbacks"></a><span class="panel-title">Exceptions from synchronous callbacks</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-exceptions_from_synchronous_callbacks" data-outline="exceptions_from_synchronous_callbacks" data-ex-id="event_loop/exceptions_from_synchronous_callbacks" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@one_difference_between"><a class="jump" href="index.html#@one_difference_between"></a>One difference between synchronous and asynchronous callbacks is how they behave with exception handling.</p>
+
+<p id="@first_consider_synchronous"><a class="jump" href="index.html#@first_consider_synchronous"></a>Let’s first consider a synchronous callback that always throws an exception, used by <code>map</code>:</p>
+
+<pre id="@function_alwaysthrows-n_number"><a class="jump" href="index.html#@function_alwaysthrows-n_number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{ 
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+}
+
+[<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>].map(alwaysThrows);</code></pre>
+
+<p id="@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_0"><a class="jump" href="index.html#@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_0"></a>Which of the following places to put a <code>try-catch</code> statement will catch the exception thrown by <code>alwaysThrows</code>?  Assume the choices are independent, i.e. the <code>try-catch</code> is put in only one place in the code.</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="around the definition of alwaysThrows, i.e. try { function alwaysThrows(n: number) { throw new Error(&quot;boom!&quot;); } } catch (e) { ... } "><label for="md_converted_choice_11_0"><input type="checkbox" id="md_converted_choice_11_0">around the definition of <code>alwaysThrows</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{ 
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    } 
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the body of alwaysThrows, i.e. function alwaysThrows(n: number) { try { throw new Error(&quot;boom!&quot;); } catch (e) { ... } } "><label for="md_converted_choice_11_1"><input type="checkbox" id="md_converted_choice_11_1">around the body of <code>alwaysThrows</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{ 
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    } <span class="hljs-keyword">catch</span> (e) { ... }
+}
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the call to map, i.e. try { [1, 2, 3].map(alwaysThrows); } catch (e) { ... } "><label for="md_converted_choice_11_2"><input type="checkbox" id="md_converted_choice_11_2">around the call to <code>map</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    [<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>].map(alwaysThrows);
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the argument to map, i.e. [1, 2, 3].map( try { alwaysThrows } catch (e) { ... } ); "><label for="md_converted_choice_11_3"><input type="checkbox" id="md_converted_choice_11_3">around the argument to <code>map</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript">[<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>].map(
+    <span class="hljs-keyword">try</span> {
+        alwaysThrows
+    } <span class="hljs-keyword">catch</span> (e) { ... }
+);
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-exceptions_from_asynchronous_callbacks" data-target="#ex-callbacks_2-exceptions_from_asynchronous_callbacks" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-exceptions_from_asynchronous_callbacks"></a><span class="panel-title">Exceptions from asynchronous callbacks</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-exceptions_from_asynchronous_callbacks" data-outline="exceptions_from_asynchronous_callbacks" data-ex-id="event_loop/exceptions_from_asynchronous_callbacks" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@now_consider_asynchronous"><a class="jump" href="index.html#@now_consider_asynchronous"></a>Now let’s consider an <em>asynchronous</em> callback, used by <code>setTimeout</code>:</p>
+
+<pre id="@function_alwaysthrows_throw"><a class="jump" href="index.html#@function_alwaysthrows_throw"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params"></span>) </span>{ 
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+}
+
+setTimeout(alwaysThrows, <span class="hljs-number">1000</span>);</code></pre>
+
+<p id="@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_1"><a class="jump" href="index.html#@which_following_places_put_try-catch_statement_catch_exception_thrown_alwaysthrows_assume_choices_independent_i-e_try-catch_put_only_one_place_code_1"></a>Which of the following places to put a <code>try-catch</code> statement will catch the exception thrown by <code>alwaysThrows</code>?  Assume the choices are independent, i.e. the <code>try-catch</code> is put in only one place in the code.</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="around the definition of alwaysThrows, i.e. try { function alwaysThrows(n: number) { throw new Error(&quot;boom!&quot;); } } catch (e) { ... } "><label for="md_converted_choice_12_0"><input type="checkbox" id="md_converted_choice_12_0">around the definition of <code>alwaysThrows</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{ 
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    } 
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the body of alwaysThrows, i.e. function alwaysThrows(n: number) { try { throw new Error(&quot;boom!&quot;); } catch (e) { ... } } "><label for="md_converted_choice_12_1"><input type="checkbox" id="md_converted_choice_12_1">around the body of <code>alwaysThrows</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">alwaysThrows</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>) </span>{ 
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"boom!"</span>);
+    } <span class="hljs-keyword">catch</span> (e) { ... }
+}
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the call to setTimeout, i.e. try { setTimeout(alwaysThrows, 1000); } catch (e) { ... } "><label for="md_converted_choice_12_2"><input type="checkbox" id="md_converted_choice_12_2">around the call to <code>setTimeout</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript"><span class="hljs-keyword">try</span> {
+    setTimeout(alwaysThrows, <span class="hljs-number">1000</span>);
+} <span class="hljs-keyword">catch</span> (e) { ... }
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="around the argument to setTimeout, i.e. setTimeout( try { alwaysThrows } catch (e) { ... }, 1000); ); "><label for="md_converted_choice_12_3"><input type="checkbox" id="md_converted_choice_12_3">around the argument to <code>setTimeout</code>, i.e. <pre class="no-markdown"><code class="ts hljs typescript">setTimeout(
+    <span class="hljs-keyword">try</span> {
+        alwaysThrows
+    } <span class="hljs-keyword">catch</span> (e) { ... },
+    <span class="hljs-number">1000</span>);
+);
+</code></pre></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_2-time_is_up" data-target="#ex-callbacks_2-time_is_up" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_2-time_is_up"></a><span class="panel-title">Time is up</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_2-time_is_up" data-outline="time_is_up" data-ex-id="event_loop/time_is_up" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<pre id="@settimeout_console-log-a_0"><a class="jump" href="index.html#@settimeout_console-log-a_0"></a><code class="language-ts hljs typescript">setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"A"</span>), <span class="hljs-number">0</span>);
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"B"</span>), <span class="hljs-number">1000</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"C"</span>);</code></pre>
+
+<p id="@order_b_c_printed_code_1"><a class="jump" href="index.html#@order_b_c_printed_code_1"></a>In what order are A, B, and C printed by this code?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="A, B, C"><label for="md_converted_choice_13_0"><input type="radio" id="md_converted_choice_13_0" name="md_converted_radio_13">A, B, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="A, C, B"><label for="md_converted_choice_13_1"><input type="radio" id="md_converted_choice_13_1" name="md_converted_radio_13">A, C, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, A, C"><label for="md_converted_choice_13_2"><input type="radio" id="md_converted_choice_13_2" name="md_converted_radio_13">B, A, C</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="B, C, A"><label for="md_converted_choice_13_3"><input type="radio" id="md_converted_choice_13_3" name="md_converted_radio_13">B, C, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, A, B"><label for="md_converted_choice_13_4"><input type="radio" id="md_converted_choice_13_4" name="md_converted_radio_13">C, A, B</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="C, B, A"><label for="md_converted_choice_13_5"><input type="radio" id="md_converted_choice_13_5" name="md_converted_radio_13">C, B, A</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="using_callbacks_with_promises"><a class="jump" href="index.html#using_callbacks_with_promises"></a>Using callbacks with promises</h2><div data-outline="using_callbacks_with_promises">
+
+<p id="@prior_introduction_promises"><a class="jump" href="index.html#@prior_introduction_promises"></a>Prior to the introduction of promises in JavaScript, callback functions were the most common way to implement asynchronous function behavior, and there are still many uses of callbacks in the JavaScript library ecosystem.</p>
+
+<p id="@turns_out_under"><a class="jump" href="index.html#@turns_out_under"></a>And it turns out that under the hood, promises <em>also</em> use callbacks.
+Let’s dig into the <code>Promise</code> abstract data type, to understand more about how it works and how it interacts with <code>await</code> and <code>async function</code>.</p>
+
+<p id="@abstract_data_type"><a class="jump" href="index.html#@abstract_data_type"></a><a href="../06-abstract-data-types/index.html#an_abstract_type_is_defined_by_its_operations">An abstract data type is defined by its operations</a>, and it turns out that a <code>Promise&lt;T&gt;</code> has one key operation, called <code>then</code>.
+Here is the simplest version of <code>then</code>:</p>
+
+<pre id="@interface_promise-t_then-callback_t_u_promise-u"><a class="jump" href="index.html#@interface_promise-t_then-callback_t_u_promise-u"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> Promise&lt;T&gt; {
+  then(callback: <span class="hljs-function"><span class="hljs-params">T</span> =&gt;</span> U): <span class="hljs-built_in">Promise</span>&lt;U&gt;;
+}</code></pre>
+
+<p id="@then_operation_promise"><a class="jump" href="index.html#@then_operation_promise"></a>The <code>then</code> operation is a <code>Promise</code> producer.
+It is called on an existing promise expected to result in a value of type <code>T</code>, and attaches a callback function to that promise.
+The callback function consumes the <code>T</code> value the promise eventually produces, and generates a value of some other type <code>U</code> (possibly the same as <code>T</code>, of course).</p>
+
+<p id="@here-s_example_then"><a class="jump" href="index.html#@here-s_example_then"></a>Here’s an example of <code>then</code> in action:</p>
+
+<pre id="@const_promise_promise-string"><a class="jump" href="index.html#@const_promise_promise-string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise : <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+
+<span class="hljs-keyword">const</span> biggerPromise : <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">number</span>&gt; = promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data: <span class="hljs-built_in">string</span></span>) </span>{
+  <span class="hljs-keyword">return</span> <span class="hljs-built_in">parseInt</span>(data);
+});</code></pre>
+
+<p id="@here_original_promise"><a class="jump" href="index.html#@here_original_promise"></a>Here, the original <code>promise</code>, which is reading a file into a string, is composed by <code>then</code> with a callback function that parses that string into a number.  The resulting <code>biggerPromise</code> represents the entire computation – both reading the file and parsing it into a number – and promises to eventually produce that number.</p>
+
+<p id="@helps_think_about"><a class="jump" href="index.html#@helps_think_about"></a>It helps to think about <code>then</code> as a <em>composition</em> operation for asynchronous computations. Conventional function composition takes two functions <code>f</code> and <code>g</code> and composes them into a new function <code>g ⚬ f</code>, such that <code>(g ⚬ f)(x) = g(f(x))</code>.  If <code>f: S → T</code> and <code>g: T → U</code>, then the type of the resulting composition is <code>g ⚬ f: S → U</code>.</p>
+
+<p id="@much_same_way"><a class="jump" href="index.html#@much_same_way"></a>In much the same way, <code>then</code> composes one computation <code>f</code>, represented by a promise of its return value <code>Promise&lt;T&gt;</code>, with another computation <code>g</code> that expects to consume that <code>T</code> value and produce a <code>U</code> value.
+The result of the composition is a combined computation that promises to eventually produce that <code>U</code> value, so its type is <code>Promise&lt;U&gt;</code>.</p>
+
+<p id="@may_also_help"><a class="jump" href="index.html#@may_also_help"></a>It may also help to think about <code>Promise&lt;T&gt;</code> like a one-element list that (eventually) has a <code>T</code> value in it.  From that point of view, <code>then(g)</code> is like <code>map(g)</code> – once the <code>T</code> element arrives, the <code>g</code> callback is called on it, to produce a <code>U</code> value that ends up as the single element of the resulting <code>Promise&lt;U&gt;</code>.  (One place this analogy breaks down, however, is with <code>Promise&lt;void&gt;</code>, since such a promise never actually has any element value.  Using <code>then(g)</code> on a <code>void</code> promise still calls <code>g</code> when the promise fulfills, but doesn’t pass any value to <code>g</code>.)</p>
+
+<p id="@need_expand_notion"><a class="jump" href="index.html#@need_expand_notion"></a>We need to expand this notion of <code>then</code> in one important way.
+The callback function doesn’t have to return an already-computed <code>U</code> value.
+It can instead return a promise of its own, of type <code>Promise&lt;U&gt;</code>:</p>
+
+<pre id="@interface_promise-t_then-callback_t_u-promise-u_promise-u"><a class="jump" href="index.html#@interface_promise-t_then-callback_t_u-promise-u_promise-u"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">interface</span> Promise&lt;T&gt; {
+  then(callback: <span class="hljs-function"><span class="hljs-params">T</span> =&gt;</span> U|<span class="hljs-built_in">Promise</span>&lt;U&gt;): <span class="hljs-built_in">Promise</span>&lt;U&gt;;
+}</code></pre>
+
+<p id="@callback_might_need"><a class="jump" href="index.html#@callback_might_need"></a>The callback might need to do this if computing the <code>U</code> also requires another long-running computation that needs to run in the background.
+Web page retrieval offers a good example of this, because getting the <code>Response</code> from a <code>fetch()</code> call just means you’ve managed to connect to the web server.  Actually downloading the full page may take a while longer.
+Here’s how that promise chain might look:</p>
+
+<pre id="@const_promisedresponse_promise-response"><a class="jump" href="index.html#@const_promisedresponse_promise-response"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promisedResponse: <span class="hljs-built_in">Promise</span>&lt;Response&gt; = fetch(<span class="hljs-string">'http://www.mit.edu/'</span>);
+
+<span class="hljs-keyword">const</span> promisedText: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = 
+  promisedResponse.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response: Response</span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">string</span>&gt; </span>{
+    <span class="hljs-comment">// we've made a connection, which is why the `response` object exists</span>
+    <span class="hljs-keyword">const</span> downloadingPromise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = response.text();
+    <span class="hljs-comment">// but we may have to wait some more for the actual data, hence `downloadingPromise`</span>
+    <span class="hljs-keyword">return</span> downloadingPromise;
+  });</code></pre>
+
+<p id="@note_several_promises"><a class="jump" href="index.html#@note_several_promises"></a>Note the several promises shown in this example code:</p>
+
+<ul id="@promisedresponse_represents_computation">
+<li><a class="jump" href="index.html#@promisedresponse_represents_computation"></a><code>promisedResponse</code> represents the computation that is making the initial connection to <code>www.mit.edu</code></li>
+<li><code>downloadingPromise</code> represents the computation that downloads the MIT homepage <em>after</em> the connection has already been made</li>
+<li><code>promisedText</code> represents the composition of both computations: the initial connection followed by the download.
+The final value of <code>promisedText</code> comes from the value of <code>downloadingPromise</code>, the text of the webpage.</li>
+</ul>
+
+<p id="@even_though_callback"><a class="jump" href="index.html#@even_though_callback"></a>Even though the callback function passed into <code>promisedResponse.then()</code> doesn’t use <code>async</code> or <code>await</code>, it still returns a promise, so it’s an <em>asynchronous</em> function.</p>
+
+<p id="@going_back_function"><a class="jump" href="index.html#@going_back_function"></a>Going back to the function composition analogy, if <code>promisedResponse</code> and <code>downloadingPromise</code> are like the functions <code>f</code> and <code>g</code>, respectively, then <code>promisedText</code> is like the composition <code>g ⚬ f</code>.</p>
+
+<p id="@you_can_call"><a class="jump" href="index.html#@you_can_call"></a>You can call <code>then</code> as many times as you want on a promise, to attach different callbacks that might do different things with the promise’s value.</p>
+
+<p id="@you_can_also"><a class="jump" href="index.html#@you_can_also"></a>You can also call <code>then</code> regardless of what state the promise is currently in.
+Most often, the promise is still pending, so the <code>then</code> callback will run sometime in the future.
+If the promise is <em>already</em> fulfilled, the <code>then</code> callback will run sooner – but still <em>asynchronously</em>.
+The callback function is <em>never</em> called synchronously by <code>then</code>.
+Instead, <code>then</code> always returns first, and later, after control returns to the event loop, the callback function will be called. The details of how the event loop calls the promise callback aren’t required for this course, but if you’re curious, the <a href="addendum.html">addendum to this reading</a> gives some details.</p>
+
+<p id="@then_operation_fundamental"><a class="jump" href="index.html#@then_operation_fundamental"></a>The <code>then</code> operation is the fundamental operation of a promise.  <strong><code>then</code> is the only way to access the value that a promise computes.</strong>  (<code>await</code> actually uses <code>then</code>, as we’ll see in a moment.)  This is partly a safety property, because it ensures that client code can never look inside a promise and see a missing value.  But more important, <code>then</code> is a feature of concurrency design.  It allows a concurrent computation to be built up by a sequence of composed computations – a sequence of <code>then</code> callbacks, which can be interleaved in controlled, predictable ways.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_3"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_3-then_more_timing" data-target="#ex-callbacks_3-then_more_timing" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_3-then_more_timing"></a><span class="panel-title">Then more timing</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_3-then_more_timing" data-outline="then_more_timing" data-ex-id="using_callbacks_with_promises/then_more_timing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@return_our_friend"><a class="jump" href="index.html#@return_our_friend"></a>Let’s return to our friend <code>timeout</code>, which returns a timer promise:</p>
+
+<pre id="@returns_promise_becomes"><a class="jump" href="index.html#@returns_promise_becomes"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// returns a promise that becomes fulfilled `milliseconds` milliseconds after the call to timeout</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">timeout</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt;</span></code></pre>
+
+<p id="@approximately_long_does"><a class="jump" href="index.html#@approximately_long_does"></a>Approximately how long does the following code take to reach the point where it prints <code>done</code>?</p>
+
+<pre id="@timeout-1000-then-function_console-log-done_timeout-2000"><a class="jump" href="index.html#@timeout-1000-then-function_console-log-done_timeout-2000"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);
+});
+timeout(<span class="hljs-number">2000</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_14_0"><input type="radio" id="md_converted_choice_14_0" name="md_converted_radio_14">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_14_1"><input type="radio" id="md_converted_choice_14_1" name="md_converted_radio_14">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_14_2"><input type="radio" id="md_converted_choice_14_2" name="md_converted_radio_14">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_14_3"><input type="radio" id="md_converted_choice_14_3" name="md_converted_radio_14">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_14_4"><input type="radio" id="md_converted_choice_14_4" name="md_converted_radio_14">never prints <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@timeout-1000-then-function_return_timeout-2000"><a class="jump" href="index.html#@timeout-1000-then-function_return_timeout-2000"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">return</span> timeout(<span class="hljs-number">2000</span>);
+});
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_15_0"><input type="radio" id="md_converted_choice_15_0" name="md_converted_radio_15">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_15_1"><input type="radio" id="md_converted_choice_15_1" name="md_converted_radio_15">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_15_2"><input type="radio" id="md_converted_choice_15_2" name="md_converted_radio_15">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_15_3"><input type="radio" id="md_converted_choice_15_3" name="md_converted_radio_15">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_15_4"><input type="radio" id="md_converted_choice_15_4" name="md_converted_radio_15">never prints <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@timeout-1000-then-function_return_timeout-2000-then-function"><a class="jump" href="index.html#@timeout-1000-then-function_return_timeout-2000-then-function"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">return</span> timeout(<span class="hljs-number">2000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);
+  });
+});</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_16_0"><input type="radio" id="md_converted_choice_16_0" name="md_converted_radio_16">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_16_1"><input type="radio" id="md_converted_choice_16_1" name="md_converted_radio_16">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_16_2"><input type="radio" id="md_converted_choice_16_2" name="md_converted_radio_16">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_16_3"><input type="radio" id="md_converted_choice_16_3" name="md_converted_radio_16">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_16_4"><input type="radio" id="md_converted_choice_16_4" name="md_converted_radio_16">never prints <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@timeout-1000-then-function_timeout-2000_then-function"><a class="jump" href="index.html#@timeout-1000-then-function_timeout-2000_then-function"></a><code class="language-ts hljs typescript">timeout(<span class="hljs-number">1000</span>).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    timeout(<span class="hljs-number">2000</span>);
+}).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);
+});</code></pre>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_17_0"><input type="radio" id="md_converted_choice_17_0" name="md_converted_radio_17">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_17_1"><input type="radio" id="md_converted_choice_17_1" name="md_converted_radio_17">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_17_2"><input type="radio" id="md_converted_choice_17_2" name="md_converted_radio_17">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_17_3"><input type="radio" id="md_converted_choice_17_3" name="md_converted_radio_17">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never prints done"><label for="md_converted_choice_17_4"><input type="radio" id="md_converted_choice_17_4" name="md_converted_radio_17">never prints <code>done</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="unpacking_an_asynchronous_function"><a class="jump" href="index.html#unpacking_an_asynchronous_function"></a>Unpacking an asynchronous function</h2><div data-outline="unpacking_an_asynchronous_function">
+
+<p id="@then_operation_now"><a class="jump" href="index.html#@then_operation_now"></a>The <code>then</code> operation now gives us enough power to see what <code>await</code> and <code>async function</code> mean, and how they use promises and callbacks to construct a computation.</p>
+
+<p id="@here-s_async_function"><a class="jump" href="index.html#@here-s_async_function"></a>Here’s an <code>async</code> function containing a line that awaits a promise, and then does some computation on the result of the promise:</p>
+
+<pre id="@async_function_getbalance"><a class="jump" href="index.html#@async_function_getbalance"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> promise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+    <span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> promise;
+    <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+    <span class="hljs-keyword">return</span> balance;
+}</code></pre>
+
+<p id="@await_encountered_execution"><a class="jump" href="index.html#@await_encountered_execution"></a>When <code>await</code> is encountered in the execution of a function like this, TypeScript takes the remainder of the computation that the function would do, and wraps it up into a <code>then</code> callback.
+So this code:</p>
+
+<pre id="@const_data_string"><a class="jump" href="index.html#@const_data_string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> promise;
+<span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+<span class="hljs-keyword">return</span> balance;</code></pre>
+
+<p id="@becomes_something_like"><a class="jump" href="index.html#@becomes_something_like"></a>becomes something like this:</p>
+
+<pre id="@promise-then-function-data_string_const"><a class="jump" href="index.html#@promise-then-function-data_string_const"></a><code class="language-ts hljs typescript">promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data: <span class="hljs-built_in">string</span></span>) </span>{
+  <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+  <span class="hljs-keyword">return</span> balance;
+});</code></pre>
+
+<p id="@instead_spinning_wheels"><a class="jump" href="index.html#@instead_spinning_wheels"></a>Instead of spinning its wheels waiting for the file-loading promise to fulfill, <code>await</code> creates a composite promise, which combines the file-loading computation with the <code>parseInt</code> computation.
+It then immediately returns control to the caller, along with this composite promise.
+So the equivalent code, without <code>await</code> or <code>async</code>, looks something like this: </p>
+
+<pre id="@function_getbalance_promise-number"><a class="jump" href="index.html#@function_getbalance_promise-number"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> promise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+    <span class="hljs-keyword">return</span> promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data: <span class="hljs-built_in">string</span></span>) </span>{
+      <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+      <span class="hljs-keyword">return</span> balance;
+    });
+}</code></pre>
+
+<p id="@note_version_getbalance"><a class="jump" href="index.html#@note_version_getbalance"></a>Note that this version of <code>getBalance</code> is fairly simple because it’s just straight-line code. When <code>await</code> is used inside a loop, then the “rest of the function’s computation” includes the remaining iterations of the loop, which can’t be easily shown by a syntactic transformation like this, because it chops the loop in pieces.  But this example shows semantically what <code>await</code> means.</p>
+
+<p id="@note_also_version"><a class="jump" href="index.html#@note_also_version"></a>Note also that this version of <code>getBalance</code> doesn’t have the <code>async</code> keyword any more, because we’re showing what the <code>async</code> keyword means in terms of lower-level TypeScript code.
+But this version of <code>getBalance</code> is indeed still <em>asynchronous</em>, because it returns a promise representing a concurrent computation that has yet to complete.</p>
+
+<p id="@summarize_you_write"><a class="jump" href="index.html#@summarize_you_write"></a>To summarize, when you write <code>async function</code> instead of <code>function</code>, TypeScript/JavaScript internally transforms the function’s behavior:</p>
+
+<ul id="@await_expressions_transformed">
+<li><a class="jump" href="index.html#@await_expressions_transformed"></a><code>await</code> expressions are transformed into returning a promise composed with <code>then</code>;</li>
+<li><code>return</code>/<code>throw</code> statements are transformed into fulfilling/rejecting (respectively) that promise
+
+<ul><li>a function that returns by falling off the end of its body is transformed to fulfill its promise before doing so</li></ul></li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_4"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_4-then_what" data-target="#ex-callbacks_4-then_what" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_4-then_what"></a><span class="panel-title">Then what?</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_4-then_what" data-outline="then_what" data-ex-id="unpacking_an_asynchronous_function/then_what" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@recall_await_always"><a class="jump" href="index.html#@recall_await_always"></a>Recall that <code>await</code> always gives up control, even if the promise it would wait for is already fulfilled.</p>
+
+<p id="@since_await_can"><a class="jump" href="index.html#@since_await_can"></a>Since <code>await</code> can be implemented in terms of <code>then</code>, as just described, let’s see what this rule implies for <code>then</code>.  Suppose <code>promise</code> points to an <strong>already-fulfilled</strong> <code>Promise&lt;void&gt;</code>.  What does the following code do?</p>
+
+<pre id="@promise-then_console-log-a_console-log-b"><a class="jump" href="index.html#@promise-then_console-log-a_console-log-b"></a><code class="language-ts hljs typescript">promise.then( <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'A'</span>) );
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'B'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="prints A immediately, then prints B after returning to the event loop"><label for="md_converted_choice_18_0"><input type="radio" id="md_converted_choice_18_0" name="md_converted_radio_18">prints <code>A</code> immediately, then prints <code>B</code> after returning to the event loop</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints B immediately, then prints A after returning to the event loop"><label for="md_converted_choice_18_1"><input type="radio" id="md_converted_choice_18_1" name="md_converted_radio_18">prints <code>B</code> immediately, then prints <code>A</code> after returning to the event loop</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints A, but never prints B (even after returning to the event loop)"><label for="md_converted_choice_18_2"><input type="radio" id="md_converted_choice_18_2" name="md_converted_radio_18">prints <code>A</code>, but never prints <code>B</code> (even after returning to the event loop)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="prints B, but never prints A (even after returning to the event loop)"><label for="md_converted_choice_18_3"><input type="radio" id="md_converted_choice_18_3" name="md_converted_radio_18">prints <code>B</code>, but never prints <code>A</code> (even after returning to the event loop)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@does_imply_about"><a class="jump" href="index.html#@does_imply_about"></a>What does this imply about how <code>then</code> uses its callback function?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="then always uses its callback synchronously, like map() and filter() and sort()"><label for="md_converted_choice_19_0"><input type="radio" id="md_converted_choice_19_0" name="md_converted_radio_19"><code>then</code> always uses its callback synchronously, like <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map"><code>map()</code></a> and <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/filter"><code>filter()</code></a> and <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort"><code>sort()</code></a></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="then always uses its callback asynchronously, like setTimeout()"><label for="md_converted_choice_19_1"><input type="radio" id="md_converted_choice_19_1" name="md_converted_radio_19"><code>then</code> always uses its callback asynchronously, like <code>setTimeout()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="then sometimes uses its callback synchronously, and sometimes asynchronously, like countdown() above"><label for="md_converted_choice_19_2"><input type="radio" id="md_converted_choice_19_2" name="md_converted_radio_19"><code>then</code> sometimes uses its callback synchronously, and sometimes asynchronously, like <code>countdown()</code> above</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="html_and_the_document_object_model"><a class="jump" href="index.html#html_and_the_document_object_model"></a>HTML and the Document Object Model</h2><div data-outline="html_and_the_document_object_model">
+
+<p id="@asynchronous_callbacks_heavily"><a class="jump" href="index.html#@asynchronous_callbacks_heavily"></a>Asynchronous callbacks are heavily used in graphical user interfaces.
+To understand how, we need to start by looking at how user interfaces are structured, using HTML web pages as an example.</p>
+
+<p id="@html_consists_elements"><a class="jump" href="index.html#@html_consists_elements"></a>HTML consists of <em>elements</em>, which are delimited by a start tag and end tag.
+For example, here is how a button is described in HTML:</p>
+
+<pre id="@button_id-drawbutton-draw-button"><a class="jump" href="index.html#@button_id-drawbutton-draw-button"></a><code class="language-html hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">button</span> <span class="hljs-attr">id</span>=<span class="hljs-string">'drawButton'</span>&gt;</span>Draw<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span></code></pre>
+
+<p id="@which_web_browser"><a class="jump" href="index.html#@which_web_browser"></a>… which the web browser renders like this:</p>
+
+<div class="no-markdown">
+    <button>Draw</button>
+</div>
+
+<p id="@start_tag_often"><a class="jump" href="index.html#@start_tag_often"></a>The start tag often contains <em>attributes</em>, like <code>id</code> in this <code>button</code> example.
+The <code>id</code> attribute is a unique identifier for the element.
+Other attributes may specify other properties of the element.
+For example, here is a 256-by-256-pixel drawing surface:</p>
+
+<pre id="@canvas_id-drawingcanvas_width-256"><a class="jump" href="index.html#@canvas_id-drawingcanvas_width-256"></a><code class="hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">canvas</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"drawingCanvas"</span> <span class="hljs-attr">width</span>=<span class="hljs-string">"256"</span> <span class="hljs-attr">height</span>=<span class="hljs-string">"256"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">canvas</span>&gt;</span></code></pre>
+
+<p id="@canvas_element_canvas"><a class="jump" href="index.html#@canvas_element_canvas"></a>(The <code>&lt;canvas&gt;</code> element has the <code>Canvas</code> drawing interface that we are using in ps3.)</p>
+
+<p id="@html_elements_nested"><a class="jump" href="index.html#@html_elements_nested"></a>HTML elements are nested in other HTML elements, to form a tree.  Below is a snippet of HTML that groups two buttons together in one row, and the canvas in another row, using the <code>&lt;div&gt;</code> grouping element.
+The way it might render in a web page is shown on the right.</p>
+
+<div class="no-markdown panel panel-figure pull-right">
+    <div>
+        <button>Draw</button>
+        <button>Clear</button>
+    </div>
+    <div>
+        <canvas width="256" height="256" style="border: 1px solid black">
+        </canvas>
+    </div>
+</div>
+
+<pre id="@div_button_id-drawbutton-draw-button"><a class="jump" href="index.html#@div_button_id-drawbutton-draw-button"></a><code class="language-html hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">button</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"drawButton"</span>&gt;</span>Draw<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">button</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"clearButton"</span>&gt;</span>Clear<span class="hljs-tag">&lt;/<span class="hljs-name">button</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">canvas</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"canvas"</span> <span class="hljs-attr">width</span>=<span class="hljs-string">"256"</span> <span class="hljs-attr">height</span>=<span class="hljs-string">"256"</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">canvas</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></code></pre>
+
+<p id="@web_browser_loads"><a class="jump" href="index.html#@web_browser_loads"></a>When a web browser loads and displays an HTML document like this, every element is represented by an object in memory, an instance of a subtype of <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement"><code>HTMLElement</code></a>.  The tree of elements is called the <mark data-structure-text="document object model (dom)." id="^document_object_model_dom"><em>Document Object Model (DOM).</em></mark>
+Each element of the tree occupies a certain portion of the screen, generally a rectangular area called its bounding box.
+The  tree is not just an arbitrary hierarchy, but is in fact a spatial one: child elements are typically nested inside their parent’s bounding box.</p>
+
+<p id="@virtually_every_gui"><a class="jump" href="index.html#@virtually_every_gui"></a>Virtually every GUI system has some kind of tree of visual elements like this.  The element tree is a powerful structuring idea, which is loaded with responsibilities in a typical GUI:</p>
+
+<p id="@output_attributes_children"><a class="jump" href="index.html#@output_attributes_children"></a><strong>Output</strong>. Attributes and children of the element affect what the element displays on the screen.  For example, the label on the button is the text found between its start tag and end tag.</p>
+
+<p id="@input_elements_can"><a class="jump" href="index.html#@input_elements_can"></a><strong>Input</strong>. Elements can have input handlers that respond to mouse and keyboard input from the user, and to other events.  More on this in a moment.</p>
+
+<p id="@layout_dom_controls"><a class="jump" href="index.html#@layout_dom_controls"></a><strong>Layout</strong>. The DOM controls how elements are laid out on the screen, i.e. how their bounding boxes are assigned.  An automatic layout algorithm automatically calculates the position and size of each element, controlled by style rules written in Cascading Style Sheets (CSS).  CSS layout is outside the scope of what we’ll be talking about in 6.102; 6.104 [formerly 6.170], 6.450, or IAP Web.Lab are good places to learn it.</p>
+
+<h3 id="connecting_to_typescript"><a class="jump" href="index.html#connecting_to_typescript"></a>Connecting to TypeScript</h3><div data-outline="connecting_to_typescript">
+
+<p id="@make_interactive_user"><a class="jump" href="index.html#@make_interactive_user"></a>To make an interactive user interface, HTML can also include JavaScript code (or TypeScript which has been compiled into JavaScript).
+The code can obtain references to elements in the tree using <code>getElementByIdAndType()</code>:</p>
+
+<pre id="@const_drawbutton_htmlbuttonelement"><a class="jump" href="index.html#@const_drawbutton_htmlbuttonelement"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> drawButton: HTMLButtonElement = getElementByIdAndType(<span class="hljs-string">'drawButton'</span>, HTMLButtonElement);</code></pre>
+
+<small><p id="@note_getelementbyidandtype_function"><a class="jump" href="index.html#@note_getelementbyidandtype_function"></a>Note that the <code>getElementByIdAndType()</code> function we are using here is not quite the standard <a href="https://developer.mozilla.org/en-US/docs/Web/API/Document/getElementById"><code>document.getElementById()</code></a> method used in JavaScript, but a typesafe TypeScript version of it. See <a href="code.html#drawts">the full code</a> if you are interested in its definition.</p></small>
+
+<p id="@dom_elements_mutable"><a class="jump" href="index.html#@dom_elements_mutable"></a>DOM elements are <em>mutable</em>, so the code can reassign instance variables or call mutators to add and remove elements from the tree, or change their appearance.
+For example, this code changes the button’s label:</p>
+
+<pre id="@drawbutton-text_draw_randomly"><a class="jump" href="index.html#@drawbutton-text_draw_randomly"></a><code class="language-ts hljs typescript">drawButton.text = <span class="hljs-string">'Draw Randomly'</span>;</code></pre>
+
+<div class="no-markdown">
+    <button>Draw Randomly</button>
+</div>
+
+</div></div><h2 id="input_handling"><a class="jump" href="index.html#input_handling"></a>Input handling</h2><div data-outline="input_handling">
+
+<p id="@input_handled_differently"><a class="jump" href="index.html#@input_handled_differently"></a>Input is handled differently in GUIs than in typical command-line or text-input user interfaces.
+A typical text UI has an <em>input loop</em> that displays a prompt, reads a command typed by the user, parses it, and decides how to direct it to different modules of the program.</p>
+
+<p id="@if_gui_written"><a class="jump" href="index.html#@if_gui_written"></a>If a GUI were written that way, it might look like this (in pseudocode):</p>
+
+<pre id="@while_true_read"><a class="jump" href="index.html#@while_true_read"></a><code class="language-java hljs"><span class="hljs-keyword">while</span> (<span class="hljs-keyword">true</span>) {
+    <span class="hljs-function">read mouse <span class="hljs-title">click</span>
+    <span class="hljs-params">(x,y)</span> </span>= <span class="hljs-function">position of mouse click
+    <span class="hljs-title">if</span> <span class="hljs-params">(mouse was clicked on the Draw button)</span> <span class="hljs-title">drawRandomShape</span><span class="hljs-params">()</span></span>;
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (mouse was clicked on the Clear button) clearCanvas();
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (mouse was clicked somewhere on the canvas) drawShapeAtPosition(x, y);
+    ...
+}</code></pre>
+
+<p id="@but_gui_don-t"><a class="jump" href="index.html#@but_gui_don-t"></a>But in a GUI, we don’t directly write this kind of code, because it’s not modular.
+GUIs are put together from a variety of library components – buttons, scrollbars, textboxes, menus – that need to be self-contained and handle their own input.
+Deep inside the graphical user interface library is an input loop that is reading from the mouse and keyboard, and passing those input events to the appropriate components of the GUI.</p>
+
+<p id="@order_make_button"><a class="jump" href="index.html#@order_make_button"></a>In order to make a button do something when it is clicked, you attach a <mark data-structure-text="listener" id="^listener"><em>listener</em></mark> to it:</p>
+
+<pre id="@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_0"><a class="jump" href="index.html#@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_0"></a><code class="language-ts hljs typescript">drawButton.addEventListener(<span class="hljs-string">'click'</span>, <span class="hljs-function">(<span class="hljs-params">event: MouseEvent</span>) =&gt;</span> {
+  drawRandomShape();
+});</code></pre>
+
+<p id="@gui_event_handling"><a class="jump" href="index.html#@gui_event_handling"></a>GUI event handling is an instance of the <mark data-structure-text="listener pattern" id="^listener_pattern"><em>Listener pattern</em></mark>.
+In the Listener pattern:</p>
+
+<ul id="@event_source_generates">
+<li><a class="jump" href="index.html#@event_source_generates"></a>An event source generates a stream of discrete events.</li>
+<li>One or more other modules subscribe (or <em>listen</em>) to the stream of events, providing a function to be called when a new event occurs.</li>
+</ul>
+
+<p id="@example_0"><a class="jump" href="index.html#@example_0"></a>In this example:</p>
+
+<ul id="@button_event_source">
+<li><a class="jump" href="index.html#@button_event_source"></a>the button is the event source;</li>
+<li>its events are button presses;</li>
+<li>the listener is a function provided by the client.</li>
+</ul>
+
+<p id="@event_often_includes"><a class="jump" href="index.html#@event_often_includes"></a>An event often includes additional information which might be bundled into an event object (like the <code>MouseEvent</code> here) or passed as parameters to the listener function.</p>
+
+<p id="@event_occurs_event"><a class="jump" href="index.html#@event_occurs_event"></a>When an event occurs, the event source distributes it to all subscribed listeners, by calling their listener callbacks.</p>
+
+<p id="@so_control_flow"><a class="jump" href="index.html#@so_control_flow"></a>So the control flow through a graphical user interface proceeds like this:</p>
+
+<ul id="@event_loop_reads">
+<li><a class="jump" href="index.html#@event_loop_reads"></a>The <mark data-structure-text="event loop" id="^event_loop_2"><em>event loop</em></mark> reads input from mouse and keyboard.  In HTML/JavaScript, like most other GUI frameworks, this loop is actually hidden from you.  It’s buried inside the JavaScript runtime system, and listeners appear to be called magically.</li>
+<li>Each listener does its thing (which might involve e.g. mutating objects in the user interface), and then <em>returns immediately to the event loop</em>.</li>
+</ul>
+
+<p id="@last_part_listeners"><a class="jump" href="index.html#@last_part_listeners"></a>The last part – listeners return to the event loop as fast as possible – is very important, because it preserves the responsiveness of the user interface.</p>
+
+<p id="@listener_design_pattern"><a class="jump" href="index.html#@listener_design_pattern"></a>The Listener design pattern isn’t just used for button presses.
+Every GUI object generates events, often as a result of some combination of low-level input events sent by input devices, like a mouse, keyboard, or touchscreen.
+For example, in HTML:</p>
+
+<ul id="@mouse_sends_low-level">
+<li><a class="jump" href="index.html#@mouse_sends_low-level"></a>the mouse sends low-level events <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/mousedown_event"><code>mousedown</code></a> (the mouse button was pressed down) and <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/mouseup_event"><code>mouseup</code></a> (when the button was released)</li>
+<li>the keyboard sends similar low-level events <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/keydown_event"><code>keydown</code></a> and <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/keyup_event"><code>keyup</code></a> when keyboard keys are pressed and released</li>
+<li>a button (<code>&lt;button&gt;</code>) sends a <a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/click_event"><code>click</code></a> event after it receives both <code>mousedown</code> and <code>mouseup</code>.</li>
+<li>a dropdown menu (<code>&lt;select&gt;</code>) sends an <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/input_event"><code>input</code></a> event when the user selects a different element from the dropdown menu (whether by mouse or by keyboard)</li>
+<li>a textbox (<code>&lt;input type=text&gt;</code>) sends an <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTMLElement/input_event"><code>input</code></a> event when the text inside it changes, as a result of keyboard or mouse events.</li>
+</ul>
+
+<div class="handout-solo alert alert-warning"><p id="@here_full_html"><a class="jump" href="index.html#@here_full_html"></a>Here is <a href="code.html" class="alert-link">the full HTML and TypeScript code for the drawing interface</a>.</p></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-callbacks_5"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_5-listeners" data-target="#ex-callbacks_5-listeners" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_5-listeners"></a><span class="panel-title">Listeners</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_5-listeners" data-outline="listeners" data-ex-id="input_handling/listeners" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@put_following_items"><a class="jump" href="index.html#@put_following_items"></a>Put the following items in order according to when they would happen during the setup and execution of an HTML graphical user interface.</p>
+
+<p id="@const_launchbutton_htmlbuttonelement"><a class="jump" href="index.html#@const_launchbutton_htmlbuttonelement"></a><code>const launchButton: HTMLButtonElement = getElementByIdAndType('launchButton', HTMLButtonElement);</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@launchbutton-addeventlistener-click_launchspacecraft"><a class="jump" href="index.html#@launchbutton-addeventlistener-click_launchspacecraft"></a><code>launchButton.addEventListener('click', launchSpacecraft);</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div> 
+
+<p id="@launchspacecraft_function_called"><a class="jump" href="index.html#@launchspacecraft_function_called"></a><code>launchSpacecraft()</code> function is called</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div> 
+
+<p id="@html_code_button"><a class="jump" href="index.html#@html_code_button"></a>HTML code <code>&lt;button id="launchButton"&gt;</code> is interpreted by the web browser to create an <code>HTMLButtonElement</code> object in the DOM</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@mouse_click_launch"><a class="jump" href="index.html#@mouse_click_launch"></a>Mouse click on the launch button is received by the input event loop</p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="dropdown exercise-choice" data-outline="; 1; 2; 3; 4; 5"><select class="form-control"><option selected="selected"></option><option>1</option>,<option>2</option>,<option>3</option>,<option>4</option>,<option>5</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_5-dont_call_me_ill_call_you" data-target="#ex-callbacks_5-dont_call_me_ill_call_you" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_5-dont_call_me_ill_call_you"></a><span class="panel-title">Don’t call me, I’ll call you</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_5-dont_call_me_ill_call_you" data-outline="dont_call_me_ill_call_you" data-ex-id="input_handling/dont_call_me_ill_call_you" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@listener_section_example"><a class="jump" href="index.html#@listener_section_example"></a>The listener in this section is an example of a callback, where <strong>the client</strong> of a module provides a <strong>piece of code</strong> for <strong>that module</strong> to call:</p>
+
+<pre id="@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_1"><a class="jump" href="index.html#@drawbutton-addeventlistener-click_event_mouseevent_drawrandomshape_1"></a><code class="language-ts hljs typescript">drawButton.addEventListener(<span class="hljs-string">'click'</span>, <span class="hljs-function">(<span class="hljs-params">event: MouseEvent</span>) =&gt;</span> {
+  drawRandomShape();
+});</code></pre>
+
+<p id="@client_example"><a class="jump" href="index.html#@client_example"></a>What is <strong>the client</strong> in the example?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; the GUI event loop; the drawButton; the code setting up drawButton; the () => {…} arrow function; the drawRandomShape function"><select class="form-control"><option selected="selected"></option><option>the GUI event loop</option>,<option>the drawButton</option>,<option>the code setting up drawButton</option>,<option>the () =&gt; {…} arrow function</option>,<option>the drawRandomShape function</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@piece_code_example"><a class="jump" href="index.html#@piece_code_example"></a>What is the <strong>piece of code</strong> in the example?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; the GUI event loop; the drawButton; the code setting up drawButton; the () => {…} arrow function; the drawRandomShape method"><select class="form-control"><option selected="selected"></option><option>the GUI event loop</option>,<option>the drawButton</option>,<option>the code setting up drawButton</option>,<option>the () =&gt; {…} arrow function</option>,<option>the drawRandomShape method</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@module_example"><a class="jump" href="index.html#@module_example"></a>What is <strong>that module</strong> in the example?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; the GUI event loop; the drawButton; the code setting up drawButton; the () => {…} arrow function; the drawRandomShape method"><select class="form-control"><option selected="selected"></option><option>the GUI event loop</option>,<option>the drawButton</option>,<option>the code setting up drawButton</option>,<option>the () =&gt; {…} arrow function</option>,<option>the drawRandomShape method</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-callbacks_5-try_it" data-target="#ex-callbacks_5-try_it" data-toggle="collapse"><a class="jump" href="index.html#@ex-callbacks_5-try_it"></a><span class="panel-title">Try it</span></div><div class="panel-collapse collapse exercise-panel" id="ex-callbacks_5-try_it" data-outline="try_it" data-ex-id="input_handling/try_it" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis"><div class="panel-body">
+
+<p id="@download_code_drawing"><a class="jump" href="index.html#@download_code_drawing"></a>Download the <a href="code.html">code for the drawing interface</a> as a ZIP file.  Unpack it, <code>npm install</code>, and <code>npm run compile</code> to compile it.</p>
+
+<p id="@then_open_up"><a class="jump" href="index.html#@then_open_up"></a>Then open up <code>draw.html</code> in your web browser and press the Draw Randomly button a few times.  You should see some circles appear.</p>
+
+<p id="@button-s_click_listener"><a class="jump" href="index.html#@button-s_click_listener"></a>The button’s click listener has a <code>console.log</code> that prints the width of the drawing canvas. Open your web browser’s JavaScript console so you can see the output of that print statement.  (The easiest way to open the console in most browsers is to right-click on the page, choose Inspect, then click on the Console tab in the sidebar that appears.  <a href="https://balsamiq.com/support/faqs/browser-console/#apple-safari">Safari may need additional steps.</a>)</p>
+
+<p id="@number_code_prints"><a class="jump" href="index.html#@number_code_prints"></a>What is the number that the code prints for the width of the canvas?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@now_find_console-log"><a class="jump" href="index.html#@now_find_console-log"></a>Now find that <code>console.log</code> statement in <code>draw.ts</code>, and change the code to also print the height of the drawing canvas.  Recompile the code, reload the web page, and click Draw Randomly again.</p>
+
+<p id="@number_your_code"><a class="jump" href="index.html#@number_your_code"></a>What is the number that your code prints for the height of the canvas?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="event_sources"><a class="jump" href="index.html#event_sources"></a>Event sources</h2><div data-outline="event_sources">
+
+<p id="@listener_pattern_general"><a class="jump" href="index.html#@listener_pattern_general"></a>The listener pattern is a general programming idea, and there are two ways it appears in TypeScript/JavaScript programming:</p>
+
+<ul>
+<li><p id="@web_pages_just"><a class="jump" href="index.html#@web_pages_just"></a>in web pages, as we have just seen, objects that can act as event sources implement the <a href="https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener"><code>addEventListener()</code></a> method, which is part of the <code>EventTarget</code> interface.</p></li>
+<li><p id="@node_event_sources"><a class="jump" href="index.html#@node_event_sources"></a>in Node, event sources implement the <a href="https://nodejs.org/api/events.html#emitteroneventname-listener"><code>on()</code></a> method, which is part of <code>EventEmitter</code>. And <a href="https://nodejs.org/api/events.html#emitteraddlistenereventname-listener"><code>addListener()</code></a> is a synonym for <code>on()</code>.</p></li>
+</ul>
+
+<p id="@addeventlistener_on-addlistener_methods"><a class="jump" href="index.html#@addeventlistener_on-addlistener_methods"></a>The <code>addEventListener()</code> and <code>on()</code>/<code>addListener()</code> methods have essentially the same parameters: a string naming the type of the event, and a callback function that will be called when the event occurs.</p>
+
+</div><h2 id="pitfalls_in_listeners"><a class="jump" href="index.html#pitfalls_in_listeners"></a>Pitfalls in listeners</h2><div data-outline="pitfalls_in_listeners">
+
+<p id="@there_few_common"><a class="jump" href="index.html#@there_few_common"></a>There are a few common pitfalls in the listener design pattern, particularly when used in GUIs, that are important to be aware of.</p>
+
+<p id="@listeners_should_run"><a class="jump" href="index.html#@listeners_should_run"></a><strong>Listeners should run quickly and return quickly.</strong>
+If a listener function responds to an event by doing a long, slow computation, then it will stall the user interface.  Since the listener was called by the GUI event loop, the event loop will not be able to continue processing input events until the listener returns. </p>
+
+<p id="@example_suppose_draw"><a class="jump" href="index.html#@example_suppose_draw"></a>For example, suppose the draw button’s listener drew a large number of random shapes:</p>
+
+<pre id="@drawbutton-addeventlistener-click_event_mouseevent_let_i_0"><a class="jump" href="index.html#@drawbutton-addeventlistener-click_event_mouseevent_let_i_0"></a><code class="language-ts hljs typescript">drawButton.addEventListener(<span class="hljs-string">'click'</span>, <span class="hljs-function">(<span class="hljs-params">event: MouseEvent</span>) =&gt;</span> {
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1</span>_000_000; i++) {
+        drawRandomShape();
+    }
+});</code></pre>
+
+<p id="@drawing_million_rectangles"><a class="jump" href="index.html#@drawing_million_rectangles"></a>Drawing a million rectangles may involve a long, long pause.
+During that time, the web page appears frozen.
+Mouse clicks don’t seem to work, scrolling doesn’t work, keypresses don’t seem to be handled.
+On many platforms, the operating system changes the mouse cursor to an hourglass or colorful spinning beachball to show that the user interface is stuck.</p>
+
+<p id="@once_million_rectangles"><a class="jump" href="index.html#@once_million_rectangles"></a>Once the million rectangles are finally all drawn, and the listener function returns, then the event loop resumes processing.
+All the input events you tried to do while it was stuck were stored in a queue, so it will eventually catch up.</p>
+
+<p id="@lesson_here_graphical"><a class="jump" href="index.html#@lesson_here_graphical"></a>The lesson here is: in graphical user interfaces, listener functions must run quickly and return quickly, typically within a few milliseconds.</p>
+
+<p id="@if_listener_needs"><a class="jump" href="index.html#@if_listener_needs"></a>If a listener needs to do a long-running computation, it should use <a href="../15-promises/index.html#concurrency_model">concurrency</a>, which we talked about in a previous class.</p>
+
+<p id="@be_careful_about"><a class="jump" href="index.html#@be_careful_about"></a><strong>Be careful about cycles</strong>.
+Sometimes it is necessary to have two GUI elements that mutually depend on each other, like the textbox and slider in the code below:</p>
+
+<div class="panel panel-figure no-markdown pull-right">
+    <div>
+        Size: <input type="number" id="sizeTextbox" value="10" min="1" max="50" maxlength="2"> 
+              <input type="range" id="sizeSlider" value="10" min="1" max="50">
+    </div>
+</div>
+
+<pre id="@div_size_input"><a class="jump" href="index.html#@div_size_input"></a><code class="language-html hljs xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span>&gt;</span>
+    Size:
+    <span class="hljs-tag">&lt;<span class="hljs-name">input</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"number"</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"sizeTextbox"</span> <span class="hljs-attr">value</span>=<span class="hljs-string">"10"</span> <span class="hljs-attr">min</span>=<span class="hljs-string">"1"</span> <span class="hljs-attr">max</span>=<span class="hljs-string">"50"</span> <span class="hljs-attr">maxlength</span>=<span class="hljs-string">"2"</span>&gt;</span> 
+    <span class="hljs-tag">&lt;<span class="hljs-name">input</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"range"</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"sizeSlider"</span> <span class="hljs-attr">value</span>=<span class="hljs-string">"10"</span> <span class="hljs-attr">min</span>=<span class="hljs-string">"1"</span> <span class="hljs-attr">max</span>=<span class="hljs-string">"50"</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></code></pre>
+
+<p id="@design_user_should"><a class="jump" href="index.html#@design_user_should"></a>In this design, the user should be able to change the size either by typing a number in the box, or by dragging the slider.
+Either way of doing it should update the other element as well, so that they remain consistent.
+So it’s tempting to attach listeners like this, to propagate the value from the textbox to the slider, and vice versa:</p>
+
+<pre id="@sizetextbox-addeventlistener-input_event_changeevent"><a class="jump" href="index.html#@sizetextbox-addeventlistener-input_event_changeevent"></a><code class="language-ts hljs typescript">sizeTextbox.addEventListener(<span class="hljs-string">'input'</span>, <span class="hljs-function">(<span class="hljs-params">event: ChangeEvent</span>) =&gt;</span> {
+    <span class="hljs-comment">// make the slider match the updated textbox</span>
+    sizeSlider.value = sizeTextbox.value;
+});
+sizeSlider.addEventListener(<span class="hljs-string">'input'</span>, <span class="hljs-function">(<span class="hljs-params">event: ChangeEvent</span>) =&gt;</span> {
+    <span class="hljs-comment">// make the textbox match the updated slider</span>
+    sizeTextbox.value = sizeSlider.value;
+});</code></pre>
+
+<p id="@creates_cycle_listeners"><a class="jump" href="index.html#@creates_cycle_listeners"></a>This creates a <em>cycle</em> of listeners.
+If the textbox changes, its listener responds by mutating the slider, which might in turn trigger the listener for the slider, which mutates the textbox, which might then trigger the textbox listener again.
+There is a risk of an infinite loop.</p>
+
+<p id="@case_cycle_broken"><a class="jump" href="index.html#@case_cycle_broken"></a>In this case, the cycle is broken by specification: the <code>input</code> event is specified to be sent only when the <em>user</em> changes the value of the textbox or slider, using mouse or keyboard input.  Mutations of the value caused by <em>code</em> do not trigger the event.  So there is no infinite loop in this particular case, but you should watch out for the possibility in general.</p>
+
+<p id="@finally_don-t_forget"><a class="jump" href="index.html#@finally_don-t_forget"></a>Finally, <strong>don’t forget to clean up</strong>.
+You may reach a point in your program when you’d like to <em>stop</em> listening. 
+<code>EventTarget</code>’s <code>addEventListener()</code> and <code>EventEmitter</code>’s <code>on()</code>/<code>addListener()</code> methods have complementary methods
+<a href="https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/removeEventListener"><code>removeEventListener()</code></a> and 
+<a href="https://nodejs.org/api/events.html#emitteroffeventname-listener"><code>off()</code></a>/<a href="https://nodejs.org/api/events.html#emitterremovelistenereventname-listener"><code>removeListener()</code></a>.
+Failing to remove listeners when they are no longer necessary may slow down or cause bugs in your user interface. </p>
+
+</div><h2 id="summary"><a class="jump" href="index.html#summary"></a>Summary</h2><div data-outline="summary">
+
+<ul id="@callbacks_another_example">
+<li><a class="jump" href="index.html#@callbacks_another_example"></a>Callbacks are another example of <a href="../10-functional-programming/index.html#first-class_functions">first-class functions</a>, where we treat functions just as we treat data: passing them to and returning them from other functions, and storing them to call later.
+
+<ul><li>They can be synchronous or asynchronous</li></ul></li>
+<li>TypeScript/JavaScript use an event loop and event queue to store events and execute asynchronous callback code.</li>
+<li>GUI event handling (e.g. HTML) uses the Listener pattern, where modules can listen for different events and provide callback functions.
+
+<ul><li>Listeners must return quickly to give control back to the event loop, and should not be in a cycle with another listener.</li></ul></li>
+</ul>
+
+<p id="@these_ideas_connect"><a class="jump" href="index.html#@these_ideas_connect"></a>These ideas connect to our three key properties of good software as follows:</p>
+
+<ul>
+<li><p id="@callbacks_make_code"><a class="jump" href="index.html#@callbacks_make_code"></a>Callbacks make code more <strong>ready for change</strong> by allowing clients to provide their own code to run when an event occurs, so that the behavior doesn’t have to be hard-coded into the implementation beforehand.</p></li>
+<li><p id="@writing_single_giant"><a class="jump" href="index.html#@writing_single_giant"></a>Writing a single giant input loop to handle every possible event in a large system is neither <strong>safe from bugs</strong> nor <strong>easy to understand</strong>: that single piece of code becomes an all-knowing all-controlling behemoth.
+Callbacks allow each module in the system to be responsible for their own events.</p></li>
+</ul></div></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-17-callbacks-guis"></script></body><!--
+Handout delivered Tue May 26 2026 13:31:56 GMT+0000 (Coordinated Universal Time)
+--></html>

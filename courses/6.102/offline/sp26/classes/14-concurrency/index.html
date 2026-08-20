@@ -1,0 +1,735 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>Reading 14: Concurrency</title>
+
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — Software Construction</a><div>Spring 2026</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_14_concurrency">Reading 14: Concurrency</a></li><li><a href="index.html#concurrency">Concurrency</a></li><li><a href="index.html#two_models_for_concurrent_programming">Two models for concurrent programming</a></li><li><a href="index.html#processes_threads_time-slicing">Processes, threads, time-slicing</a></li><li><a href="index.html#threads_in_python">Threads in Python</a></li><li><a href="index.html#workers_in_typescript">Workers in TypeScript</a></li><li><a href="index.html#shared_memory_example">Shared memory example</a></li><li><a href="index.html#interleaving">Interleaving</a></li><li><a href="index.html#race_condition">Race condition</a></li><li><a href="index.html#message_passing_example">Message passing example</a></li><li><a href="index.html#concurrency_is_hard_to_test_and_debug">Concurrency is hard to test and debug</a></li><li><a href="index.html#summary">Summary</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_14_concurrency"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-14-concurrency"></iframe><a class="jump" href="index.html#reading_14_concurrency"></a>Reading 14: Concurrency</h1><div data-outline="reading_14_concurrency">
+
+<style>
+/* special case a pair of radio buttons */
+.radio.exercise-choice:nth-child(1):nth-last-child(2)[data-outline=Passes],
+.radio.exercise-choice:nth-child(2):nth-last-child(1)[data-outline=Fails] {
+  display: inline-block;
+  margin: 0 20px 0 0;
+}
+</style>
+<script>
+/* style timeline tables */
+window.onHandoutDidRender = function() {
+  $('.timeline table').addClass('table-condensed');
+  $('.timeline table').css('width', 'inherit');
+  $('.timeline table thead:not(:has(th:not(:empty)))').remove();
+}
+</script>
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>Software in 6.102</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>Safe from bugs</th><th>Easy to understand</th><th>Ready for change</th></tr>
+<tr><td>
+  Correct today and correct in the unknown future.
+</td><td>
+  Communicating clearly with future programmers, including future you.
+</td><td>
+  Designed to accommodate change without rewriting.
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>Objectives</h4>
+
+<p id="@reading_introduces_following"><a class="jump" href="index.html#@reading_introduces_following"></a>This reading introduces the following ideas:</p>
+
+<ul id="@message-passing_shared-memory_models_concurrency_concurrent_processes">
+<li><a class="jump" href="index.html#@message-passing_shared-memory_models_concurrency_concurrent_processes"></a>the message-passing and shared-memory models of concurrency</li>
+<li>concurrent processes and threads, and time slicing</li>
+<li>the danger of race conditions</li>
+</ul>
+
+<h2 id="concurrency"><a class="jump" href="index.html#concurrency"></a>Concurrency</h2><div data-outline="concurrency">
+
+<p id="@concurrency_means_multiple"><a class="jump" href="index.html#@concurrency_means_multiple"></a><mark data-structure-text="concurrency" id="^concurrency"><em>Concurrency</em></mark> means multiple computations are happening at the same time.  Concurrency is everywhere in modern programming, whether we like it or not:</p>
+
+<ul id="@multiple_computers_network">
+<li><a class="jump" href="index.html#@multiple_computers_network"></a>Multiple computers in a network</li>
+<li>Multiple applications running on one computer</li>
+<li>Multiple processors in a computer (today, often multiple processor cores on a single chip) </li>
+</ul>
+
+<p id="@fact_concurrency_essential"><a class="jump" href="index.html#@fact_concurrency_essential"></a>In fact, concurrency is essential in modern programming:</p>
+
+<ul id="@web_sites_must">
+<li><a class="jump" href="index.html#@web_sites_must"></a>Web sites must handle multiple simultaneous users.</li>
+<li>Mobile apps need to do some of their processing on servers (“in the cloud”).</li>
+<li>Graphical user interfaces almost always require background work that does not interrupt the user.  For example, Visual Studio Code compiles your TypeScript code while you’re still editing it.</li>
+</ul>
+
+<p id="@being_able_program"><a class="jump" href="index.html#@being_able_program"></a>Being able to program with concurrency will still be important in the future. Processor clock speeds are no longer increasing.  Instead, we’re getting more cores with each new generation of chips.  So in the future, in order to get a computation to run faster, we’ll have to split up a computation into concurrent pieces.</p>
+
+</div><h2 id="two_models_for_concurrent_programming"><a class="jump" href="index.html#two_models_for_concurrent_programming"></a>Two models for concurrent programming</h2><div data-outline="two_models_for_concurrent_programming">
+
+<p id="@there_two_common"><a class="jump" href="index.html#@there_two_common"></a>There are two common models for concurrent programming: <em>shared memory</em> and <em>message passing</em>.</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/shared-memory.png" alt="shared memory" width="300"></div>
+
+<p id="@shared_memory_shared"><a class="jump" href="index.html#@shared_memory_shared"></a><strong><mark data-structure-text="shared memory" id="^shared_memory">Shared memory</mark>.</strong> In the shared memory model of concurrency, concurrent modules interact by reading and writing shared objects in memory.
+In the figure at right, A and B are concurrent modules, with access to the same shared memory space.
+The blue objects are private to A or B (only one module can access it), but the orange object is shared by both A and B (both modules have a reference to it).</p>
+
+<p id="@examples_shared-memory_model"><a class="jump" href="index.html#@examples_shared-memory_model"></a>Examples of the shared-memory model:</p>
+
+<ul>
+<li><p id="@b_might_be_two_processors_processor"><a class="jump" href="index.html#@b_might_be_two_processors_processor"></a>A and B might be two processors (or processor cores) in the same computer, sharing the same physical memory.</p></li>
+<li><p id="@b_might_be_two_programs_running_same_computer_sharing"><a class="jump" href="index.html#@b_might_be_two_programs_running_same_computer_sharing"></a>A and B might be two programs running on the same computer, sharing a common filesystem with files they can read and write.</p></li>
+<li><p id="@b_might_be_two_threads_same"><a class="jump" href="index.html#@b_might_be_two_threads_same"></a>A and B might be two threads in the same program (we’ll explain what a thread is below), sharing the same objects.</p></li>
+</ul>
+
+<div class="panel panel-figure pull-right"><img src="figures/message-passing.png" alt="message passing" width="200"></div>
+
+<p id="@message_passing_message-passing"><a class="jump" href="index.html#@message_passing_message-passing"></a><strong><mark data-structure-text="message passing" id="^message_passing">Message passing</mark>.</strong>  In the message-passing model, concurrent modules interact by sending messages to each other through a communication channel.  Modules send out messages, and incoming messages to each module are queued up for handling. Examples include:</p>
+
+<ul>
+<li><p id="@b_might_be_two_computers_network"><a class="jump" href="index.html#@b_might_be_two_computers_network"></a>A and B might be two computers in a network, communicating by network connections.</p></li>
+<li><p id="@b_might_be_web_browser_web"><a class="jump" href="index.html#@b_might_be_web_browser_web"></a>A and B might be a web browser and a web server – A opens a connection to B and asks for a web page, and B sends the web page data back to A.</p></li>
+<li><p id="@b_might_be_instant_messaging_client"><a class="jump" href="index.html#@b_might_be_instant_messaging_client"></a>A and B might be an instant messaging client and server.</p></li>
+<li><p id="@b_might_be_two_programs_running_same_computer_whose"><a class="jump" href="index.html#@b_might_be_two_programs_running_same_computer_whose"></a>A and B might be two programs running on the same computer whose input and output have been connected by a <a href="https://en.wikipedia.org/wiki/Anonymous_pipe">pipe</a>, like <code>ls | grep</code> typed into a command prompt.</p></li>
+</ul>
+
+</div><h2 id="processes_threads_time-slicing"><a class="jump" href="index.html#processes_threads_time-slicing"></a>Processes, threads, time-slicing</h2><div data-outline="processes_threads_time-slicing">
+
+<p id="@message-passing_shared-memory_models_about_concurrent_modules"><a class="jump" href="index.html#@message-passing_shared-memory_models_about_concurrent_modules"></a>The message-passing and shared-memory models are about how concurrent modules communicate.  The concurrent modules themselves come in two different kinds: processes and threads.</p>
+
+<p id="@process_process_instance"><a class="jump" href="index.html#@process_process_instance"></a><strong><mark data-structure-text="process" id="^process">Process</mark>.</strong>  A process is an instance of a running program that is <em>isolated</em> from other processes on the same machine.  In particular, it has its own private section of the machine’s memory.</p>
+
+<p id="@abstractly_you_can"><a class="jump" href="index.html#@abstractly_you_can"></a>Abstractly, you can think about a process as a <em>virtual computer</em>.  It makes the program feel like it has the entire machine to itself – like a fresh computer with its own memory, just to run that program.</p>
+
+<p id="@just_like_computers"><a class="jump" href="index.html#@just_like_computers"></a>Just like computers connected across a network, processes normally share no memory between them.  A process can’t access another process’s memory or objects at all.  Sharing memory between processes is <em>possible</em> on most operating systems, but it needs special effort.  By contrast, a new process is automatically ready for message passing, because it is created with standard input &amp; output streams.</p>
+
+<p id="@whenever_you_start"><a class="jump" href="index.html#@whenever_you_start"></a>Whenever you start a program on your computer, a fresh process is created as well, to contain the running program.</p>
+
+<p id="@thread_thread_locus"><a class="jump" href="index.html#@thread_thread_locus"></a><strong><mark data-structure-text="thread" id="^thread">Thread</mark>.</strong>  A thread is a locus of control inside a running program.  Think of it as a place in the program that is being run, plus the stack of function calls that led to that place (so the thread can go back up the stack when it reaches <code>return</code> statements).</p>
+
+<p id="@just_process_represents"><a class="jump" href="index.html#@just_process_represents"></a>Just as a process represents a virtual computer, a thread represents a <em>virtual processor</em>.  Making a new thread simulates making a fresh processor inside the virtual computer represented by the process.  This new virtual processor runs the same program and shares the same memory as other threads in the process.
+So, we can say that a process contains threads.</p>
+
+<p id="@threads_automatically_ready"><a class="jump" href="index.html#@threads_automatically_ready"></a>Threads are automatically ready for shared memory, because threads share all the memory in the process.  It takes special effort to get “thread-local” memory that’s private to a single thread.</p>
+
+<p id="@whenever_you_run"><a class="jump" href="index.html#@whenever_you_run"></a>Whenever you run a TypeScript/JavaScript program, the program starts with one thread, which starts executing the file you are running as its first step.</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/time-slicing.png" alt="time-slicing" width="500"></div>
+
+<p id="@time_slicing_can"><a class="jump" href="index.html#@time_slicing_can"></a><strong><mark data-structure-text="time slicing" id="^time_slicing">Time slicing</mark>.</strong>  How can you have many concurrent threads with only one or two processors in your computer?  When there are more threads than processors, concurrency is simulated by <strong>time slicing</strong>, which means that the processor switches between threads.  The figure on the right shows how three threads T1, T2, and T3 might be time-sliced on a machine that has only two actual processors.  In the figure, time proceeds downward, so at first, processor P1 is running thread T1, and processor P2 is running thread T2, and then processor P2 switches to run thread T3.  Thread T2 simply pauses, until its next time slice on the same processor or another processor.  The far right part of the figure shows how this looks from each thread’s point of view.  Sometimes a thread is actively running on a processor, and sometimes it is suspended waiting for its next chance to run on some processor.
+Notice that a thread is only ever run on at most one processor; it wouldn’t make sense for a thread to be run on multiple processors at the same time.</p>
+
+<p id="@threads_running_same"><a class="jump" href="index.html#@threads_running_same"></a>When threads are running at the same time on two different processors, they are said to be running <em>in parallel</em> and thus give rise to <mark data-structure-text="parallelism" id="^parallelism"><em>parallelism</em></mark> in software.
+If the threads were instead sharing the same processor, time-sliced with each other, they would be concurrent, but not parallel.</p>
+
+<span id="nondeterministic"></span>
+
+<p id="@even_without_parallelism"><a class="jump" href="index.html#@even_without_parallelism"></a>Even without parallelism, though, concurrency can be tricky.
+On most systems, time slicing happens unpredictably and nondeterministically, meaning that a thread may be paused or resumed at any time.</p>
+
+</div><h2 id="threads_in_python"><a class="jump" href="index.html#threads_in_python"></a>Threads in Python</h2><div data-outline="threads_in_python">
+
+<p id="@first_look_threads"><a class="jump" href="index.html#@first_look_threads"></a>Let’s first look at how threads work in Python.
+Python’s API for threads is similar to that provided by other object-oriented languages, including Java.</p>
+
+<p id="@python_you_start"><a class="jump" href="index.html#@python_you_start"></a>In Python, you start a new thread by making an instance of <a href="https://docs.python.org/3/library/threading.html#thread-objects"><code>Thread</code></a> and telling it to <code>start()</code>.
+You provide code for the new thread to run by passing a function to the <code>Thread</code> constructor.
+The first thing the new thread will do is call this function.
+For example:</p>
+
+<pre id="@threading_import_thread_def_hello_print-hello"><a class="jump" href="index.html#@threading_import_thread_def_hello_print-hello"></a><code class="language-py hljs python"><span class="hljs-keyword">from</span> threading <span class="hljs-keyword">import</span> Thread
+
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">hello</span><span class="hljs-params">()</span>:</span>
+  print(<span class="hljs-string">"Hello from a thread!"</span>)
+
+t = Thread(target=hello)  <span class="hljs-comment"># makes a thread that is ready to call hello()</span>
+t.start()                 <span class="hljs-comment"># actually calls hello() in the new thread</span></code></pre>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-threads_in_python"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-threads_in_python-thread_lifecycle" data-target="#ex-threads_in_python-thread_lifecycle" data-toggle="collapse"><a class="jump" href="index.html#@ex-threads_in_python-thread_lifecycle"></a><span class="panel-title">Thread lifecycle</span></div><div class="panel-collapse collapse exercise-panel" id="ex-threads_in_python-thread_lifecycle" data-outline="thread_lifecycle" data-ex-id="threads_in_python/thread_lifecycle" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@consider_code_starts"><a class="jump" href="index.html#@consider_code_starts"></a>Consider this code that starts a thread:</p>
+
+<pre id="@thread-target-lambda_print-hello_thread-start"><a class="jump" href="index.html#@thread-target-lambda_print-hello_thread-start"></a><code class="language-py hljs python">Thread(target=<span class="hljs-keyword">lambda</span> : print(<span class="hljs-string">"Hello from a thread!"</span>)).start()</code></pre>
+
+<p id="@note_condensed_previous"><a class="jump" href="index.html#@note_condensed_previous"></a>Note that we have condensed the previous example into one line using a zero-argument <code>lambda</code> expression.</p>
+
+<p id="@put_following_events_order_they_occur_0"><a class="jump" href="index.html#@put_following_events_order_they_occur_0"></a>Put the following events in the order that they occur.</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; a Thread object is created; the function object is defined; “Hello from a thread” is printed; start() is called; the function object is called; the function object returns"><select class="form-control"><option selected="selected"></option><option>a Thread object is created</option>,<option>the function object is defined</option>,<option>“Hello from a thread” is printed</option>,<option>start() is called</option>,<option>the function object is called</option>,<option>the function object returns</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; a Thread object is created; the function object is defined; “Hello from a thread” is printed; start() is called; the function object is called; the function object returns"><select class="form-control"><option selected="selected"></option><option>a Thread object is created</option>,<option>the function object is defined</option>,<option>“Hello from a thread” is printed</option>,<option>start() is called</option>,<option>the function object is called</option>,<option>the function object returns</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; a Thread object is created; the function object is defined; “Hello from a thread” is printed; start() is called; the function object is called; the function object returns"><select class="form-control"><option selected="selected"></option><option>a Thread object is created</option>,<option>the function object is defined</option>,<option>“Hello from a thread” is printed</option>,<option>start() is called</option>,<option>the function object is called</option>,<option>the function object returns</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; a Thread object is created; the function object is defined; “Hello from a thread” is printed; start() is called; the function object is called; the function object returns"><select class="form-control"><option selected="selected"></option><option>a Thread object is created</option>,<option>the function object is defined</option>,<option>“Hello from a thread” is printed</option>,<option>start() is called</option>,<option>the function object is called</option>,<option>the function object returns</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="e"><div class="dropdown exercise-choice" data-outline="; a Thread object is created; the function object is defined; “Hello from a thread” is printed; start() is called; the function object is called; the function object returns"><select class="form-control"><option selected="selected"></option><option>a Thread object is created</option>,<option>the function object is defined</option>,<option>“Hello from a thread” is printed</option>,<option>start() is called</option>,<option>the function object is called</option>,<option>the function object returns</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="f"><div class="dropdown exercise-choice" data-outline="; a Thread object is created; the function object is defined; “Hello from a thread” is printed; start() is called; the function object is called; the function object returns"><select class="form-control"><option selected="selected"></option><option>a Thread object is created</option>,<option>the function object is defined</option>,<option>“Hello from a thread” is printed</option>,<option>start() is called</option>,<option>the function object is called</option>,<option>the function object returns</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-threads_in_python-processes_and_threads_1" data-target="#ex-threads_in_python-processes_and_threads_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-threads_in_python-processes_and_threads_1"></a><span class="panel-title">Processes and threads 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-threads_in_python-processes_and_threads_1" data-outline="processes_and_threads_1" data-ex-id="threads_in_python/processes_and_threads_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@you_run_python"><a class="jump" href="index.html#@you_run_python"></a>When you run a Python program (for example, using <code>python my-program.py</code> on the command line), how many processors, processes, and threads are created at first?</p>
+
+<p id="@processors_created_0"><a class="jump" href="index.html#@processors_created_0"></a>Processors created:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; no processors; one processor; one processor for each class in the program"><select class="form-control"><option selected="selected"></option><option>no processors</option>,<option>one processor</option>,<option>one processor for each class in the program</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@processes_created_0"><a class="jump" href="index.html#@processes_created_0"></a>Processes created:</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; no processes; one process; one process for each class in the program"><select class="form-control"><option selected="selected"></option><option>no processes</option>,<option>one process</option>,<option>one process for each class in the program</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@threads_created_0"><a class="jump" href="index.html#@threads_created_0"></a>Threads created:</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; no threads; one thread; one thread for each class in the program"><select class="form-control"><option selected="selected"></option><option>no threads</option>,<option>one thread</option>,<option>one thread for each class in the program</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-threads_in_python-processes_and_threads_2" data-target="#ex-threads_in_python-processes_and_threads_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-threads_in_python-processes_and_threads_2"></a><span class="panel-title">Processes and threads 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-threads_in_python-processes_and_threads_2" data-outline="processes_and_threads_2" data-ex-id="threads_in_python/processes_and_threads_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@suppose_run_python"><a class="jump" href="index.html#@suppose_run_python"></a>Suppose we run this Python program, which contains bugs:</p>
+
+<pre id="@threading_import_thread_clotho_thread-target-lambda_print-spinning"><a class="jump" href="index.html#@threading_import_thread_clotho_thread-target-lambda_print-spinning"></a><code class="language-py hljs python"><span class="hljs-keyword">from</span> threading <span class="hljs-keyword">import</span> Thread
+
+clotho = Thread(target=<span class="hljs-keyword">lambda</span> : print(<span class="hljs-string">'spinning'</span>))
+clotho.start()
+
+Thread(target=<span class="hljs-keyword">lambda</span> : print(<span class="hljs-string">"measuring"</span>)).start()
+
+Thread(target=<span class="hljs-keyword">lambda</span> : print(<span class="hljs-string">"cutting"</span>))</code></pre>
+
+<p id="@many_new_thread"><a class="jump" href="index.html#@many_new_thread"></a>How many new <code>Thread</code> objects are created during the execution of this program?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@many_new_threads"><a class="jump" href="index.html#@many_new_threads"></a>How many new threads are run?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@maximum_number_threads"><a class="jump" href="index.html#@maximum_number_threads"></a>What is the maximum number of threads that might be running at the same time?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="workers_in_typescript"><a class="jump" href="index.html#workers_in_typescript"></a>Workers in TypeScript</h2><div data-outline="workers_in_typescript">
+
+<p id="@typescript_does_not"><a class="jump" href="index.html#@typescript_does_not"></a>TypeScript does not have user-accessible threads, but it does have an abstraction called <a href="https://developer.mozilla.org/en-US/docs/Web/API/Worker"><code>Worker</code></a>.
+Sometimes called <a href="https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API">Web Workers</a> because the API first appeared in web browsers, the API is <a href="https://nodejs.org/api/worker_threads.html">also supported by Node</a>.</p>
+
+<p id="@worker_created_specifying"><a class="jump" href="index.html#@worker_created_specifying"></a>A <code>Worker</code> is created by specifying the JavaScript file that it should execute as its starting point.
+For example, suppose we already have the file <code>hello-world.js</code> created by compiling this TypeScript code:</p>
+
+<pre id="@hello-world-ts_compiles_hello-world-js_console-log-hello_worker_0"><a class="jump" href="index.html#@hello-world-ts_compiles_hello-world-js_console-log-hello_worker_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// hello-world.ts (compiles to hello-world.js)</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'Hello from a worker!'</span>)</code></pre>
+
+<p id="@then_can_start"><a class="jump" href="index.html#@then_can_start"></a>Then we can start a worker for it like this:</p>
+
+<pre id="@let_worker_worker"><a class="jump" href="index.html#@let_worker_worker"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> worker: Worker = <span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./hello-world.js'</span>);
+<span class="hljs-comment">// ...</span></code></pre>
+
+<p id="@code_immediately_start"><a class="jump" href="index.html#@code_immediately_start"></a>This code will immediately start creating a new environment for the <code>Worker</code>, begin executing <code>hello-world.js</code>, and print the hello message.
+It will also continue concurrently executing the code that started the worker.</p>
+
+<p id="@note_new_worker"><a class="jump" href="index.html#@note_new_worker"></a>Note that <code>new Worker</code> expects a JavaScript file (<code>.js</code>).  If the worker code is written in TypeScript, it must first be compiled to JavaScript before a worker can be started with it.</p>
+
+<p id="@both_mozilla_node"><a class="jump" href="index.html#@both_mozilla_node"></a>Both the Mozilla and Node documentation for workers calls them <em>threads</em>, but their behavior is much more like separate <em>processes</em>:</p>
+
+<ul>
+<li><p id="@like_threads_workers"><a class="jump" href="index.html#@like_threads_workers"></a>Like threads, workers can access shared memory using <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer"><code>SharedArrayBuffer</code></a> to share <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Typed_arrays">binary data</a>.</p></li>
+<li><p id="@but_like_processes"><a class="jump" href="index.html#@but_like_processes"></a>But like processes, each new <code>Worker</code> runs its JavaScript file in a fresh global environment.
+When it imports a module, it loads a fresh private copy of that module; it does not share the module with other workers.
+Workers cannot share variables or instances of regular objects.</p></li>
+<li><p id="@instead_because_their"><a class="jump" href="index.html#@instead_because_their"></a>Instead, because their shared memory capability is very limited, workers generally communicate by message-passing.
+A bidirectional message passing communication channel is automatically set up between the code that creates a <code>Worker</code> and the code running inside that <code>Worker</code>.</p></li>
+</ul>
+
+<p id="@overall_can_think"><a class="jump" href="index.html#@overall_can_think"></a>Overall, we can think of a <code>Worker</code> as a lightweight process.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-workers_in_typescript"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-workers_in_typescript-worker_lifecycle" data-target="#ex-workers_in_typescript-worker_lifecycle" data-toggle="collapse"><a class="jump" href="index.html#@ex-workers_in_typescript-worker_lifecycle"></a><span class="panel-title">Worker lifecycle</span></div><div class="panel-collapse collapse exercise-panel" id="ex-workers_in_typescript-worker_lifecycle" data-outline="worker_lifecycle" data-ex-id="workers_in_typescript/worker_lifecycle" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@code_starts_worker"><a class="jump" href="index.html#@code_starts_worker"></a>For this code that starts a worker when we run the <code>main</code> file:</p>
+
+<pre id="@hello-world-ts_compiles_hello-world-js_console-log-hello_worker_1"><a class="jump" href="index.html#@hello-world-ts_compiles_hello-world-js_console-log-hello_worker_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// hello-world.ts (compiles to hello-world.js)</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'Hello from a worker!'</span>)</code></pre>
+
+<pre id="@main-ts_compiles_main-js"><a class="jump" href="index.html#@main-ts_compiles_main-js"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// main.ts (compiles to main.js)</span>
+<span class="hljs-keyword">const</span> worker: Worker = <span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./hello-world.js'</span>);</code></pre>
+
+<p id="@put_following_events_order_they_occur_1"><a class="jump" href="index.html#@put_following_events_order_they_occur_1"></a>Put the following events in the order that they occur.</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; a Worker object is created; hello-world.js starts running; hello-world.js stops running; main.js starts running; console.log(..) is called"><select class="form-control"><option selected="selected"></option><option>a Worker object is created</option>,<option>hello-world.js starts running</option>,<option>hello-world.js stops running</option>,<option>main.js starts running</option>,<option>console.log(..) is called</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; a Worker object is created; hello-world.js starts running; hello-world.js stops running; main.js starts running; console.log(..) is called"><select class="form-control"><option selected="selected"></option><option>a Worker object is created</option>,<option>hello-world.js starts running</option>,<option>hello-world.js stops running</option>,<option>main.js starts running</option>,<option>console.log(..) is called</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; a Worker object is created; hello-world.js starts running; hello-world.js stops running; main.js starts running; console.log(..) is called"><select class="form-control"><option selected="selected"></option><option>a Worker object is created</option>,<option>hello-world.js starts running</option>,<option>hello-world.js stops running</option>,<option>main.js starts running</option>,<option>console.log(..) is called</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; a Worker object is created; hello-world.js starts running; hello-world.js stops running; main.js starts running; console.log(..) is called"><select class="form-control"><option selected="selected"></option><option>a Worker object is created</option>,<option>hello-world.js starts running</option>,<option>hello-world.js stops running</option>,<option>main.js starts running</option>,<option>console.log(..) is called</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="form-group exercise-part" data-outline="e"><div class="dropdown exercise-choice" data-outline="; a Worker object is created; hello-world.js starts running; hello-world.js stops running; main.js starts running; console.log(..) is called"><select class="form-control"><option selected="selected"></option><option>a Worker object is created</option>,<option>hello-world.js starts running</option>,<option>hello-world.js stops running</option>,<option>main.js starts running</option>,<option>console.log(..) is called</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-workers_in_typescript-node_processes_and_threads" data-target="#ex-workers_in_typescript-node_processes_and_threads" data-toggle="collapse"><a class="jump" href="index.html#@ex-workers_in_typescript-node_processes_and_threads"></a><span class="panel-title">Node processes and threads</span></div><div class="panel-collapse collapse exercise-panel" id="ex-workers_in_typescript-node_processes_and_threads" data-outline="node_processes_and_threads" data-ex-id="workers_in_typescript/node_processes_and_threads" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@you_run_node-js"><a class="jump" href="index.html#@you_run_node-js"></a>When you run a Node.js program (for example with <code>npm start</code>), how many processors, processes, and threads are created at first?</p>
+
+<p id="@processors_created_1"><a class="jump" href="index.html#@processors_created_1"></a>Processors created:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; no processors; one processor; one processor for each class in the program"><select class="form-control"><option selected="selected"></option><option>no processors</option>,<option>one processor</option>,<option>one processor for each class in the program</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@processes_created_1"><a class="jump" href="index.html#@processes_created_1"></a>Processes created:</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; no processes; one process; one process for each class in the program"><select class="form-control"><option selected="selected"></option><option>no processes</option>,<option>one process</option>,<option>one process for each class in the program</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@threads_created_1"><a class="jump" href="index.html#@threads_created_1"></a>Threads created:</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; no threads; one thread; one thread for each class in the program"><select class="form-control"><option selected="selected"></option><option>no threads</option>,<option>one thread</option>,<option>one thread for each class in the program</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-workers_in_typescript-node_workers_1" data-target="#ex-workers_in_typescript-node_workers_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-workers_in_typescript-node_workers_1"></a><span class="panel-title">Node workers 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-workers_in_typescript-node_workers_1" data-outline="node_workers_1" data-ex-id="workers_in_typescript/node_workers_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@given_these_files"><a class="jump" href="index.html#@given_these_files"></a>Given these files compiled to <code>.js</code> files of the same names…</p>
+
+<table class="table table-condensed" style="margin-bottom:0;"><tbody><tr><td><pre id="@nona-ts_console-log-spinning_0"><a class="jump" href="index.html#@nona-ts_console-log-spinning_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// nona.ts</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'spinning'</span>);</code></pre></td><td><pre id="@decima-ts_console-log-measuring"><a class="jump" href="index.html#@decima-ts_console-log-measuring"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// decima.ts</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'measuring'</span>);</code></pre></td><td><pre id="@morta-ts_console-log-cutting_0"><a class="jump" href="index.html#@morta-ts_console-log-cutting_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// morta.ts</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'cutting'</span>);</code></pre></td></tr></tbody></table>
+
+<p id="@run_file_0"><a class="jump" href="index.html#@run_file_0"></a>… when we run this file:</p>
+
+<pre id="@main-ts_new_worker-nona-js_new_worker-decima-js_new_worker-morta-js_0"><a class="jump" href="index.html#@main-ts_new_worker-nona-js_new_worker-decima-js_new_worker-morta-js_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// main.ts</span>
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./nona.js'</span>);
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./decima.js'</span>);
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./morta.js'</span>);</code></pre>
+
+<p id="@maximum_number_workers"><a class="jump" href="index.html#@maximum_number_workers"></a>What is the maximum number of workers that might be running at the same time?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@minimum_number_workers"><a class="jump" href="index.html#@minimum_number_workers"></a>What is the minimum number of workers that will definitely be running at the same time?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_following_console_outputs_possible_0"><a class="jump" href="index.html#@which_following_console_outputs_possible_0"></a>Which of the following console outputs are possible?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="spinning, measuring, cutting"><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0">spinning, measuring, cutting</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="measuring, spinning, cutting"><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1">measuring, spinning, cutting</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="cutting, spinning, measuring"><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2">cutting, spinning, measuring</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="cutting, measuring, spinning"><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3">cutting, measuring, spinning</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-workers_in_typescript-node_workers_2" data-target="#ex-workers_in_typescript-node_workers_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-workers_in_typescript-node_workers_2"></a><span class="panel-title">Node workers 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-workers_in_typescript-node_workers_2" data-outline="node_workers_2" data-ex-id="workers_in_typescript/node_workers_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@exception_thrown_worker"><a class="jump" href="index.html#@exception_thrown_worker"></a>When an exception is thrown in a worker thread and not caught, Node’s default behavior is to print a stack trace and terminate the <strong>entire program</strong>.</p>
+
+<p id="@so_given_these"><a class="jump" href="index.html#@so_given_these"></a>So given these files compiled to <code>.js</code> files of the same names…</p>
+
+<table class="table table-condensed" style="margin-bottom:0;"><tbody><tr><td><pre id="@nona-ts_console-log-spinning_1"><a class="jump" href="index.html#@nona-ts_console-log-spinning_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// nona.ts</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'spinning'</span>);</code></pre></td><td><pre id="@decima-ts_throw_new"><a class="jump" href="index.html#@decima-ts_throw_new"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// decima.ts</span>
+<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(
+  <span class="hljs-string">'measurement failure'</span>);</code></pre></td><td><pre id="@morta-ts_console-log-cutting_1"><a class="jump" href="index.html#@morta-ts_console-log-cutting_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// morta.ts</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'cutting'</span>);</code></pre></td></tr></tbody></table>
+
+<p id="@run_file_1"><a class="jump" href="index.html#@run_file_1"></a>… when we run this file:</p>
+
+<pre id="@main-ts_new_worker-nona-js_new_worker-decima-js_new_worker-morta-js_1"><a class="jump" href="index.html#@main-ts_new_worker-nona-js_new_worker-decima-js_new_worker-morta-js_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// main.ts</span>
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./nona.js'</span>);
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./decima.js'</span>);
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./morta.js'</span>);</code></pre>
+
+<p id="@which_following_console_outputs_possible_1"><a class="jump" href="index.html#@which_following_console_outputs_possible_1"></a>Which of the following console outputs are possible?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="spinning, Error: measurement failure (with stack trace), cutting"><label for="md_converted_choice_2_0"><input type="checkbox" id="md_converted_choice_2_0">spinning, Error: measurement failure (with stack trace), cutting</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="spinning, Error: measurement failure (with stack trace)"><label for="md_converted_choice_2_1"><input type="checkbox" id="md_converted_choice_2_1">spinning, Error: measurement failure (with stack trace)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="cutting, spinning, Error: measurement failure (with stack trace)"><label for="md_converted_choice_2_2"><input type="checkbox" id="md_converted_choice_2_2">cutting, spinning, Error: measurement failure (with stack trace)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Error: measurement failure (with stack trace)"><label for="md_converted_choice_2_3"><input type="checkbox" id="md_converted_choice_2_3">Error: measurement failure (with stack trace)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="shared_memory_example"><a class="jump" href="index.html#shared_memory_example"></a>Shared memory example</h2><div data-outline="shared_memory_example">
+
+<p id="@look_example_shared"><a class="jump" href="index.html#@look_example_shared"></a>Let’s look at an example of a shared memory system.  The point of this example is to show that concurrent programming is hard, because it can have subtle bugs.</p>
+
+<p id="@use_filesystem_our"><a class="jump" href="index.html#@use_filesystem_our"></a>We’ll use the filesystem as our shared memory for this example.</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/shared-memory-bank-account.png" alt="shared memory model for bank accounts" width="500"></div>
+
+<p id="@imagine_bank_cash"><a class="jump" href="index.html#@imagine_bank_cash"></a>Imagine that a bank has cash machines that use a shared memory model: a common filesystem.
+The information about a bank account is stored in a file, and all the cash machines can read and write that file to update the account.</p>
+
+<p id="@illustrate_can_go"><a class="jump" href="index.html#@illustrate_can_go"></a>To illustrate what can go wrong, let’s simplify the bank down to a single account, with its dollar balance stored as text in a file named <code>account</code>:</p>
+
+<div class="clearfix"></div>
+
+<pre id="@import_fs_node-fs"><a class="jump" href="index.html#@import_fs_node-fs"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">import</span> fs <span class="hljs-keyword">from</span> <span class="hljs-string">'node:fs'</span>;
+
+<span class="hljs-comment">// suppose all the cash machines share a single bank account, stored in a file named `account`</span>
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">readBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">number</span> </span>{
+  <span class="hljs-keyword">const</span> fileData = fs.readFileSync(<span class="hljs-string">'account.txt'</span>).toString();
+  <span class="hljs-keyword">return</span> <span class="hljs-built_in">parseInt</span>(fileData);
+}
+
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">writeBalance</span>(<span class="hljs-params">balance: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span> </span>{
+  fs.writeFileSync(<span class="hljs-string">'account.txt'</span>, balance.toString());
+}
+</code></pre>
+
+<p id="@two_operations_deposit"><a class="jump" href="index.html#@two_operations_deposit"></a>Two operations <code>deposit</code> and <code>withdraw</code> update that file to simply add or remove a dollar:</p>
+
+<pre id="@function_deposit_void"><a class="jump" href="index.html#@function_deposit_void"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">deposit</span>(<span class="hljs-params"></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-keyword">let</span> balance = readBalance();
+  balance = balance + <span class="hljs-number">1</span>;
+  writeBalance(balance);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">withdraw</span>(<span class="hljs-params"></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-keyword">let</span> balance = readBalance();
+  balance = balance - <span class="hljs-number">1</span>;
+  writeBalance(balance);
+}
+</code></pre>
+
+<p id="@customers_use_cash"><a class="jump" href="index.html#@customers_use_cash"></a>Customers use the cash machines to do transactions like this:</p>
+
+<pre id="@deposit_put_dollar"><a class="jump" href="index.html#@deposit_put_dollar"></a><code class="language-ts hljs typescript">deposit(); <span class="hljs-comment">// put a dollar in</span>
+withdraw(); <span class="hljs-comment">// take it back out</span></code></pre>
+
+<p id="@each_transaction_just"><a class="jump" href="index.html#@each_transaction_just"></a>Each transaction is just a one-dollar deposit followed by a one-dollar withdrawal, so it should leave the balance in the account unchanged.  Throughout the day, each cash machine in our network is processing a sequence of deposit/withdraw transactions:</p>
+
+<pre id="@cash-machine-ts_each_atm"><a class="jump" href="index.html#@cash-machine-ts_each_atm"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// in cash-machine.ts</span>
+
+<span class="hljs-comment">// each ATM does a bunch of transactions that</span>
+<span class="hljs-comment">// modify balance, but leave it unchanged afterward</span>
+<span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> txn = <span class="hljs-number">0</span>; txn &lt; TRANSACTIONS_PER_MACHINE; ++txn) {
+    deposit(); <span class="hljs-comment">// put a dollar in</span>
+    withdraw(); <span class="hljs-comment">// take it back out</span>
+}</code></pre>
+
+<p id="@if_start_day"><a class="jump" href="index.html#@if_start_day"></a>If we start the day with, say, $200 in the account, then at the end of the day, regardless of how many cash machines were running, or how many transactions we processed, we should expect the account balance to be unchanged at $200:</p>
+
+<pre id="@start_balance_200"><a class="jump" href="index.html#@start_balance_200"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// start with a balance of 200</span>
+writeBalance(<span class="hljs-number">200</span>);
+
+<span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> machine = <span class="hljs-number">0</span>; machine &lt; NUMBER_OF_CASH_MACHINES; ++machine) {
+    <span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./cash-machine.js'</span>); <span class="hljs-comment">// runs the cash-machine code just above</span>
+}</code></pre>
+
+<p id="@but_if_run"><a class="jump" href="index.html#@but_if_run"></a>But if we run this code, we discover frequently that the balance at the end of the day is <em>not</em> $200.  If more than one worker is running at the same time – say, on separate processors in the same computer – then <code>balance</code> may not be unchanged at $200 at the end of the day.  Why not?</p>
+
+</div><h2 id="interleaving"><a class="jump" href="index.html#interleaving"></a>Interleaving</h2><div data-outline="interleaving">
+
+<p id="@here-s_one_thing"><a class="jump" href="index.html#@here-s_one_thing"></a>Here’s one thing that can happen.  Suppose two cash machine workers, A and B, are both working on a deposit at the same time.  Here’s how the <code>deposit()</code> step breaks down into lower-level instructions:</p>
+
+<div class="timeline"><table class="table table-condensed" id="@readbalance_returns_200" style="width: inherit;">
+
+<tbody><tr>
+  <td><a class="jump" href="index.html#@readbalance_returns_200"></a>readBalance() returns 200</td>
+</tr>
+<tr>
+  <td>add 1</td>
+</tr>
+<tr>
+  <td>writeBalance(201)</td>
+</tr>
+</tbody></table></div>
+
+<p id="@b_running_concurrently"><a class="jump" href="index.html#@b_running_concurrently"></a>When A and B are running concurrently, these instructions can <mark data-mark-text="interleaving" data-structure-text="interleaving" id="^interleaving"><em>interleave</em></mark> with each other, meaning that the actual sequence of execution can intersperse A’s operations and B’s operations arbitrarily.
+(Some operations might very well be simultaneous or overlapping if A and B run on separate processors, but let’s just worry about interleaving for now.)
+Here is one possible interleaving:</p>
+
+<div class="timeline"><table class="table table-condensed" id="@b_readbalance_returns_200_add_1" style="width: inherit;">
+<thead>
+<tr>
+  <th><a class="jump" href="index.html#@b_readbalance_returns_200_add_1"></a>A</th>
+  <th>B</th>
+</tr>
+</thead>
+<tbody><tr>
+  <td>A readBalance() returns 200</td>
+  <td></td>
+</tr>
+<tr>
+  <td>A add 1</td>
+  <td></td>
+</tr>
+<tr>
+  <td>A writeBalance(201)</td>
+  <td></td>
+</tr>
+<tr>
+  <td></td>
+  <td>B readBalance() returns 201</td>
+</tr>
+<tr>
+  <td></td>
+  <td>B add 1</td>
+</tr>
+<tr>
+  <td></td>
+  <td>B writeBalance(202)</td>
+</tr>
+</tbody></table></div>
+
+<p id="@interleaving_fine_end"><a class="jump" href="index.html#@interleaving_fine_end"></a>This interleaving is fine – we end up with balance 202, so both A and B successfully put in a dollar. But what if the interleaving looked like this:</p>
+
+<div class="timeline"><table class="table table-condensed" id="@b_readbalance_returns_200_b_readbalance" style="width: inherit;">
+<thead>
+<tr>
+  <th><a class="jump" href="index.html#@b_readbalance_returns_200_b_readbalance"></a>A</th>
+  <th>B</th>
+</tr>
+</thead>
+<tbody><tr>
+  <td>A readBalance() returns 200</td>
+  <td></td>
+</tr>
+<tr>
+  <td></td>
+  <td>B readBalance() returns 200</td>
+</tr>
+<tr>
+  <td>A add 1</td>
+  <td></td>
+</tr>
+<tr>
+  <td></td>
+  <td>B add 1</td>
+</tr>
+<tr>
+  <td>A writeBalance(201)</td>
+  <td></td>
+</tr>
+<tr>
+  <td></td>
+  <td>B writeBalance(201)</td>
+</tr>
+</tbody></table></div>
+
+<p id="@balance_now_201"><a class="jump" href="index.html#@balance_now_201"></a>The balance is now 201 – A’s dollar was lost! A and B both read the balance at the same time, computed separate final balances, and then raced to store back the new balance – which failed to take the other’s deposit into account.</p>
+
+</div><h2 id="race_condition"><a class="jump" href="index.html#race_condition"></a>Race condition</h2><div data-outline="race_condition">
+
+<p id="@example_race_condition"><a class="jump" href="index.html#@example_race_condition"></a>This is an example of a race condition.  A <mark data-structure-text="race condition" id="^race_condition"><strong>race condition</strong></mark> means that the correctness of the program (the satisfaction of its specs and preservation of its invariants) depends on the relative timing of events in concurrent computations A and B.  When this happens, we say “A is in a race with B.”</p>
+
+<p id="@some_interleavings_events"><a class="jump" href="index.html#@some_interleavings_events"></a>Some interleavings of events may be OK, in the sense that they are consistent with what a single, nonconcurrent process would produce, but other interleavings produce wrong answers – violating specs or invariants.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-race_condition"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-race_condition-race_conditions_1" data-target="#ex-race_condition-race_conditions_1" data-toggle="collapse"><a class="jump" href="index.html#@ex-race_condition-race_conditions_1"></a><span class="panel-title">Race conditions 1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-race_condition-race_conditions_1" data-outline="race_conditions_1" data-ex-id="race_condition/race_conditions_1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@consider_following_code"><a class="jump" href="index.html#@consider_following_code"></a>Consider the following code:</p>
+
+<pre id="@writebalance-1_new_worker-a-js"><a class="jump" href="index.html#@writebalance-1_new_worker-a-js"></a><code class="language-ts hljs typescript">writeBalance(<span class="hljs-number">1</span>);
+
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./A.js'</span>);
+<span class="hljs-keyword">new</span> Worker(<span class="hljs-string">'./B.js'</span>);</code></pre>
+
+<p id="@essential_parts_code"><a class="jump" href="index.html#@essential_parts_code"></a>with the essential parts of the code for <code>A.js</code> and <code>B.js</code>:</p>
+
+<pre id="@a-js_writebalance-readbalance_2"><a class="jump" href="index.html#@a-js_writebalance-readbalance_2"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// A.js</span>
+writeBalance(readBalance() * <span class="hljs-number">2</span>);
+writeBalance(readBalance() * <span class="hljs-number">3</span>);</code></pre>
+
+<pre id="@b-js_writebalance-readbalance_5"><a class="jump" href="index.html#@b-js_writebalance-readbalance_5"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// B.js</span>
+writeBalance(readBalance() * <span class="hljs-number">5</span>);</code></pre>
+
+<p id="@suppose_worker_worker"><a class="jump" href="index.html#@suppose_worker_worker"></a>Suppose worker A and worker B run <strong>sequentially</strong>, i.e. first one and then the other.
+What is the final value of the account balance?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-race_condition-race_conditions_2" data-target="#ex-race_condition-race_conditions_2" data-toggle="collapse"><a class="jump" href="index.html#@ex-race_condition-race_conditions_2"></a><span class="panel-title">Race conditions 2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-race_condition-race_conditions_2" data-outline="race_conditions_2" data-ex-id="race_condition/race_conditions_2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@now_suppose_b"><a class="jump" href="index.html#@now_suppose_b"></a>Now suppose A and B run <strong>concurrently</strong>, so that their instructions might interleave arbitrarily.
+Which of the following are possible final values of the balance?
+(There may be other possible values that are not listed below.)</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="1"><label for="md_converted_choice_3_0"><input type="checkbox" id="md_converted_choice_3_0">1</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="2"><label for="md_converted_choice_3_1"><input type="checkbox" id="md_converted_choice_3_1">2</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="5"><label for="md_converted_choice_3_2"><input type="checkbox" id="md_converted_choice_3_2">5</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="6"><label for="md_converted_choice_3_3"><input type="checkbox" id="md_converted_choice_3_3">6</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="10"><label for="md_converted_choice_3_4"><input type="checkbox" id="md_converted_choice_3_4">10</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="30"><label for="md_converted_choice_3_5"><input type="checkbox" id="md_converted_choice_3_5">30</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="150"><label for="md_converted_choice_3_6"><input type="checkbox" id="md_converted_choice_3_6">150</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="message_passing_example"><a class="jump" href="index.html#message_passing_example"></a>Message passing example</h2><div data-outline="message_passing_example">
+
+<p id="@now_look_message-passing"><a class="jump" href="index.html#@now_look_message-passing"></a>Now let’s look at the message-passing approach to our bank account example.</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/message-passing-bank-account.png" alt="message passing bank account example" width="593"></div>
+
+<p id="@now_not_only"><a class="jump" href="index.html#@now_not_only"></a>Now not only is each cash machine a module, but each account is a module, too.  Modules interact by sending messages to each other.  Incoming requests are placed in a queue to be handled one at a time (for example, the figure shows three pending requests queued for account 1). The sender doesn’t stop working while waiting for an answer to its request.  It handles more requests from its own queue.  The reply to its request eventually comes back as another message.</p>
+
+<div class="clearfix"></div>
+
+<div class="panel panel-figure pull-right"><img src="figures/message-passing-race-condition.png" alt="message passing race condition example" width="300"></div>
+
+<p id="@unfortunately_message_passing"><a class="jump" href="index.html#@unfortunately_message_passing"></a>Unfortunately, message passing doesn’t eliminate the possibility of race conditions.  Suppose each account supports <code>get-balance</code> and <code>withdraw</code> operations, with corresponding messages.  Two users, at cash machines A and B, are both trying to withdraw a dollar from the same account.  They check the balance first to make sure they never withdraw more than the account holds, because overdrafts trigger big bank penalties:</p>
+
+<pre id="@send_get-balance_message_store_reply_local_variable_bal_if_bal_1_then_send_withdraw-1-dollar_message_0"><a class="jump" href="index.html#@send_get-balance_message_store_reply_local_variable_bal_if_bal_1_then_send_withdraw-1-dollar_message_0"></a><code class="language-text">send get-balance message, and store the reply in local variable bal
+if bal &gt;= 1 then send withdraw-1-dollar message</code></pre>
+
+<p id="@problem_again_interleaving"><a class="jump" href="index.html#@problem_again_interleaving"></a>The problem is again interleaving, but this time interleaving of the <em>messages</em> sent to the bank account, rather than the <em>instructions</em> executed by A and B. If the account starts with one dollar in it, then what interleaving of messages will fool A and B into thinking they can both withdraw a dollar, thereby overdrawing the account?</p>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-message_passing_example"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-message_passing_example-racing_with_messages" data-target="#ex-message_passing_example-racing_with_messages" data-toggle="collapse"><a class="jump" href="index.html#@ex-message_passing_example-racing_with_messages"></a><span class="panel-title">Racing with messages</span></div><div class="panel-collapse collapse exercise-panel" id="ex-message_passing_example-racing_with_messages" data-outline="racing_with_messages" data-ex-id="message_passing_example/racing_with_messages" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@cash_machines_b"><a class="jump" href="index.html#@cash_machines_b"></a>Cash machines A and B are trying to withdraw a dollar from the same account without overdrawing it, by sending messages <code>get-balance</code> and <code>withdraw</code> to the bank according to the following pseudocode:</p>
+
+<pre id="@send_get-balance_message_store_reply_local_variable_bal_if_bal_1_then_send_withdraw-1-dollar_message_1"><a class="jump" href="index.html#@send_get-balance_message_store_reply_local_variable_bal_if_bal_1_then_send_withdraw-1-dollar_message_1"></a><code class="language-text">send get-balance message, and store the reply in local variable bal
+if bal &gt;= 1 then send withdraw-1-dollar message</code></pre>
+
+<p id="@suppose_account_only"><a class="jump" href="index.html#@suppose_account_only"></a>Suppose the account has only $1 in it.  For each of the following interleavings of messages received by the bank, is the interleaving <em>possible</em> or <em>impossible</em>, and is the account <em>safe</em> (balance never goes below 0) or <em>overdrawn</em> (balance becomes negative)?</p>
+
+<label class="exercise-part-heading" id="@get-balance_then_get-balance"><a class="jump" href="index.html#@get-balance_then_get-balance"></a>get-balance from A, then get-balance from B, then withdraw from A, then withdraw from B</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="possible"><label for="md_converted_choice_4_0"><input type="checkbox" id="md_converted_choice_4_0">possible</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="impossible"><label for="md_converted_choice_4_1"><input type="checkbox" id="md_converted_choice_4_1">impossible</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="safe"><label for="md_converted_choice_4_2"><input type="checkbox" id="md_converted_choice_4_2">safe</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="overdrawn"><label for="md_converted_choice_4_3"><input type="checkbox" id="md_converted_choice_4_3">overdrawn</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@get-balance_b_then"><a class="jump" href="index.html#@get-balance_b_then"></a>get-balance from B, then get-balance from A, then withdraw from A, then withdraw from B</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="possible"><label for="md_converted_choice_5_0"><input type="checkbox" id="md_converted_choice_5_0">possible</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="impossible"><label for="md_converted_choice_5_1"><input type="checkbox" id="md_converted_choice_5_1">impossible</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="safe"><label for="md_converted_choice_5_2"><input type="checkbox" id="md_converted_choice_5_2">safe</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="overdrawn"><label for="md_converted_choice_5_3"><input type="checkbox" id="md_converted_choice_5_3">overdrawn</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@get-balance_then_withdraw"><a class="jump" href="index.html#@get-balance_then_withdraw"></a>get-balance from A, then withdraw from A, then get-balance from B, then withdraw from B</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="possible"><label for="md_converted_choice_6_0"><input type="checkbox" id="md_converted_choice_6_0">possible</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="impossible"><label for="md_converted_choice_6_1"><input type="checkbox" id="md_converted_choice_6_1">impossible</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="safe"><label for="md_converted_choice_6_2"><input type="checkbox" id="md_converted_choice_6_2">safe</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="overdrawn"><label for="md_converted_choice_6_3"><input type="checkbox" id="md_converted_choice_6_3">overdrawn</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<p id="@one_lesson_here"><a class="jump" href="index.html#@one_lesson_here"></a>One lesson here is that you need to carefully choose the operations of a message-passing model.  <code>withdraw-if-sufficient-funds</code> would be a better operation for these clients than just <code>withdraw</code>.</p>
+
+</div><h2 id="concurrency_is_hard_to_test_and_debug"><a class="jump" href="index.html#concurrency_is_hard_to_test_and_debug"></a>Concurrency is hard to test and debug</h2><div data-outline="concurrency_is_hard_to_test_and_debug">
+
+<p id="@if_haven-t_persuaded"><a class="jump" href="index.html#@if_haven-t_persuaded"></a>If we haven’t persuaded you that concurrency is tricky, here’s the worst of it.  It’s very hard to discover race conditions using testing.  And even once a test has found a bug, it may be very hard to localize it to the part of the program causing it.</p>
+
+<p id="@concurrency_bugs_exhibit"><a class="jump" href="index.html#@concurrency_bugs_exhibit"></a>Concurrency bugs exhibit very poor reproducibility.  It’s hard to make them happen the same way twice.  Interleaving of instructions or messages depends on the relative timing of events that are strongly influenced by the environment. Delays can be caused by other running programs, other network traffic, operating system scheduling decisions, variations in processor clock speed, etc. — all things the programmer has little to no control over.  Each time you run a program containing a race condition, you may get different behavior. </p>
+
+<p id="@these_kinds_bugs"><a class="jump" href="index.html#@these_kinds_bugs"></a>These kinds of bugs are <a href="https://en.wikipedia.org/wiki/Heisenbug"><mark data-mark-text="heisenbug" data-structure-text="heisenbug" id="^heisenbug"><em>heisenbugs</em></mark></a>, which are nondeterministic and hard to reproduce, as opposed to a <mark data-structure-text="bohrbug" id="^bohrbug"><em>bohrbug</em></mark>, which shows up repeatedly whenever you look at it.  Almost all bugs in sequential programming are bohrbugs.</p>
+
+<p id="@heisenbug_may_even"><a class="jump" href="index.html#@heisenbug_may_even"></a>A heisenbug may even disappear when you try to look at it with <code>console.log</code> or a debugger!  The reason is that printing and debugging are so much slower than other operations (often 100-1000x slower), that they dramatically change the timing of operations, and the interleaving.
+So it can be easy to fool yourself into thinking that you’ve fixed a concurrency bug just by inserting a print statement.
+But it’s only masked, not truly fixed.  A change in timing somewhere else in the program may suddenly make the bug come back.</p>
+
+<p id="@harder_hide_concurrency"><a class="jump" href="index.html#@harder_hide_concurrency"></a>It’s harder to hide a concurrency bug with a print statement in the TypeScript bank account example, using workers reading and writing a shared file, because file access is comparably slow to printing.  But the heisenbug phenomenon still exists, and would certainly crop up if you stopped one of the cash machines at a breakpoint and tried to step through it with a debugger – the other cash machine would be able to run to completion without interference, and the problem would appear to go away.</p>
+
+<p id="@concurrency_hard_get"><a class="jump" href="index.html#@concurrency_hard_get"></a>Concurrency is hard to get right.  Part of the point of this reading is to scare you a bit.  Over the next several readings, we’ll see principled ways to design concurrent programs so that they are safer from these kinds of bugs.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-concurrency_is_hard_to_test_and_debug"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-concurrency_is_hard_to_test_and_debug-testing_concurrency" data-target="#ex-concurrency_is_hard_to_test_and_debug-testing_concurrency" data-toggle="collapse"><a class="jump" href="index.html#@ex-concurrency_is_hard_to_test_and_debug-testing_concurrency"></a><span class="panel-title">Testing concurrency</span></div><div class="panel-collapse collapse exercise-panel" id="ex-concurrency_is_hard_to_test_and_debug-testing_concurrency" data-outline="testing_concurrency" data-ex-id="concurrency_is_hard_to_test_and_debug/testing_concurrency" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-14-concurrency"><div class="panel-body">
+
+<p id="@you-re_running_test"><a class="jump" href="index.html#@you-re_running_test"></a>You’re running a test suite (for code written by somebody else), and some of the tests are failing.
+You add debugging print statements to the one function called by all the failing test cases, in order to display some of its local variables, and the test cases suddenly start passing.
+Which of the following are likely to be part of the explanation for this behavior?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="The function is calling a random number generator (e.g. Math.random()), so sometimes its tests will pass by random chance."><label for="md_converted_choice_7_0"><input type="checkbox" id="md_converted_choice_7_0">The function is calling a random number generator (e.g. <code>Math.random()</code>), so sometimes its tests will pass by random chance.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="The function has code running concurrently."><label for="md_converted_choice_7_1"><input type="checkbox" id="md_converted_choice_7_1">The function has code running concurrently.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="The function has a race condition."><label for="md_converted_choice_7_2"><input type="checkbox" id="md_converted_choice_7_2">The function has a race condition.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="The function’s preconditions are not being met by the test cases."><label for="md_converted_choice_7_3"><input type="checkbox" id="md_converted_choice_7_3">The function’s preconditions are not being met by the test cases.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="summary"><a class="jump" href="index.html#summary"></a>Summary</h2><div data-outline="summary">
+
+<ul id="@concurrency_multiple_computations">
+<li><a class="jump" href="index.html#@concurrency_multiple_computations"></a>Concurrency: multiple computations running simultaneously</li>
+<li>Shared-memory &amp; message-passing paradigms</li>
+<li>Processes &amp; threads
+
+<ul><li>Process is like a virtual computer; thread is like a virtual processor in that virtual computer</li>
+<li>A TypeScript <code>Worker</code> is like a lightweight process.</li>
+<li>Time slicing allows a processor to switch between multiple threads</li></ul></li>
+<li>Race conditions
+
+<ul><li>When correctness of result (postconditions and invariants) depends on the relative timing of events</li></ul></li>
+</ul>
+
+<p id="@these_ideas_connect"><a class="jump" href="index.html#@these_ideas_connect"></a>These ideas connect to our three key properties of good software mostly in bad ways.  Concurrency is necessary but it causes serious problems for correctness.  We’ll work on fixing those problems in the next few readings.</p>
+
+<ul>
+<li><p id="@safe_bugs_concurrency"><a class="jump" href="index.html#@safe_bugs_concurrency"></a><strong>Safe from bugs.</strong> Concurrency bugs are some of the hardest bugs to find and fix, and require careful design to avoid.</p></li>
+<li><p id="@easy_understand_predicting"><a class="jump" href="index.html#@easy_understand_predicting"></a><strong>Easy to understand.</strong> Predicting how concurrent code might interleave with other concurrent code is very hard for programmers to do.  It’s best to design your code in such a way that programmers don’t have to think about interleaving at all. </p></li>
+<li><p id="@ready_change_choosing"><a class="jump" href="index.html#@ready_change_choosing"></a><strong>Ready for change.</strong> Choosing the right concurrency design — for example which data are in shared memory, or what the messages are in a message-passing protocol — will not only prevent bugs now, but it will influence how easy it is to accommodate different changes in the future.</p></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-14-concurrency"></script></body><!--
+Handout delivered Tue May 26 2026 13:31:21 GMT+0000 (Coordinated Universal Time)
+--></html>

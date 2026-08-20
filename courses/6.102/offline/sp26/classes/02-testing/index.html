@@ -1,0 +1,1520 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+
+<title>Reading 2: Testing</title>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — Software Construction</a><div>Spring 2026</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_2_testing">Reading 2: Testing</a></li><li><a href="index.html#validation">Validation</a></li><li><a href="index.html#why_software_testing_is_hard">Why software testing is hard</a></li><li><a href="index.html#test-first_programming">Test-first programming</a></li><li><a href="index.html#systematic_testing">Systematic testing</a></li><li><a href="index.html#choosing_test_cases_by_partitioning">Choosing test cases by partitioning</a></li><li><a href="index.html#automated_unit_testing">Automated unit testing</a></li><li><a href="index.html#documenting_your_testing_strategy">Documenting your testing strategy</a></li><li><a href="index.html#black_box_and_glass_box_testing">Black box and glass box testing</a></li><li><a href="index.html#coverage">Coverage</a></li><li><a href="index.html#unit_and_integration_testing">Unit and integration testing</a></li><li><a href="index.html#automated_regression_testing">Automated regression testing</a></li><li><a href="index.html#iterative_test-first_programming">Iterative test-first programming</a></li><li><a href="index.html#randomized_testing">Randomized testing</a></li><li><a href="index.html#summary">Summary</a></li></ul></nav>
+<main class="container-fluid"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-02-testing"></iframe><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_2_testing"><a class="jump" href="index.html#reading_2_testing"></a>Reading 2: Testing</h1><div data-outline="reading_2_testing">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>Software in 6.102</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>Safe from bugs</th><th>Easy to understand</th><th>Ready for change</th></tr>
+<tr><td>
+  Correct today and correct in the unknown future.
+</td><td>
+  Communicating clearly with future programmers, including future you.
+</td><td>
+  Designed to accommodate change without rewriting.
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>Objectives</h4>
+
+<p id="@after_today-s_class"><a class="jump" href="index.html#@after_today-s_class"></a>After today’s class, you should:</p>
+
+<ul id="@understand_value_testing">
+<li><a class="jump" href="index.html#@understand_value_testing"></a>understand the value of testing, and know the process of test-first programming;</li>
+<li>be able to judge a test suite for correctness, thoroughness, and size;</li>
+<li>be able to design a test suite for a function by partitioning its input space and choosing good test cases;</li>
+<li>be able to judge a test suite by measuring its code coverage; and</li>
+<li>understand and know when to use black box vs. glass box testing, unit tests vs. integration tests, and automated regression testing.</li>
+</ul>
+
+<h2 id="validation"><a class="jump" href="index.html#validation"></a>Validation</h2><div data-outline="validation">
+
+<p id="@testing_example_more"><a class="jump" href="index.html#@testing_example_more"></a>Testing is an example of a more general process called <mark data-structure-text="validation" id="^validation"><em>validation</em></mark>.
+The purpose of validation is to uncover problems in a program and thereby increase your confidence in the program’s correctness.
+Validation includes:</p>
+
+<ul id="@formal_reasoning_about">
+<li><a class="jump" href="index.html#@formal_reasoning_about"></a><strong>Formal reasoning</strong> about a program, usually called <mark data-structure-text="verification" id="^verification"><em>verification</em></mark>.
+Verification constructs a formal proof that a program is correct.
+Verification is tedious to do by hand, and automated tool support for verification is still an active area of research.
+Nevertheless, small, crucial pieces of a program may be formally verified, such as the scheduler in an operating system, or the bytecode interpreter in a virtual machine, or <a href="https://www.csail.mit.edu/news/crash-proof-computer-systems">the filesystem in an operating system</a>.</li>
+<li><strong>Code review.</strong>
+Having somebody else carefully read your code, and reason informally about it, can be a good way to uncover bugs.
+It’s much like having somebody else proofread an essay you have written.
+We’ll discuss <a href="../03-code-review/index.html">code review in another reading</a>.</li>
+<li><strong>Testing</strong>. Running the program on carefully selected inputs and checking the results.</li>
+</ul>
+
+</div><h2 id="why_software_testing_is_hard"><a class="jump" href="index.html#why_software_testing_is_hard"></a>Why software testing is hard</h2><div data-outline="why_software_testing_is_hard">
+
+<p id="@here_some_approaches"><a class="jump" href="index.html#@here_some_approaches"></a>Here are some approaches that unfortunately don’t work well in the world of software.</p>
+
+<p id="@exhaustive_testing_infeasible"><a class="jump" href="index.html#@exhaustive_testing_infeasible"></a><strong>Exhaustive testing</strong> is infeasible.  The space of possible test cases is generally too big to cover exhaustively.  Imagine exhaustively testing a 32-bit floating-point multiply operation, <code>a*b</code>.  There are 2<sup>64</sup> test cases!</p>
+
+<p id="@haphazard_testing_just"><a class="jump" href="index.html#@haphazard_testing_just"></a><strong>Haphazard testing</strong> (“just try it and see if it works”) is less likely to find bugs, unless the program is so buggy that an arbitrarily-chosen input is more likely to fail than to succeed.
+It also doesn’t increase our confidence in program correctness.</p>
+
+<p id="@random_statistical_testing"><a class="jump" href="index.html#@random_statistical_testing"></a><strong>Random or statistical testing</strong> works better for finding flaws in other kinds of engineered artifacts than finding bugs in software.  Other engineering disciplines can test small random samples (e.g. 1% of hard drives manufactured) and infer the defect rate for the whole production lot.  Physical systems can use many tricks to speed up time, like opening a refrigerator 1000 times in 24 hours instead of 10 years.  These tricks give known failure rates (e.g. mean lifetime of a hard drive), but they assume continuity or uniformity across the space of defects.  This is true for physical artifacts.</p>
+
+<p id="@but_not_true"><a class="jump" href="index.html#@but_not_true"></a>But this is not true for software.  Software behavior varies discontinuously and discretely across the space of possible inputs.  The system may seem to work fine across a broad range of inputs, and then abruptly fail at a single boundary point.  The <a href="https://www.willamette.edu/~mjaneba/pentprob.html">famous Pentium division bug</a> affected approximately 1 in 9 billion divisions.  Stack overflows, out of memory errors, and numeric overflow bugs tend to happen abruptly, and always in the same way, without probabilistic variation.  That’s different from physical systems, where there is often visible evidence that the system is approaching a failure point (e.g. cracks in a bridge), or failures are distributed probabilistically near the failure point (so that statistical testing will observe some failures even before the point is reached).</p>
+
+<p id="@instead_test_cases"><a class="jump" href="index.html#@instead_test_cases"></a>Instead, test cases should be chosen carefully and systematically.
+Techniques for <strong>systematic testing</strong> are the primary focus of this reading.
+Note that random testing <em>is</em> used as a tool in software engineering (particularly to increase confidence that common-case behavior will be reliable or efficient enough, not just for finding bugs), but it’s best to use it in combination with systematic testing.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-why_software_testing_is_hard"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_software_testing_is_hard-needle_in_a_haystack" data-target="#ex-why_software_testing_is_hard-needle_in_a_haystack" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_software_testing_is_hard-needle_in_a_haystack"></a><span class="panel-title">Needle in a haystack</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_software_testing_is_hard-needle_in_a_haystack" data-outline="needle_in_a_haystack" data-ex-id="why_software_testing_is_hard/needle_in_a_haystack" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@here_buggy_function"><a class="jump" href="index.html#@here_buggy_function"></a>Here is a buggy function:</p>
+
+<pre id="@param_bits_array"><a class="jump" href="index.html#@param_bits_array"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param bits an array of 32 true/false values
+ * @returns the Boolean AND of all values in the array
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">andAll</span>(<span class="hljs-params">bits: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">boolean</span>&gt;</span>): <span class="hljs-title">boolean</span> </span>{
+  <span class="hljs-keyword">let</span> result = bits[<span class="hljs-number">0</span>];
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">1</span>; i &lt; <span class="hljs-number">31</span>; i++) {
+    result = result &amp;&amp; bits[i];
+  }
+  <span class="hljs-keyword">return</span> result;
+}</code></pre>
+
+<p id="@louis_reasoner_wrote"><a class="jump" href="index.html#@louis_reasoner_wrote"></a>Louis Reasoner, who wrote this function and thinks it should work, tries it on a couple of <em>haphazardly-chosen</em> test cases shown below.
+What is the result of each test case?</p>
+
+<p id="@andall-true_true_true"><a class="jump" href="index.html#@andall-true_true_true"></a><code>andAll([true, true, true, ..., true, true]) // 32 true values</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; correctly returns true; correctly returns false; incorrectly returns true; incorrectly returns false"><select class="form-control"><option selected="selected"></option><option>correctly returns true</option>,<option>correctly returns false</option>,<option>incorrectly returns true</option>,<option>incorrectly returns false</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@andall-false_true_false"><a class="jump" href="index.html#@andall-false_true_false"></a><code>andAll([false, true, false, true, ..., false, true]) // 32 values alternating between false and true</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; correctly returns true; correctly returns false; incorrectly returns true; incorrectly returns false"><select class="form-control"><option selected="selected"></option><option>correctly returns true</option>,<option>correctly returns false</option>,<option>incorrectly returns true</option>,<option>incorrectly returns false</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<p id="@louis_satisfied_but"><a class="jump" href="index.html#@louis_satisfied_but"></a>Louis is satisfied.
+But unfortunately his code has an <em>off-by-one</em> error.
+Which expression has the bug?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="bits[0]"><label for="md_converted_choice_2_0"><input type="radio" id="md_converted_choice_2_0" name="md_converted_radio_2"><code>bits[0]</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="i = 1"><label for="md_converted_choice_2_1"><input type="radio" id="md_converted_choice_2_1" name="md_converted_radio_2"><code>i = 1</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="i < 31"><label for="md_converted_choice_2_2"><input type="radio" id="md_converted_choice_2_2" name="md_converted_radio_2"><code>i &lt; 31</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="i++"><label for="md_converted_choice_2_3"><input type="radio" id="md_converted_choice_2_3" name="md_converted_radio_2"><code>i++</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_closest_number"><a class="jump" href="index.html#@which_closest_number"></a>Which is closest to the number of test cases required to test this function <em>exhaustively</em>?</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="tens"><label for="md_converted_choice_3_0"><input type="radio" id="md_converted_choice_3_0" name="md_converted_radio_3">tens</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="hundreds"><label for="md_converted_choice_3_1"><input type="radio" id="md_converted_choice_3_1" name="md_converted_radio_3">hundreds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="thousands"><label for="md_converted_choice_3_2"><input type="radio" id="md_converted_choice_3_2" name="md_converted_radio_3">thousands</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="millions"><label for="md_converted_choice_3_3"><input type="radio" id="md_converted_choice_3_3" name="md_converted_radio_3">millions</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="billions"><label for="md_converted_choice_3_4"><input type="radio" id="md_converted_choice_3_4" name="md_converted_radio_3">billions</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="trillions"><label for="md_converted_choice_3_5"><input type="radio" id="md_converted_choice_3_5" name="md_converted_radio_3">trillions</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_closest_probability"><a class="jump" href="index.html#@which_closest_probability"></a>Which is closest to the probability of finding the off-by-one bug with a <em>random test</em> (i.e. picking a single input to try, uniformly at random from the possible inputs)?</p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="radio exercise-choice" data-outline="1 in 32"><label for="md_converted_choice_4_0"><input type="radio" id="md_converted_choice_4_0" name="md_converted_radio_4">1 in 32</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 in 231"><label for="md_converted_choice_4_1"><input type="radio" id="md_converted_choice_4_1" name="md_converted_radio_4">1 in 2<sup>31</sup></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 in 232"><label for="md_converted_choice_4_2"><input type="radio" id="md_converted_choice_4_2" name="md_converted_radio_4">1 in 2<sup>32</sup></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 in 264"><label for="md_converted_choice_4_3"><input type="radio" id="md_converted_choice_4_3" name="md_converted_radio_4">1 in 2<sup>64</sup></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-why_software_testing_is_hard-a_real_crash" data-target="#ex-why_software_testing_is_hard-a_real_crash" data-toggle="collapse"><a class="jump" href="index.html#@ex-why_software_testing_is_hard-a_real_crash"></a><span class="panel-title">A real crash</span></div><div class="panel-collapse collapse exercise-panel" id="ex-why_software_testing_is_hard-a_real_crash" data-outline="a_real_crash" data-ex-id="why_software_testing_is_hard/a_real_crash" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@1990s_ariane_5"><a class="jump" href="index.html#@1990s_ariane_5"></a>In the 1990s, the Ariane 5 launch vehicle, designed and built for the European Space Agency, self-destructed 37 seconds after its first launch.</p>
+
+<p id="@reason_control_software"><a class="jump" href="index.html#@reason_control_software"></a>The reason was a control software bug that went undetected.  The Ariane 5’s guidance software was reused from the Ariane 4, which was a slower rocket.  When the velocity calculation converted from a 64-bit floating point number (the same as a <code>number</code> in TypeScript, though this software wasn’t written in TypeScript) to a 16-bit signed integer, it overflowed the small integer and caused an exception to be thrown.  The exception handler had been disabled for efficiency reasons, so the guidance software crashed. Without guidance, the rocket crashed too.  The cost of the failure was $1 billion.</p>
+
+<p id="@ideas_does_story"><a class="jump" href="index.html#@ideas_does_story"></a>What ideas does this story demonstrate?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Even high-quality safety-critical software may still have residual bugs."><label for="md_converted_choice_1_0"><input type="checkbox" id="md_converted_choice_1_0">Even high-quality safety-critical software may still have residual bugs.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Testing all possible inputs is the best solution to this problem."><label for="md_converted_choice_1_1"><input type="checkbox" id="md_converted_choice_1_1">Testing all possible inputs is the best solution to this problem.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Software exhibits discontinuous behavior, unlike many physically-engineered systems."><label for="md_converted_choice_1_2"><input type="checkbox" id="md_converted_choice_1_2">Software exhibits discontinuous behavior, unlike many physically-engineered systems.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="Static type checking could have detected this bug."><label for="md_converted_choice_1_3"><input type="checkbox" id="md_converted_choice_1_3">Static type checking could have detected this bug.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="test-first_programming"><a class="jump" href="index.html#test-first_programming"></a>Test-first programming</h2><div data-outline="test-first_programming">
+
+<p id="@before_dive_need"><a class="jump" href="index.html#@before_dive_need"></a>Before we dive in, we need to define some terms:</p>
+
+<ul>
+<li><p id="@module_part_software"><a class="jump" href="index.html#@module_part_software"></a>A <mark data-structure-text="module" id="^module"><em>module</em></mark> is a part of a software system that can be designed, implemented, tested, and reasoned about separately from the rest of the system.
+In this reading, we’ll focus on modules that are functions.
+In future readings, we’ll broaden our view to think about larger modules, like a class with multiple interacting methods.</p></li>
+<li><p id="@specification_spec_describes"><a class="jump" href="index.html#@specification_spec_describes"></a>A <mark data-structure-text="specification" id="^specification"><em>specification</em></mark> (or spec) describes the behavior of a module.
+For a function, the specification gives the types of the parameters and any additional constraints on them (e.g. <code>sqrt</code>’s parameter must be nonnegative).
+It also gives the type of the return value and how the return value relates to the inputs.
+In TypeScript code, the specification consists of the function signature and the comment above it that describes what it does.</p></li>
+<li><p id="@module_implementation_provides"><a class="jump" href="index.html#@module_implementation_provides"></a>A module has an <mark data-structure-text="implementation" id="^implementation"><em>implementation</em></mark> that provides its behavior, and <mark data-mark-text="client" data-structure-text="client" id="^client"><em>clients</em></mark> that use the module.
+For a function, the implementation is the body of the function, and the clients are other pieces of code that call the function.
+The specification of the module constrains both the client and the implementation.
+We’ll have much more to say about specifications, implementations, and clients a few classes from now.</p></li>
+<li><p id="@test_case_particular"><a class="jump" href="index.html#@test_case_particular"></a>A <mark data-structure-text="test case" id="^test_case"><em>test case</em></mark> is a particular choice of inputs, along with the expected output behavior required by the specification.</p></li>
+<li><p id="@test_suite_set"><a class="jump" href="index.html#@test_suite_set"></a>A <mark data-structure-text="test suite" id="^test_suite"><em>test suite</em></mark> is a set of test cases for a module.</p></li>
+</ul>
+
+<p id="@you_already_started"><a class="jump" href="index.html#@you_already_started"></a>You have already started using these concepts on Problem Set 0.
+You were given some specifications for TypeScript functions and asked to write an implementation for each one.
+You were also given a test suite for each function that you could run to see if your implementation obeyed the spec.</p>
+
+<p id="@turns_out_good"><a class="jump" href="index.html#@turns_out_good"></a>It turns out that this is a good pattern to follow when designing a program from scratch.
+In <mark data-structure-text="test-first programming" id="^test-first_programming"><em>test-first programming</em></mark>, you write the spec and the tests before you even write any code.
+The development of a single function proceeds in this order:</p>
+
+<ol id="@spec_write_specification">
+<li><a class="jump" href="index.html#@spec_write_specification"></a><strong>Spec</strong>: Write a specification for the function.</li>
+<li><strong>Test</strong>: Write tests that exercise the specification.</li>
+<li><strong>Implement</strong>: Write the implementation.</li>
+</ol>
+
+<p id="@once_your_implementation"><a class="jump" href="index.html#@once_your_implementation"></a>Once your implementation passes the tests you wrote, you’re done.</p>
+
+<p id="@biggest_benefit_test-first"><a class="jump" href="index.html#@biggest_benefit_test-first"></a>The biggest benefit of test-first programming is safety from bugs.
+Don’t leave testing until the end of development, when you have a big pile of unvalidated code.
+Leaving testing until the end only makes debugging longer and more painful, because bugs may be anywhere in your code.
+It’s far more pleasant to test your code as you develop it.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-test-first_programming"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-test-first_programming-test-first_programming" data-target="#ex-test-first_programming-test-first_programming" data-toggle="collapse"><a class="jump" href="index.html#@ex-test-first_programming-test-first_programming"></a><span class="panel-title">Test-first programming</span></div><div class="panel-collapse collapse exercise-panel" id="ex-test-first_programming-test-first_programming" data-outline="test-first_programming" data-ex-id="test-first_programming/test-first_programming" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@which_stage_test-first"><a class="jump" href="index.html#@which_stage_test-first"></a>In which stage of test-first programming for a function would you…</p>
+
+<p id="@first_write_function"><a class="jump" href="index.html#@first_write_function"></a>…first write the function signature:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; 1. spec; 2. test; 3. implement"><select class="form-control"><option selected="selected"></option><option>1. spec</option>,<option>2. test</option>,<option>3. implement</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@write_function-s_final"><a class="jump" href="index.html#@write_function-s_final"></a>…write the function’s final <code>return</code> statement:</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; 1. spec; 2. test; 3. implement"><select class="form-control"><option selected="selected"></option><option>1. spec</option>,<option>2. test</option>,<option>3. implement</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@write_first_client"><a class="jump" href="index.html#@write_first_client"></a>…write the first client of the module:</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; 1. spec; 2. test; 3. implement"><select class="form-control"><option selected="selected"></option><option>1. spec</option>,<option>2. test</option>,<option>3. implement</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@first_write_comment"><a class="jump" href="index.html#@first_write_comment"></a>…first write a comment:</p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="dropdown exercise-choice" data-outline="; 1. spec; 2. test; 3. implement"><select class="form-control"><option selected="selected"></option><option>1. spec</option>,<option>2. test</option>,<option>3. implement</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="systematic_testing"><a class="jump" href="index.html#systematic_testing"></a>Systematic testing</h2><div data-outline="systematic_testing">
+
+<p id="@rather_than_exhaustive"><a class="jump" href="index.html#@rather_than_exhaustive"></a>Rather than exhaustive, haphazard, or randomized testing, we want to test <em>systematically</em>.
+<mark data-mark-text="systematic testing" data-structure-text="systematic testing" id="^systematic_testing">Systematic testing</mark> means that we are choosing test cases in a principled way, with the goal of designing a test suite with three desirable properties:</p>
+
+<ul>
+<li><p id="@correct_correct_test"><a class="jump" href="index.html#@correct_correct_test"></a><strong>Correct</strong>.
+A correct test suite is a legal client of the specification, and it accepts all legal implementations of the spec without complaint.
+This gives us the freedom to change how the module is implemented internally without necessarily having to change the test suite.
+We will discuss in more detail about what <em>legal</em> means with respect to a specification in an upcoming reading.</p></li>
+<li><p id="@thorough_thorough_test"><a class="jump" href="index.html#@thorough_thorough_test"></a><strong>Thorough</strong>.
+A thorough test suite finds actual bugs in the implementation, caused by mistakes that programmers are likely to make.</p></li>
+<li><p id="@small_small_test"><a class="jump" href="index.html#@small_small_test"></a><strong>Small</strong>.
+A small test suite, with few test cases, is faster to write in the first place, and easier to update if the specification evolves.
+Small test suites are also faster to run.
+You will be able to run your tests more frequently if your test suites are small and fast.</p></li>
+</ul>
+
+<p id="@these_criteria_exhaustive"><a class="jump" href="index.html#@these_criteria_exhaustive"></a>By these criteria, exhaustive testing is thorough but infeasibly large.
+Haphazard testing tends to be small but not thorough.
+Randomized testing can achieve thoroughness only at the cost of large size.</p>
+
+<p id="@designing_test_suite"><a class="jump" href="index.html#@designing_test_suite"></a>Designing a test suite for both thoroughness and small size requires having the right attitude.
+Normally when you’re coding, your goal is to make the program work.
+But as a test suite designer, you want to <em>make it fail</em>.
+That’s a subtle but important difference.
+A good tester intentionally pokes at all the places the program might be vulnerable, so that those vulnerabilities can be eliminated.</p>
+
+<p id="@need_adopt_testing"><a class="jump" href="index.html#@need_adopt_testing"></a>The need to adopt a testing attitude is another argument for test-first programming.
+It is all too tempting to treat code you’ve already written as a precious thing, a fragile eggshell, and test it very lightly just to see it work.
+For <em>thorough</em> testing, though, you have to be brutal.
+Test-first programming allows you to put on your testing hat and adopt that brutal perspective before you’ve even written any code.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-systematic_testing"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-systematic_testing-correctness_and_thoroughness" data-target="#ex-systematic_testing-correctness_and_thoroughness" data-toggle="collapse"><a class="jump" href="index.html#@ex-systematic_testing-correctness_and_thoroughness"></a><span class="panel-title">Correctness and thoroughness</span></div><div class="panel-collapse collapse exercise-panel" id="ex-systematic_testing-correctness_and_thoroughness" data-outline="correctness_and_thoroughness" data-ex-id="systematic_testing/correctness_and_thoroughness" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@test_suite_correct"><a class="jump" href="index.html#@test_suite_correct"></a>A test suite is <em>correct</em> if:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="all its test cases fail when run on a buggy implementation"><label for="md_converted_choice_5_0"><input type="checkbox" id="md_converted_choice_5_0">all its test cases fail when run on a buggy implementation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="some test case fails when run on a buggy implementation"><label for="md_converted_choice_5_1"><input type="checkbox" id="md_converted_choice_5_1">some test case fails when run on a buggy implementation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="all its test cases pass when run on a legal implementation"><label for="md_converted_choice_5_2"><input type="checkbox" id="md_converted_choice_5_2">all its test cases pass when run on a legal implementation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="some test case passes when run on a legal implementation"><label for="md_converted_choice_5_3"><input type="checkbox" id="md_converted_choice_5_3">some test case passes when run on a legal implementation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@test_suite_t1"><a class="jump" href="index.html#@test_suite_t1"></a>A test suite T<sub>1</sub> is more <em>thorough</em> than a test suite T<sub>2</sub> if:</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="the number of test cases in T1 is larger than the number of test cases in T2"><label for="md_converted_choice_6_0"><input type="checkbox" id="md_converted_choice_6_0">the number of test cases in T<sub>1</sub> is larger than the number of test cases in T<sub>2</sub></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="the buggy implementations that fail at least one test in T1 is a strict superset of those that fail at least one test in T2"><label for="md_converted_choice_6_1"><input type="checkbox" id="md_converted_choice_6_1">the buggy implementations that fail at least one test in T<sub>1</sub> is a strict superset of those that fail at least one test in T<sub>2</sub></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="the legal implementations that pass all tests in T1 is a strict superset of those that pass all tests in T2"><label for="md_converted_choice_6_2"><input type="checkbox" id="md_converted_choice_6_2">the legal implementations that pass all tests in T<sub>1</sub> is a strict superset of those that pass all tests in T<sub>2</sub></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@empty_test_suite"><a class="jump" href="index.html#@empty_test_suite"></a>An empty test suite contains no test cases.
+Assuming a nontrivial specification, an empty test suite is:</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="correct"><label for="md_converted_choice_7_0"><input type="checkbox" id="md_converted_choice_7_0">correct</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="thorough"><label for="md_converted_choice_7_1"><input type="checkbox" id="md_converted_choice_7_1">thorough</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="small"><label for="md_converted_choice_7_2"><input type="checkbox" id="md_converted_choice_7_2">small</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<div class="clearfix"></div>
+
+</div><h2 id="choosing_test_cases_by_partitioning"><a class="jump" href="index.html#choosing_test_cases_by_partitioning"></a>Choosing test cases by partitioning</h2><div data-outline="choosing_test_cases_by_partitioning">
+
+<p id="@creating_good_test"><a class="jump" href="index.html#@creating_good_test"></a>Creating a good test suite is a challenging and interesting design problem.
+We want to pick a set of test cases that is small enough to be easy to write and maintain and quick to run, yet thorough enough to find bugs in the program.</p>
+
+<div class="panel panel-figure pull-right"><img src="figures/partition.png" alt="partitioning a function's input space" width="200"></div>
+
+<p id="@do_divide_program-s"><a class="jump" href="index.html#@do_divide_program-s"></a>To do this, we divide the program’s input space into <mark data-structure-text="subdomain" id="^subdomain"><em>subdomains</em></mark>, each consisting of a set of inputs.
+(The name <em>subdomain</em> comes from the fact that it is a subset of the <em>domain</em>, the input space of a mathematical function.)
+Taken together, the subdomains form a <mark data-structure-text="partition" id="^partition"><em>partition</em></mark>.  A <a href="https://en.wikipedia.org/wiki/Partition_of_a_set">partition</a> is a collection of non-empty disjoint sets that completely covers the input space, so that every input lies in exactly one subdomain (no overlap between subdomains).
+Then, we choose one test case from each subdomain, and that’s our test suite.</p>
+
+<p id="@idea_behind_subdomains"><a class="jump" href="index.html#@idea_behind_subdomains"></a>The idea behind subdomains is to divide the input space into sets of similar inputs on which the program has similar behavior, so that we only need to test one representative for each set.
+This approach makes the best use of limited testing resources by choosing dissimilar test cases (for smallness) and forcing the testing to explore areas of the input space that haphazard or random testing might not reach (for thoroughness).</p>
+
+<p id="@note_purpose_partitioning"><a class="jump" href="index.html#@note_purpose_partitioning"></a>Note that for the purpose of partitioning, a program’s input space only includes <em>legal</em> inputs, for which the correct behavior is specified (and therefore testable).
+Inputs for which the program does not have defined behavior are not part of the legal input space and should not be included in the partition.
+This distinction is subtle and will make more sense with some examples and further discussion of <em>specifications</em> in a future reading.</p>
+
+<div class="clearfix"></div>
+
+<h4 id="@example_abs"><a class="jump" href="index.html#@example_abs"></a>Example: <code>abs()</code></h4>
+
+<p id="@start_simple_example"><a class="jump" href="index.html#@start_simple_example"></a>Let’s start with a simple example from the JavaScript library, the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/abs"><code>Math.abs()</code></a> function:</p>
+
+<pre id="@param_argument_whose"><a class="jump" href="index.html#@param_argument_whose"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * ...
+ * @param a  the argument whose absolute value is to be determined
+ * @returns  the absolute value of the argument.
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">abs</span>(<span class="hljs-params">a: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">number</span></span></code></pre>
+
+<p id="@mathematically_function_following"><a class="jump" href="index.html#@mathematically_function_following"></a>Mathematically, this is a function of the following type:</p>
+
+<p id="@abs_number_number"><a class="jump" href="index.html#@abs_number_number"></a><strong>abs : number → number</strong></p>
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/abs-partition.png" alt="partitioning-abs" width="300"></div>
+
+<p id="@function_one-dimensional_input"><a class="jump" href="index.html#@function_one-dimensional_input"></a>The function has a one-dimensional input space, consisting of all the possible values of <em>a</em>.
+Thinking about how the absolute value function behaves, we might start by partitioning the input space into these two subdomains: { <em>a</em> | <em>a</em> ≥ 0 } and { <em>a</em> | <em>a</em> &lt; 0 }.
+On the first subdomain, <code>abs</code> should return <em>a</em> unchanged.
+On the second subdomain, <code>abs</code> should negate it.</p>
+
+<p id="@write_partition_compactly"><a class="jump" href="index.html#@write_partition_compactly"></a>To write a partition compactly, we omit the { <em>a</em> | … } frame of each set description, and simply write a list of predicates like so:</p>
+
+<pre><code class="language-ts hljs typescript"><span class="hljs-comment">// partition: a &gt;= 0; a &lt; 0</span></code></pre>
+
+<p id="@choose_test_cases"><a class="jump" href="index.html#@choose_test_cases"></a>To choose test cases for our test suite, we pick an arbitrary value <em>a</em> from each subdomain of the partition, for example:</p>
+
+<ul id="@17_cover_subdomain">
+<li><a class="jump" href="index.html#@17_cover_subdomain"></a><em>a</em> = 17 to cover the subdomain <em>a</em> ≥ 0</li>
+<li><em>a</em> = -3 to cover the subdomain <em>a</em> &lt; 0</li>
+</ul>
+
+<div class="clearfix"></div>
+
+<h4 id="@example_max"><a class="jump" href="index.html#@example_max"></a>Example: <code>max()</code></h4>
+
+<p id="@now_look_another"><a class="jump" href="index.html#@now_look_another"></a>Now let’s look at another example from the JavaScript library, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/max"><code>Math.max()</code></a>.
+Although <code>max()</code> can take any number of arguments, we will focus just on the two-argument form for now:</p>
+
+<pre id="@param_argument_param"><a class="jump" href="index.html#@param_argument_param"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * ...
+ * @param a  an argument
+ * @param b  another argument
+ * @returns the larger of a and b.
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">max</span>(<span class="hljs-params">a: <span class="hljs-built_in">number</span>, b: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">number</span></span></code></pre>
+
+<p id="@mathematically_function_two"><a class="jump" href="index.html#@mathematically_function_two"></a>Mathematically, this is a function of two arguments:</p>
+
+<p id="@max_number_number"><a class="jump" href="index.html#@max_number_number"></a><strong>max : number × number → number</strong></p>
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/max-partition.png" alt="partitioning-max" width="200"></div>
+
+<p id="@so_two-dimensional_input"><a class="jump" href="index.html#@so_two-dimensional_input"></a>So we have a two-dimensional input space, consisting of all pairs of numbers (<em>a</em>,<em>b</em>).
+Now let’s partition it.
+From the specification, it makes sense to choose the subdomains { (<em>a</em>,<em>b</em>) | <em>a</em> &lt; <em>b</em> } and { (<em>a</em>,<em>b</em>) | <em>a</em> &gt; <em>b</em> }, because the spec calls for different behavior on each one: inputs in the former subdomain should return <em>b</em>, and those in the latter subdomain should return <em>a</em>.
+But we can’t stop there, because these subdomains are not yet a <em>partition</em> of the input space.
+A partition must completely cover the set of possible inputs.
+So we need to add { (<em>a</em>,<em>b</em>) | <em>a</em> = <em>b</em> }, where the function could return either <em>a</em> or <em>b</em>.
+Expressed compactly, the partition looks like this:</p>
+
+<pre id="@partition_b_b"><a class="jump" href="index.html#@partition_b_b"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition: a &lt; b; a &gt; b; a = b</span></code></pre>
+
+<p id="@our_test_suite_might_then_be_0"><a class="jump" href="index.html#@our_test_suite_might_then_be_0"></a>Our test suite might then be:</p>
+
+<ul id="@a-b_1_2">
+<li><a class="jump" href="index.html#@a-b_1_2"></a>(<em>a</em>,<em>b</em>) = (1, 2) to cover <em>a</em> &lt; <em>b</em></li>
+<li>(<em>a</em>,<em>b</em>) = (10, -8) to cover <em>a</em> &gt; <em>b</em></li>
+<li>(<em>a</em>,<em>b</em>) = (9, 9) to cover <em>a</em> = <em>b</em></li>
+</ul>
+
+<p id="@summarize_form_partition"><a class="jump" href="index.html#@summarize_form_partition"></a>To summarize, to form a partition, the subdomains should have three desirable properties:</p>
+
+<ul id="@subdomains_should_be">
+<li><a class="jump" href="index.html#@subdomains_should_be"></a>subdomains should be <strong>disjoint</strong>, with no intersections between them;</li>
+<li>subdomains should be <strong>complete</strong>, so that their union covers the legal input space;</li>
+<li>subdomains should be <strong>nonempty</strong>, so that a legal test case can be chosen from each one.</li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-choosing_test_cases_by_partitioning"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-choosing_test_cases_by_partitioning-square_root" data-target="#ex-choosing_test_cases_by_partitioning-square_root" data-toggle="collapse"><a class="jump" href="index.html#@ex-choosing_test_cases_by_partitioning-square_root"></a><span class="panel-title">Square root</span></div><div class="panel-collapse collapse exercise-panel" id="ex-choosing_test_cases_by_partitioning-square_root" data-outline="square_root" data-ex-id="choosing_test_cases_by_partitioning/square_root" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@suppose_you_want"><a class="jump" href="index.html#@suppose_you_want"></a>Suppose you want to partition the input space of this square root function:</p>
+
+<pre id="@param_x_must"><a class="jump" href="index.html#@param_x_must"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param x  must be nonnegative
+ * @returns square root of x
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">sqrt</span>(<span class="hljs-params">x: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">number</span></span></code></pre>
+
+<p id="@assess_quality_each"><a class="jump" href="index.html#@assess_quality_each"></a>Assess the quality of each of the following candidate partitions.
+Are the proposed subdomains disjoint, complete, and nonempty, thus forming a mathematical partition of the input space?
+A good partition should check all three boxes.</p>
+
+<pre id="@partition_x_0"><a class="jump" href="index.html#@partition_x_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition: x &lt; 0; x &gt;= 0</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="subdomains are disjoint"><label for="md_converted_choice_8_0"><input type="checkbox" id="md_converted_choice_8_0">subdomains are disjoint</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are complete"><label for="md_converted_choice_8_1"><input type="checkbox" id="md_converted_choice_8_1">subdomains are complete</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are nonempty"><label for="md_converted_choice_8_2"><input type="checkbox" id="md_converted_choice_8_2">subdomains are nonempty</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@partition_x_perfect"><a class="jump" href="index.html#@partition_x_perfect"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition: x is a perfect square; x is &gt; 0 but not a perfect square</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="subdomains are disjoint"><label for="md_converted_choice_9_0"><input type="checkbox" id="md_converted_choice_9_0">subdomains are disjoint</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are complete"><label for="md_converted_choice_9_1"><input type="checkbox" id="md_converted_choice_9_1">subdomains are complete</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are nonempty"><label for="md_converted_choice_9_2"><input type="checkbox" id="md_converted_choice_9_2">subdomains are nonempty</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@partition_x-0_x-1"><a class="jump" href="index.html#@partition_x-0_x-1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition: x=0, x=1, x=7, x=16</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="subdomains are disjoint"><label for="md_converted_choice_10_0"><input type="checkbox" id="md_converted_choice_10_0">subdomains are disjoint</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are complete"><label for="md_converted_choice_10_1"><input type="checkbox" id="md_converted_choice_10_1">subdomains are complete</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are nonempty"><label for="md_converted_choice_10_2"><input type="checkbox" id="md_converted_choice_10_2">subdomains are nonempty</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-choosing_test_cases_by_partitioning-the_greatest_of_all_common_divisors" data-target="#ex-choosing_test_cases_by_partitioning-the_greatest_of_all_common_divisors" data-toggle="collapse"><a class="jump" href="index.html#@ex-choosing_test_cases_by_partitioning-the_greatest_of_all_common_divisors"></a><span class="panel-title">The greatest of all common divisors</span></div><div class="panel-collapse collapse exercise-panel" id="ex-choosing_test_cases_by_partitioning-the_greatest_of_all_common_divisors" data-outline="the_greatest_of_all_common_divisors" data-ex-id="choosing_test_cases_by_partitioning/the_greatest_of_all_common_divisors" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@now_consider_specification"><a class="jump" href="index.html#@now_consider_specification"></a>Now consider this specification:</p>
+
+<pre id="@param_x_integer"><a class="jump" href="index.html#@param_x_integer"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param x an integer
+ * @param y an integer, where x and y are not both 0
+ * @returns the greatest common divisor of x and y
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">gcd</span>(<span class="hljs-params">x: <span class="hljs-built_in">number</span>, y: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">number</span></span></code></pre>
+
+<p id="@assess_each_following"><a class="jump" href="index.html#@assess_each_following"></a>Assess each of the following candidate partitions for <code>gcd</code>.</p>
+
+<pre id="@partition_x_y"><a class="jump" href="index.html#@partition_x_y"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition: x and y are not both 0</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="subdomains are disjoint"><label for="md_converted_choice_11_0"><input type="checkbox" id="md_converted_choice_11_0">subdomains are disjoint</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are complete"><label for="md_converted_choice_11_1"><input type="checkbox" id="md_converted_choice_11_1">subdomains are complete</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are nonempty"><label for="md_converted_choice_11_2"><input type="checkbox" id="md_converted_choice_11_2">subdomains are nonempty</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@partition_x_divisible"><a class="jump" href="index.html#@partition_x_divisible"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition: x is divisible by y; y is divisible by x; x and y are relatively prime</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="subdomains are disjoint"><label for="md_converted_choice_12_0"><input type="checkbox" id="md_converted_choice_12_0">subdomains are disjoint</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are complete"><label for="md_converted_choice_12_1"><input type="checkbox" id="md_converted_choice_12_1">subdomains are complete</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="subdomains are nonempty"><label for="md_converted_choice_12_2"><input type="checkbox" id="md_converted_choice_12_2">subdomains are nonempty</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="include_boundaries_in_the_partition"><a class="jump" href="index.html#include_boundaries_in_the_partition"></a>Include boundaries in the partition</h3><div data-outline="include_boundaries_in_the_partition">
+
+<p id="@bugs_often_occur"><a class="jump" href="index.html#@bugs_often_occur"></a>Bugs often occur at <mark data-mark-text="boundary value" data-structure-text="boundary value" id="^boundary_value"><em>boundaries</em></mark> between subdomains.
+Some examples:</p>
+
+<ul id="@0_boundary_between">
+<li><a class="jump" href="index.html#@0_boundary_between"></a>0 is a boundary between positive numbers and negative numbers</li>
+<li>the maximum and minimum values of numeric types, like <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER"><code>Number.MAX_SAFE_INTEGER</code></a> or <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_VALUE"><code>Number.MAX_VALUE</code></a></li>
+<li>emptiness for collection types, like the empty string, empty array, or empty set</li>
+<li>the first and last element of a sequence, like a string or array</li>
+</ul>
+
+<p id="@why_do_bugs"><a class="jump" href="index.html#@why_do_bugs"></a>Why do bugs often happen at boundaries?
+One reason is that programmers often make <strong>off-by-one mistakes</strong>, like writing <code>&lt;=</code> instead of <code>&lt;</code>, or initializing a counter to 0 instead of 1.
+Another is that some boundaries may need to be handled as special cases in the code.
+Yet another is that boundaries may be places of discontinuity in the code’s behavior.
+When a <code>number</code> variable used as an integer grows beyond <code>Number.MAX_SAFE_INTEGER</code>, for example, it suddenly starts to lose precision.</p>
+
+<p id="@incorporate_boundaries_single-element"><a class="jump" href="index.html#@incorporate_boundaries_single-element"></a>We incorporate boundaries as <em>single-element subdomains</em> in the partition, so that the test suite will necessarily include the boundary value as a test case.
+For <code>abs</code>, we would add a subdomain for the relevant boundary:</p>
+
+<ul id="@0_because_abs">
+<li><a class="jump" href="index.html#@0_because_abs"></a><em>a</em> = 0, because <code>abs</code> behaves differently on positive and negative numbers</li>
+</ul>
+
+<p id="@our_original_two"><a class="jump" href="index.html#@our_original_two"></a>Our original two subdomains would then shrink to exclude the boundary values: { <em>a</em> | <em>a</em> &gt; 0 } and  { <em>a</em> | <em>a</em> &lt; 0 }.</p>
+
+<p id="@still_partition_input"><a class="jump" href="index.html#@still_partition_input"></a>This is still a partition of the input space of <code>abs</code>: the three subdomains are disjoint and completely cover the input space.
+One way to write it compactly looks like this:</p>
+
+<pre><code class="language-ts hljs typescript"><span class="hljs-comment">// partition:</span>
+<span class="hljs-comment">//   a &lt; 0</span>
+<span class="hljs-comment">//   a = 0</span>
+<span class="hljs-comment">//   a &gt; 0</span></code></pre>
+
+<p id="@our_test_suite_might_then_be_1"><a class="jump" href="index.html#@our_test_suite_might_then_be_1"></a>Our test suite might then be:</p>
+
+<ul id="@0_17_cover">
+<li><a class="jump" href="index.html#@0_17_cover"></a><em>a</em> = 0</li>
+<li><em>a</em> = 17 to cover the subdomain <em>a</em> &gt; 0</li>
+<li><em>a</em> = -3 to cover the subdomain <em>a</em> &lt; 0</li>
+</ul>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-choosing_test_cases_by_partitioning_2"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-choosing_test_cases_by_partitioning_2-boundaries" data-target="#ex-choosing_test_cases_by_partitioning_2-boundaries" data-toggle="collapse"><a class="jump" href="index.html#@ex-choosing_test_cases_by_partitioning_2-boundaries"></a><span class="panel-title">Boundaries</span></div><div class="panel-collapse collapse exercise-panel" id="ex-choosing_test_cases_by_partitioning_2-boundaries" data-outline="boundaries" data-ex-id="include_boundaries_in_the_partition/boundaries" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@function_1"><a class="jump" href="index.html#@function_1"></a>For this function:</p>
+
+<pre id="@param_winsandlosses_string"><a class="jump" href="index.html#@param_winsandlosses_string"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @param winsAndLosses  a string of length at most 5 consisting of 'W' or 'L' characters
+ * @returns the fraction of characters in winsAndLosses that are 'W'
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">winLossRatio</span>(<span class="hljs-params">winsAndLosses: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">number</span></span></code></pre>
+
+<p id="@which_following_appropriate"><a class="jump" href="index.html#@which_following_appropriate"></a>Which of the following are appropriate boundary values for testing this function?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="&quot;&quot;"><label for="md_converted_choice_13_0"><input type="checkbox" id="md_converted_choice_13_0"><code>""</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="&quot;LLLLL&quot;"><label for="md_converted_choice_13_1"><input type="checkbox" id="md_converted_choice_13_1"><code>"LLLLL"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="&quot;WLW&quot;"><label for="md_converted_choice_13_2"><input type="checkbox" id="md_converted_choice_13_2"><code>"WLW"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="&quot;WWWWW&quot;"><label for="md_converted_choice_13_3"><input type="checkbox" id="md_converted_choice_13_3"><code>"WWWWW"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="&quot;xxxxx&quot;"><label for="md_converted_choice_13_4"><input type="checkbox" id="md_converted_choice_13_4"><code>"xxxxx"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h4 id="@example_bigint_multiplication"><a class="jump" href="index.html#@example_bigint_multiplication"></a>Example: <code>BigInt</code> multiplication</h4>
+
+<p id="@look_slightly_more"><a class="jump" href="index.html#@look_slightly_more"></a>Let’s look at a slightly more complicated example.
+<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"><code>BigInt</code></a> is a type built into TypeScript that can represent integers of any size, unlike the type <code>number</code> that only has a limited range.
+<code>BigInt</code> supports the usual integer operations like <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, and <code>**</code>.
+For example, here’s how it might be used:</p>
+
+<pre id="@let_bigint-number-max_safe_integer_2-53"><a class="jump" href="index.html#@let_bigint-number-max_safe_integer_2-53"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> a = BigInt(<span class="hljs-built_in">Number</span>.MAX_SAFE_INTEGER); <span class="hljs-comment">// 2^53 - 1</span>
+<span class="hljs-keyword">let</span> b = BigInt(<span class="hljs-number">4</span>);
+<span class="hljs-keyword">let</span> ab = a * b; <span class="hljs-comment">// should be 2^55 - 4</span></code></pre>
+
+<p id="@can_think_overloaded"><a class="jump" href="index.html#@can_think_overloaded"></a>We can think of <code>*</code> as an (overloaded) function taking two inputs, each of type <code>BigInt</code>, and producing one output of type <code>BigInt</code>:</p>
+
+<p id="@multiply_bigint_bigint"><a class="jump" href="index.html#@multiply_bigint_bigint"></a><strong>multiply : BigInt × BigInt → BigInt</strong></p>
+
+<p id="@again_two-dimensional_input"><a class="jump" href="index.html#@again_two-dimensional_input"></a>We again have a two-dimensional input space, consisting of all the pairs of integers (<em>a</em>,<em>b</em>).
+Thinking about how sign rules work with multiplication, we might start with these subdomains:</p>
+
+<ul id="@b_both_positive">
+<li><a class="jump" href="index.html#@b_both_positive"></a><em>a</em> and <em>b</em> are both positive</li>
+<li><em>a</em> and <em>b</em> are both negative</li>
+<li><em>a</em> is positive, <em>b</em> is negative</li>
+<li><em>a</em> is negative, <em>b</em> is positive</li>
+</ul>
+
+<p id="@there_also_some"><a class="jump" href="index.html#@there_also_some"></a>There are also some boundary values for multiplication that we should check:</p>
+
+<ul id="@b_0_because">
+<li><a class="jump" href="index.html#@b_0_because"></a><em>a</em> or <em>b</em> is 0, because the result is always 0</li>
+<li><em>a</em> or <em>b</em> is 1, the identity value for multiplication</li>
+</ul>
+
+<p id="@finally_because_purpose"><a class="jump" href="index.html#@finally_because_purpose"></a>Finally, because the purpose of <code>BigInt</code> is to represent arbitrarily-large integers, we should make sure to try integers that are very big – at least bigger than <code>Number.MAX_SAFE_INTEGER</code>, which is 2<sup>53</sup> - 1, a 16-digit decimal integer.</p>
+
+<ul id="@b_small_large">
+<li><a class="jump" href="index.html#@b_small_large"></a><em>a</em> or <em>b</em> is small or large in magnitude (i.e., small enough to represent exactly in a <code>number</code> value, or too large for a <code>number</code>)</li>
+</ul>
+
+<span id="multiply-partition"></span>
+
+<p id="@bring_all_these"><a class="jump" href="index.html#@bring_all_these"></a>Let’s bring all these observations together into a single partition of the whole (<em>a</em>,<em>b</em>) space.  We’ll choose <em>a</em> and <em>b</em> independently from:</p>
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/multiply-partition.png" alt="partitioning multiply()" width="400"></div>
+
+<ul id="@0_1_small">
+<li><a class="jump" href="index.html#@0_1_small"></a>0</li>
+<li>1</li>
+<li>small positive integer (≤ <code>Number.MAX_SAFE_INTEGER</code> and &gt; 1)</li>
+<li>small negative integer (≥ <code>Number.MIN_SAFE_INTEGER</code> and &lt; 0)</li>
+<li>large positive integer (&gt; <code>Number.MAX_SAFE_INTEGER</code>)</li>
+<li>large negative integer (&lt; <code>Number.MIN_SAFE_INTEGER</code>)</li>
+</ul>
+
+<p id="@so_would_produce"><a class="jump" href="index.html#@so_would_produce"></a>So this would produce 6 × 6 = 36 subdomains that partition the space of pairs of integers.</p>
+
+<p id="@produce_test_suite"><a class="jump" href="index.html#@produce_test_suite"></a>To produce the test suite from this partition, we would pick an arbitrary pair (<em>a</em>,<em>b</em>) from each square of the grid, for example:</p>
+
+<ul id="@a-b_0_0">
+<li><a class="jump" href="index.html#@a-b_0_0"></a>(<em>a</em>,<em>b</em>) = (0, 0) to cover (0, 0)</li>
+<li>(<em>a</em>,<em>b</em>) = (0, 1) to cover (0, 1)</li>
+<li>(<em>a</em>,<em>b</em>) = (0, 8392) to cover (0, small positive integer)</li>
+<li>(<em>a</em>,<em>b</em>) = (0, -7) to cover (0, small negative integer)</li>
+<li>…</li>
+<li>(<em>a</em>,<em>b</em>) = (-10<sup>60</sup>, -10<sup>810</sup>) to cover (large negative, large negative)</li>
+</ul>
+
+<p id="@figure_right_shows"><a class="jump" href="index.html#@figure_right_shows"></a>The figure at the right shows how the two-dimensional (<em>a</em>,<em>b</em>) space is divided by this partition, and the points are test cases that we might choose to completely cover the partition.</p>
+
+<div class="clearfix"></div>
+
+</div><h3 id="using_multiple_partitions"><a class="jump" href="index.html#using_multiple_partitions"></a>Using multiple partitions</h3><div data-outline="using_multiple_partitions">
+
+<p id="@examples_so_far"><a class="jump" href="index.html#@examples_so_far"></a>The examples so far used only one partition – one collection of disjoint subdomains – across the entire input space.
+For functions with multiple parameters, this can become costly.
+Each parameter may have interesting behavior variation and several boundary values, so forming a single partition of the input space from the <em>Cartesian product</em> of the behavior on each parameter leads to a combinatorial explosion in the size of the resulting test suite.
+We saw this already with <code>BigInt</code> multiplication, in which the Cartesian product partition already had 6 × 6 = 36 subdomains, requiring 36 test cases to cover.
+For a function with <em>n</em> parameters, the Cartesian-product approach produces a test suite of size exponential in <em>n</em>, which quickly becomes infeasible for manual test authoring.</p>
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/multiply-a-b-partition.png" alt="partitioning multiply() with separate a and b partitions" width="400"></div>
+
+<p id="@alternative_approach_treat"><a class="jump" href="index.html#@alternative_approach_treat"></a>An alternative approach is to treat the features of each input <em>a</em> and <em>b</em> as two separate partitions of the input space.
+One partition only considers the value of <em>a</em>:</p>
+
+<ul id="@a-b_such_0">
+<li><a class="jump" href="index.html#@a-b_such_0"></a>(<em>a</em>,<em>b</em>) such that <em>a</em> = 0, 1, small positive, small negative, large positive, large negative</li>
+</ul>
+
+<p id="@other_partition_only"><a class="jump" href="index.html#@other_partition_only"></a>And the other partition only considers the value of <em>b</em>:</p>
+
+<ul id="@a-b_such_b">
+<li><a class="jump" href="index.html#@a-b_such_b"></a>(<em>a</em>,<em>b</em>) such that <em>b</em> = 0, 1, small positive, small negative, large positive, large negative</li>
+</ul>
+
+<p id="@these_two_partitions"><a class="jump" href="index.html#@these_two_partitions"></a>These two partitions are illustrated at the right.
+Every input pair (<em>a</em>,<em>b</em>) belongs to exactly one subdomain from each partition.</p>
+
+<p id="@might_write_two"><a class="jump" href="index.html#@might_write_two"></a>We might write the two partitions compactly as follows:</p>
+
+<pre id="@partition_0_1_small_positive_integer"><a class="jump" href="index.html#@partition_0_1_small_positive_integer"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on a:</span>
+<span class="hljs-comment">//   a = 0</span>
+<span class="hljs-comment">//   a = 1</span>
+<span class="hljs-comment">//   a is small positive integer &gt; 1</span>
+<span class="hljs-comment">//   a is small negative integer</span>
+<span class="hljs-comment">//   a is large positive integer</span>
+<span class="hljs-comment">//   a is large negative integer</span>
+<span class="hljs-comment">//      (where "small" fits in a TypeScript number, and "large" doesn't)</span>
+<span class="hljs-comment">// partition on b:</span>
+<span class="hljs-comment">//   b = 0</span>
+<span class="hljs-comment">//   b = 1</span>
+<span class="hljs-comment">//   b is small positive integer &gt; 1</span>
+<span class="hljs-comment">//   b is small negative integer</span>
+<span class="hljs-comment">//   b is large positive integer</span>
+<span class="hljs-comment">//   b is large negative integer</span></code></pre>
+
+<p id="@still_want_cover"><a class="jump" href="index.html#@still_want_cover"></a>We still want to cover every subdomain with a test case, but now a single test case can cover multiple subdomains from different partitions, making the test suite more efficient.
+We can cover both partitions completely with just 6 test cases, as shown on the right.</p>
+
+<div class="clearfix"></div>
+
+<div class="panel panel-figure pull-right pull-margin"><img src="figures/multiply-sign-partition.png" alt="partitioning multiply() on the signs of a and b" width="400"></div>
+
+<p id="@partitioning_b_independently"><a class="jump" href="index.html#@partitioning_b_independently"></a>Partitioning <em>a</em> and <em>b</em> independently raises the risk that you’re no longer testing the interaction between them.
+For example, sign handling in multiplication is a possible source of bugs, and the sign of the result depends on the signs of both <em>a</em> and <em>b</em>.
+But we can add an additional partition that captures this interaction:</p>
+
+<pre id="@partition_signs_b"><a class="jump" href="index.html#@partition_signs_b"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on signs of a and b:</span>
+<span class="hljs-comment">//   a and b are both positive</span>
+<span class="hljs-comment">//   a and b are both negative</span>
+<span class="hljs-comment">//   a positive and b negative</span>
+<span class="hljs-comment">//   a negative and b positive</span>
+<span class="hljs-comment">//   one or both are 0</span></code></pre>
+
+<p id="@now_three_partitions"><a class="jump" href="index.html#@now_three_partitions"></a>Now we have three partitions, with 6, 6, and 5 subdomains each, but we don’t need the Cartesian product of 6 × 6 × 5 test cases to cover them.
+A test suite with 6 carefully-chosen test cases can cover the subdomains of all three partitions.</p>
+
+<p id="@can_continue_add"><a class="jump" href="index.html#@can_continue_add"></a>We can continue to add partitions this way, as we think more about the spec and observe other behavioral variations that might lead to bugs.
+With careful test case selection, additional partitions should require few (if any) additional test cases.</p>
+
+<p id="@sometimes_may_want"><a class="jump" href="index.html#@sometimes_may_want"></a>Sometimes we may want to use the Cartesian product approach on multiple partitions, to produce a more thorough test suite.
+But even in those cases, the Cartesian product may be smaller than we expect.
+When subdomains from different partitions turn out to be mutually exclusive, the Cartesian product won’t include a subdomain for that particular combination of subdomains.
+We’ll see an example of that in one of the exercises below.</p>
+
+<p id="@starting_point_test-first"><a class="jump" href="index.html#@starting_point_test-first"></a>As a starting point for test-first programming, however, a small test suite that covers each subdomain of several thoughtfully-chosen partitions strikes a good balance between size and thoroughness.
+The test suite may then grow further with glass box testing, code coverage measurement, and regression testing, which we’ll see later in this reading.</p>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-choosing_test_cases_by_partitioning_3"><h4 class="text-danger" id="@reading_exercises_5"><a class="jump" href="index.html#@reading_exercises_5"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-choosing_test_cases_by_partitioning_3-one_partition_vs_multiple_partitions" data-target="#ex-choosing_test_cases_by_partitioning_3-one_partition_vs_multiple_partitions" data-toggle="collapse"><a class="jump" href="index.html#@ex-choosing_test_cases_by_partitioning_3-one_partition_vs_multiple_partitions"></a><span class="panel-title">One partition vs. multiple partitions</span></div><div class="panel-collapse collapse exercise-panel" id="ex-choosing_test_cases_by_partitioning_3-one_partition_vs_multiple_partitions" data-outline="one_partition_vs_multiple_partitions" data-ex-id="using_multiple_partitions/one_partition_vs_multiple_partitions" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@consider_partition_above"><a class="jump" href="index.html#@consider_partition_above"></a>Consider this partition on <em>a</em> from above:</p>
+
+<pre id="@partition_0_1_small_integer_1_small_integer_0_large_positive_integer_large_negative_integer_small_fits_typescript"><a class="jump" href="index.html#@partition_0_1_small_integer_1_small_integer_0_large_positive_integer_large_negative_integer_small_fits_typescript"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on a:</span>
+<span class="hljs-comment">//   a = 0</span>
+<span class="hljs-comment">//   a = 1</span>
+<span class="hljs-comment">//   a is small integer &gt; 1</span>
+<span class="hljs-comment">//   a is small integer &lt; 0</span>
+<span class="hljs-comment">//   a is large positive integer</span>
+<span class="hljs-comment">//   a is large negative integer</span>
+<span class="hljs-comment">//      (where "small" fits in a TypeScript number, and "large" doesn't)</span></code></pre>
+
+<p id="@partition_actually_combines"><a class="jump" href="index.html#@partition_actually_combines"></a>This partition actually combines several distinct concerns: the sign of <em>a</em>, the magnitude of <em>a</em> (small or large), and the boundary values 0 and 1.</p>
+
+<p id="@can_instead_think"><a class="jump" href="index.html#@can_instead_think"></a>We can instead think about these concerns as independent partitions.
+From among the choices below, choose a subset that would be legal partitions and that together would capture the same concerns:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="partition on a: 0, 1"><label for="md_converted_choice_14_0"><input type="checkbox" id="md_converted_choice_14_0"><code>partition on a: 0, 1</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="partition on a: 0"><label for="md_converted_choice_14_1"><input type="checkbox" id="md_converted_choice_14_1"><code>partition on a: 0</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="partition on a: 1"><label for="md_converted_choice_14_2"><input type="checkbox" id="md_converted_choice_14_2"><code>partition on a: 1</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="partition on a: 0, positive, negative"><label for="md_converted_choice_14_3"><input type="checkbox" id="md_converted_choice_14_3"><code>partition on a: 0, positive, negative</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="partition on a: positive, negative"><label for="md_converted_choice_14_4"><input type="checkbox" id="md_converted_choice_14_4"><code>partition on a: positive, negative</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="partition on a: 1, !=1"><label for="md_converted_choice_14_5"><input type="checkbox" id="md_converted_choice_14_5"><code>partition on a: 1, !=1</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="partition on a: small (fits in a number), large (doesn't fit in a number)"><label for="md_converted_choice_14_6"><input type="checkbox" id="md_converted_choice_14_6"><code>partition on a: small (fits in a number), large (doesn't fit in a number)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-choosing_test_cases_by_partitioning_3-covering_every_subdomain_vs_covering_cartesian_product" data-target="#ex-choosing_test_cases_by_partitioning_3-covering_every_subdomain_vs_covering_cartesian_product" data-toggle="collapse"><a class="jump" href="index.html#@ex-choosing_test_cases_by_partitioning_3-covering_every_subdomain_vs_covering_cartesian_product"></a><span class="panel-title">Covering every subdomain vs. covering Cartesian product</span></div><div class="panel-collapse collapse exercise-panel" id="ex-choosing_test_cases_by_partitioning_3-covering_every_subdomain_vs_covering_cartesian_product" data-outline="covering_every_subdomain_vs_covering_cartesian_product" data-ex-id="using_multiple_partitions/covering_every_subdomain_vs_covering_cartesian_product" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@consider_again_partition"><a class="jump" href="index.html#@consider_again_partition"></a>Consider again this partition on <code>a</code> from above:</p>
+
+<pre id="@partition_0_1_small_integer_1_small_integer_0_large_positive_integer_large_negative_integer_small_fits_number"><a class="jump" href="index.html#@partition_0_1_small_integer_1_small_integer_0_large_positive_integer_large_negative_integer_small_fits_number"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on a:</span>
+<span class="hljs-comment">//   a = 0</span>
+<span class="hljs-comment">//   a = 1</span>
+<span class="hljs-comment">//   a is small integer &gt; 1</span>
+<span class="hljs-comment">//   a is small integer &lt; 0</span>
+<span class="hljs-comment">//   a is large positive integer</span>
+<span class="hljs-comment">//   a is large negative integer</span>
+<span class="hljs-comment">//      (where "small" fits in a number, and "large" doesn't)</span></code></pre>
+
+<p id="@partition_6_subdomains"><a class="jump" href="index.html#@partition_6_subdomains"></a>This partition has 6 subdomains, so 6 different values of <code>a</code> can cover it, one chosen for each subdomain.</p>
+
+<p id="@suppose_used_these"><a class="jump" href="index.html#@suppose_used_these"></a>Suppose we used these three partitions of <code>a</code> instead:</p>
+
+<pre id="@partition_0_positive_negative_partition_1"><a class="jump" href="index.html#@partition_0_positive_negative_partition_1"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on a: 0, positive, negative</span>
+<span class="hljs-comment">// partition on a: 1, !=1</span>
+<span class="hljs-comment">// partition on a: small (fits in a number), large (doesn't fit in a number)</span></code></pre>
+
+<p id="@if_just_want"><a class="jump" href="index.html#@if_just_want"></a>If we just want to cover every subdomain of the three partitions, how many different values of <code>a</code> would we need?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@if_want_cover"><a class="jump" href="index.html#@if_want_cover"></a>If we want to cover the Cartesian product of these three partitions, how many different values of <code>a</code> would we need?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-choosing_test_cases_by_partitioning_3-partitions_expressed_on_outputs" data-target="#ex-choosing_test_cases_by_partitioning_3-partitions_expressed_on_outputs" data-toggle="collapse"><a class="jump" href="index.html#@ex-choosing_test_cases_by_partitioning_3-partitions_expressed_on_outputs"></a><span class="panel-title">Partitions expressed on outputs</span></div><div class="panel-collapse collapse exercise-panel" id="ex-choosing_test_cases_by_partitioning_3-partitions_expressed_on_outputs" data-outline="partitions_expressed_on_outputs" data-ex-id="using_multiple_partitions/partitions_expressed_on_outputs" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@sometimes_convenient_think"><a class="jump" href="index.html#@sometimes_convenient_think"></a>It is sometimes convenient to think about and write an input space partition in terms of the <em>output</em> of the function, because variations in behavior may be more visible there.
+For example:</p>
+
+<pre id="@partition_a-b_0"><a class="jump" href="index.html#@partition_a-b_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on a*b: 0, positive, negative</span></code></pre>
+
+<p id="@shorthand_three-subdomain_partition"><a class="jump" href="index.html#@shorthand_three-subdomain_partition"></a>is shorthand for the three-subdomain partition consisting of:</p>
+
+<p id="@a-b_a-b_0"><a class="jump" href="index.html#@a-b_a-b_0"></a> { (<em>a</em>,<em>b</em>) | <code>a*b</code> = 0 }
+ { (<em>a</em>,<em>b</em>) | <code>a*b</code> &gt; 0 }
+ { (<em>a</em>,<em>b</em>) | <code>a*b</code> &lt; 0 }</p>
+
+<p id="@using_approach_many"><a class="jump" href="index.html#@using_approach_many"></a>Using this approach, how many test cases are needed to cover the following three partitions?</p>
+
+<pre id="@partition_0_positive_negative_partition_b"><a class="jump" href="index.html#@partition_0_positive_negative_partition_b"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on a: 0, positive, negative</span>
+<span class="hljs-comment">// partition on b: 0, positive, negative</span>
+<span class="hljs-comment">// partition on a*b: 0, positive, negative</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@many_needed_cover"><a class="jump" href="index.html#@many_needed_cover"></a>How many are needed to cover the following two partitions?</p>
+
+<pre id="@partition_value_abs-x"><a class="jump" href="index.html#@partition_value_abs-x"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// partition on value of abs(x): same as x, different from x</span>
+<span class="hljs-comment">// partition on sign of abs(x): 0, positive</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-choosing_test_cases_by_partitioning_3-partitioning" data-target="#ex-choosing_test_cases_by_partitioning_3-partitioning" data-toggle="collapse"><a class="jump" href="index.html#@ex-choosing_test_cases_by_partitioning_3-partitioning"></a><span class="panel-title">Partitioning</span></div><div class="panel-collapse collapse exercise-panel" id="ex-choosing_test_cases_by_partitioning_3-partitioning" data-outline="partitioning" data-ex-id="using_multiple_partitions/partitioning" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@consider_following_specification"><a class="jump" href="index.html#@consider_following_specification"></a>Consider the following specification:</p>
+
+<pre id="@reverses_end_string"><a class="jump" href="index.html#@reverses_end_string"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Reverses the end of a string.
+ * For example:
+ *  reverseEnd("abcdef", 2) returns "abfedc"
+ *  reverseEnd("abcdef", 0) returns "fedcba"
+ *  reverseEnd("abcdef", 6) returns "abcdef"
+ *
+ * @param text    string that will have its end reversed
+ * @param start   the index from which the remainder of the input is reversed.
+ *                Requires start to be an integer, 0 &lt;= start &lt;= text.length
+ * @returns input text with the substring from `start` to the end of the string reversed
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">reverseEnd</span>(<span class="hljs-params">text: <span class="hljs-built_in">string</span>, start: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">string</span></span></code></pre>
+
+<p id="@which_following_reasonable_partitions_involving_start"><a class="jump" href="index.html#@which_following_reasonable_partitions_involving_start"></a>Which of the following are reasonable partitions involving the <code>start</code> parameter?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="start = 0; start = 5; start = 100"><label for="md_converted_choice_15_0"><input type="checkbox" id="md_converted_choice_15_0"><code>start = 0; start = 5; start = 100</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="start < 0; start = 0; start > 0"><label for="md_converted_choice_15_1"><input type="checkbox" id="md_converted_choice_15_1"><code>start &lt; 0; start = 0; start &gt; 0</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="start = 0; 0 < start < text.length; start = text.length (assuming nonempty text)"><label for="md_converted_choice_15_2"><input type="checkbox" id="md_converted_choice_15_2"><code>start = 0; 0 &lt; start &lt; text.length; start = text.length</code> (assuming nonempty <code>text</code>)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="start < text.length; start = text.length; start > text.length (assuming nonempty text)"><label for="md_converted_choice_15_3"><input type="checkbox" id="md_converted_choice_15_3"><code>start &lt; text.length; start = text.length; start &gt; text.length</code> (assuming nonempty <code>text</code>)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_following_reasonable_partitions_involving_text"><a class="jump" href="index.html#@which_following_reasonable_partitions_involving_text"></a>Which of the following are reasonable partitions involving the <code>text</code> parameter?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="text contains some letters; text contains no letters, but some numbers; text contains neither letters nor numbers"><label for="md_converted_choice_16_0"><input type="checkbox" id="md_converted_choice_16_0"><code>text contains some letters; text contains no letters, but some numbers; text contains neither letters nor numbers</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="text.length = 0; text.length > 0"><label for="md_converted_choice_16_1"><input type="checkbox" id="md_converted_choice_16_1"><code>text.length = 0; text.length &gt; 0</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="text.length-start = 0; text.length-start is odd; text.length-start is even (> 0)"><label for="md_converted_choice_16_2"><input type="checkbox" id="md_converted_choice_16_2"><code>text.length-start = 0; text.length-start is odd; text.length-start is even (&gt; 0)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="text is every possible string from length 0 to 100"><label for="md_converted_choice_16_3"><input type="checkbox" id="md_converted_choice_16_3"><code>text is every possible string from length 0 to 100</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="text is &quot;&quot; or &quot;abcdef&quot;"><label for="md_converted_choice_16_4"><input type="checkbox" id="md_converted_choice_16_4"><code>text is "" or "abcdef"</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="text should be the empty string in some test case"><label for="md_converted_choice_16_5"><input type="checkbox" id="md_converted_choice_16_5"><code>text should be the empty string in some test case</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div></div><h2 id="automated_unit_testing"><a class="jump" href="index.html#automated_unit_testing"></a>Automated unit testing</h2><div data-outline="automated_unit_testing">
+
+<p id="@well-tested_program_tests"><a class="jump" href="index.html#@well-tested_program_tests"></a>A well-tested program will have tests for every individual module that it contains.
+A test that tests an individual module, in isolation if possible, is called a <mark data-mark-text="unit test" data-structure-text="unit test" id="^unit_test"><strong>unit test</strong></mark>.</p>
+
+<p id="@nothing_makes_unit"><a class="jump" href="index.html#@nothing_makes_unit"></a>Nothing makes unit tests easier to run, and more likely to be run, than complete automation.
+<mark data-mark-text="automated testing" data-structure-text="automated testing" id="^automated_testing"><strong>Automated testing</strong></mark> means running the tests and checking their results automatically.
+The code that runs tests on a module is a <em>test driver</em> (also known as a test harness or test runner).
+A test driver should <em>not</em> be an interactive program that prompts you for inputs and prints out results for you to manually check.
+Instead, a test driver should invoke the module itself on fixed test cases and automatically check that the results are correct.
+The result of the test driver should be either “all tests OK” or “these tests failed: …”</p>
+
+<p id="@most_programming_languages"><a class="jump" href="index.html#@most_programming_languages"></a>Most programming languages have at least one popular library for writing automated unit tests, including <a href="https://junit.org/junit5/">JUnit</a> for Java and <a href="https://docs.python.org/3/library/unittest.html">unittest</a> for Python.
+For JavaScript and TypeScript, a popular choice is <a href="https://mochajs.org/">Mocha</a>.</p>
+
+<p id="@mocha_unit_test"><a class="jump" href="index.html#@mocha_unit_test"></a>A Mocha unit test is written as a call to the function <code>it()</code>, with the name of the test as its first argument, and the body of the test (written as a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/function">function expression</a>) as the second argument.
+The test body typically contains one or more calls to the module being tested, and then checks the results using assertion functions like <a href="https://nodejs.org/api/assert.html#assertvalue-message"><code>assert</code></a>, <a href="https://nodejs.org/api/assert.html#assertstrictequalactual-expected-message"><code>assert.strictEqual</code></a>, or <a href="https://nodejs.org/api/assert.html#assertthrowsfn-error-message"><code>assert.throws</code></a>.
+For example, a single unit test for <code>max</code> might look like this:</p>
+
+<pre id="@it-covers_b_function_assert-strictequal-math-max-1_2_2_0"><a class="jump" href="index.html#@it-covers_b_function_assert-strictequal-math-max-1_2_2_0"></a><code class="language-ts hljs typescript">it(<span class="hljs-string">"covers a &lt; b"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  assert.strictEqual(<span class="hljs-built_in">Math</span>.max(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>), <span class="hljs-number">2</span>);
+});</code></pre>
+
+<p id="@note_order_parameters"><a class="jump" href="index.html#@note_order_parameters"></a>Note that the order of the parameters to <code>assert.strictEqual</code> is important.
+The first parameter should be the <em>actual</em> result – what the code actually does.
+The second parameter should be the <em>expected</em> result – usually a constant – that the test wants to see.
+If you switch them around, then Mocha may produce a confusing error message when the test fails.
+An assertion can also take an optional message string as the last argument, which you should use to make the test failure clearer.</p>
+
+<p id="@collect_set_unit"><a class="jump" href="index.html#@collect_set_unit"></a>To collect a set of unit tests into a test suite, put them inside a call to <code>describe()</code>.
+For example, the tests we chose for <code>max</code> above might look like this when implemented for Mocha:</p>
+
+<pre id="@describe-math-max_function_it-covers"><a class="jump" href="index.html#@describe-math-max_function_it-covers"></a><code class="language-ts hljs typescript">describe(<span class="hljs-string">"Math.max"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  it(<span class="hljs-string">"covers a &lt; b"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    assert.strictEqual(<span class="hljs-built_in">Math</span>.max(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>), <span class="hljs-number">2</span>);
+  });
+
+  it(<span class="hljs-string">"covers a = b"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    assert.strictEqual(<span class="hljs-built_in">Math</span>.max(<span class="hljs-number">9</span>, <span class="hljs-number">9</span>), <span class="hljs-number">9</span>);
+  });
+
+  it(<span class="hljs-string">"covers a &gt; b"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    assert.strictEqual(<span class="hljs-built_in">Math</span>.max(<span class="hljs-number">10</span>, <span class="hljs-number">-9</span>), <span class="hljs-number">10</span>);
+  });
+});</code></pre>
+
+<p id="@test_suite_can"><a class="jump" href="index.html#@test_suite_can"></a>A test suite can contain any number of <code>it()</code> functions, which are run <em>independently</em> when you run the test suite with Mocha.
+If an assertion fails in a test case, then that test case returns immediately, and Mocha records a failure for that test.
+Even if one test fails, the others in the suite will still be run.</p>
+
+<p id="@note_automated_testing"><a class="jump" href="index.html#@note_automated_testing"></a>Note that automated testing frameworks like Mocha make it easy to run the tests, but you still have to come up with good test cases yourself.
+<em>Automatic test generation</em> is a hard problem that’s still a subject of active computer science research.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-automated_unit_testing"><h4 class="text-danger" id="@reading_exercises_6"><a class="jump" href="index.html#@reading_exercises_6"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automated_unit_testing-asserting_equal" data-target="#ex-automated_unit_testing-asserting_equal" data-toggle="collapse"><a class="jump" href="index.html#@ex-automated_unit_testing-asserting_equal"></a><span class="panel-title">Asserting equal</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automated_unit_testing-asserting_equal" data-outline="asserting_equal" data-ex-id="automated_unit_testing/asserting_equal" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@fill_blank_finish"><a class="jump" href="index.html#@fill_blank_finish"></a>Fill in the blank to finish this Mocha test case for <code>Math.abs()</code>:</p>
+
+<pre id="@describe-math-abs_function_it-covers"><a class="jump" href="index.html#@describe-math-abs_function_it-covers"></a><code class="language-ts hljs typescript"><span class="no-markdown">describe(<span class="hljs-string">"Math.abs"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  it(<span class="hljs-string">"covers a &lt; 0"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">const</span> result: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">Math</span>.abs(<span class="hljs-number">-3</span>);</span><div><div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div></div><span class="no-markdown">  });
+});
+</span></code></pre>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automated_unit_testing-asserting_true" data-target="#ex-automated_unit_testing-asserting_true" data-toggle="collapse"><a class="jump" href="index.html#@ex-automated_unit_testing-asserting_true"></a><span class="panel-title">Asserting true</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automated_unit_testing-asserting_true" data-outline="asserting_true" data-ex-id="automated_unit_testing/asserting_true" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@consider_mocha_test"><a class="jump" href="index.html#@consider_mocha_test"></a>Consider this Mocha test, which is intended to test a function <code>pickRandomly()</code> that picks a random number from its input set:</p>
+
+<pre id="@it-should_return_number"><a class="jump" href="index.html#@it-should_return_number"></a><code class="language-ts hljs typescript">it(<span class="hljs-string">"should return a number found in the set"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">const</span> <span class="hljs-keyword">set</span> = <span class="hljs-keyword">new</span> Set&lt;<span class="hljs-built_in">number</span>&gt;([<span class="hljs-number">293</span>, <span class="hljs-number">384</span>, <span class="hljs-number">10</span>, <span class="hljs-number">5</span>, <span class="hljs-number">-3</span>, <span class="hljs-number">99</span>]);
+  <span class="hljs-keyword">const</span> result: <span class="hljs-built_in">number</span> = pickRandomly(<span class="hljs-keyword">set</span>);
+  <span class="hljs-comment">/* ASSERTION HERE */</span>
+});</code></pre>
+
+<p id="@which_assertion_put"><a class="jump" href="index.html#@which_assertion_put"></a>Which assertion, put where the code says <code>/* ASSERTION HERE */</code>, would be both correct and useful for debugging?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="assert.strictEqual(result, -3);"><label for="md_converted_choice_17_0"><input type="radio" id="md_converted_choice_17_0" name="md_converted_radio_17"><code>assert.strictEqual(result, -3);</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="assert(set.has(result));"><label for="md_converted_choice_17_1"><input type="radio" id="md_converted_choice_17_1" name="md_converted_radio_17"><code>assert(set.has(result));</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="assert(set.has(result), &quot;expected result from {&quot; + Array.from(set) + &quot;} but actually was &quot; + result);"><label for="md_converted_choice_17_2"><input type="radio" id="md_converted_choice_17_2" name="md_converted_radio_17"><code>assert(set.has(result), "expected result from {" + Array.from(set) + "} but actually was " + result);</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<p id="@comparison_used_strictequal"><a class="jump" href="index.html#@comparison_used_strictequal"></a>The comparison used by <code>strictEqual</code> works as expected for built-in types like <code>string</code> and <code>number</code>, but it does not help us with data structures.
+For example, all of the following assertions <em>fail</em>:</p>
+
+<ul id="@strictequal_strictequal-1_1">
+<li><a class="jump" href="index.html#@strictequal_strictequal-1_1"></a><code>strictEqual([], [])</code></li>
+<li><code>strictEqual([1], [1])</code></li>
+<li><code>strictEqual(new Set([1]), new Set([1]))</code></li>
+</ul>
+
+<p id="@see_later_readings"><a class="jump" href="index.html#@see_later_readings"></a>As we’ll see in later readings, they fail for good reason: the question of whether these mutable arrays and sets are “equal” is quite a thorny one.
+So when we’re testing a function that returns this kind of structure, we have two options:</p>
+
+<ul>
+<li><p id="@use_assert-deepstrictequal_which"><a class="jump" href="index.html#@use_assert-deepstrictequal_which"></a>Use <a href="https://nodejs.org/api/assert.html#assertdeepstrictequalactual-expected-message"><code>assert.deepStrictEqual</code></a>, which performs an equality comparison that considers arrays, sets, maps, and object literals with identical contents to be equal.
+This is most useful when we know exactly what the correct structure is.
+But <code>assert.deepStrictEqual</code> has a dangerous caveat: only use it to compare structures of built-in arrays, sets, maps, and object literals containing primitive types like numbers and strings — not anything else, and most importantly, not any user-defined types.
+We’ll see why in future classes.</p></li>
+<li><p id="@use_simple_assert"><a class="jump" href="index.html#@use_simple_assert"></a>Use simple <code>assert</code> and <code>assert.strictEqual</code> assertions on properties of the structure.
+This is most useful when, as in the previous exercise, there are multiple correct outputs.</p></li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-automated_unit_testing_2"><h4 class="text-danger" id="@reading_exercises_7"><a class="jump" href="index.html#@reading_exercises_7"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automated_unit_testing_2-asserting_deep" data-target="#ex-automated_unit_testing_2-asserting_deep" data-toggle="collapse"><a class="jump" href="index.html#@ex-automated_unit_testing_2-asserting_deep"></a><span class="panel-title">Asserting deep</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automated_unit_testing_2-asserting_deep" data-outline="asserting_deep" data-ex-id="automated_unit_testing/asserting_deep" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@if_want_assert"><a class="jump" href="index.html#@if_want_assert"></a>If we want to assert that value <code>actual</code> is a <code>Set</code> with the single element <code>"hello"</code>, we could use:</p>
+
+<pre id="@assert-deepstrictequal-actual_new_set-hello"><a class="jump" href="index.html#@assert-deepstrictequal-actual_new_set-hello"></a><code class="language-ts hljs typescript">assert.deepStrictEqual(actual, <span class="hljs-keyword">new</span> Set([<span class="hljs-string">"hello"</span>]));</code></pre>
+
+<p id="@could_use_select"><a class="jump" href="index.html#@could_use_select"></a>… or we could use: (select a set of correct assertions that are necessary and sufficient)</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="assert(actual.has(&quot;hello&quot;));"><label for="md_converted_choice_18_0"><input type="checkbox" id="md_converted_choice_18_0"><code>assert(actual.has("hello"));</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="assert( ! actual.has(&quot;goodbye&quot;));"><label for="md_converted_choice_18_1"><input type="checkbox" id="md_converted_choice_18_1"><code>assert( ! actual.has("goodbye"));</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="assert.strictEqual(actual.size, 1);"><label for="md_converted_choice_18_2"><input type="checkbox" id="md_converted_choice_18_2"><code>assert.strictEqual(actual.size, 1);</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="assert.strictEqual(actual.values(), ['hello']);"><label for="md_converted_choice_18_3"><input type="checkbox" id="md_converted_choice_18_3"><code>assert.strictEqual(actual.values(), ['hello']);</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="documenting_your_testing_strategy"><a class="jump" href="index.html#documenting_your_testing_strategy"></a>Documenting your testing strategy</h2><div data-outline="documenting_your_testing_strategy">
+
+<p id="@good_idea_write"><a class="jump" href="index.html#@good_idea_write"></a>It’s a good idea to write down the testing strategy you used to create a test suite: the partitions, their subdomains, and which subdomains each test case was chosen to cover.
+Writing down the strategy makes the thoroughness of your test suite much more visible to the reader, and easier for you to spot missing partitions or subdomain coverage.</p>
+
+<p id="@document_partitions_subdomains"><a class="jump" href="index.html#@document_partitions_subdomains"></a>Document the partitions and subdomains in a comment at the top of the <code>describe()</code> function.
+For example, to document our strategy for testing <code>max</code>, we would write this:</p>
+
+<pre id="@describe-max_function_testing"><a class="jump" href="index.html#@describe-max_function_testing"></a><code class="language-ts hljs typescript">describe(<span class="hljs-string">"max"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-comment">/*
+   * Testing strategy
+   *
+   * partition:
+   *   a &lt; b
+   *   a &gt; b
+   *   a = b
+   */</span>
+
+   it(...); <span class="hljs-comment">// test cases here</span>
+   it(...);
+   it(...);
+   ...
+});</code></pre>
+
+<p id="@each_test_case"><a class="jump" href="index.html#@each_test_case"></a>Each test case should be named by the subdomain(s) it covers, e.g.:</p>
+
+<pre id="@it-covers_b_function_assert-strictequal-math-max-1_2_2_1"><a class="jump" href="index.html#@it-covers_b_function_assert-strictequal-math-max-1_2_2_1"></a><code class="language-ts hljs typescript">it(<span class="hljs-string">"covers a &lt; b"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  assert.strictEqual(<span class="hljs-built_in">Math</span>.max(<span class="hljs-number">1</span>, <span class="hljs-number">2</span>), <span class="hljs-number">2</span>);
+});</code></pre>
+
+<p id="@most_test_suites"><a class="jump" href="index.html#@most_test_suites"></a>Most test suites will have more than one partition, and most test cases will cover multiple subdomains.
+For example, here’s a strategy for <code>BigInt</code> multiplication, using seven partitions:</p>
+
+<pre id="@describe-multiplication_function_testing"><a class="jump" href="index.html#@describe-multiplication_function_testing"></a><code class="language-ts hljs typescript">describe(<span class="hljs-string">"multiplication"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-comment">/*
+   * Testing strategy
+   *
+   * cover the cartesian product of these partitions:
+   *   partition on a: positive, negative, 0
+   *   partition on b: positive, negative, 0
+   *   partition on a: 1, !=1
+   *   partition on b: 1, !=1
+   *   partition on a: small (fits in a TypeScript number), or large (doesn't fit)
+   *   partition on b: small, large
+   *
+   * cover the subdomains of these partitions:
+   *   partition on signs of a and b:
+   *      both positive
+   *      both negative
+   *      different signs
+   *      one or both are 0
+   */</span>
+
+  it(<span class="hljs-string">"covers a = 1, b != 1, a and b both positive"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    assert.strictEqual(BigInt(<span class="hljs-number">1</span>) * BigInt(<span class="hljs-number">33</span>), BigInt(<span class="hljs-number">33</span>));
+  });
+
+  it(<span class="hljs-string">"covers a is positive, b is negative, "</span>
+      + <span class="hljs-string">"a fits in a number, b fits in a number, "</span>
+      + <span class="hljs-string">"a and b have different signs"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    assert.strictEqual(BigInt(<span class="hljs-number">73</span>) * BigInt(<span class="hljs-number">-2</span>), BigInt(<span class="hljs-number">-146</span>));
+  });
+
+  ...
+});</code></pre>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-documenting_your_testing_strategy"><h4 class="text-danger" id="@reading_exercises_8"><a class="jump" href="index.html#@reading_exercises_8"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-documenting_your_testing_strategy-put_that_there" data-target="#ex-documenting_your_testing_strategy-put_that_there" data-toggle="collapse"><a class="jump" href="index.html#@ex-documenting_your_testing_strategy-put_that_there"></a><span class="panel-title">Put that there</span></div><div class="panel-collapse collapse exercise-panel" id="ex-documenting_your_testing_strategy-put_that_there" data-outline="put_that_there" data-ex-id="documenting_your_testing_strategy/put_that_there" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@suppose_you_writing_mocha_test_suite"><a class="jump" href="index.html#@suppose_you_writing_mocha_test_suite"></a>Suppose you are writing a Mocha test suite for the <code>max()</code> function.</p>
+
+<p id="@does_each_these"><a class="jump" href="index.html#@does_each_these"></a>Where does each of these pieces of your testing documentation go?</p>
+
+<label class="exercise-part-heading" id="@partition_parameter"><a class="jump" href="index.html#@partition_parameter"></a>the partition for the <code>a</code> parameter</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="in a comment just before the max() function"><label for="md_converted_choice_19_0"><input type="checkbox" id="md_converted_choice_19_0">in a comment just before the <code>max()</code> function</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in the first argument of a call to describe()"><label for="md_converted_choice_19_1"><input type="checkbox" id="md_converted_choice_19_1">in the first argument of a call to <code>describe()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in the first argument of a call to it()"><label for="md_converted_choice_19_2"><input type="checkbox" id="md_converted_choice_19_2">in the first argument of a call to <code>it()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in a comment inside the function body passed to describe()"><label for="md_converted_choice_19_3"><input type="checkbox" id="md_converted_choice_19_3">in a comment inside the function body passed to <code>describe()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@phrase_covers_b"><a class="jump" href="index.html#@phrase_covers_b"></a>the phrase “covers a &lt; b”</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="in a comment just before the max() function"><label for="md_converted_choice_20_0"><input type="checkbox" id="md_converted_choice_20_0">in a comment just before the <code>max()</code> function</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in the first argument of a call to describe()"><label for="md_converted_choice_20_1"><input type="checkbox" id="md_converted_choice_20_1">in the first argument of a call to <code>describe()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in the first argument of a call to it()"><label for="md_converted_choice_20_2"><input type="checkbox" id="md_converted_choice_20_2">in the first argument of a call to <code>it()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in a comment inside the function body passed to describe(&quot;max&quot;)"><label for="md_converted_choice_20_3"><input type="checkbox" id="md_converted_choice_20_3">in a comment inside the function body passed to <code>describe("max")</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@comment_returns_max"><a class="jump" href="index.html#@comment_returns_max"></a>the comment “@returns the max of a and b”</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="in a comment just before the max() function"><label for="md_converted_choice_21_0"><input type="checkbox" id="md_converted_choice_21_0">in a comment just before the <code>max()</code> function</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in the first argument of a call to describe()"><label for="md_converted_choice_21_1"><input type="checkbox" id="md_converted_choice_21_1">in the first argument of a call to <code>describe()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in the first argument of a call to it()"><label for="md_converted_choice_21_2"><input type="checkbox" id="md_converted_choice_21_2">in the first argument of a call to <code>it()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="in a comment inside the function body passed to describe()"><label for="md_converted_choice_21_3"><input type="checkbox" id="md_converted_choice_21_3">in a comment inside the function body passed to <code>describe()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="black_box_and_glass_box_testing"><a class="jump" href="index.html#black_box_and_glass_box_testing"></a>Black box and glass box testing</h2><div data-outline="black_box_and_glass_box_testing">
+
+<p id="@recall_above_specification"><a class="jump" href="index.html#@recall_above_specification"></a>Recall from above that the <em>specification</em> is the description of the function’s behavior — the types of parameters, type of return value, and constraints and relationships between them.</p>
+
+<p id="@black_box_testing"><a class="jump" href="index.html#@black_box_testing"></a><mark data-structure-text="black box testing" id="^black_box_testing"><strong>Black box testing</strong></mark> means choosing test cases only from the specification, not the implementation of the function.
+That’s what we’ve been doing in our examples so far.
+We partitioned and looked for boundaries in <code>abs</code>, <code>max</code>, and <code>BigInt</code> multiplication without looking at the actual code for these functions.
+In fact, if we were following the test-first programming approach, we had <em>not</em> even written the code for these functions yet.</p>
+
+<p id="@glass_box_testing"><a class="jump" href="index.html#@glass_box_testing"></a><mark data-structure-text="glass box testing" id="^glass_box_testing"><strong>Glass box testing</strong></mark> means choosing test cases with knowledge of how the function is actually implemented.
+For example, if the implementation selects different algorithms depending on the input, then you should partition around the points where different algorithms are chosen.
+If the implementation keeps an internal cache that remembers the answers to previous inputs, then you should test repeated inputs to see if the cache is working properly.</p>
+
+<p id="@case_bigint_multiplication"><a class="jump" href="index.html#@case_bigint_multiplication"></a>For the case of <code>BigInt</code> multiplication, when we finally implemented it, we may have decided to represent the integer as an array of decimal digits.
+This decision introduces new boundaries in the function’s behavior.
+Multiplying two single-digit numbers is trivial, but arrays of two or more digits demand the greater complexity of multiple-digit multiplication.
+So glass box testing of this implementation might introduce a new partition based on the length of the internal array.
+(A more efficient representation for <code>BigInt</code> might be an array of 32-bit unsigned integers like <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Uint32Array"><code>Uint32Array</code></a>, but the principle is the same — a sequence of digits of base 2<sup>32</sup> rather than base 10.)</p>
+
+<p id="@doing_glass_box"><a class="jump" href="index.html#@doing_glass_box"></a>When doing glass box testing, you must take care that your test cases don’t <em>require</em> specific implementation behavior that isn’t specifically called for by the spec.  For example, if the spec says “throws an exception if the input is poorly formatted,” then your test shouldn’t check <em>specifically</em> for a <code>TypeError</code> exception just because that’s what the current implementation does.  The specification in this case allows <em>any</em> exception to be thrown, so your test case should likewise be general in order to be correct, and preserve the implementor’s freedom.  We’ll have much more to say about this in the class on specs.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-black_box_and_glass_box_testing"><h4 class="text-danger" id="@reading_exercises_9"><a class="jump" href="index.html#@reading_exercises_9"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-black_box_and_glass_box_testing-black_box_and_glass_box_testing" data-target="#ex-black_box_and_glass_box_testing-black_box_and_glass_box_testing" data-toggle="collapse"><a class="jump" href="index.html#@ex-black_box_and_glass_box_testing-black_box_and_glass_box_testing"></a><span class="panel-title">Black box and glass box testing</span></div><div class="panel-collapse collapse exercise-panel" id="ex-black_box_and_glass_box_testing-black_box_and_glass_box_testing" data-outline="black_box_and_glass_box_testing" data-ex-id="black_box_and_glass_box_testing/black_box_and_glass_box_testing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@consider_following_function"><a class="jump" href="index.html#@consider_following_function"></a>Consider the following function:</p>
+
+<pre id="@sort_array_numbers"><a class="jump" href="index.html#@sort_array_numbers"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Sort an array of numbers in nondecreasing order.  Modifies the array so that
+ * values[i] &lt;= values[i+1] for all 0 &lt;= i &lt; values.length-1
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">sort</span>(<span class="hljs-params">values: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt;</span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-comment">// choose a good algorithm for the size of the array</span>
+    <span class="hljs-keyword">if</span> (values.length &lt; <span class="hljs-number">10</span>) {
+        radixSort(values);
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (values.length &lt; <span class="hljs-number">1</span>_000_000_000) {
+        quickSort(values);
+    } <span class="hljs-keyword">else</span> {
+        mergeSort(values);
+    }
+}</code></pre>
+
+<p id="@which_following_test"><a class="jump" href="index.html#@which_following_test"></a>Which of the following test cases are likely to be boundary values produced by glass box testing?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="values = [] (the empty array)"><label for="md_converted_choice_22_0"><input type="checkbox" id="md_converted_choice_22_0"><code>values = []</code> (the empty array)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="values = [1, 2, 3]"><label for="md_converted_choice_22_1"><input type="checkbox" id="md_converted_choice_22_1"><code>values = [1, 2, 3]</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="values = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]"><label for="md_converted_choice_22_2"><input type="checkbox" id="md_converted_choice_22_2"><code>values = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="values = [0, 0, 1, 0, 0, 0, 0]"><label for="md_converted_choice_22_3"><input type="checkbox" id="md_converted_choice_22_3"><code>values = [0, 0, 1, 0, 0, 0, 0]</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="coverage"><a class="jump" href="index.html#coverage"></a>Coverage</h2><div data-outline="coverage">
+
+<p id="@one_way_judge"><a class="jump" href="index.html#@one_way_judge"></a>One way to judge a test suite is to ask how thoroughly it exercises the program.  This notion is called <mark data-structure-text="coverage" id="^coverage"><em>coverage</em></mark>.  Here are three common kinds of coverage:</p>
+
+<ul id="@statement_coverage_every">
+<li><a class="jump" href="index.html#@statement_coverage_every"></a><strong>Statement coverage</strong>: is every statement run by at least one test case?</li>
+<li><strong>Branch coverage</strong>: for every control branch in the program (such as an <code>if</code> or <code>while</code> or <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Conditional_Operator"><code>?:</code> ternary expression</a>), is each side of the branch taken by at least one test case?</li>
+<li><strong>Path coverage</strong>: is every possible combination of branches — every path through the program — taken by at least one test case?</li>
+</ul>
+
+<div class="panel panel-default panel-figure pull-right pull-margin"><div class="panel-body"><a href="figures/istanbul.png"><img src="figures/istanbul.png" alt="example output from a code coverage tool" width="450"></a></div></div>
+
+<p id="@branch_coverage_stronger"><a class="jump" href="index.html#@branch_coverage_stronger"></a>Branch coverage is stronger (i.e. requires more tests to achieve) than statement coverage, and path coverage is stronger than branch coverage.  In industry, 100% statement coverage is a common goal, but even that is rarely achieved due to unreachable defensive code (like “should never get here” assertions).  100% branch coverage is highly desirable, and safety-critical industry code has even more arduous criteria (e.g., <a href="https://en.wikipedia.org/wiki/Modified_condition/decision_coverage">MC/DC</a>, modified condition/decision coverage).  Unfortunately 100% path coverage is infeasible, requiring exponential-size test suites to achieve.</p>
+
+<p id="@standard_approach_testing"><a class="jump" href="index.html#@standard_approach_testing"></a>A standard approach to testing is to add tests until the test suite achieves adequate statement coverage: i.e., so that every reachable statement in the program is executed by at least one test case.
+In practice, statement coverage is usually measured by a code coverage tool, which counts the number of times each statement is run by your test suite.
+With such a tool, glass box testing is easy; you just measure the coverage of your black box tests, and add more test cases until all important statements are logged as executed.</p>
+
+<p id="@good_code_coverage"><a class="jump" href="index.html#@good_code_coverage"></a>A good code coverage tool for JavaScript and TypeScript is <a href="https://www.npmjs.com/package/c8">c8</a>, shown on the right.
+In the tool’s HTML output, a line that has been executed by the test suite has a green mark in the left margin (which also shows the number of times the line was executed).
+A line not yet covered is colored red.
+A line containing a branch that has been executed in only one direction – always true but never false, or vice versa – has an I or E icon, indicating which path was never taken (I for “if” or E for “else”).
+If you saw the result on the right from your coverage tool, your next step would be to come up with a test case that causes the <code>if</code> test to be true at least once, and add it to your test suite so that the red line becomes green.</p>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-coverage"><h4 class="text-danger" id="@reading_exercises_10"><a class="jump" href="index.html#@reading_exercises_10"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-coverage-kinds_of_coverage" data-target="#ex-coverage-kinds_of_coverage" data-toggle="collapse"><a class="jump" href="index.html#@ex-coverage-kinds_of_coverage"></a><span class="panel-title">Kinds of coverage</span></div><div class="panel-collapse collapse exercise-panel" id="ex-coverage-kinds_of_coverage" data-outline="kinds_of_coverage" data-ex-id="coverage/kinds_of_coverage" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@consider_function_reproduced"><a class="jump" href="index.html#@consider_function_reproduced"></a>Consider this function (reproduced from the screenshot above):</p>
+
+<pre id="@param_letters_string"><a class="jump" href="index.html#@param_letters_string"></a><code class="hljs javascript"><span class="hljs-comment">/**
+ * <span class="hljs-doctag">@param </span>letters a string of lowercase English letters
+ * <span class="hljs-doctag">@returns </span>the set of vowels found in letters
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getVowelsIn</span>(<span class="hljs-params">letters: string</span>): <span class="hljs-title">string</span> </span>{
+  <span class="hljs-keyword">const</span> VOWELS = <span class="hljs-string">"aeiou"</span>;
+  <span class="hljs-keyword">let</span> vowelsFound = <span class="hljs-string">""</span>;
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> vowel <span class="hljs-keyword">of</span> VOWELS) {
+    <span class="hljs-keyword">if</span> (letters.indexOf(vowel) !== <span class="hljs-number">-1</span>) {
+      vowelsFound += vowel;
+    }
+  }
+  <span class="hljs-keyword">return</span> vowelsFound;
+}</code></pre>
+
+<p id="@suppose_you_just"><a class="jump" href="index.html#@suppose_you_just"></a>Suppose you have just one test case for this function, which only calls <code>getVowelsIn("aeiou")</code>.
+What level of coverage of the body of this function does this test case achieve?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="100% statement coverage"><label for="md_converted_choice_23_0"><input type="checkbox" id="md_converted_choice_23_0">100% statement coverage</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="100% branch coverage"><label for="md_converted_choice_23_1"><input type="checkbox" id="md_converted_choice_23_1">100% branch coverage</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="100% path coverage"><label for="md_converted_choice_23_2"><input type="checkbox" id="md_converted_choice_23_2">100% path coverage</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-coverage-using_a_coverage_tool" data-target="#ex-coverage-using_a_coverage_tool" data-toggle="collapse"><a class="jump" href="index.html#@ex-coverage-using_a_coverage_tool"></a><span class="panel-title">Using a coverage tool</span></div><div class="panel-collapse collapse exercise-panel" id="ex-coverage-using_a_coverage_tool" data-outline="using_a_coverage_tool" data-ex-id="coverage/using_a_coverage_tool" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@exercise_asks_you"><a class="jump" href="index.html#@exercise_asks_you"></a>This exercise asks you to explore the output of the c8 coverage tool.</p>
+
+<ol>
+<li><p id="@download_small_program"><a class="jump" href="index.html#@download_small_program"></a>Download this small program, <a href="ex02-coverage.zip">ex02-coverage.zip</a>, and unpack it.</p></li>
+<li><p id="@your_terminal_prompt"><a class="jump" href="index.html#@your_terminal_prompt"></a>In your terminal prompt, <code>cd</code> into the <code>ex02-coverage</code> folder you just extracted, and run:</p>
+
+<pre id="@npm_install"><a class="jump" href="index.html#@npm_install"></a><code class="language-sh hljs bash">npm install</code></pre>
+
+<p id="@install_c8_other"><a class="jump" href="index.html#@install_c8_other"></a>This will install c8 and other necessary packages.</p></li>
+<li><p id="@open_ex02-coverage-hailstone-ts_visual"><a class="jump" href="index.html#@open_ex02-coverage-hailstone-ts_visual"></a>Open <code>ex02-coverage/hailstone.ts</code> in Visual Studio Code.  You should see this code:</p>
+
+<pre id="@let_n_number"><a class="jump" href="index.html#@let_n_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">3</span>;
+<span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+   <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+       n = n / <span class="hljs-number">2</span>;
+   } <span class="hljs-keyword">else</span> {
+       n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+   }
+}</code></pre></li>
+<li><p id="@back_your_terminal"><a class="jump" href="index.html#@back_your_terminal"></a>Back in your terminal prompt, run the program using the code coverage tool:</p>
+
+<pre id="@npm_run_coverage"><a class="jump" href="index.html#@npm_run_coverage"></a><code class="language-sh hljs bash">npm run coverage</code></pre></li>
+<li><p id="@open_coverage_report"><a class="jump" href="index.html#@open_coverage_report"></a>Open the coverage report in your web browser: you will find it in the file <code>ex02-coverage/coverage/index.html</code>.
+Then click on <code>hailstone.ts</code> in the report to see a line-by-line coverage report for that source file.</p></li>
+</ol>
+
+<p id="@changing_initial_value"><a class="jump" href="index.html#@changing_initial_value"></a>By changing the initial value of <code>n</code> in the first line of the code, you will be able to observe how the code coverage tool would highlight different lines of code differently.</p>
+
+<label class="exercise-part-heading" id="@n_3_initially"><a class="jump" href="index.html#@n_3_initially"></a>When <code>n = 3</code> initially, what color is the line <code>n = n/2</code> in the coverage report?</label>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; green; yellow; red; white"><select class="form-control"><option selected="selected"></option><option>green</option>,<option>yellow</option>,<option>red</option>,<option>white</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@n_16_initially"><a class="jump" href="index.html#@n_16_initially"></a>When <code>n = 16</code> initially, what color is the line <code>n = 3 * n + 1</code> in the coverage report?</label>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; green; yellow; red; white"><select class="form-control"><option selected="selected"></option><option>green</option>,<option>yellow</option>,<option>red</option>,<option>white</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<label class="exercise-part-heading" id="@initial_value_n"><a class="jump" href="index.html#@initial_value_n"></a>What initial value of <code>n</code> would make the entire body of the loop red in the coverage report?</label>
+
+<div class="form-group exercise-part" data-outline="c"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="unit_and_integration_testing"><a class="jump" href="index.html#unit_and_integration_testing"></a>Unit and integration testing</h2><div data-outline="unit_and_integration_testing">
+
+<p id="@we-ve_so_far"><a class="jump" href="index.html#@we-ve_so_far"></a>We’ve so far been talking about unit tests that test a single module in isolation.
+Testing modules in isolation leads to much easier debugging.
+When a unit test for a module fails, you can be more confident that the bug is found in that module, rather than anywhere in the program.</p>
+
+<p id="@contrast_unit_test"><a class="jump" href="index.html#@contrast_unit_test"></a>In contrast to a unit test, an <mark data-mark-text="integration testing" data-structure-text="integration testing" id="^integration_testing"><strong>integration test</strong></mark> tests a combination of modules, or even the entire program.
+If all you have are integration tests, then when a test fails, you have to hunt for the bug.
+It might be anywhere in the program.
+Integration tests are still important, because a program can fail at the connections between modules.
+For example, one module may be expecting different inputs than it’s actually getting from another module.
+But if you have a thorough set of unit tests that give you confidence in the correctness of individual modules, then you’ll have much less searching to do to find the bug.</p>
+
+<p id="@suppose_you-re_building"><a class="jump" href="index.html#@suppose_you-re_building"></a>Suppose you’re building a document search engine.
+Two of your modules might be <code>load()</code>, which loads a file, and <code>extract()</code>, which splits a document into its component words:</p>
+
+<pre id="@returns_contents_file"><a class="jump" href="index.html#@returns_contents_file"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @returns the contents of the file
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load</span>(<span class="hljs-params">filename: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">string</span> </span>{ ... }
+
+<span class="hljs-comment">/**
+ * @returns the words in string s, in the order they appear,
+ *         where a word is a contiguous sequence of
+ *         non-whitespace and non-punctuation characters
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">extract</span>(<span class="hljs-params">s: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">string</span>&gt; </span>{ ... }</code></pre>
+
+<p id="@these_functions_might"><a class="jump" href="index.html#@these_functions_might"></a>These functions might be used by another module <code>index()</code> to make the search engine’s index:</p>
+
+<pre id="@returns_index_mapping"><a class="jump" href="index.html#@returns_index_mapping"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * @returns an index mapping a word to the set of filenames
+ *         containing that word, for all files in the input set
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">index</span>(<span class="hljs-params">filenames: Set&lt;<span class="hljs-built_in">string</span>&gt;</span>): <span class="hljs-title">Map</span>&lt;<span class="hljs-title">string</span>, <span class="hljs-title">Set</span>&lt;<span class="hljs-title">string</span>&gt;&gt; </span>{
+    ...
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> file of files) {
+        <span class="hljs-keyword">const</span> doc = load(file);
+        <span class="hljs-keyword">const</span> words = extract(doc);
+        ...
+    }
+    ...
+}</code></pre>
+
+<p id="@our_test_suite_would_want"><a class="jump" href="index.html#@our_test_suite_would_want"></a>In our test suite, we would want:</p>
+
+<ul id="@unit_tests_just">
+<li><a class="jump" href="index.html#@unit_tests_just"></a>unit tests just for <code>load</code> that test it on various files</li>
+<li>unit tests just for <code>extract</code> that test it on various strings</li>
+<li>unit tests for <code>index</code> that test it on various sets of files</li>
+</ul>
+
+<p id="@one_mistake_programmers"><a class="jump" href="index.html#@one_mistake_programmers"></a>One mistake that programmers sometimes make is writing test cases for <code>extract</code> in such a way that the test cases depend on <code>load</code> to be correct.
+For example, a test case might use <code>load</code> to load a file, and then pass its result as input to <code>extract</code>.
+But this is <em>not</em> a unit test of <code>extract</code>.
+If the test case fails, then we don’t know if the failure is due to a bug in <code>load</code> or <code>extract</code>.</p>
+
+<p id="@better_think_about"><a class="jump" href="index.html#@better_think_about"></a>It’s better to think about and test <code>extract</code> in isolation.
+Using test partitions that involve realistic file content might be reasonable, because that’s how <code>extract</code> is actually used in the program.
+But don’t actually call <code>load</code> from the test case, because <code>load</code> may be buggy!
+Instead, store file content as a literal string, and pass it directly to <code>extract</code>.
+That way you’re writing an isolated unit test, and if it fails, you can be more confident that the bug is in the module it’s actually testing.</p>
+
+<p id="@note_unit_tests"><a class="jump" href="index.html#@note_unit_tests"></a>Note that the unit tests for <code>index</code> can’t easily be isolated in this way.
+When a test case calls <code>index</code>, it is testing the correctness of not only the code inside <code>index</code>, but also all the functions called by <code>index</code>.
+If the test fails, the bug might be in any of those functions.
+That’s why we want separate tests for <code>load</code> and <code>extract</code>, to increase our confidence in those modules individually and localize the problem to the <code>index</code> code that connects them together.</p>
+
+<p id="@isolating_higher-level_module"><a class="jump" href="index.html#@isolating_higher-level_module"></a>Isolating a higher-level module like <code>index</code> is possible if we write <mark data-mark-text="stub" data-structure-text="stub" id="^stub"><strong>stub</strong></mark> versions of the modules that it calls.
+For example, a stub for <code>load</code> wouldn’t access the filesystem at all, but instead would return mock file content no matter what <code>File</code> was passed to it.
+A stub for a class is often called a <a href="https://en.wikipedia.org/wiki/Mock_object"><strong>mock object</strong></a>.
+Stubs are an <a href="https://microsoft.github.io/code-with-engineering-playbook/automated-testing/unit-testing/mocking/">important technique</a> when building large systems (some unit test frameworks include support for mocking, such as <a href="https://jestjs.io/">jest</a> in TypeScript and <a href="https://docs.python.org/3/library/unittest.mock.html">unittest</a> in Python ), but we will generally not use them in 6.102.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-unit_and_integration_testing"><h4 class="text-danger" id="@reading_exercises_11"><a class="jump" href="index.html#@reading_exercises_11"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-unit_and_integration_testing-pizza_pizza" data-target="#ex-unit_and_integration_testing-pizza_pizza" data-toggle="collapse"><a class="jump" href="index.html#@ex-unit_and_integration_testing-pizza_pizza"></a><span class="panel-title">Pizza pizza</span></div><div class="panel-collapse collapse exercise-panel" id="ex-unit_and_integration_testing-pizza_pizza" data-outline="pizza_pizza" data-ex-id="unit_and_integration_testing/pizza_pizza" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@suppose_you_developing"><a class="jump" href="index.html#@suppose_you_developing"></a>Suppose you are developing a new pizza recipe.
+Making pizza involves three “modules” (subrecipes) for:</p>
+
+<ul id="@making_dough_crust">
+<li><a class="jump" href="index.html#@making_dough_crust"></a>making the dough for the crust</li>
+<li>making the sauce</li>
+<li>preparing the cheese and other toppings</li>
+</ul>
+
+<p id="@you_make_dough"><a class="jump" href="index.html#@you_make_dough"></a>You make the dough for the crust, bake it by itself, and see how crunchy and tasty it comes out.
+This is:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="dropdown exercise-choice" data-outline="; unit testing; integration testing; not testing"><select class="form-control"><option selected="selected"></option><option>unit testing</option>,<option>integration testing</option>,<option>not testing</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@you_decide_buy"><a class="jump" href="index.html#@you_decide_buy"></a>You decide to buy a premade spice mix from a specialty store.
+You make a sauce using the spices, then taste it.
+This is:</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; unit testing; integration testing; not testing"><select class="form-control"><option selected="selected"></option><option>unit testing</option>,<option>integration testing</option>,<option>not testing</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@you_put_sauce"><a class="jump" href="index.html#@you_put_sauce"></a>You put sauce and toppings on a crust and bake it, to see whether the crust still cooks well with the moist stuff on top of it.
+This is:</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="dropdown exercise-choice" data-outline="; unit testing; integration testing; not testing"><select class="form-control"><option selected="selected"></option><option>unit testing</option>,<option>integration testing</option>,<option>not testing</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="automated_regression_testing"><a class="jump" href="index.html#automated_regression_testing"></a>Automated regression testing</h2><div data-outline="automated_regression_testing">
+
+<p id="@once_you_test"><a class="jump" href="index.html#@once_you_test"></a>Once you have test automation, it’s very important to rerun your tests when you modify your code.
+Software engineers know from painful experience that <em>any</em> change to a large or complex program is dangerous.
+Whether you’re fixing another bug, adding a new feature, or optimizing the code to make it faster, an automated test suite that preserves a baseline of correct behavior – even if it’s only a few tests – will save your bacon.
+Running the tests frequently while you’re changing the code prevents your program from <em>regressing</em> — introducing other bugs when you fix new bugs or add new features.
+Running all your tests after every change is called <mark data-structure-text="regression testing" id="^regression_testing"><strong>regression testing</strong></mark>.</p>
+
+<p id="@whenever_you_find"><a class="jump" href="index.html#@whenever_you_find"></a>Whenever you find and fix a bug, take the input that elicited the bug and add it to your automated test suite as a test case.
+This kind of test case is called a <em>regression test</em>. This helps to populate your test suite with good test cases.  Remember that a test is good if it elicits a bug — and every regression test did in one version of your code!  Saving regression tests also protects against reversions that reintroduce the bug.  The bug may be an easy error to make, since it happened once already.</p>
+
+<p id="@idea_also_leads"><a class="jump" href="index.html#@idea_also_leads"></a>This idea also leads to <em>test-first debugging</em>.  When a bug arises, immediately write a test case for it that elicits it, and immediately add it to your test suite, with a name that identifies it as coming from a bug report rather than partitioning, such as <code>it("covers bug #1079")</code>.  Once you find and fix the bug, all your test cases will be passing, and you’ll be done with debugging and have a regression test for that bug.</p>
+
+<p id="@practice_these_two"><a class="jump" href="index.html#@practice_these_two"></a>In practice, these two ideas, automated testing and regression testing, are almost always used in combination.
+Regression testing is only practical if the tests can be run often, automatically.
+Conversely, if you already have automated testing in place for your project, then you might as well use it to prevent regressions.
+So <strong>automated regression testing</strong> is a best-practice of modern software engineering.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-automated_regression_testing"><h4 class="text-danger" id="@reading_exercises_12"><a class="jump" href="index.html#@reading_exercises_12"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automated_regression_testing-regression_testing" data-target="#ex-automated_regression_testing-regression_testing" data-toggle="collapse"><a class="jump" href="index.html#@ex-automated_regression_testing-regression_testing"></a><span class="panel-title">Regression testing</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automated_regression_testing-regression_testing" data-outline="regression_testing" data-ex-id="automated_regression_testing/regression_testing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@which_following_best"><a class="jump" href="index.html#@which_following_best"></a>Which of the following best defines regression testing?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="You should run a suite of tests whenever you change the code."><label for="md_converted_choice_25_0"><input type="radio" id="md_converted_choice_25_0" name="md_converted_radio_25">You should run a suite of tests whenever you change the code.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Every component in your code should have an associated set of tests that exercises all the corner cases in its specification."><label for="md_converted_choice_25_1"><input type="radio" id="md_converted_choice_25_1" name="md_converted_radio_25">Every component in your code should have an associated set of tests that exercises all the corner cases in its specification.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Tests should be written before you write the code as a way of checking your understanding of the specification."><label for="md_converted_choice_25_2"><input type="radio" id="md_converted_choice_25_2" name="md_converted_radio_25">Tests should be written before you write the code as a way of checking your understanding of the specification.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="When a new test exposes a bug, you should run it on all previous versions of the code until you find the version where the bug was introduced."><label for="md_converted_choice_25_3"><input type="radio" id="md_converted_choice_25_3" name="md_converted_radio_25">When a new test exposes a bug, you should run it on all previous versions of the code until you find the version where the bug was introduced.</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-automated_regression_testing-running_automated_tests" data-target="#ex-automated_regression_testing-running_automated_tests" data-toggle="collapse"><a class="jump" href="index.html#@ex-automated_regression_testing-running_automated_tests"></a><span class="panel-title">Running automated tests</span></div><div class="panel-collapse collapse exercise-panel" id="ex-automated_regression_testing-running_automated_tests" data-outline="running_automated_tests" data-ex-id="automated_regression_testing/running_automated_tests" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@which_following_good"><a class="jump" href="index.html#@which_following_good"></a>Which of the following are good times to rerun all your tests?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="Before doing git add/commit/push"><label for="md_converted_choice_24_0"><input type="checkbox" id="md_converted_choice_24_0">Before doing git add/commit/push</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="After rewriting a function to make it faster"><label for="md_converted_choice_24_1"><input type="checkbox" id="md_converted_choice_24_1">After rewriting a function to make it faster</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="When using a code coverage tool"><label for="md_converted_choice_24_2"><input type="checkbox" id="md_converted_choice_24_2">When using a code coverage tool</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="After you think you fixed a bug"><label for="md_converted_choice_24_3"><input type="checkbox" id="md_converted_choice_24_3">After you think you fixed a bug</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="iterative_test-first_programming"><a class="jump" href="index.html#iterative_test-first_programming"></a>Iterative test-first programming</h2><div data-outline="iterative_test-first_programming">
+
+<p id="@revisit_test-first_programming"><a class="jump" href="index.html#@revisit_test-first_programming"></a>Let’s revisit the test-first programming idea that we introduced at the start of this reading, and refine it.
+Effective software engineering does not follow a linear process.
+Practice <mark data-mark-text="iterative development" data-structure-text="iterative development" id="^iterative_development"><strong>iterative</strong></mark> test-first programming, in which you are prepared to go back and revise your work in previous steps:</p>
+
+<ol id="@write_specification_function">
+<li><a class="jump" href="index.html#@write_specification_function"></a>Write a specification for the function.</li>
+<li>Write tests that exercise the spec.
+As you find problems, <strong>iterate</strong> on the spec and the tests.</li>
+<li>Write an implementation.
+As you find problems, <strong>iterate</strong> on the spec, the tests, and the implementation.</li>
+</ol>
+
+<p id="@each_step_helps"><a class="jump" href="index.html#@each_step_helps"></a>Each step helps to validate the previous steps.
+Writing tests is a good way to understand the specification.
+The specification can be incorrect, incomplete, ambiguous, or missing corner cases.
+Trying to write tests can uncover these problems early, before you’ve wasted time working on an implementation of a buggy spec.
+Similarly, writing the implementation may help you discover missing or incorrect tests, or prompt you to revisit and revise the specification.</p>
+
+<p id="@since_may_be"><a class="jump" href="index.html#@since_may_be"></a>Since it may be necessary to iterate on previous steps, it doesn’t make sense to devote enormous amounts of time making one step perfect before moving on to the next step.
+<strong>Plan for iteration:</strong></p>
+
+<ul>
+<li><p id="@large_specification_start"><a class="jump" href="index.html#@large_specification_start"></a>For a large specification, start by writing only one part of the spec, proceed to test and implement that part, then iterate with a more complete spec.</p></li>
+<li><p id="@complex_test_suite"><a class="jump" href="index.html#@complex_test_suite"></a>For a complex test suite, start by choosing a few important partitions, and create a small test suite for them.
+Proceed with a simple implementation that passes those tests, and then iterate on the test suite with more partitions.</p></li>
+<li><p id="@tricky_implementation_first"><a class="jump" href="index.html#@tricky_implementation_first"></a>For a tricky implementation, first write a simple brute-force implementation that tests your spec and validates your test suite.
+Then move on to the harder implementation with confidence that your spec is good and your tests are correct.</p></li>
+</ul>
+
+<p id="@iteration_feature_every"><a class="jump" href="index.html#@iteration_feature_every"></a>Iteration is a feature of every modern software engineering process (such as <a href="https://en.wikipedia.org/wiki/Agile_software_development">Agile</a> and <a href="https://en.wikipedia.org/wiki/Scrum_(software_development)">Scrum</a>), with good empirical support for its effectiveness.
+Iteration requires a different mindset than you may be used to as a student solving homework and exam problems.
+Instead of trying to solve a problem perfectly from start to finish, iteration means reaching a rough solution as soon as possible, and then steadily refining and improving it, so that you have time to discard and rework if necessary.
+Iteration makes the best use of your time when a problem is difficult and the solution space is unknown.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-iterative_test-first_programming"><h4 class="text-danger" id="@reading_exercises_13"><a class="jump" href="index.html#@reading_exercises_13"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-iterative_test-first_programming-testing_techniques" data-target="#ex-iterative_test-first_programming-testing_techniques" data-toggle="collapse"><a class="jump" href="index.html#@ex-iterative_test-first_programming-testing_techniques"></a><span class="panel-title">Testing techniques</span></div><div class="panel-collapse collapse exercise-panel" id="ex-iterative_test-first_programming-testing_techniques" data-outline="testing_techniques" data-ex-id="iterative_test-first_programming/testing_techniques" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@which_these_techniques"><a class="jump" href="index.html#@which_these_techniques"></a>Which of these techniques are useful for choosing test cases in test-first programming, before any code is written?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="black box"><label for="md_converted_choice_26_0"><input type="checkbox" id="md_converted_choice_26_0">black box</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="regression"><label for="md_converted_choice_26_1"><input type="checkbox" id="md_converted_choice_26_1">regression</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typing"><label for="md_converted_choice_26_2"><input type="checkbox" id="md_converted_choice_26_2">static typing</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="partitioning"><label for="md_converted_choice_26_3"><input type="checkbox" id="md_converted_choice_26_3">partitioning</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="boundaries"><label for="md_converted_choice_26_4"><input type="checkbox" id="md_converted_choice_26_4">boundaries</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="glass box"><label for="md_converted_choice_26_5"><input type="checkbox" id="md_converted_choice_26_5">glass box</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="coverage"><label for="md_converted_choice_26_6"><input type="checkbox" id="md_converted_choice_26_6">coverage</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-iterative_test-first_programming-iterating" data-target="#ex-iterative_test-first_programming-iterating" data-toggle="collapse"><a class="jump" href="index.html#@ex-iterative_test-first_programming-iterating"></a><span class="panel-title">Iterating</span></div><div class="panel-collapse collapse exercise-panel" id="ex-iterative_test-first_programming-iterating" data-outline="iterating" data-ex-id="iterative_test-first_programming/iterating" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@suppose_you_writing_binary-search_function_you"><a class="jump" href="index.html#@suppose_you_writing_binary-search_function_you"></a>Suppose you are writing a binary-search function, and you are expected to provide not only a working implementation but also a clear spec for clients and a useful test suite as well.</p>
+
+<p id="@although_binary_search"><a class="jump" href="index.html#@although_binary_search"></a>Although binary search is a straightforward algorithm to understand, it is <a href="https://ai.googleblog.com/2006/06/extra-extra-read-all-about-it-nearly.html">notoriously tricky to implement correctly</a>, so you are looking for all the help you can get to make sure you get it right.</p>
+
+<p id="@which_these_steps_help_validate_your_specification_before_you"><a class="jump" href="index.html#@which_these_steps_help_validate_your_specification_before_you"></a>Which of these steps will help validate your specification, before you implement the binary-search algorithm?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="black box testing"><label for="md_converted_choice_27_0"><input type="checkbox" id="md_converted_choice_27_0">black box testing</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="glass box testing"><label for="md_converted_choice_27_1"><input type="checkbox" id="md_converted_choice_27_1">glass box testing</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="running the tests"><label for="md_converted_choice_27_2"><input type="checkbox" id="md_converted_choice_27_2">running the tests</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="writing a simple linear-search algorithm"><label for="md_converted_choice_27_3"><input type="checkbox" id="md_converted_choice_27_3">writing a simple linear-search algorithm</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@which_these_steps_help_validate_your_test_suite_before"><a class="jump" href="index.html#@which_these_steps_help_validate_your_test_suite_before"></a>Which of these steps will help validate your test suite, before you implement the binary-search algorithm?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="writing a simple linear-search algorithm"><label for="md_converted_choice_28_0"><input type="checkbox" id="md_converted_choice_28_0">writing a simple linear-search algorithm</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="running a code coverage tool on a simple implementation"><label for="md_converted_choice_28_1"><input type="checkbox" id="md_converted_choice_28_1">running a code coverage tool on a simple implementation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typechecking by running the TypeScript compiler"><label for="md_converted_choice_28_2"><input type="checkbox" id="md_converted_choice_28_2">static typechecking by running the TypeScript compiler</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@why_good_find"><a class="jump" href="index.html#@why_good_find"></a>Why is it good to find and remove bugs in your spec and test suite before starting the tricky implementation?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="so that when a bug arises, you can assume that the bug is probably in the implementation code, rather than the spec or tests"><label for="md_converted_choice_29_0"><input type="checkbox" id="md_converted_choice_29_0">so that when a bug arises, you can assume that the bug is probably in the implementation code, rather than the spec or tests</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="because fixing bugs in the spec can force major changes on the implementation"><label for="md_converted_choice_29_1"><input type="checkbox" id="md_converted_choice_29_1">because fixing bugs in the spec can force major changes on the implementation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="because fixing bugs in the test suite can force major changes on the implementation"><label for="md_converted_choice_29_2"><input type="checkbox" id="md_converted_choice_29_2">because fixing bugs in the test suite can force major changes on the implementation</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="randomized_testing"><a class="jump" href="index.html#randomized_testing"></a>Randomized testing</h2><div data-outline="randomized_testing">
+
+<p id="@explained_above_why"><a class="jump" href="index.html#@explained_above_why"></a>We explained <a href="index.html#why_software_testing_is_hard">above</a> why random <em>statistical</em> testing (in the way practiced by other engineering disciplines) is ineffective for software.</p>
+
+<p id="@but_randomly-generated_test"><a class="jump" href="index.html#@but_randomly-generated_test"></a>But randomly-generated test cases <em>do</em> play a role in testing, usually in later iterations of a project after the code has been validated by more systematic testing.</p>
+
+<p id="@fuzz_testing_generates"><a class="jump" href="index.html#@fuzz_testing_generates"></a><a href="https://en.wikipedia.org/wiki/Fuzzing">Fuzz testing</a> generates random inputs for functions or entire programs, in order to find bugs or security vulnerabilities.
+Because it doesn’t know the correct answer for any given input, a fuzz tester just looks for an absence of bad behavior: the program should run cleanly, detect and report errors, but not arbitrarily crash.</p>
+
+<p id="@property-based_testing_somewhat"><a class="jump" href="index.html#@property-based_testing_somewhat"></a><a href="https://fast-check.dev/">Property-based testing</a> is somewhat more principled than fuzz testing.
+A property-based tester also generates random inputs (often guided by custom code to make it realistically fake and filtered by the precondition), then checks that the result satisfies some particular property (weaker than the real postcondition).
+For example, a property-based tester for a string slicing function might check that the returned slice occurs as a substring of the original string.
+Fuzz testing is a special case of property-based testing, where the desired property is “didn’t crash.”</p>
+
+</div><h2 id="summary"><a class="jump" href="index.html#summary"></a>Summary</h2><div data-outline="summary">
+
+<p id="@reading_saw_these"><a class="jump" href="index.html#@reading_saw_these"></a>In this reading, we saw these ideas:</p>
+
+<ul id="@test-first_programming_write">
+<li><a class="jump" href="index.html#@test-first_programming_write"></a>Test-first programming. Write tests before you write code.</li>
+<li>Systematic testing with partitioning and boundary values, to design a test suite that is correct, thorough, and small.</li>
+<li>Glass box testing and statement coverage for filling out a test suite.</li>
+<li>Unit-testing each module, in isolation as much as possible.</li>
+<li>Automated regression testing to keep bugs from coming back.</li>
+<li>Iterative development. Plan to redo some work.</li>
+</ul>
+
+<p id="@topics_today-s_reading"><a class="jump" href="index.html#@topics_today-s_reading"></a>The topics of today’s reading connect to our three key properties of good software as follows:</p>
+
+<ul>
+<li><p id="@safe_bugs_testing"><a class="jump" href="index.html#@safe_bugs_testing"></a><strong>Safe from bugs.</strong>
+Testing is about finding bugs in your code, and test-first programming is about finding them as early as possible, right after you introduce them.</p></li>
+<li><p id="@easy_understand_systematic"><a class="jump" href="index.html#@easy_understand_systematic"></a><strong>Easy to understand.</strong>
+Systematic testing with a documented testing strategy makes it easier to understand how test cases were chosen and how thorough a test suite is.</p></li>
+<li><p id="@ready_change_correct"><a class="jump" href="index.html#@ready_change_correct"></a><strong>Ready for change.</strong>
+Correct test suites only depend on behavior in the spec, which allows the implementation to change within the confines of the spec.
+We also talked about automated regression testing, which helps keep bugs from coming back when changes are made to code.</p></li>
+</ul>
+
+<h3 id="asking_questions_about_the_reading"><a class="jump" href="index.html#asking_questions_about_the_reading"></a>Asking questions about the reading</h3><div data-outline="asking_questions_about_the_reading">
+
+<p id="@question_about_reading"><a class="jump" href="index.html#@question_about_reading"></a>Have a question about the reading, or about a reading exercise?
+Post your question on Piazza, and include a link that jumps directly to the part of the reading or the reading exercise that you’re asking about.
+You can get that link by moving your mouse cursor into the left margin until an octothorpe <code>#</code> link appears next to what you want to refer to.
+Click on that <code>#</code>, and your browser’s address bar now has the link you want.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-summary"><h4 class="text-danger" id="@reading_exercises_14"><a class="jump" href="index.html#@reading_exercises_14"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-summary-every_question_is_a_good_question" data-target="#ex-summary-every_question_is_a_good_question" data-toggle="collapse"><a class="jump" href="index.html#@ex-summary-every_question_is_a_good_question"></a><span class="panel-title">Every question is a good question</span></div><div class="panel-collapse collapse exercise-panel" id="ex-summary-every_question_is_a_good_question" data-outline="every_question_is_a_good_question" data-ex-id="asking_questions_about_the_reading/every_question_is_a_good_question" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@find_paragraph_reading"><a class="jump" href="index.html#@find_paragraph_reading"></a>Find the paragraph in this reading that defines <em>glass box testing</em>, get the link that jumps right to that paragraph, and paste the link here:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-summary-jumping_in" data-target="#ex-summary-jumping_in" data-toggle="collapse"><a class="jump" href="index.html#@ex-summary-jumping_in"></a><span class="panel-title">Jumping in</span></div><div class="panel-collapse collapse exercise-panel" id="ex-summary-jumping_in" data-outline="jumping_in" data-ex-id="asking_questions_about_the_reading/jumping_in" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-02-testing"><div class="panel-body">
+
+<p id="@find_link_jumps"><a class="jump" href="index.html#@find_link_jumps"></a>Find the link that jumps right to this exercise, and paste the link here:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div></div></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-02-testing"></script></body><!--
+Handout delivered Tue May 26 2026 13:28:48 GMT+0000 (Coordinated Universal Time)
+--></html>
