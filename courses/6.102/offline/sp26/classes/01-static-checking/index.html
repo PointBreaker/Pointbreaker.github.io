@@ -1,0 +1,702 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>Reading 1: Static Checking</title>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — Software Construction</a><div>Spring 2026</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_1_static_checking">Reading 1: Static Checking</a></li><li><a href="index.html#hailstone_sequence">Hailstone sequence</a></li><li><a href="index.html#types">Types</a></li><li><a href="index.html#static_typing">Static typing</a></li><li><a href="index.html#static_checking_dynamic_checking_no_checking">Static checking, dynamic checking, no checking</a></li><li><a href="index.html#arrays">Arrays</a></li><li><a href="index.html#functions">Functions</a></li><li><a href="index.html#mutating_values_vs_reassigning_variables">Mutating values vs. reassigning variables</a></li><li><a href="index.html#documenting_assumptions">Documenting assumptions</a></li><li><a href="index.html#hacking_vs_engineering">Hacking vs. engineering</a></li><li><a href="index.html#the_goals_of_6102">The goals of 6.102</a></li><li><a href="index.html#summary">Summary</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_1_static_checking"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-01-static-checking"></iframe><a class="jump" href="index.html#reading_1_static_checking"></a>Reading 1: Static Checking</h1><div data-outline="reading_1_static_checking">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>Objectives</h4>
+
+<p id="@today-s_class_two"><a class="jump" href="index.html#@today-s_class_two"></a>Today’s class has two topics:</p>
+
+<ul id="@static_typing_big">
+<li><a class="jump" href="index.html#@static_typing_big"></a>static typing</li>
+<li>the big three properties of good software</li>
+</ul>
+
+<h2 id="hailstone_sequence"><a class="jump" href="index.html#hailstone_sequence"></a>Hailstone sequence</h2><div data-outline="hailstone_sequence">
+
+<p id="@running_example_going"><a class="jump" href="index.html#@running_example_going"></a>As a running example, we’re going to explore the hailstone sequence, which is defined as follows:
+Starting with a number <em>n</em>, the next number in the sequence is <em>n/2</em> if <em>n</em> is even, or <em>3n+1</em> if <em>n</em> is odd.
+The sequence ends when it reaches 1.
+Here are some examples:</p>
+
+<pre><p id="@2_1_3"><a class="jump" href="index.html#@2_1_3"></a>2, 1
+3, 10, 5, 16, 8, 4, 2, 1
+4, 2, 1
+2<sup>n</sup>, 2<sup>n-1</sup> , … , 4, 2, 1
+5, 16, 8, 4, 2, 1
+7, 22, 11, 34, 17, 52, 26, 13, 40, …? (where does this stop?)</p></pre>
+
+<p id="@because_odd-number_rule"><a class="jump" href="index.html#@because_odd-number_rule"></a>Because of the odd-number rule, the sequence may bounce up and down before decreasing to 1.
+It’s conjectured that all hailstones eventually fall to the ground – i.e., the hailstone sequence reaches 1 for all starting <em>n</em> – but that’s still an <a href="https://en.wikipedia.org/wiki/Collatz_conjecture">open question</a>.
+Why is it called a hailstone sequence?
+Because hailstones form in clouds by bouncing up and down until they eventually build enough weight to fall to earth.</p>
+
+<h3 id="computing_hailstones"><a class="jump" href="index.html#computing_hailstones"></a>Computing hailstones</h3><div data-outline="computing_hailstones">
+
+<p id="@here-s_some_code"><a class="jump" href="index.html#@here-s_some_code"></a>Here’s some code for computing and printing the hailstone sequence for some starting <em>n</em>.
+We’ll write JavaScript and Python versions of the code side by side for comparison:</p>
+
+<table><tbody><tr><td style="vertical-align: top; padding-right: 10px"><pre id="@python_n_3"><a class="jump" href="index.html#@python_n_3"></a><code class="language-python hljs"><span class="hljs-comment"># Python</span>
+n = <span class="hljs-number">3</span>
+<span class="hljs-keyword">while</span> n != <span class="hljs-number">1</span>:
+    print(n)
+    <span class="hljs-keyword">if</span> n % <span class="hljs-number">2</span> == <span class="hljs-number">0</span>:
+        n = n / <span class="hljs-number">2</span>
+    <span class="hljs-keyword">else</span>:
+        n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>
+
+
+print(n)</code></pre></td><td style="vertical-align: top"><pre id="@javascript_typescript_code"><a class="jump" href="index.html#@javascript_typescript_code"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// JavaScript (or TypeScript, this code works in both languages)</span>
+<span class="hljs-keyword">let</span> n = <span class="hljs-number">3</span>;
+<span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+    <span class="hljs-built_in">console</span>.log(n);
+    <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+        n = n / <span class="hljs-number">2</span>;
+    } <span class="hljs-keyword">else</span> {
+        n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+    }
+}
+<span class="hljs-built_in">console</span>.log(n);</code></pre></td></tr></tbody></table>
+
+<p id="@basic_semantics_expressions"><a class="jump" href="index.html#@basic_semantics_expressions"></a>The basic semantics of expressions and statements in JavaScript are very similar to Python.  The <code>while</code> and <code>if</code> keywords behave the same, for example.</p>
+
+<p id="@few_points_syntax"><a class="jump" href="index.html#@few_points_syntax"></a>A few points of syntax are worth noting here:</p>
+
+<ul>
+<li><p id="@javascript_requires_parentheses"><a class="jump" href="index.html#@javascript_requires_parentheses"></a>JavaScript requires parentheses around the conditions of the <code>if</code> and <code>while</code>.</p></li>
+<li><p id="@javascript_statement_ends"><a class="jump" href="index.html#@javascript_statement_ends"></a>A JavaScript statement ends with a semicolon.
+This is technically optional, because JavaScript has rules for <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#automatic_semicolon_insertion">automatically inserting a semicolon</a> at the end of a line.  But these rules have obscure pitfalls that can lead to unexpected behavior and bugs, so always using semicolons is a good practice.</p></li>
+<li><p id="@javascript_uses_curly"><a class="jump" href="index.html#@javascript_uses_curly"></a>JavaScript uses curly braces around blocks instead of indentation.
+But you should still always indent the block, even though JavaScript won’t pay any attention to your extra spaces.  Programming is a form of communication, and you’re communicating not only to the compiler, but to human beings.  Humans need that indentation.  We’ll come back to this later.</p></li>
+</ul>
+
+<span id="triple-equals"></span>
+
+<p id="@you_may_also"><a class="jump" href="index.html#@you_may_also"></a>You may also notice that the JavaScript version uses <code>===</code> and <code>!==</code> where the Python uses <code>==</code> and <code>!=</code>.
+That’s because <code>==</code> and <code>!=</code> in JavaScript do a variety of <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Equality#description">automatic type conversions</a> to try to make the values on the lefthand side and righthand side comparable to each other.
+For example, <code>0 == ""</code> is true in JavaScript, which is surprising and confusing.
+The triple-equals versions of these operators are much safer and more predictable: <code>0 === ""</code> is false.
+Good JavaScript programmers will only use <code>===</code> and <code>!==</code>.
+This is a potential pitfall when moving from Python.</p>
+
+</div></div><h2 id="types"><a class="jump" href="index.html#types"></a>Types</h2><div data-outline="types">
+
+<p id="@but_not_using"><a class="jump" href="index.html#@but_not_using"></a>But we are not using JavaScript in this class, strictly speaking.
+We are using <em>TypeScript</em>, which extends JavaScript with the ability to declare types in the program.
+In this case, we can specify that the variable <code>n</code> has type <code>number</code>:</p>
+
+<pre id="@let_n_number_3"><a class="jump" href="index.html#@let_n_number_3"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">3</span>;</code></pre>
+
+<p id="@type_set_values"><a class="jump" href="index.html#@type_set_values"></a>A <mark data-structure-text="type" id="^type"><strong>type</strong></mark> is a set of values along with operations that can be performed on those values.</p>
+
+<p id="@typescript_several_built-in"><a class="jump" href="index.html#@typescript_several_built-in"></a>TypeScript has several built-in types, including:</p>
+
+<ul id="@number_which_represents">
+<li><a class="jump" href="index.html#@number_which_represents"></a><code>number</code>, which represents both integers and floating-point numbers</li>
+<li><code>boolean</code>, which represents true or false</li>
+<li><code>string</code>, which represents a sequence of characters</li>
+</ul>
+
+<p id="@operations_functions_take"><a class="jump" href="index.html#@operations_functions_take"></a><mark data-structure-text="operation" id="^operation"><strong>Operations</strong></mark> are functions that take inputs and produce outputs (and sometimes change the values of the inputs themselves).  The syntax for operations varies, but we still think of them as functions no matter how they’re written.  Here are several different syntaxes for an operation in Python or TypeScript:</p>
+
+<ul>
+<li><p id="@operator_example_b"><a class="jump" href="index.html#@operator_example_b"></a><em>As an operator.</em>  For example, <code>a + b</code> invokes the operation <code>+ : number × number → number</code>.
+(In this notation: <code>+</code> is the name of the operation, <code>number × number</code> before the arrow gives the types of the two inputs, and <code>number</code> after the arrow gives the type of the output.)</p></li>
+<li><p id="@function_example_math-sin-theta"><a class="jump" href="index.html#@function_example_math-sin-theta"></a><em>As a function.</em>  For example, <code>Math.sin(theta)</code> calls the operation <code>sin: number → number</code>.  Here, <code>Math</code> is not an object.  It’s the class that contains the <code>sin</code> function.</p></li>
+<li><p id="@method_object_example"><a class="jump" href="index.html#@method_object_example"></a><em>As a method of an object.</em>  For example, <code>str1.concat(str2)</code> calls the operation <code>concat: string × string → string</code>.</p></li>
+<li><p id="@property_object_example"><a class="jump" href="index.html#@property_object_example"></a><em>As a property of an object.</em>  For example, <code>str.length</code> calls the operation <code>length: string → number</code>.  Note the lack of parentheses after <code>str.length</code>.</p></li>
+</ul>
+
+<p id="@contrast_typescript-s_str-length"><a class="jump" href="index.html#@contrast_typescript-s_str-length"></a>Contrast TypeScript’s <code>str.length</code> with Python’s <code>len(str)</code>.  It’s the same operation in both languages – taking a string and returning its length – but it just uses different syntax.</p>
+
+<p id="@some_operations_overloaded"><a class="jump" href="index.html#@some_operations_overloaded"></a>Some operations are <mark data-mark-text="overloading" data-structure-text="overloading" id="^overloading"><strong>overloaded</strong></mark> in the sense that the same operation name is used for functions that take different types of arguments.
+The operator <code>+</code> is overloaded in TypeScript.
+With numbers, 5 + 3 naturally produces 8.
+But when <code>+</code> is used on strings, it does string concatenation instead, so “5” + “3” produces “53”.
+Overloading is not limited to operators like <code>+</code>; methods and functions can also be overloaded
+(at least in <a href="https://en.wikipedia.org/wiki/Function_overloading#Languages_supporting_overloading">some programming languages</a>, including TypeScript).</p>
+
+</div><h2 id="static_typing"><a class="jump" href="index.html#static_typing"></a>Static typing</h2><div data-outline="static_typing">
+
+<p id="@typescript_statically-typed_language"><a class="jump" href="index.html#@typescript_statically-typed_language"></a>TypeScript is a <strong><mark data-mark-text="static typing" data-structure-text="static typing" id="^static_typing">statically-typed</mark> language</strong>.  Variables can be assigned a type at <mark data-structure-text="compile time" id="^compile_time"><strong>compile time</strong></mark> (before the program runs), and the compiler can therefore deduce the types of expressions using those variables.  If <code>a</code> and <code>b</code> are declared as <code>number</code>, then the compiler concludes that <code>a+b</code> is also <code>number</code>.  In fact, the VS Code environment does this while you’re writing code, so you can see all the relevant errors while you’re still typing.</p>
+
+<p id="@javascript_python_contrast"><a class="jump" href="index.html#@javascript_python_contrast"></a>JavaScript and Python, by contrast, are <strong><mark data-mark-text="dynamic typing" data-structure-text="dynamic typing" id="^dynamic_typing">dynamically-typed</mark> languages</strong>, because this kind of checking is deferred until <mark data-structure-text="runtime" id="^runtime"><strong>runtime</strong></mark> (while the program is running).</p>
+
+<p id="@static_typing_particular"><a class="jump" href="index.html#@static_typing_particular"></a>Static typing is a particular kind of <strong>static checking</strong>, which means checking for bugs at compile time.  Bugs are the bane of programming.  Many of the ideas in this course are aimed at eliminating bugs from your code, and static checking is the first idea that we’ve seen for this.  Static typing prevents a large class of bugs from infecting your program: to be precise, bugs caused by applying an operation to the wrong types of arguments.  If you write a broken line of code like:</p>
+
+<pre id="@5_6"><a class="jump" href="index.html#@5_6"></a><code class="language-ts hljs typescript"><span class="hljs-string">"5"</span> * <span class="hljs-string">"6"</span></code></pre>
+
+<p id="@tries_multiply_two"><a class="jump" href="index.html#@tries_multiply_two"></a>that tries to multiply two strings, then static typing will catch this error while you’re still programming, rather than waiting until the line is reached during execution.</p>
+
+<h3 id="static_types_at_compile_time_dynamic_types_at_runtime"><a class="jump" href="index.html#static_types_at_compile_time_dynamic_types_at_runtime"></a>Static types at compile time, dynamic types at runtime</h3><div data-outline="static_types_at_compile_time_dynamic_types_at_runtime">
+
+<p id="@static_type_declarations"><a class="jump" href="index.html#@static_type_declarations"></a>Static type declarations are used at compile time to perform static checking.
+Adding static types doesn’t change the fact that the behavior of our program at runtime is driven by actual values.
+In the hailstone program, if we declare <code>let&nbsp;n:&nbsp;number&nbsp;=&nbsp;3;</code> to specify the static type of <code>n</code>, the initial value at runtime is still <code>3</code>, not any other <code>number</code>.
+We’ll need to keep this distinction in mind when our static type encompasses more than one possible runtime type: a variable of static type <code>Animal</code> (let’s imagine) might really be a <code>Dog</code> or a <code>Fish</code> or a <code>SpottedOwl</code> at runtime.</p>
+
+<p id="@fact_typescript_like"><a class="jump" href="index.html#@fact_typescript_like"></a>In fact, TypeScript – like many statically-typed languages – <em>throws away</em> the static type information after compilation.
+What does the TypeScript compiler generate? JavaScript!
+Here is a bit of code in well-typed TypeScript, and the generated JavaScript:</p>
+
+<table><tbody><tr><td style="vertical-align: top; padding-right: 10px"><pre id="@typescript_compile_function"><a class="jump" href="index.html#@typescript_compile_function"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// TypeScript to compile</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>(<span class="hljs-params">name: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">string</span> </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-string">'Hi, '</span> + name;
+}
+<span class="hljs-keyword">let</span> greeting: <span class="hljs-built_in">string</span> = hello(<span class="hljs-string">'types'</span>);</code></pre></td><td style="vertical-align: top"><pre id="@javascript_generated_function"><a class="jump" href="index.html#@javascript_generated_function"></a><code class="language-javascript hljs"><span class="hljs-comment">// JavaScript generated</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hello</span>(<span class="hljs-params">name</span>) </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-string">'Hi, '</span> + name;
+}
+<span class="hljs-keyword">let</span> greeting = hello(<span class="hljs-string">'types'</span>);&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</code></pre></td></tr></tbody></table>
+
+</div><h3 id="support_for_static_typing_in_dynamically-typed_languages"><a class="jump" href="index.html#support_for_static_typing_in_dynamically-typed_languages"></a>Support for static typing in dynamically-typed languages</h3><div data-outline="support_for_static_typing_in_dynamically-typed_languages">
+
+<p id="@just_like_typescript"><a class="jump" href="index.html#@just_like_typescript"></a>Just like TypeScript adds static typing to the dynamically-typed JavaScript language, Python also has extensions that support static typing.
+Python 3.5 and later allow you to declare <a href="https://www.python.org/dev/peps/pep-0484/">type hints</a> in the code, e.g.:</p>
+
+<pre id="@python_function_declared"><a class="jump" href="index.html#@python_function_declared"></a><code class="language-python hljs"><span class="hljs-comment"># Python function declared with type hints</span>
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">hello</span><span class="hljs-params">(name: str)</span> -&gt; str:</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-string">'Hi, '</span> + name</code></pre>
+
+<p id="@declared_types_can"><a class="jump" href="index.html#@declared_types_can"></a>The declared types can be used by a checker like <a href="https://mypy-lang.org/">Mypy</a> or <a href="https://microsoft.github.io/pyright/">Pyright</a> to find type errors statically without having to run the code.</p>
+
+<p id="@addition_static_types"><a class="jump" href="index.html#@addition_static_types"></a>The addition of static types to dynamically-typed languages like Python and JavaScript reflects a widespread belief among software engineers that the use of static types is essential to building and maintaining a large software system.
+The rest of this reading, and in fact this entire course, will show reasons for this belief.</p>
+
+<p id="@adding_static_types"><a class="jump" href="index.html#@adding_static_types"></a>Adding static types to a dynamically-typed language enables a programming approach called <a href="https://en.wikipedia.org/wiki/Gradual_typing">gradual typing</a>, in which some parts of the code have static type declarations and other parts omit them.
+Gradual typing can provide a smoother path for a small experimental prototype to grow into a large, stable, maintainable system.</p>
+
+</div></div><h2 id="static_checking_dynamic_checking_no_checking"><a class="jump" href="index.html#static_checking_dynamic_checking_no_checking"></a>Static checking, dynamic checking, no checking</h2><div data-outline="static_checking_dynamic_checking_no_checking">
+
+<p id="@useful_think_about"><a class="jump" href="index.html#@useful_think_about"></a>It’s useful to think about three kinds of automatic checking that a language can provide:</p>
+
+<ul id="@static_checking_bug">
+<li><a class="jump" href="index.html#@static_checking_bug"></a><mark data-structure-text="static checking" id="^static_checking"><strong>Static checking</strong></mark>: the bug is found automatically before the program even runs.</li>
+<li><mark data-structure-text="dynamic checking" id="^dynamic_checking"><strong>Dynamic checking</strong></mark>: the bug is found automatically during execution.</li>
+<li><strong>No checking</strong>: the language doesn’t help you find the error at all.  You have to watch for it yourself, or end up with wrong answers.</li>
+</ul>
+
+<p id="@needless_say_catching"><a class="jump" href="index.html#@needless_say_catching"></a>Needless to say, catching a bug statically is better than catching it dynamically, and catching it dynamically is better than not catching it at all.</p>
+
+<p id="@here_some_rules"><a class="jump" href="index.html#@here_some_rules"></a>Here are some rules of thumb for what errors you can expect to be caught at each of these times.</p>
+
+<p id="@static_checking_can"><a class="jump" href="index.html#@static_checking_can"></a><strong>Static checking</strong> can catch:</p>
+
+<ul id="@syntax_errors_like">
+<li><a class="jump" href="index.html#@syntax_errors_like"></a>syntax errors, like extra punctuation or spurious words.  Even dynamically-typed languages like Python do this kind of static checking.  If you have an indentation error in your Python program, you’ll find out before the program starts running.</li>
+<li>misspelled names, like <code>Math.sine(2)</code>.  (The correct spelling is <code>sin</code>.)</li>
+<li>wrong number of arguments, like <code>Math.sin(30, 20)</code>.</li>
+<li>wrong argument types, like <code>Math.sin("30")</code>.</li>
+<li>wrong return types, like <code>return "30";</code> from a function that’s declared to return a <code>number</code>.</li>
+</ul>
+
+<p id="@general_static_checking"><a class="jump" href="index.html#@general_static_checking"></a>In general, static checking can detect errors related to the <em>type</em> of a variable – the set of values it is allowed to have, which is known at compile time in statically-typed languages like TypeScript – but is generally unable to find errors related to a specific value from that type.</p>
+
+<p id="@dynamic_checking_can"><a class="jump" href="index.html#@dynamic_checking_can"></a><strong>Dynamic checking</strong> can catch, for example:</p>
+
+<ul id="@specific_illegal_argument">
+<li><a class="jump" href="index.html#@specific_illegal_argument"></a>specific illegal argument values.  For example, the expression <code>x/y</code> is erroneous when <code>y</code> is zero, but well-defined for other values of <code>y</code>.  So divide-by-zero is not a static error, because you can’t know until runtime whether <code>y</code> is actually zero or not.  But divide-by-zero can be caught as a dynamic error; Python throws <code>ZeroDivisionError</code> when it happens.</li>
+<li>illegal conversions, i.e., when the specific value can’t be converted to or represented in the target type.
+For example, in Python, <code>int("hello")</code> throws <code>ValueError</code>, because the string <code>"hello"</code> cannot be parsed as a decimal integer.</li>
+<li>out-of-range indices or missing keys, e.g., using a too-large index on a string or array.
+In Python, <code>"hello"[13]</code> throws <code>IndexError</code>, and <code>{'a': 1}['b']</code> throws <code>KeyError</code>.</li>
+</ul>
+
+<span id="no-checking-in-JS"></span>
+
+<p id="@but_you_may"><a class="jump" href="index.html#@but_you_may"></a>But you may have noticed that the dynamic-checking examples above all came from Python.
+What about dynamic checking in TypeScript?
+TypeScript does the static checking, but its runtime behavior is entirely provided by <em>JavaScript</em>, and JavaScript’s designers decided to do <strong>no checking</strong> for many of these cases.
+So, for example, when a string or array index is out of bounds, or a key is not found in a map, JavaScript returns the special value <code>undefined</code>, rather than throwing an error as Python would.
+When dividing by zero, JavaScript returns a special value representing infinity rather than throwing an error.
+No checking makes bugs harder to find than they might otherwise be, because the special values can propagate through further computations until a failure finally occurs much farther away from the original mistake in the code.</p>
+
+<h3 id="surprise_number_is_not_a_true_number"><a class="jump" href="index.html#surprise_number_is_not_a_true_number"></a>Surprise: <code>number</code> is not a true number</h3><div data-outline="surprise_number_is_not_a_true_number">
+
+<p id="@another_trap_typescript"><a class="jump" href="index.html#@another_trap_typescript"></a>Another trap in TypeScript – which is shared by many other programming languages – is that its numeric type has corner cases that do not behave like the integers and real numbers we’re used to.  As a result, some errors that really should be dynamically checked are not checked at all.  Here are some of the traps hiding in TypeScript:</p>
+
+<ul>
+<li><p id="@limited_precision_integers"><a class="jump" href="index.html#@limited_precision_integers"></a><strong>Limited precision for integers</strong>. All numbers in TypeScript are floating-point numbers, which means that large-magnitude integers can only be represented approximately.  Integers between -2<sup>53</sup> and 2<sup>53</sup> (exclusive) can be represented exactly, but beyond that range, the floating-point representation preserves only the most-significant binary digits of the number.
+What does that mean if you have, say, 2<sup>60</sup> and try to increment it?  You get the same number back again: <code>2**60 + 1 === 2**60</code> in TypeScript.
+So this is an example of where what we might have hoped would be a dynamic error (because the computation we wrote can’t be represented correctly) produces the wrong answer instead.</p>
+
+<p id="@these_limits_representable"><a class="jump" href="index.html#@these_limits_representable"></a>These limits on representable integers are available as built-in constants:</p>
+
+<ul><li><code>Number.MAX_SAFE_INTEGER</code> (roughly 2<sup>53</sup> or 10<sup>16</sup>) is the largest precisely-representable integer</li>
+<li><code>Number.MIN_SAFE_INTEGER</code> (roughly -2<sup>53</sup> or -10<sup>16</sup>) is the smallest precisely-representable integer</li></ul>
+
+<p id="@arithmetic_integers_within"><a class="jump" href="index.html#@arithmetic_integers_within"></a><br>
+Arithmetic on integers within these safe bounds is guaranteed to remain precise.</p></li>
+<li><p id="@special_values_number"><a class="jump" href="index.html#@special_values_number"></a><strong>Special values</strong>.  The <code>number</code> type has several special values that aren’t real numbers:</p>
+
+<ul><li><code>Number.NaN</code> (which stands for “Not a Number”)</li>
+<li><code>Number.POSITIVE_INFINITY</code> (which prints as just <code>"Infinity"</code>)</li>
+<li><code>Number.NEGATIVE_INFINITY</code> (which prints as <code>"-Infinity"</code>)</li></ul>
+
+<p id="@you_apply_certain"><a class="jump" href="index.html#@you_apply_certain"></a><br>
+When you apply certain operations to a <code>number</code> that you’d expect to produce dynamic errors, like dividing by zero or taking the square root of a negative number, you will get one of these special values instead.  If you keep computing with it, you’ll end up with a bad final answer.</p></li>
+<li><p id="@overflow_underflow_typescript"><a class="jump" href="index.html#@overflow_underflow_typescript"></a><strong>Overflow and underflow</strong>. TypeScript is also unable to represent numbers that are too large (far from zero) or small (close to zero):</p>
+
+<ul><li><code>Number.MAX_VALUE</code> (roughly 10<sup>308</sup>) is the largest number that can be safely represented</li>
+<li><code>Number.MIN_VALUE</code> (roughly 10<sup>-324</sup>) is the smallest positive number that can be safely represented</li></ul>
+
+<p id="@happens_you_do"><a class="jump" href="index.html#@happens_you_do"></a><br>
+What happens when you do a computation whose answer is too large or too small to fit in that finite range?  The computation quietly <em>overflows</em> (becoming <code>POSITIVE_INFINITY</code> or <code>NEGATIVE_INFINITY</code>) or <em>underflows</em> (becoming zero).</p></li>
+</ul>
+
+<p id="@these_special_constant"><a class="jump" href="index.html#@these_special_constant"></a>These special constant values start with a capitalized <code>Number</code>, which is a class wrapper for <code>number</code>.
+Don’t use <code>Number</code> as a type – only use it to access these constants.
+When you are declaring a type, <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#the-primitives-string-number-and-boolean">always use the lowercase <code>number</code> instead</a>.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-static_checking_dynamic_checking_no_checking"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>reading exercises</h4><p id="@try_some_examples"><a class="jump" href="index.html#@try_some_examples"></a>Let’s try some examples of buggy code and see how they behave in TypeScript.
+Are these bugs caught statically, dynamically, or not at all?</p>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-1" data-target="#ex-static_checking_dynamic_checking_no_checking-1" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-1"></a><span class="panel-title">1</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-1" data-outline="1" data-ex-id="surprise_number_is_not_a_true_number/1" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_n_number_5_n_n"><a class="jump" href="index.html#@let_n_number_5_n_n"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">5</span>;
+n = n + <span class="hljs-string">".0"</span>;</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_1_0"><input type="radio" id="md_converted_choice_1_0" name="md_converted_radio_1">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_1_1"><input type="radio" id="md_converted_choice_1_1" name="md_converted_radio_1">dynamic error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_1_2"><input type="radio" id="md_converted_choice_1_2" name="md_converted_radio_1">no error, wrong answer</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-2" data-target="#ex-static_checking_dynamic_checking_no_checking-2" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-2"></a><span class="panel-title">2</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-2" data-outline="2" data-ex-id="surprise_number_is_not_a_true_number/2" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_odd_number"><a class="jump" href="index.html#@let_odd_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> odd: <span class="hljs-built_in">number</span> = <span class="hljs-number">2</span>**<span class="hljs-number">30</span> - <span class="hljs-number">1</span>;         <span class="hljs-comment">// an odd number</span>
+<span class="hljs-keyword">let</span> oddSquared: <span class="hljs-built_in">number</span> = odd * odd;  <span class="hljs-comment">// the square of an odd number should be odd</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_2_0"><input type="radio" id="md_converted_choice_2_0" name="md_converted_radio_2">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_2_1"><input type="radio" id="md_converted_choice_2_1" name="md_converted_radio_2">dynamic error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_2_2"><input type="radio" id="md_converted_choice_2_2" name="md_converted_radio_2">no error, wrong answer</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-3" data-target="#ex-static_checking_dynamic_checking_no_checking-3" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-3"></a><span class="panel-title">3</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-3" data-outline="3" data-ex-id="surprise_number_is_not_a_true_number/3" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_sum_number"><a class="jump" href="index.html#@let_sum_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> sum: <span class="hljs-built_in">number</span> = <span class="hljs-number">7</span>;
+<span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">0</span>;
+<span class="hljs-keyword">let</span> average: <span class="hljs-built_in">number</span> = sum/n;</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_3_0"><input type="radio" id="md_converted_choice_3_0" name="md_converted_radio_3">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_3_1"><input type="radio" id="md_converted_choice_3_1" name="md_converted_radio_3">dynamic error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_3_2"><input type="radio" id="md_converted_choice_3_2" name="md_converted_radio_3">no error, wrong answer</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-4" data-target="#ex-static_checking_dynamic_checking_no_checking-4" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-4"></a><span class="panel-title">4</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-4" data-outline="4" data-ex-id="surprise_number_is_not_a_true_number/4" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_x_number"><a class="jump" href="index.html#@let_x_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> x: <span class="hljs-built_in">number</span> = <span class="hljs-number">0</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+x += <span class="hljs-number">0.1</span>; x += <span class="hljs-number">0.1</span>;
+<span class="hljs-comment">// x should be 1.0</span></code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_4_0"><input type="radio" id="md_converted_choice_4_0" name="md_converted_radio_4">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_4_1"><input type="radio" id="md_converted_choice_4_1" name="md_converted_radio_4">dynamic error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, wrong answer"><label for="md_converted_choice_4_2"><input type="radio" id="md_converted_choice_4_2" name="md_converted_radio_4">no error, wrong answer</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-static_checking_dynamic_checking_no_checking-5" data-target="#ex-static_checking_dynamic_checking_no_checking-5" data-toggle="collapse"><a class="jump" href="index.html#@ex-static_checking_dynamic_checking_no_checking-5"></a><span class="panel-title">5</span></div><div class="panel-collapse collapse exercise-panel" id="ex-static_checking_dynamic_checking_no_checking-5" data-outline="5" data-ex-id="surprise_number_is_not_a_true_number/5" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<pre id="@let_n_number_2-53_1000_while"><a class="jump" href="index.html#@let_n_number_2-53_1000_while"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">2</span>**<span class="hljs-number">53</span> - <span class="hljs-number">1000</span>;
+<span class="hljs-keyword">while</span> (n !== <span class="hljs-number">2</span>**<span class="hljs-number">53</span> + <span class="hljs-number">1000</span>) {
+    n = n + <span class="hljs-number">1</span>;
+}</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_5_0"><input type="radio" id="md_converted_choice_5_0" name="md_converted_radio_5">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_5_1"><input type="radio" id="md_converted_choice_5_1" name="md_converted_radio_5">dynamic error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="no error, infinite loop"><label for="md_converted_choice_5_2"><input type="radio" id="md_converted_choice_5_2" name="md_converted_radio_5">no error, infinite loop</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<div class="handout-solo alert alert-warning"><p id="@note_these_readings"><a class="jump" href="index.html#@note_these_readings"></a>Note that these readings don’t keep track of the exercises you’ve previously done.
+When you reload the page, all exercises reset themselves.</p>
+
+<p id="@if_you-re_registered"><a class="jump" href="index.html#@if_you-re_registered"></a>If you’re a registered student, you can see which exercises you’ve already done by looking at <a href="https://omni.mit.edu/6.102/sp26/user/classes/" class="alert-link">Omnivore</a>.</p></div>
+
+</div></div><h2 id="arrays"><a class="jump" href="index.html#arrays"></a>Arrays</h2><div data-outline="arrays">
+
+<p id="@change_our_hailstone"><a class="jump" href="index.html#@change_our_hailstone"></a>Let’s change our hailstone computation so that it stores the sequence in a data structure instead of just printing it out.</p>
+
+<p id="@can_use_array"><a class="jump" href="index.html#@can_use_array"></a>For that, we can use an array type.  Arrays are variable-length sequences of another type, similar to Python lists.  Here’s how we can declare an array of numbers and make an empty array value:</p>
+
+<pre id="@let_array_array-number_0"><a class="jump" href="index.html#@let_array_array-number_0"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];</code></pre>
+
+<p id="@here-s_hailstone_code"><a class="jump" href="index.html#@here-s_hailstone_code"></a>Here’s the hailstone code written with arrays:</p>
+
+<pre id="@let_array_array-number_let_n_number"><a class="jump" href="index.html#@let_array_array-number_let_n_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+<span class="hljs-keyword">let</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">3</span>;
+<span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+    array.push(n);
+    <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+        n = n / <span class="hljs-number">2</span>;
+    } <span class="hljs-keyword">else</span> {
+        n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+    }
+}
+array.push(n);</code></pre>
+
+</div><h2 id="functions"><a class="jump" href="index.html#functions"></a>Functions</h2><div data-outline="functions">
+
+<p id="@if_want_wrap"><a class="jump" href="index.html#@if_want_wrap"></a>If we want to wrap this code into a reusable module, we can write a function:</p>
+
+<pre id="@compute_hailstone_sequence"><a class="jump" href="index.html#@compute_hailstone_sequence"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/**
+ * Compute a hailstone sequence.
+ * @param n  starting number for sequence.  Assumes n &gt; 0.
+ * @returns hailstone sequence starting with n and ending with 1.
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+    <span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+        array.push(n);
+        <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+            n = n / <span class="hljs-number">2</span>;
+        } <span class="hljs-keyword">else</span> {
+            n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+        }
+    }
+    array.push(n);
+    <span class="hljs-keyword">return</span> array;
+}</code></pre>
+
+<p id="@take_note_comment"><a class="jump" href="index.html#@take_note_comment"></a>Take note of the <code>/** ... */</code> comment before the function, because it’s very important.  This comment is a specification of the function, describing the inputs and outputs of the operation. The specification should be concise, clear, and precise. The comment provides information that is not already clear from the function types.  It doesn’t say, for example, that the return value is an array of numbers, because the <code>Array&lt;number&gt;</code> return type declaration just below already says that.  But it does say that the sequence starts with <code>n</code> and ends with 1, which is not captured by the type declaration but is important for the caller to know.</p>
+
+<p id="@lot_more_say"><a class="jump" href="index.html#@lot_more_say"></a>We’ll have a lot more to say about how to write good specifications in a few classes, but you’ll have to start reading them and using them right away.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-functions"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-functions-static_checking_of_function_return" data-target="#ex-functions-static_checking_of_function_return" data-toggle="collapse"><a class="jump" href="index.html#@ex-functions-static_checking_of_function_return"></a><span class="panel-title">Static checking of function return</span></div><div class="panel-collapse collapse exercise-panel" id="ex-functions-static_checking_of_function_return" data-outline="static_checking_of_function_return" data-ex-id="functions/static_checking_of_function_return" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@code_wrote_above"><a class="jump" href="index.html#@code_wrote_above"></a>In the code we wrote above, notice that the return type of the function is explicitly declared to be an array of numbers:</p>
+
+<pre id="@function_hailstonesequence-n_number_array-number_0"><a class="jump" href="index.html#@function_hailstonesequence-n_number_array-number_0"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{ ... }</code></pre>
+
+<p id="@means_typescript_statically"><a class="jump" href="index.html#@means_typescript_statically"></a>This means that TypeScript will statically check whether you are returning the right kind of value from the function.
+How would the TypeScript compiler judge each of the following <code>return</code> statements, if it appeared at the end of the body of <code>hailstoneSequence()</code>?</p>
+
+<p id="@return_array"><a class="jump" href="index.html#@return_array"></a><code>return array;</code></p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_6_0"><input type="radio" id="md_converted_choice_6_0" name="md_converted_radio_6">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_6_1"><input type="radio" id="md_converted_choice_6_1" name="md_converted_radio_6">legal</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_1"><a class="jump" href="index.html#@return_1"></a><code>return [];</code></p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_7_0"><input type="radio" id="md_converted_choice_7_0" name="md_converted_radio_7">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_7_1"><input type="radio" id="md_converted_choice_7_1" name="md_converted_radio_7">legal</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_8_4"><a class="jump" href="index.html#@return_8_4"></a><code>return ["8", "4", "2", "1"];</code></p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_8_0"><input type="radio" id="md_converted_choice_8_0" name="md_converted_radio_8">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_8_1"><input type="radio" id="md_converted_choice_8_1" name="md_converted_radio_8">legal</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_array-number"><a class="jump" href="index.html#@return_array-number"></a><code>return Array&lt;number&gt;;</code></p>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_9_0"><input type="radio" id="md_converted_choice_9_0" name="md_converted_radio_9">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_9_1"><input type="radio" id="md_converted_choice_9_1" name="md_converted_radio_9">legal</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_new_array-number"><a class="jump" href="index.html#@return_new_array-number"></a><code>return new Array&lt;number&gt;();</code></p>
+
+<div class="form-group exercise-part" data-outline="e"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_10_0"><input type="radio" id="md_converted_choice_10_0" name="md_converted_radio_10">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_10_1"><input type="radio" id="md_converted_choice_10_1" name="md_converted_radio_10">legal</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@return_5"><a class="jump" href="index.html#@return_5"></a><code>return;</code></p>
+
+<div class="form-group exercise-part" data-outline="f"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_11_0"><input type="radio" id="md_converted_choice_11_0" name="md_converted_radio_11">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_11_1"><input type="radio" id="md_converted_choice_11_1" name="md_converted_radio_11">legal</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@no_return_statement"><a class="jump" href="index.html#@no_return_statement"></a>no return statement at all at the end of the body of <code>hailstoneSequence()</code></p>
+
+<div class="form-group exercise-part" data-outline="g"><div class="radio exercise-choice" data-outline="static error"><label for="md_converted_choice_12_0"><input type="radio" id="md_converted_choice_12_0" name="md_converted_radio_12">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="legal"><label for="md_converted_choice_12_1"><input type="radio" id="md_converted_choice_12_1" name="md_converted_radio_12">legal</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="mutating_values_vs_reassigning_variables"><a class="jump" href="index.html#mutating_values_vs_reassigning_variables"></a>Mutating values vs. reassigning variables</h2><div data-outline="mutating_values_vs_reassigning_variables">
+
+<p id="@change_necessary_evil"><a class="jump" href="index.html#@change_necessary_evil"></a>Change is a necessary evil.
+But good programmers try to avoid things that change, because they may change unexpectedly.
+Immutability – intentionally forbidding certain things from changing at runtime – will be a major design principle in this course.</p>
+
+<p id="@there_two_aspects"><a class="jump" href="index.html#@there_two_aspects"></a>There are two aspects to immutability: whether a value is mutable or immutable, and whether a reference (such as a variable) can be reassigned or not.</p>
+
+<p id="@mutation_refers_changing"><a class="jump" href="index.html#@mutation_refers_changing"></a><mark data-structure-text="mutation" id="^mutation"><strong>Mutation</strong></mark> refers to changing the content of a value.
+An immutable type is a type whose values can never change once they have been created.
+The string type is immutable in both Python and TypeScript.
+Once a string is created, you can’t make it shorter, or longer, or replace any of its characters.
+You would have to create a new string containing the changes you want.</p>
+
+<p id="@contrast_array_type"><a class="jump" href="index.html#@contrast_array_type"></a>By contrast, the array type is <em>mutable</em> in TypeScript, just like lists are mutable in Python.
+You can change the contents of an array or list – adding elements, removing elements, or replacing elements.</p>
+
+<p id="@python_also_immutable"><a class="jump" href="index.html#@python_also_immutable"></a>Python also has immutable sequences, <em>tuples</em>, which cannot be changed once created.
+TypeScript doesn’t have immutable tuples, but it does have <code>ReadonlyArray</code>, which is an array type that omits the mutator operations.
+When you use <code>ReadonlyArray</code> as a type in your code, you can’t call <code>push()</code> to add elements, or <code>splice()</code> to delete elements, or reassign elements like <code>arr[i] = ...</code>.
+TypeScript will report a compiler error, because it can’t find those operations in the <code>ReadonlyArray</code> type.</p>
+
+<p id="@reassignment_means_changing"><a class="jump" href="index.html#@reassignment_means_changing"></a><mark data-structure-text="reassignment" id="^reassignment"><strong>Reassignment</strong></mark> means changing where a variable points.
+Python allows any variable to be reassigned, but TypeScript allows us to declare <em>constants</em>, which are unreassignable: names that are assigned to a value once, and can never be reassigned.  To make a reference unreassignable, declare it with the keyword <mark data-mark-text="const (TypeScript)" data-structure-text="const (TypeScript)" id="^const_typescript"><code>const</code></mark> instead of <code>let</code>:</p>
+
+<pre id="@const_n_number"><a class="jump" href="index.html#@const_n_number"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> n: <span class="hljs-built_in">number</span> = <span class="hljs-number">5</span>;</code></pre>
+
+<p id="@if_typescript_compiler"><a class="jump" href="index.html#@if_typescript_compiler"></a>If the TypeScript compiler isn’t convinced that your <code>const</code> variable will only be assigned once at runtime, then it will produce a compiler error.  So <code>const</code> gives you static checking for unreassignable references.</p>
+
+<p id="@good_practice_use"><a class="jump" href="index.html#@good_practice_use"></a>It’s good practice to use <code>const</code> for as many variables as possible.  Like the type of the variable, these declarations are important documentation, useful to the reader of the code and statically checked by the compiler.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-mutating_values_vs_reassigning_variables"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-mutating_values_vs_reassigning_variables-const" data-target="#ex-mutating_values_vs_reassigning_variables-const" data-toggle="collapse"><a class="jump" href="index.html#@ex-mutating_values_vs_reassigning_variables-const"></a><span class="panel-title">const</span></div><div class="panel-collapse collapse exercise-panel" id="ex-mutating_values_vs_reassigning_variables-const" data-outline="const" data-ex-id="mutating_values_vs_reassigning_variables/const" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@consider_variables_our"><a class="jump" href="index.html#@consider_variables_our"></a>Consider the variables in our <code>hailstoneSequence</code> function:</p>
+
+<pre id="@function_hailstonesequence-n_number_array-number_let_array"><a class="jump" href="index.html#@function_hailstonesequence-n_number_array-number_let_array"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Array</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">let</span> array: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">number</span>&gt; = [];
+    <span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+        array.push(n);
+        <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+            n = n / <span class="hljs-number">2</span>;
+        } <span class="hljs-keyword">else</span> {
+            n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+        }
+    }
+    array.push(n);
+    <span class="hljs-keyword">return</span> array;
+}</code></pre>
+
+<p id="@which_variables_might"><a class="jump" href="index.html#@which_variables_might"></a>Which variables might we declare <code>const</code>, because they are never reassigned in the code?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="n: number"><label for="md_converted_choice_13_0"><input type="checkbox" id="md_converted_choice_13_0"><code>n: number</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="array: Array<number>"><label for="md_converted_choice_13_1"><input type="checkbox" id="md_converted_choice_13_1"><code>array: Array&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-mutating_values_vs_reassigning_variables-readonlyarray" data-target="#ex-mutating_values_vs_reassigning_variables-readonlyarray" data-toggle="collapse"><a class="jump" href="index.html#@ex-mutating_values_vs_reassigning_variables-readonlyarray"></a><span class="panel-title">ReadonlyArray</span></div><div class="panel-collapse collapse exercise-panel" id="ex-mutating_values_vs_reassigning_variables-readonlyarray" data-outline="readonlyarray" data-ex-id="mutating_values_vs_reassigning_variables/readonlyarray" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@suppose_change_all"><a class="jump" href="index.html#@suppose_change_all"></a>Suppose we change all the uses of <code>Array</code> in the function into <code>ReadonlyArray</code> instead:</p>
+
+<pre id="@function_hailstonesequence-n_number_readonlyarray-number_let_array"><a class="jump" href="index.html#@function_hailstonesequence-n_number_readonlyarray-number_let_array"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">hailstoneSequence</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">ReadonlyArray</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">let</span> array: ReadonlyArray&lt;<span class="hljs-built_in">number</span>&gt; = [];
+    <span class="hljs-keyword">while</span> (n !== <span class="hljs-number">1</span>) {
+        array.push(n);
+        <span class="hljs-keyword">if</span> (n % <span class="hljs-number">2</span> === <span class="hljs-number">0</span>) {
+            n = n / <span class="hljs-number">2</span>;
+        } <span class="hljs-keyword">else</span> {
+            n = <span class="hljs-number">3</span> * n + <span class="hljs-number">1</span>;
+        }
+    }
+    array.push(n);
+    <span class="hljs-keyword">return</span> array;
+}</code></pre>
+
+<p id="@which_lines_static"><a class="jump" href="index.html#@which_lines_static"></a>Which lines will have static errors?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="let array: ReadonlyArray<number> = [];"><label for="md_converted_choice_14_0"><input type="checkbox" id="md_converted_choice_14_0"><code>let array: ReadonlyArray&lt;number&gt; = [];</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="while (n !== 1) {"><label for="md_converted_choice_14_1"><input type="checkbox" id="md_converted_choice_14_1"><code>while (n !== 1) {</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="array.push(n)"><label for="md_converted_choice_14_2"><input type="checkbox" id="md_converted_choice_14_2"><code>array.push(n)</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="return array"><label for="md_converted_choice_14_3"><input type="checkbox" id="md_converted_choice_14_3"><code>return array</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="documenting_assumptions"><a class="jump" href="index.html#documenting_assumptions"></a>Documenting assumptions</h2><div data-outline="documenting_assumptions">
+
+<p id="@writing_type_variable"><a class="jump" href="index.html#@writing_type_variable"></a>Writing the type of a variable down documents an assumption about it: e.g., the variable <code>n</code> will always refer to a number.  TypeScript actually checks this assumption at compile time and guarantees that there’s no place in your program where you violated this assumption.</p>
+
+<p id="@declaring_variable_const"><a class="jump" href="index.html#@declaring_variable_const"></a>Declaring a variable <code>const</code> is also a form of documentation: a claim that the variable will never be reassigned after its initial assignment.  TypeScript checks that too, statically.</p>
+
+<p id="@documented_another_assumption"><a class="jump" href="index.html#@documented_another_assumption"></a>We documented another assumption that TypeScript (unfortunately) doesn’t check automatically: that <code>n</code> must be positive.</p>
+
+<p id="@why_do_need"><a class="jump" href="index.html#@why_do_need"></a>Why do we need to write down our assumptions?  Because programming is full of them, and if we don’t write them down, we won’t remember them, and other people who need to read or change our programs later won’t know them.  They’ll have to guess.</p>
+
+<p id="@programs_be_written"><a class="jump" href="index.html#@programs_be_written"></a>Programs have to be written with two goals in mind:</p>
+
+<ul id="@communicating_computer_first">
+<li><a class="jump" href="index.html#@communicating_computer_first"></a>communicating with the computer.  First persuading the compiler that your program is sensible – syntactically correct and type-correct.  Then getting the logic right so that it gives the right results at runtime.</li>
+<li>communicating with other people.  Making the program easy to understand, so that when somebody (possibly you) has to fix it, improve it, or adapt it in the future, they can do so.</li>
+</ul>
+
+</div><h2 id="hacking_vs_engineering"><a class="jump" href="index.html#hacking_vs_engineering"></a>Hacking vs. engineering</h2><div data-outline="hacking_vs_engineering">
+
+<p id="@we-ve_written_some"><a class="jump" href="index.html#@we-ve_written_some"></a>We’ve written some hacky code in this reading.  Hacking is often marked by unbridled optimism:</p>
+
+<ul id="@bad_writing_lots">
+<li><a class="jump" href="index.html#@bad_writing_lots"></a>Bad: writing lots of code before testing any of it.</li>
+<li>Bad: keeping all the details in your head, assuming you (and everyone using your code) will remember them forever, instead of writing them down in your code.</li>
+<li>Bad: assuming that bugs will be nonexistent or else easy to find and fix.</li>
+</ul>
+
+<p id="@but_software_engineering"><a class="jump" href="index.html#@but_software_engineering"></a>But software engineering is not hacking.  Engineers are pessimists:</p>
+
+<ul id="@good_write_little">
+<li><a class="jump" href="index.html#@good_write_little"></a>Good: write a little bit at a time, testing as you go.  In a future class, we’ll talk about test-first programming.</li>
+<li>Good: document the assumptions that your code depends on.</li>
+<li>Good: defend your code against stupidity – especially our own!  Static checking helps with that.</li>
+</ul>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-hacking_vs_engineering"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>reading exercises</h4><p id="@consider_following_simple"><a class="jump" href="index.html#@consider_following_simple"></a>Consider the following simple Python function:</p>
+
+<pre id="@math_import_sqrt"><a class="jump" href="index.html#@math_import_sqrt"></a><code class="language-python hljs"><span class="hljs-keyword">from</span> math <span class="hljs-keyword">import</span> sqrt
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">fun_fact_about</span><span class="hljs-params">(person)</span>:</span>
+    <span class="hljs-keyword">if</span> sqrt(person.age) == int(sqrt(person.age)):
+        print(<span class="hljs-string">"The age of "</span> + person.name + <span class="hljs-string">" is a perfect square: "</span> + str(person.age))</code></pre>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-hacking_vs_engineering-assumptions" data-target="#ex-hacking_vs_engineering-assumptions" data-toggle="collapse"><a class="jump" href="index.html#@ex-hacking_vs_engineering-assumptions"></a><span class="panel-title">Assumptions</span></div><div class="panel-collapse collapse exercise-panel" id="ex-hacking_vs_engineering-assumptions" data-outline="assumptions" data-ex-id="hacking_vs_engineering/assumptions" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_assumptions"><a class="jump" href="index.html#@which_following_assumptions"></a>Which of the following are assumptions made by this code – i.e. they must be true in order for the code to run without errors?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="person must be an object with age and name instance variables"><label for="md_converted_choice_15_0"><input type="checkbox" id="md_converted_choice_15_0"><code>person</code> must be an object with <code>age</code> and <code>name</code> instance variables</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be a nonnegative number"><label for="md_converted_choice_15_1"><input type="checkbox" id="md_converted_choice_15_1"><code>person.age</code> must be a nonnegative number</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be an integer"><label for="md_converted_choice_15_2"><input type="checkbox" id="md_converted_choice_15_2"><code>person.age</code> must be an integer</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.name must be a string"><label for="md_converted_choice_15_3"><input type="checkbox" id="md_converted_choice_15_3"><code>person.name</code> must be a string</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-hacking_vs_engineering-checkable_assumptions" data-target="#ex-hacking_vs_engineering-checkable_assumptions" data-toggle="collapse"><a class="jump" href="index.html#@ex-hacking_vs_engineering-checkable_assumptions"></a><span class="panel-title">Checkable assumptions</span></div><div class="panel-collapse collapse exercise-panel" id="ex-hacking_vs_engineering-checkable_assumptions" data-outline="checkable_assumptions" data-ex-id="hacking_vs_engineering/checkable_assumptions" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@if_code_written"><a class="jump" href="index.html#@if_code_written"></a>If this code were written in TypeScript instead, which of the following assumptions could be documented by type declarations and statically checked by the TypeScript compiler?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="person must be an object with age and name instance variables"><label for="md_converted_choice_16_0"><input type="checkbox" id="md_converted_choice_16_0"><code>person</code> must be an object with <code>age</code> and <code>name</code> instance variables</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be a nonnegative number"><label for="md_converted_choice_16_1"><input type="checkbox" id="md_converted_choice_16_1"><code>person.age</code> must be a nonnegative number</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.age must be a number"><label for="md_converted_choice_16_2"><input type="checkbox" id="md_converted_choice_16_2"><code>person.age</code> must be a number</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="person.name must be a string"><label for="md_converted_choice_16_3"><input type="checkbox" id="md_converted_choice_16_3"><code>person.name</code> must be a string</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="the_goals_of_6102"><a class="jump" href="index.html#the_goals_of_6102"></a>The goals of 6.102</h2><div data-outline="the_goals_of_6102">
+
+<p id="@our_primary_goal"><a class="jump" href="index.html#@our_primary_goal"></a>Our primary goal in this course is learning how to produce software that is:</p>
+
+<ul id="@safe_bugs_correctness">
+<li><a class="jump" href="index.html#@safe_bugs_correctness"></a><strong>Safe from bugs</strong>.  Correctness (correct behavior right now) and defensiveness (correct behavior in the future) are required in any software we build.</li>
+<li><strong>Easy to understand</strong>.  The code has to communicate to future programmers who need to understand it and make changes in it (fixing bugs or adding new features).  That future programmer might be you, months or years from now.  You’ll be surprised how much you forget if you don’t write it down, and how much it helps your own future self to have a good design.</li>
+<li><strong>Ready for change</strong>.  Software always changes.  Some designs make it easy to make changes; others require throwing away and rewriting a lot of code.</li>
+</ul>
+
+<p id="@there_other_important"><a class="jump" href="index.html#@there_other_important"></a>There are other important properties of software (like performance, usability, security), and they may trade off against these three.  But these are the Big Three that we care about in 6.102, and that software developers generally put foremost in the practice of building software.  It’s worth considering every language feature, every programming practice, every design pattern that we study in this course, and understanding how they relate to the Big Three.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-the_goals_of_6102"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-the_goals_of_6102-sfb" data-target="#ex-the_goals_of_6102-sfb" data-toggle="collapse"><a class="jump" href="index.html#@ex-the_goals_of_6102-sfb"></a><span class="panel-title">SFB</span></div><div class="panel-collapse collapse exercise-panel" id="ex-the_goals_of_6102-sfb" data-outline="sfb" data-ex-id="the_goals_of_6102/sfb" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_ideas_discussed_reading_generally_help_make_your_code_more_safe"><a class="jump" href="index.html#@which_following_ideas_discussed_reading_generally_help_make_your_code_more_safe"></a>Which of the following ideas discussed in this reading generally help make your code more <strong>safe from bugs</strong>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="dynamic checking"><label for="md_converted_choice_17_0"><input type="checkbox" id="md_converted_choice_17_0">dynamic checking</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="const variables"><label for="md_converted_choice_17_1"><input type="checkbox" id="md_converted_choice_17_1">const variables</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="overflow"><label for="md_converted_choice_17_2"><input type="checkbox" id="md_converted_choice_17_2">overflow</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typing"><label for="md_converted_choice_17_3"><input type="checkbox" id="md_converted_choice_17_3">static typing</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-the_goals_of_6102-etu" data-target="#ex-the_goals_of_6102-etu" data-toggle="collapse"><a class="jump" href="index.html#@ex-the_goals_of_6102-etu"></a><span class="panel-title">ETU</span></div><div class="panel-collapse collapse exercise-panel" id="ex-the_goals_of_6102-etu" data-outline="etu" data-ex-id="the_goals_of_6102/etu" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_ideas_discussed_reading_generally_help_make_your_code_more_easy"><a class="jump" href="index.html#@which_following_ideas_discussed_reading_generally_help_make_your_code_more_easy"></a>Which of the following ideas discussed in this reading generally help make your code more <strong>easy to understand</strong>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="documented assumptions in comments"><label for="md_converted_choice_18_0"><input type="checkbox" id="md_converted_choice_18_0">documented assumptions in comments</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="const variables"><label for="md_converted_choice_18_1"><input type="checkbox" id="md_converted_choice_18_1">const variables</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="overloading"><label for="md_converted_choice_18_2"><input type="checkbox" id="md_converted_choice_18_2">overloading</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typing"><label for="md_converted_choice_18_3"><input type="checkbox" id="md_converted_choice_18_3">static typing</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-the_goals_of_6102-rfc" data-target="#ex-the_goals_of_6102-rfc" data-toggle="collapse"><a class="jump" href="index.html#@ex-the_goals_of_6102-rfc"></a><span class="panel-title">RFC</span></div><div class="panel-collapse collapse exercise-panel" id="ex-the_goals_of_6102-rfc" data-outline="rfc" data-ex-id="the_goals_of_6102/rfc" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-01-static-checking"><div class="panel-body">
+
+<p id="@which_following_ideas_discussed_reading_generally_help_make_your_code_more_ready"><a class="jump" href="index.html#@which_following_ideas_discussed_reading_generally_help_make_your_code_more_ready"></a>Which of the following ideas discussed in this reading generally help make your code more <strong>ready for change</strong>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="documented assumptions in comments"><label for="md_converted_choice_19_0"><input type="checkbox" id="md_converted_choice_19_0">documented assumptions in comments</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="functions"><label for="md_converted_choice_19_1"><input type="checkbox" id="md_converted_choice_19_1">functions</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="static typing"><label for="md_converted_choice_19_2"><input type="checkbox" id="md_converted_choice_19_2">static typing</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="why_we_use_typescript_in_this_course"><a class="jump" href="index.html#why_we_use_typescript_in_this_course"></a>Why we use TypeScript in this course</h3><div data-outline="why_we_use_typescript_in_this_course">
+
+<p id="@since_you-ve_had"><a class="jump" href="index.html#@since_you-ve_had"></a>Since you’ve had 6.101 [formerly 6.009], we’re assuming that you’re comfortable with Python.  So why aren’t we using Python in this course?  Why do we use TypeScript/JavaScript in 6.102?</p>
+
+<p id="@safety_first_reason"><a class="jump" href="index.html#@safety_first_reason"></a><strong>Safety</strong> is the first reason.  TypeScript has static checking (primarily type checking, but other kinds of static checks too, like that your code returns values from functions declared to do so).  We’re studying software engineering in this course, and safety from bugs is a key tenet of that approach.  TypeScript dials safety up to a high level, which makes it a good language for learning about good software engineering practices. It’s certainly possible to write safe code in dynamic languages like Python or JavaScript, but it’s easier to understand what you need to do if you learn how in a safe, statically-checked language.</p>
+
+<p id="@ubiquity_another_reason"><a class="jump" href="index.html#@ubiquity_another_reason"></a><strong>Ubiquity</strong> is another reason.  TypeScript compiles into pure JavaScript, which is widely used in research, education, and industry.  JavaScript runs on many platforms, not just in the web browser where it originally became widespread, but now also in web servers and even in desktop applications for Windows/Mac/Linux.</p>
+
+<p id="@compared_java_typescript"><a class="jump" href="index.html#@compared_java_typescript"></a>Compared to Java, TypeScript has a richer type system, needs less boilerplate code to write a program, and is a better choice for creating modern user interfaces and web apps. In fact, Typescript’s type system is quite <a href="https://www.typescriptlang.org/docs/handbook/2/types-from-types.html">advanced</a>, enabling users to create unexpected <a href="https://mattrickard.com/typescript-type-system-hacks">programs</a> with it (some of them <a href="https://www.youtube.com/watch?v=0mCsluv5FXA">quite extraordinary</a>).</p>
+
+<p id="@any_case_good"><a class="jump" href="index.html#@any_case_good"></a>In any case, a good programmer must be <strong>multilingual</strong>.  Programming languages are tools, and you have to use the right tool for the job.  You will very likely have to pick up other programming languages (such as Java, C/C++, Scheme, Ruby, or Haskell) for classes, internships, or UROPs before you even finish your MIT career, so we’re getting you started now by learning a second one.</p>
+
+<p id="@result_ubiquity_javascript"><a class="jump" href="index.html#@result_ubiquity_javascript"></a>As a result of its ubiquity, JavaScript has a wide array of interesting and useful <strong>libraries</strong> and excellent free <strong>tools</strong> for development (IDEs like VS Code, editors, compilers, test frameworks, profilers, code coverage, style checkers).  JavaScript and Python are close competitors in the richness of their ecosystems, and TypeScript can take full advantage of JavaScript libraries.</p>
+
+<p id="@there_some_reasons"><a class="jump" href="index.html#@there_some_reasons"></a>There are some reasons to regret using JavaScript.  It’s large, having accumulated many features in the decades since it was originally designed.  It’s weighed down by the baggage of older languages like C/C++ — the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/switch"><code>switch</code> statement</a> is a good example of an antiquated and unsafe language construct inherited from C.  And JavaScript itself started with some poor design decisions, including type conversion rules that make <a href="index.html#triple-equals"><code>0 == ""</code> return true</a> and <a href="https://www.destroyallsoftware.com/talks/wat"><code>[] + []</code> somehow produce the empty string</a>, as well as <a href="index.html#no-checking-in-JS">less dynamic checking</a> than other languages.
+TypeScript fixes some of these warts in JavaScript, but not all.
+There are many parts of JavaScript that are now deprecated and avoided by programmers because they’re risky to use.</p>
+
+<p id="@but_whole_typescript"><a class="jump" href="index.html#@but_whole_typescript"></a>But on the whole, TypeScript is a reasonable choice of language right now to learn how to write code that is safe from bugs, easy to understand, and ready for change.  And that’s our goal.</p>
+
+<p id="@real_skills_you-ll"><a class="jump" href="index.html#@real_skills_you-ll"></a>The real skills you’ll get from this course are not language-specific, but carry over to any language that you might program in.  The most important lessons from this course will survive language fads: safety, clarity, abstraction, engineering instincts.</p>
+
+</div></div><h2 id="summary"><a class="jump" href="index.html#summary"></a>Summary</h2><div data-outline="summary">
+
+<p id="@main_idea_introduced"><a class="jump" href="index.html#@main_idea_introduced"></a>The main idea we introduced today is <strong>static checking</strong>.  Here’s how this idea relates to the goals of the course:</p>
+
+<ul>
+<li><p id="@safe_bugs_static"><a class="jump" href="index.html#@safe_bugs_static"></a><strong>Safe from bugs.</strong>
+Static checking helps with safety by catching type errors and other bugs before runtime.</p></li>
+<li><p id="@easy_understand_helps"><a class="jump" href="index.html#@easy_understand_helps"></a><strong>Easy to understand.</strong>
+It helps with understanding, because types are explicitly stated in the code.</p></li>
+<li><p id="@ready_change_static"><a class="jump" href="index.html#@ready_change_static"></a><strong>Ready for change.</strong>
+Static checking makes it easier to change your code by identifying other places that need to change in tandem.</p></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-01-static-checking"></script></body><!--
+Handout delivered Tue May 26 2026 13:28:39 GMT+0000 (Coordinated Universal Time)
+--></html>

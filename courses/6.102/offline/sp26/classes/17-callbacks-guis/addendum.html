@@ -1,0 +1,414 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>Reading 17 Addendum: More on the JavaScript Event Loop</title>
+<style>
+    .ball-visualization > *:not(:first-child) {
+        margin-left: 1%;
+    }
+
+    .ball-visualization {
+        margin-top: 1em;
+        margin-bottom: 1em;
+    }
+
+    .ball-container {
+        position: relative;
+        width: 34%;
+        aspect-ratio: 1;
+    }
+
+    .ball-container > span {
+        display: inline;
+        height: 20px;
+    }
+
+    .ball-container > div {
+        position: relative;
+        border: 2px solid #333;
+        width: 100%;
+        height: 100%;
+    }
+
+    #controls {
+        margin-top: 20px;
+    }
+
+    .ball {
+        position: absolute;
+        aspect-ratio: 1;
+        height: auto;
+        border-radius: 50%;
+    }
+</style>
+<script>
+    // Code for the animation
+    window.onHandoutReady = function() {
+        const [ballMicrotask, ballMacrotask, startButton] = [
+            'microtask', 'macrotask', 'start'
+        ].map((id) => document.getElementById(id));
+
+        const ballSize = 10;
+        const [minOffset, maxOffset] = [0, 100 - ballSize];
+        const [red, green] = ['hsl(0, 82%, 33%)', 'hsl(120, 71%, 43%)'];
+        [ballMicrotask, ballMacrotask].forEach((ball) => {
+            ball.style.backgroundColor = red;
+            ball.style.width = `${ballSize}%`;
+        });
+
+        let [
+             currentLeftMicrotask, currentTopMicrotask,
+             currentLeftMacrotask, currentTopMacrotask,
+             deltaLeftMicrotask, deltaTopMicrotask,
+             deltaLeftMacrotask, deltaTopMacrotask,
+             requestIdMicrotask, requestIdMacrotask,
+        ] = [0, 0, 0, 0, 1.5, 1.5, 1.5, 1.5, undefined, undefined];
+
+        const [microtasks, macrotasks] = [[], []];
+
+        function clamp(val) {
+            return Math.max(minOffset, Math.min(val, maxOffset));
+        }
+
+        function updatePosition(offset, delta) {
+            offset += delta;
+            if (offset >= maxOffset || offset <= minOffset) {
+                delta *= -1;
+            }
+            return [clamp(offset), delta];
+        }
+
+        function startBall(ball, callback) {
+            ball.style.backgroundColor = green;
+            return requestAnimationFrame(callback);
+        }
+
+        function stopBall(ball, requestId) {
+            ball.style.backgroundColor = red;
+            return cancelAnimationFrame(requestId);
+        }
+
+        // called before next repaint
+        function animateMicrotask() {
+            [currentLeftMicrotask, deltaLeftMicrotask] = updatePosition(currentLeftMicrotask, deltaLeftMicrotask);
+            [currentTopMicrotask, deltaTopMicrotask] = updatePosition(currentTopMicrotask, deltaTopMicrotask);
+            ballMicrotask.style.left = `${currentLeftMicrotask}%`;
+            ballMicrotask.style.top = `${currentTopMicrotask}%`;
+            requestIdMicrotask = requestAnimationFrame(animateMicrotask);
+
+            if (currentLeftMicrotask === 0 && currentTopMicrotask === 0) {
+                startButton.disabled = false;
+                requestIdMicrotask = stopBall(ballMicrotask, requestIdMicrotask);
+                requestIdMacrotask = stopBall(ballMacrotask, requestIdMacrotask);
+            }
+        }
+
+        // called before next repaint
+        function animateMacrotask() {
+            [currentLeftMacrotask, deltaLeftMacrotask] = updatePosition(currentLeftMacrotask, deltaLeftMacrotask);
+            [currentTopMacrotask, deltaTopMacrotask] = updatePosition(currentTopMacrotask, deltaTopMacrotask);
+            ballMacrotask.style.left = `${currentLeftMacrotask}%`;
+            ballMacrotask.style.top = `${currentTopMacrotask}%`;
+            requestIdMacrotask = requestAnimationFrame(animateMacrotask);
+        }
+
+        const startAnimationMicrotask = () => {requestIdMicrotask = startBall(ballMicrotask, animateMicrotask)};
+        const startAnimationMacrotask = () => {requestIdMacrotask = startBall(ballMacrotask, animateMacrotask)};
+
+        const faceLeftMicrotask  = () => {deltaLeftMicrotask = -1*Math.abs(deltaLeftMicrotask)};
+        const faceLeftMacrotask  = () => {deltaLeftMacrotask = -1*Math.abs(deltaLeftMacrotask)};
+        const faceRightMicrotask = () => {deltaLeftMicrotask =    Math.abs(deltaLeftMicrotask)};
+        const faceRightMacrotask = () => {deltaLeftMacrotask =    Math.abs(deltaLeftMacrotask)};
+        const faceUpMicrotask    = () => {deltaTopMicrotask  = -1*Math.abs(deltaTopMicrotask)};
+        const faceUpMacrotask    = () => {deltaTopMacrotask  = -1*Math.abs(deltaTopMacrotask)};
+        const faceDownMicrotask  = () => {deltaTopMicrotask  =    Math.abs(deltaTopMicrotask)};
+        const faceDownMacrotask  = () => {deltaTopMacrotask  =    Math.abs(deltaTopMacrotask)};
+
+        microtasks.push(startAnimationMicrotask);
+        macrotasks.push(startAnimationMacrotask);
+        for (let i = 0; i < 10000; i++) {
+            microtasks.push(faceLeftMicrotask, faceRightMicrotask, faceUpMicrotask, faceDownMicrotask);
+            macrotasks.push(faceLeftMacrotask, faceRightMacrotask, faceUpMacrotask, faceDownMacrotask);
+        }
+
+        function resetAnimation() {
+            startButton.disabled = true;
+            [ballMacrotask.style.top, ballMacrotask.style.left, ballMicrotask.style.top, ballMicrotask.style.left] = Array(4).fill('0%');
+            [currentTopMacrotask, currentLeftMacrotask, currentTopMicrotask, currentLeftMicrotask] = Array(4).fill(0);
+        }
+
+        startButton.addEventListener('click', () => {
+            resetAnimation();
+            // delay to let repaint occur and update ball position
+            setTimeout(() => {
+                microtasks.forEach((task) => queueMicrotask(task));
+                macrotasks.forEach((task) => setTimeout(task, 0));
+            }, 200);
+        });
+    };
+</script>
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — Software Construction</a><div>Spring 2026</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="addendum.html#reading_17_addendum_more_on_the_javascript_event_loop">Reading 17 Addendum: More on the JavaScript Event Loop</a></li><li><a href="addendum.html#promises_and_the_event_loop">Promises and the Event Loop</a></li><li><a href="addendum.html#the_event_loop_in_node">The Event Loop in Node</a></li><li><a href="addendum.html#summary">Summary</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_17_addendum_more_on_the_javascript_event_loop"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-17-callbacks-guis-addendum"></iframe><a class="jump" href="addendum.html#reading_17_addendum_more_on_the_javascript_event_loop"></a>Reading 17 Addendum: More on the JavaScript Event Loop</h1><div data-outline="reading_17_addendum_more_on_the_javascript_event_loop">
+
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@objectives"><a class="jump" href="addendum.html#@objectives"></a>Objectives</h4>
+
+<p id="@addendum"><a class="jump" href="addendum.html#@addendum"></a>In this addendum…</p>
+
+<ol id="@first_introduce_promise">
+<li><a class="jump" href="addendum.html#@first_introduce_promise"></a>First, we’ll introduce how promise callbacks are handled a little differently than <code>setTimeout</code> callbacks, with a <em>microtask queue</em>.</li>
+<li>Then, we’ll show how Node implements additional features in the event loop, like the <em>nextTick queue</em>.</li>
+</ol>
+
+<h2 id="promises_and_the_event_loop"><a class="jump" href="addendum.html#promises_and_the_event_loop"></a>Promises and the Event Loop</h2><div data-outline="promises_and_the_event_loop">
+
+<p id="@our_current_understanding"><a class="jump" href="addendum.html#@our_current_understanding"></a>Our current understanding of the <a href="index.html#event_loop">event loop</a> from this reading is solid.
+For the purposes of this class, that is what you need to know about how the JavaScript runtime system actually runs code and asynchronous callbacks.
+For those that are curious, it turns out that there are some additional details for how this all works, which can produce results that don’t align with our current understanding.</p>
+
+<p id="@example_consider_code"><a class="jump" href="addendum.html#@example_consider_code"></a>For example, consider this code:</p>
+
+<pre id="@wait_milliseconds_pass"><a class="jump" href="addendum.html#@wait_milliseconds_pass"></a><code class="language-ts hljs typescript"><span class="hljs-comment">/** Wait for `milliseconds` to pass before returning. */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">busyWait</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span> </span>{
+    <span class="hljs-keyword">const</span> now = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime(); <span class="hljs-comment">// new Date().getTime() is always the current clock time in milliseconds</span>
+    <span class="hljs-keyword">const</span> deadline = now + milliseconds;
+    <span class="hljs-keyword">while</span> (<span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime() &lt; deadline) {
+        <span class="hljs-comment">// do nothing, just wait until the clock reaches the deadline time</span>
+    }
+}
+
+<span class="hljs-keyword">let</span> { promise, resolve, reject } = <span class="hljs-built_in">Promise</span>.withResolvers();
+
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"timer expired"</span>);
+}, <span class="hljs-number">0</span>);
+
+promise.then(<span class="hljs-function">(<span class="hljs-params">result</span>) =&gt;</span> {
+  <span class="hljs-built_in">console</span>.log(result);
+});
+
+busyWait(<span class="hljs-number">5000</span>);
+
+resolve(<span class="hljs-string">"promise resolved"</span>);
+
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"End of the code"</span>);</code></pre>
+
+<p id="@do_you_expect"><a class="jump" href="addendum.html#@do_you_expect"></a>What do you expect to be printed in the console? Make a guess, then try it yourself! You can run the code on your own machine or <a href="https://www.typescriptlang.org/play/?target=11#code/PQKhAIHUEMEsBdwDMD2AncADAtrANnrAM4CmAxigHYAmRm48K4ADtEUeAEYmponh94AVzSVYlAOYA6cCGABYAFBIhlMvFhUuQogE8YCABS4CxclVoAucJSHZuaAJTWAbiljVwAbyXg-4CkoiREoUAHdwAF4bEgiAEWh4EkNHKQkSeAAVWGxkxwBucGBgGPjEvLSM7NyU8GJwaDww6F0OeAALfjIRPkpEMjwUMgBrBhz+cXATQlJA2l9-QODwahJoakJKfmjQiIBqKfwZ8xoifIW-MPb8fkMtsqSUyqzx2oAeFbWN8RJHbwv-H5iismKEOuIJAAacAAKx0iGaCHAqg0eAYnQCgxGAjWZE6bQxq3Wm34GlyAIAvkoqYolHgMt4WGgULhSNC+EQUHgXCR2SQYeREBSouAAArM1kkKRhBDtABKJE53JIaCIKXOtMUpBeuRQQnghlqkQAfP9FH4llypYMJIYAERklXgEgAD2YsD41DtBWp0IADD7NcwJWYpB0SJRDRyhHh4H8TWaLVQldaULbo7HAxTA0pODp9HADQBWP2lnOKDlcnn24Mssw4pU8r3ly30qQ2+0AURo4BQSHRXRQq29GqAA">here</a>.</p>
+
+<p id="@interesting_if_there"><a class="jump" href="addendum.html#@interesting_if_there"></a>Interesting! If there were just one event queue, we would expect that the callback passed to <code>setTimeout</code> would be added to the event queue before the callback passed to the promise, especially because we are busy waiting for 5 seconds before we resolve the promise.
+So why don’t we see <code>timer expired</code> printed before <code>promise resolved</code>?
+Well, promise callbacks actually aren’t added to the main JavaScript event queue. They are added to another queue, called the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model#job_queue_and_event_loop"><em>microtask queue</em></a>.</p>
+
+<p id="@microtask_queue_just"><a class="jump" href="addendum.html#@microtask_queue_just"></a>The microtask queue is just another queue like the main event queue (also called task queue or macrotask queue) that contains callbacks to run.
+However, these microtasks have a <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide/In_depth#tasks_vs._microtasks">higher priority than the task queue</a>:</p>
+
+<blockquote>
+  <p id="@difference_between_task"><a class="jump" href="addendum.html#@difference_between_task"></a>The difference between the task queue and the microtask queue is simple but very important:</p>
+  
+  <ul id="@new_iteration_event">
+  <li><a class="jump" href="addendum.html#@new_iteration_event"></a>When a new iteration of the event loop begins, the runtime executes the next task from the task queue. Further tasks and tasks added to the queue after the start of the iteration will not run until the next iteration.</li>
+  <li>Whenever a task exits and the execution context stack is empty, all microtasks in the microtask queue are executed in turn. The difference is that execution of microtasks continues until the queue is empty—even if new ones are scheduled in the interim. In other words, microtasks can enqueue new microtasks and those new microtasks will execute before the next task begins to run, and before the end of the current event loop iteration.</li>
+  </ul>
+</blockquote>
+
+<p id="@clears_up_inconsistency"><a class="jump" href="addendum.html#@clears_up_inconsistency"></a>This clears up the inconsistency above.
+The <code>setTimeout</code> callback is added to the task queue when the timer finishes (after 0 seconds, i.e. immediately). 
+Meanwhile, the <code>promise.then()</code> callback is added to the microtask queue when <code>resolve()</code> is called.
+When the current execution context stack is empty – i.e., when you reach the end of the code and print <code>End of the code</code> on the console – the promise callback on the microtask queue runs first and prints <code>promise resolved</code>, and then the microtask queue is exhausted.
+Finally, we take the <code>setTimeout</code> callback off the task queue and run it.</p>
+
+<p id="@just_can_use"><a class="jump" href="addendum.html#@just_can_use"></a>Just as we can use <code>setTimeout</code> to manually schedule tasks for the task queue, we can use <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/queueMicrotask"><code>queueMicrotask()</code></a> to schedule microtasks on the microtask queue.
+However, you generally shouldn’t need to use <code>queueMicrotask</code>. Additionally, since the microtask queue is completely drained before the next iteration of the event loop, we must be careful if our microtasks ever queue other microtasks, since this recursive pattern could starve the event loop.</p>
+
+<h3 id="why_microtasks"><a class="jump" href="addendum.html#why_microtasks"></a>Why microtasks?</h3><div data-outline="why_microtasks">
+
+<p id="@we-ve_made_sense"><a class="jump" href="addendum.html#@we-ve_made_sense"></a>We’ve made sense of the example, but why do things work like this? What’s the point of having multiple queues? When would it be appropriate to use <code>queueMicrotask</code>?
+The <a href="https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide#when_to_use_microtasks">MDN documentation</a> asks this same question:</p>
+
+<blockquote>
+  <p id="@useful"><a class="jump" href="addendum.html#@useful"></a>When is that useful?</p>
+  
+  <p id="@main_reason_use"><a class="jump" href="addendum.html#@main_reason_use"></a>The main reason to use microtasks is that: to ensure consistent ordering of tasks, even when results or data is available synchronously, but while simultaneously reducing the risk of user-discernible delays in operations.</p>
+</blockquote>
+
+<p id="@follows_quote_two"><a class="jump" href="addendum.html#@follows_quote_two"></a>What follows that quote are two good examples of why having a separate microtask queue and using <code>queueMicrotask</code> can be beneficial.  </p>
+
+<h4 id="@animations"><a class="jump" href="addendum.html#@animations"></a>Animations</h4>
+
+<p id="@another_example_look"><a class="jump" href="addendum.html#@another_example_look"></a>As another example, we’ll look at what happens with using microtasks vs macrotasks in animations.
+The animation below uses <a href="https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame"><code>requestAnimationFrame</code></a> to move a ball around the container and change its color.
+The callback function passed to <code>requestAnimationFrame</code> is called once right before the browser performs the next <a href="https://developer.mozilla.org/en-US/docs/Glossary/Repaint">repaint</a>.
+The code for this animation can be found in a <code>&lt;script&gt;</code> tag in the <code>&lt;head&gt;</code> of this webpage, so feel free to reference it by using the developer tools.
+The callback functions we pass to <code>requestAnimationFrame</code> change the position of the balls:</p>
+
+<pre id="@function_animatemacrotask_currentleftmacrotask"><a class="jump" href="addendum.html#@function_animatemacrotask_currentleftmacrotask"></a><code class="language-js hljs javascript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">animateMacrotask</span>(<span class="hljs-params"></span>) </span>{
+    [currentLeftMacrotask, deltaLeftMacrotask] = updatePosition(currentLeftMacrotask, deltaLeftMacrotask);
+    [currentTopMacrotask, deltaTopMacrotask] = updatePosition(currentTopMacrotask, deltaTopMacrotask);
+    ballMacrotask.style.left = <span class="hljs-string">`<span class="hljs-subst">${currentLeftMacrotask}</span>%`</span>;
+    ballMacrotask.style.top = <span class="hljs-string">`<span class="hljs-subst">${currentTopMacrotask}</span>%`</span>;
+    requestIdMacrotask = requestAnimationFrame(animateMacrotask);
+}</code></pre>
+
+<p id="@typical_animation_would"><a class="jump" href="addendum.html#@typical_animation_would"></a>A typical animation would immediately start moving the ball once a control is clicked.
+To introduce longer delays, this example simulates the effect of having to make asynchronous requests in order to complete the button actions (e.g. a network response must be received or a file must be read when processing the user input).
+To simulate this, we store actions to take (e.g. face up, left, etc.) as a microtask and macrotask to perform. When you press “Start”, it will queue all those microtasks and macrotasks for execution by the event loop.
+We prepopulate the list of microtasks and macrotasks to run when the start button is clicked:</p>
+
+<pre id="@let_i_0"><a class="jump" href="addendum.html#@let_i_0"></a><code class="language-js hljs javascript"><span class="hljs-keyword">for</span> (<span class="hljs-keyword">let</span> i = <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">10000</span>; i++) {
+    microtasks.push(faceLeftMicrotask, faceRightMicrotask, faceUpMicrotask, faceDownMicrotask);
+    macrotasks.push(faceLeftMacrotask, faceRightMacrotask, faceUpMacrotask, faceDownMacrotask);
+}</code></pre>
+
+<p id="@only_difference_accumulated"><a class="jump" href="addendum.html#@only_difference_accumulated"></a>The only difference in how the accumulated microtasks and macrotasks are treated is when the start button is clicked:</p>
+
+<pre id="@startbutton-addeventlistener-click_resetanimation_delay"><a class="jump" href="addendum.html#@startbutton-addeventlistener-click_resetanimation_delay"></a><code class="language-js hljs javascript">startButton.addEventListener(<span class="hljs-string">'click'</span>, () =&gt; {
+    resetAnimation();
+    <span class="hljs-comment">// delay to let repaint occur and update ball position</span>
+    setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        microtasks.forEach(<span class="hljs-function">(<span class="hljs-params">task</span>) =&gt;</span> queueMicrotask(task));
+        macrotasks.forEach(<span class="hljs-function">(<span class="hljs-params">task</span>) =&gt;</span> setTimeout(task, <span class="hljs-number">0</span>));
+    }, <span class="hljs-number">200</span>);
+});</code></pre>
+
+<p id="@code_uses_queuemicrotask"><a class="jump" href="addendum.html#@code_uses_queuemicrotask"></a>The code uses <code>queueMicrotask</code> and <code>setTimeout</code> respectively, but there are multiple ways to accomplish this.
+The box on the left shows the animation that results from queueing the tasks as microtasks, and the box on the right show the animation that results from queueing the tasks as macrotasks.</p>
+
+<div class="no-markdown clearfix ball-visualization" style="width: 100%;">
+    <div class="pull-left ball-container">
+        <span>Microtasks</span>
+        <div>
+            <div id="microtask" class="ball"></div>
+        </div>
+    </div>
+    <div class="pull-left ball-container">
+        <span>Macrotasks</span>
+        <div>
+            <div id="macrotask" class="ball"></div>
+        </div>
+    </div>
+    <div id="controls" class="pull-left">
+        <button id="start" class="btn btn-default">Start</button>
+    </div>
+</div>
+
+<p id="@why_don-t_both"><a class="jump" href="addendum.html#@why_don-t_both"></a>Why don’t both balls return to the same position? The microtasks are processed all in one batch before the next repaint, but the macrotasks aren’t necessarily processed in one batch before the next repaint.
+Rendering callbacks aren’t macrotasks on the task queue, they are handled differently.
+The <a href="https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model">HTML spec</a> includes a section about the processing model, which describes how animation frame callbacks interact with macrotasks and microtasks.</p>
+
+<p id="@after_each_macrotask"><a class="jump" href="addendum.html#@after_each_macrotask"></a>After each macrotask is processed from a task queue, the rendering can be updated, which leads to a repaint and calling all the animation frame callbacks.
+The browser runtime may decide not to update the rendering, and the programmer doesn’t have direct control over this. Since microtasks are higher priority, they are all handled before the next repaint occurs.
+The macrotasks can interleave with the animation frame callbacks, which causes the difference in the animation.
+Due to the freedom given to the browser to determine when to update the rendering, the macrotask animation is nondeterministic 😱.</p>
+
+<p id="@however_microtasks_typically"><a class="jump" href="addendum.html#@however_microtasks_typically"></a>However, microtasks typically don’t need to be explicitly used or considered by the programmer. When fine grained control over event ordering is needed they can be quite useful, but otherwise they can stay tucked away in the back of the programmer’s mind.</p>
+
+</div></div><h2 id="the_event_loop_in_node"><a class="jump" href="addendum.html#the_event_loop_in_node"></a>The Event Loop in Node</h2><div data-outline="the_event_loop_in_node">
+
+<p id="@event_loop_node_somewhat_more_complicated"><a class="jump" href="addendum.html#@event_loop_node_somewhat_more_complicated"></a>The event loop in Node is somewhat more complicated. Node breaks the event loop into different <a href="https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick#event-loop-explained">phases</a>, such as a phase to handle callbacks from I/O operations.
+Each phase has its own queue, and each queue is exhausted (or a callback limit is reached) before moving on to the next queue.</p>
+
+<p id="@do_microtasks_come"><a class="jump" href="addendum.html#@do_microtasks_come"></a>Where do microtasks come in? The microtask queue still exists and is drained after each operation from one of the phases completes.
+So now, we can think of Node as having multiple task (also called macrotask) queues, one for each phase, which are drained before moving on to the next task queue.
+The microtask queue works the same way as before, having a higher priority than all the other task queues, so that after each task in one of the task queues,
+the microtask queue is completely drained.</p>
+
+<h3 id="nexttick_queue"><a class="jump" href="addendum.html#nexttick_queue"></a>nextTick queue</h3><div data-outline="nexttick_queue">
+
+<p id="@another_distinct_queue"><a class="jump" href="addendum.html#@another_distinct_queue"></a>Another distinct queue in Node is the <a href="https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick#understanding-processnexttick"><em>nextTick queue</em></a>, which can be thought to have the same priority as the microtask queue; both queues are completely drained before a task is taken off any task queue from an event loop phase, and the nextTick queue gets processed first.
+As with <a href="https://nodejs.org/docs/latest/api/globals.html#queuemicrotaskcallback"><code>queueMicrotask</code></a>, we can add events to the nextTick queue with <a href="https://nodejs.org/docs/latest/api/process.html#processnexttickcallback-args"><code>process.nextTick()</code></a>.</p>
+
+<small><p id="@fun_fact_node"><a class="jump" href="addendum.html#@fun_fact_node"></a>Fun fact: Node internally uses the open source <a href="https://v8.dev/">V8 JavaScript engine</a>, which is also used in Chrome and <a href="https://en.wikipedia.org/wiki/V8_(JavaScript_engine)#Usage">other browsers</a>.
+The microtask queue in Node is managed by V8, but the nextTick queue is separate from V8 and managed entirely by Node.</p></small>
+
+<p id="@microtask_queue_nexttick"><a class="jump" href="addendum.html#@microtask_queue_nexttick"></a>The microtask queue and nextTick queue have very similar semantics, so much so that <a href="https://nodejs.org/docs/latest/api/process.html#when-to-use-queuemicrotask-vs-processnexttick">Node generally recommends</a> to use <code>queueMicrotask</code> over <code>process.nextTick</code>.</p>
+
+<p id="@all_these_queues"><a class="jump" href="addendum.html#@all_these_queues"></a>With all these queues, let’s put our understanding to the test:</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-the_event_loop_in_node"><h4 class="text-danger" id="@reading_exercises"><a class="jump" href="addendum.html#@reading_exercises"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-the_event_loop_in_node-queue_quarrel" data-target="#ex-the_event_loop_in_node-queue_quarrel" data-toggle="collapse"><a class="jump" href="addendum.html#@ex-the_event_loop_in_node-queue_quarrel"></a><span class="panel-title">Queue quarrel</span></div><div class="panel-collapse collapse exercise-panel" id="ex-the_event_loop_in_node-queue_quarrel" data-outline="queue_quarrel" data-ex-id="nexttick_queue/queue_quarrel" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-17-callbacks-guis-addendum"><div class="panel-body">
+
+<p id="@order_logs_appear"><a class="jump" href="addendum.html#@order_logs_appear"></a>What order will the logs appear when this code is run? Note that the nextTick queue is drained <a href="https://nodejs.org/docs/latest/api/process.html#when-to-use-queuemicrotask-vs-processnexttick">before</a> the microtask queue is drained.</p>
+
+<pre id="@console-log-0_const_promise"><a class="jump" href="addendum.html#@console-log-0_const_promise"></a><code class="language-ts hljs typescript"><span class="hljs-built_in">console</span>.log(<span class="hljs-number">0</span>);
+
+<span class="hljs-keyword">const</span> { promise, resolve, reject } = <span class="hljs-built_in">Promise</span>.withResolvers();
+
+promise.then(<span class="hljs-function">(<span class="hljs-params">result</span>) =&gt;</span> {
+    process.nextTick(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        <span class="hljs-built_in">console</span>.log(result);
+    });
+});
+
+setTimeout(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+    resolve(<span class="hljs-number">2</span>);
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-number">1</span>);
+}, <span class="hljs-number">0</span>);
+
+queueMicrotask(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-number">3</span>)
+    process.nextTick(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        <span class="hljs-built_in">console</span>.log(<span class="hljs-number">4</span>);
+    });
+    queueMicrotask(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        <span class="hljs-built_in">console</span>.log(<span class="hljs-number">5</span>);
+    });
+});
+
+process.nextTick(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-number">6</span>)
+    queueMicrotask(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        <span class="hljs-built_in">console</span>.log(<span class="hljs-number">7</span>);
+    });
+    process.nextTick(<span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {
+        <span class="hljs-built_in">console</span>.log(<span class="hljs-number">8</span>);
+    });
+});
+
+<span class="hljs-built_in">console</span>.log(<span class="hljs-number">9</span>);</code></pre>
+
+<p id="@enter_digits_printed"><a class="jump" href="addendum.html#@enter_digits_printed"></a>Enter the digits printed by <code>console.log</code> in the code above, in the order they are printed, separated by commas or spaces:</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 50%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<div class="handout-solo alert alert-warning"><p id="@since_optional_addendum"><a class="jump" href="addendum.html#@since_optional_addendum"></a>Since this is an optional addendum, this exercise is not counted in the classwork for class 17.</p></div>
+
+</div></div><h2 id="summary"><a class="jump" href="addendum.html#summary"></a>Summary</h2><div data-outline="summary">
+
+<p id="@wrapping_up"><a class="jump" href="addendum.html#@wrapping_up"></a>Wrapping up:</p>
+
+<ul id="@javascript_event_loop">
+<li><a class="jump" href="addendum.html#@javascript_event_loop"></a>The JavaScript event loop has a macrotask queue and a microtask queue</li>
+<li>The microtask queue is completely drained before each macrotask is taken of its queue and before the next browser repaint
+
+<ul><li>macrotasks can interleave with browser repaints and <code>requestAnimationFrame</code> callbacks</li></ul></li>
+<li>Promise callbacks are added to the microtask queue</li>
+<li>Node has different macrotask queues for different phases of the event loop, and a nextTick queue with the same priority as the microtask queue</li>
+<li><code>queueMicrotask</code> can be used to schedule callbacks on the microtask queue, likewise with <code>process.nextTick</code> and the nextTick queue.
+
+<ul><li>These generally won’t need to be used unless fine grained control of event ordering is needed.</li></ul></li>
+</ul>
+
+<p id="@here_various_documentation"><a class="jump" href="addendum.html#@here_various_documentation"></a>Here are various documentation sources that were used to inform this addendum and can be helpful to find additional information:</p>
+
+<ul id="@node_event_loop">
+<li><a class="jump" href="addendum.html#@node_event_loop"></a><a href="https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick">Node event loop documentation</a></li>
+<li><a href="https://nodejs.org/docs/latest/api/globals.html#queuemicrotaskcallback">Node <code>queueMicrotask</code> specification</a></li>
+<li><a href="https://nodejs.org/docs/latest/api/process.html#processnexttickcallback-args">Node <code>process.nextTick</code> specification</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model">MDN JavaScript Execution Model</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide">MDN microtask guide</a></li>
+<li><a href="https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide/In_depth">MDN microtask guide in depth</a></li>
+<li><a href="https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model">HTML Living Standard Processing Model</a></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-17-callbacks-guis-addendum"></script></body><!--
+Handout delivered Tue May 26 2026 13:31:51 GMT+0000 (Coordinated Universal Time)
+--></html>

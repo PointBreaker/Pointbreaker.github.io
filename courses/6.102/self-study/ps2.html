@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PS2 · Multi-Startup Set — MIT 6.102 自学期</title>
+<meta name="description" content="PS2 多起点集合：IntervalSet 的两种 rep 实现、泛型 MultiIntervalSet、similarity 函数，深入抽象数据类型。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+.checklist{list-style:none;padding:0;margin:12px 0}
+.checklist li{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;color:var(--fg-muted)}
+.checklist li:last-child{border-bottom:none}
+.checklist li::before{content:"☐";color:var(--accent);flex-shrink:0}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="index.html">自学期</a><a href="../index.html#psets">作业</a><a href="../index.html#offline">离线镜像</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">PS2 · Multi-Startup Set</p>
+<h1>多起点集合：抽象数据类型</h1>
+<p class="lede">IntervalSet 的两种 rep 实现、泛型 MultiIntervalSet、similarity 函数——深入抽象数据类型、AF/RI 与表示暴露防护。</p>
+
+<div class="card">
+<h4>基本信息</h4>
+<p><span class="tag">PS2</span><span class="tag">ADT</span><span class="tag">AF/RI</span><span class="tag">bigint</span><span class="tag">泛型</span></p>
+<p>官方讲义：<a href="https://web.mit.edu/6.102/www/sp26/psets/ps2/" target="_blank" rel="noreferrer" style="color:var(--accent)">web.mit.edu/6.102/ps2 ↗</a></p>
+</div>
+
+<h2>作业要求</h2>
+<div class="card">
+<ol>
+<li>为 <code>IntervalSet&lt;string&gt;</code> 设计合法客户测试套件</li>
+<li>用要求的两 map 表示实现 <code>RepMapIntervalSet</code></li>
+<li>泛化为按 <code>===</code> 比较的任意标签</li>
+<li>用要求的并行数组表示实现 <code>RepArrayIntervalSet</code></li>
+<li>在 <code>makeIntervalSet</code> 中选择一种实现</li>
+<li>测试/实现 <code>MultiIntervalSet</code>，其 rep 必须使用 <code>IntervalSet</code></li>
+<li>测试/规格化/实现 <code>similarity</code>，包括自行设计的 helper ADT</li>
+</ol>
+<p>对每个实现类，显式记录 AF、RI、<code>checkRep</code>，以及表示暴露安全性。</p>
+</div>
+
+<h2>规格说明</h2>
+<div class="card">
+<h4>Interval</h4>
+<p>不可变半开区间 <code>[start, end)</code>，<code>end &gt; start</code>，只读 bigint 端点。</p>
+</div>
+<div class="card">
+<h4>IntervalSet&lt;Label&gt;</h4>
+<p>可变映射：唯一标签 → 不重叠的半开区间。标签按 <code>===</code> 比较，不得为 <code>null</code>、<code>undefined</code> 或 <code>NaN</code>。</p>
+<pre><code>interface IntervalSet&lt;Label&gt; {
+  add(start: bigint, end: bigint, label: Label): void;
+  interval(label: Label): Interval | undefined;
+  labels(): Set&lt;Label&gt;;
+}</code></pre>
+<p><code>add</code> 在已存在相同标签区间时幂等。同一标签映射到不同区间，或不同标签占用重叠区间时抛出 <code>IntervalConflictError</code>。相邻合法（半开区间）。</p>
+</div>
+<div class="card">
+<h4>MultiIntervalSet&lt;Label&gt;</h4>
+<p>一个标签可拥有多个区间，但<strong>全局不允许重叠</strong>。rep 必须以 <code>IntervalSet</code> 为构建块。</p>
+<pre><code>add(start,end,label): void
+clear(): boolean
+intervals(label): IntervalSet&lt;number&gt;
+labels(): Set&lt;Label&gt;</code></pre>
+</div>
+<div class="card">
+<h4>similarity</h4>
+<pre><code>type LabelSimilarity = [string,string,number];
+similarity(defs, setA, setB): number</code></pre>
+<p>客户为选定的字符串标签对提供 [0,1] 对称相似度。未列出的相同标签相似度为 1；未列出的不同标签为 0。对两个非空多区间集合，在每个区间边界处划分整体跨度，累加每个子跨度长度 × 覆盖它的标签对的相似度，再除以总跨度。两个空集合的相似度为 0。</p>
+</div>
+
+<h2>完成清单</h2>
+<div class="card">
+<ul class="checklist">
+<li>IntervalSet 分区/测试</li><li>map 表示 + AF/RI/checkRep</li><li>泛型标签测试</li><li>array 表示 + AF/RI/checkRep</li><li>makeIntervalSet</li><li>MultiIntervalSet</li><li>similarity 测试</li><li>helper ADT</li><li>similarity</li>
+</ul>
+</div>
+
+<h2>源码骨架</h2>
+<h3>interval.ts — 不可变区间</h3>
+<pre><code>export class Interval {
+  public constructor(public readonly start: bigint, public readonly end: bigint) {
+    if (end &lt;= start) throw new Error('end must be greater than start');
+  }
+  public toString(): string { return `[${this.start},${this.end})`; }
+}</code></pre>
+
+<h3>intervalset.ts — 接口与工厂</h3>
+<pre><code>import { Interval } from './interval.js';
+
+export class IntervalConflictError extends Error {}
+export interface IntervalSet&lt;Label&gt; {
+  add(start: bigint, end: bigint, label: Label): void;
+  interval(label: Label): Interval | undefined;
+  labels(): Set&lt;Label&gt;;
+}
+
+export function makeIntervalSet&lt;Label&gt;(): IntervalSet&lt;Label&gt; {
+  throw new Error('TODO: select one completed IntervalSet implementation');
+}</code></pre>
+
+<h3>intervalset-impls.ts — 两种 rep 实现</h3>
+<pre><code>const todo = (name:string): never => { throw new Error(`TODO: ${name}`); };
+
+export class RepMapIntervalSet&lt;Label&gt; implements IntervalSet&lt;Label&gt; {
+  private readonly startMap: Map&lt;Label, bigint&gt; = new Map();
+  private readonly endMap: Map&lt;bigint, bigint&gt; = new Map();
+  private checkRep(): void { /* TODO */ }
+  public add(start: bigint, end: bigint, label: Label): void { todo('RepMapIntervalSet.add'); }
+  public interval(label: Label): Interval | undefined { return todo('RepMapIntervalSet.interval'); }
+  public labels(): Set&lt;Label&gt; { return todo('RepMapIntervalSet.labels'); }
+}
+
+export class RepArrayIntervalSet&lt;Label&gt; implements IntervalSet&lt;Label&gt; {
+  private readonly labelList: Array&lt;Label&gt; = [];
+  private readonly valueList: Array&lt;bigint&gt; = [];
+  // ... 同上，需决定 valueList 如何编码区间端点
+}
+
+export function implementationsForTesting() { return [RepMapIntervalSet, RepArrayIntervalSet]; }</code></pre>
+
+<h3>multiintervalset.ts — 多区间集合</h3>
+<pre><code>const todo = (name:string): never => { throw new Error(`TODO: ${name}`); };
+
+export class MultiIntervalSet&lt;Label&gt; {
+  // TODO: 官方作业要求 IntervalSet 出现在此 rep 中
+  public constructor(initial?: IntervalSet&lt;Label&gt;) { void initial; }
+  public add(start:bigint,end:bigint,label:Label):void { todo('MultiIntervalSet.add'); }
+  public clear():boolean { return todo('MultiIntervalSet.clear'); }
+  public intervals(label:Label):IntervalSet&lt;number&gt; { return todo('MultiIntervalSet.intervals'); }
+  public labels():Set&lt;Label&gt; { return todo('MultiIntervalSet.labels'); }
+}</code></pre>
+
+<h3>similarity.ts — 相似度与 helper ADT</h3>
+<pre><code>export type LabelSimilarity = [string,string,number];
+export function similarity(similarities:LabelSimilarity[], setA:MultiIntervalSet&lt;string&gt;, setB:MultiIntervalSet&lt;string&gt;):number {
+  throw new Error('TODO: design helper ADT, test, then implement similarity');
+}
+// TODO: PS2 explicitly requires you to design one helper ADT here before implementing similarity.</code></pre>
+
+</div></article>
+
+<footer class="bottom">
+  <div class="wrap">
+    <p><a href="ps1.html">← PS1</a> · <a href="index.html">返回自学期导航</a> · <a href="ps3.html">PS3 →</a></p>
+    <p>自学期支架为个人学习辅助 · 课程材料版权归 MIT 6.102 Spring 2026 教学团队</p>
+  </div>
+</footer>
+</body>
+</html>

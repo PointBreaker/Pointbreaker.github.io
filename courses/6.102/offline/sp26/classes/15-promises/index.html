@@ -1,0 +1,945 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>Reading 15: Promises</title>
+
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — Software Construction</a><div>Spring 2026</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="index.html#reading_15_promises">Reading 15: Promises</a></li><li><a href="index.html#promises">Promises</a></li><li><a href="index.html#await">Await</a></li><li><a href="index.html#asynchronous_functions">Asynchronous functions</a></li><li><a href="index.html#concurrency_model">Concurrency model</a></li><li><a href="index.html#aggregating_promises">Aggregating promises</a></li><li><a href="index.html#never_busy-wait">Never busy-wait</a></li><li><a href="index.html#promises_and_exception_handling">Promises and exception handling</a></li><li><a href="index.html#summary">Summary</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="reading_15_promises"><iframe class="exercises-status" src="https://handx.mit.edu/v1/6.102/sp26/status?classes-15-promises"></iframe><a class="jump" href="index.html#reading_15_promises"></a>Reading 15: Promises</h1><div data-outline="reading_15_promises">
+
+<style>
+table.figure-right td {
+  vertical-align: top;
+}
+table.figure-right td:first-child {
+  border-right: 1px solid #333;
+  padding-right: 1em;
+}
+table.figure-right td:last-child {
+  padding-left: 1em;
+}
+
+
+.show-steps._0 .highlight-on._0,
+.show-steps._1 .highlight-on._1,
+.show-steps._2 .highlight-on._2,
+.show-steps._3 .highlight-on._3,
+.show-steps._4 .highlight-on._4,
+.show-steps._5 .highlight-on._5,
+.show-steps._6 .highlight-on._6,
+.show-steps._7 .highlight-on._7,
+.show-steps._8 .highlight-on._8,
+.show-steps._9 .highlight-on._9,
+.show-steps._10 .highlight-on._10,
+.show-steps._11 .highlight-on._11 {
+    background: #fffd9c;
+}
+
+.show-on {
+  display: none;
+}
+
+</style>
+
+<script>
+/* style timeline tables */
+window.onHandoutDidRender = function() {
+  $('.timeline table').addClass('table-condensed');
+  $('.timeline table').css('width', 'inherit');
+  $('.timeline table thead:not(:has(th:not(:empty)))').remove();
+}
+</script>
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h4 id="@software_6-102"><a class="jump" href="index.html#@software_6-102"></a>Software in 6.102</h4>
+
+<table class="table table-striped no-markdown" id="@safe_bugseasy_understandready">
+<tbody><tr><th width="33%"><a class="jump" href="index.html#@safe_bugseasy_understandready"></a>Safe from bugs</th><th>Easy to understand</th><th>Ready for change</th></tr>
+<tr><td>
+  Correct today and correct in the unknown future.
+</td><td>
+  Communicating clearly with future programmers, including future you.
+</td><td>
+  Designed to accommodate change without rewriting.
+</td></tr>
+</tbody></table>
+
+<h4 id="@objectives"><a class="jump" href="index.html#@objectives"></a>Objectives</h4>
+
+<p id="@reading_discusses_concurrent"><a class="jump" href="index.html#@reading_discusses_concurrent"></a>This reading discusses concurrent computation using <em>promises</em>.</p>
+
+<p id="@start_highest_level"><a class="jump" href="index.html#@start_highest_level"></a>We start at the highest level, with the promise abstraction, and the <code>await</code> operator and <code>async</code> function declaration that allow concurrent computations to happen in TypeScript in a way that closely resembles familiar synchronous programming.</p>
+
+<p id="@then_dig_below"><a class="jump" href="index.html#@then_dig_below"></a>Then we will dig below the covers to understand more about what is happening with <code>Promise</code>, <code>await</code>, and <code>async</code>.</p>
+
+<h2 id="promises"><a class="jump" href="index.html#promises"></a>Promises</h2><div data-outline="promises">
+
+<p id="@promise_represents_concurrent"><a class="jump" href="index.html#@promise_represents_concurrent"></a>A <mark data-structure-text="promise" id="^promise"><em>promise</em></mark> represents a concurrent computation that has been started but whose result may not be ready yet.
+The name comes from the notion that it is a promise to finish the computation and provide a result sometime in the future.</p>
+
+<p id="@promise_type_typescript"><a class="jump" href="index.html#@promise_type_typescript"></a>The <code>Promise</code> type in TypeScript is generic: a <code>Promise&lt;T&gt;</code> represents a concurrent computation that at some point should produce a value of type <code>T</code>.</p>
+
+<p id="@here_examples_concurrent"><a class="jump" href="index.html#@here_examples_concurrent"></a>Here are examples of concurrent computations using promises.  (Some of these are actual functions provided by Node packages; others don’t currently exist as library functions but could be readily implemented.)</p>
+
+<ul id="@readfile-pathname_string_returning">
+<li><a class="jump" href="index.html#@readfile-pathname_string_returning"></a><code>readFile(pathname: string, ...)</code> returning a <code>Promise&lt;string&gt;</code>.  The file is loaded concurrently, and the value it promises to eventually produce is the content of the file.</li>
+<li><code>diskSpace(folder: string)</code> returning a <code>Promise&lt;number&gt;</code>.  A folder tree in the filesystem is traversed in the background, the sizes of all of its files are added up, and the resulting number of bytes is the promised result.</li>
+<li><code>fetch(url: string)</code> returning a <code>Promise&lt;Response&gt;</code>.  The URL is opened in the background, and the promised result is an <a href="https://developer.mozilla.org/en-US/docs/Web/API/Response">HTTP Response object</a>.</li>
+<li><code>timeout(milliseconds: number)</code> returning a <code>Promise&lt;void&gt;</code>.  A timer runs for the given number of milliseconds, and the promised result has type <code>void</code> (the same as a function that returns no result).  This may seem like an empty promise (ha), but we’ll see shortly that even empty promises are useful, because we can trigger additional computation when the <code>timeout</code> computation completes.</li>
+</ul>
+
+<p id="@importantly_each_these"><a class="jump" href="index.html#@importantly_each_these"></a>Importantly, each of these functions returns its promise <em>almost immediately</em>.
+The function starts a long-running computation, like loading a web page or scanning the filesystem, but does not wait for that computation to complete.
+In lieu of returning a computed value, it returns a promise associated with the concurrent computation that it started.
+When the computation finishes, its result will be accessible through the promise.</p>
+
+<p id="@does_let_us"><a class="jump" href="index.html#@does_let_us"></a>What does this let us do?  One benefit we can get from promises is concurrency: by starting multiple computations and collecting a promise for each one, the computations can proceed concurrently with each other:</p>
+
+<pre id="@const_promise1_fetch-http-www-mit-edu"><a class="jump" href="index.html#@const_promise1_fetch-http-www-mit-edu"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise1 = fetch(<span class="hljs-string">'http://www.mit.edu/'</span>);
+<span class="hljs-keyword">const</span> promise2 = fetch(<span class="hljs-string">'http://www.harvard.edu/'</span>);
+<span class="hljs-keyword">const</span> promise3 = fetch(<span class="hljs-string">'http://www.tufts.edu/'</span>);
+<span class="hljs-comment">// we have now started trying to contact all three web servers concurrently</span></code></pre>
+
+<p id="@more_concretely_promise-t"><a class="jump" href="index.html#@more_concretely_promise-t"></a>More concretely, a <code>Promise&lt;T&gt;</code> is a mutable value with three states:</p>
+
+<ul id="@pending_computation_associated">
+<li><a class="jump" href="index.html#@pending_computation_associated"></a><em>pending</em>: the computation associated with the promise has not finished yet.</li>
+<li><em>fulfilled</em>: the computation has finished, and the promise now holds the value of type <code>T</code> that the computation produced.</li>
+<li><em>rejected</em>: the computation failed for some reason, and the promise now holds an <code>Error</code> object describing the failure.</li>
+</ul>
+
+<p id="@promise_starts_pending"><a class="jump" href="index.html#@promise_starts_pending"></a>A promise starts in the pending state, and eventually transitions into either fulfilled (if the computation completes) or rejected (if the computation throws an exception).
+It may also stay in the pending state forever (for example, if the computation is waiting for an event that never happens).
+Once a promise is fulfilled or rejected, it remains in that state; there is no way to reset a promise back to the pending state.</p>
+
+<p id="@if_you_print"><a class="jump" href="index.html#@if_you_print"></a>If you print a promise for debugging purposes, you will see its state and the result stored inside it (if it is no longer pending).
+For example, at the <code>npx ts-node</code> TypeScript prompt, you can print a promise immediately to see it in the pending state:</p>
+
+<pre id="@const_promise_fs-promises-readfile-account"><a class="jump" href="index.html#@const_promise_fs-promises-readfile-account"></a><code class="language-ts hljs typescript">&gt; <span class="hljs-keyword">const</span> promise = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> }); <span class="hljs-built_in">console</span>.log(promise);
+<span class="hljs-built_in">Promise</span> { &lt;pending&gt; }</code></pre>
+
+<p id="@assuming_file_account"><a class="jump" href="index.html#@assuming_file_account"></a>Assuming the file <code>account</code> contains <code>200</code> (representing a bank account with $200 in it), then your next command should see that the promise has been fulfilled (since it takes very little time to finish loading the file, relative to your typing speed):</p>
+
+<pre id="@console-log-promise_promise_200"><a class="jump" href="index.html#@console-log-promise_promise_200"></a><code class="language-ts hljs typescript">&gt; <span class="hljs-built_in">console</span>.log(promise);
+<span class="hljs-built_in">Promise</span> { <span class="hljs-string">'200'</span> }</code></pre>
+
+<p id="@if_other_hand"><a class="jump" href="index.html#@if_other_hand"></a>If on the other hand the file <code>account</code> does not exist, you will see that the promise has been rejected.  The exception object that would normally have been thrown to describe the error is instead stored in the promise:</p>
+
+<pre id="@console-log-promise_promise_rejected"><a class="jump" href="index.html#@console-log-promise_promise_rejected"></a><code class="language-ts hljs typescript">&gt; <span class="hljs-built_in">console</span>.log(promise);
+<span class="hljs-built_in">Promise</span> {
+  &lt;rejected&gt; [<span class="hljs-built_in">Error</span>: ENOENT: no such file or directory, open <span class="hljs-string">'account'</span>] { ... }
+}</code></pre>
+
+</div><h2 id="await"><a class="jump" href="index.html#await"></a>Await</h2><div data-outline="await">
+
+<p id="@we-ve_seen_start"><a class="jump" href="index.html#@we-ve_seen_start"></a>We’ve seen how to start up concurrent computations and obtain <code>Promise</code> values associated with them.
+Now how can we interact with the final values produced by those computations?
+One simple way is to use the <code>await</code> keyword:</p>
+
+<pre id="@const_promise_promise-string"><a class="jump" href="index.html#@const_promise_promise-string"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">string</span>&gt; = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+<span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> promise;
+<span class="hljs-comment">// data is now '200'</span></code></pre>
+
+<p id="@await_keyword_built-in"><a class="jump" href="index.html#@await_keyword_built-in"></a>The <code>await</code> keyword is a built-in operator that converts a value of type <code>Promise&lt;T&gt;</code> into a value of type <code>T</code>.
+It waits until the promise has been fulfilled, and then unpacks the promise to extract the promised value.
+If the promise is rejected, then <code>await</code> throws an exception instead, using the <code>Error</code> object that the computation stored in the promise.</p>
+
+<p id="@note_await_not"><a class="jump" href="index.html#@note_await_not"></a>Note that <code>await</code> is not <em>triggering</em> the computation that the promise represents.
+The computation is already underway!
+It was set in motion by the original function that produced the promise.
+The computation may have made some progress, or even run to completion, by the time execution arrives at the <code>await</code>.</p>
+
+<p id="@better_mental_model"><a class="jump" href="index.html#@better_mental_model"></a>A better mental model for <code>await</code> is that it is handling a deferred <em>return</em> from the function that produced the promise.
+The <code>await</code> waits for the computation to finish, and then provides its return value, or else a thrown exception, just like the result of a normal function call.</p>
+
+<span id="fetch"></span>
+
+<p id="@using_await_now"><a class="jump" href="index.html#@using_await_now"></a>Using <code>await</code>, now we can wrap up the concurrent computations that we started:</p>
+
+<pre id="@const_promise1_promise-response"><a class="jump" href="index.html#@const_promise1_promise-response"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise1: <span class="hljs-built_in">Promise</span>&lt;Response&gt; = fetch(<span class="hljs-string">'http://www.mit.edu/'</span>);
+<span class="hljs-keyword">const</span> promise2: <span class="hljs-built_in">Promise</span>&lt;Response&gt; = fetch(<span class="hljs-string">'http://www.harvard.edu/'</span>);
+<span class="hljs-keyword">const</span> promise3: <span class="hljs-built_in">Promise</span>&lt;Response&gt; = fetch(<span class="hljs-string">'http://www.tufts.edu/'</span>);
+<span class="hljs-comment">// we have now started trying to contact all three web servers concurrently</span>
+
+<span class="hljs-keyword">const</span> response1: Response = <span class="hljs-keyword">await</span> promise1;
+<span class="hljs-keyword">const</span> response2: Response = <span class="hljs-keyword">await</span> promise2;
+<span class="hljs-keyword">const</span> response3: Response = <span class="hljs-keyword">await</span> promise3;
+<span class="hljs-comment">// we have now received initial responses from all three servers</span>
+<span class="hljs-comment">// (unless one failed and threw an exception)</span></code></pre>
+
+<p id="@note_there_better"><a class="jump" href="index.html#@note_there_better"></a>Note that there is a better way to handle waiting for multiple promises like this, using <code>Promise.all()</code>, which we will discuss later in the reading.</p>
+
+<p id="@can_see_now"><a class="jump" href="index.html#@can_see_now"></a>And we can see now why even an empty promise can be useful, just like a function with a <code>void</code> return value:</p>
+
+<pre id="@const_promise_promise-void"><a class="jump" href="index.html#@const_promise_promise-void"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise: <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; = timeout(<span class="hljs-number">2000</span>);
+<span class="hljs-comment">// started up a timer for 2000 milliseconds</span>
+
+<span class="hljs-keyword">await</span> promise;
+<span class="hljs-comment">// no useful return value, but -- now we know that 2000 milliseconds have indeed passed</span></code></pre>
+
+<p id="@note_void_different"><a class="jump" href="index.html#@note_void_different"></a>Note that <code>void</code> is a different type from <code>undefined</code>, which we’ve been using in other contexts to denote the idea of “no useful value”.  The <a href="https://www.typescriptlang.org/docs/handbook/2/functions.html#void"><code>void</code> type</a> is designed as the return type of functions that don’t return anything.  That’s why we use <code>Promise&lt;void&gt;</code> for computations that will not produce a value, and are just running for the sake of some side-effect (like a timer delay).  By contrast, <a href="https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#null-and-undefined"><code>undefined</code></a> represents the lack of a value, the difference being that <code>void</code> tells other programmers that a function shouldn’t be used for its return value and <code>undefined</code> tells other programmers that the lack of a value is important.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-await"><h4 class="text-danger" id="@reading_exercises_0"><a class="jump" href="index.html#@reading_exercises_0"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-await-timing" data-target="#ex-await-timing" data-toggle="collapse"><a class="jump" href="index.html#@ex-await-timing"></a><span class="panel-title">Timing</span></div><div class="panel-collapse collapse exercise-panel" id="ex-await-timing" data-outline="timing" data-ex-id="await/timing" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@consider_these_two"><a class="jump" href="index.html#@consider_these_two"></a>Consider these two functions, both designed to wait for a certain amount of time:</p>
+
+<pre id="@returns_promise_becomes"><a class="jump" href="index.html#@returns_promise_becomes"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// returns a promise that becomes fulfilled `milliseconds` milliseconds after the call to timeout</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">timeout</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt;</span>;
+
+<span class="hljs-comment">// waits for `milliseconds` milliseconds before returning</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">busyWait</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">void</span></span>;</code></pre>
+
+<p id="@note_timeout_uses"><a class="jump" href="index.html#@note_timeout_uses"></a>Note that <code>timeout</code> uses a promise, but <code>busyWait</code> does not.</p>
+
+<p id="@approximately_long_does"><a class="jump" href="index.html#@approximately_long_does"></a>Approximately how long does the following code take to reach the point where it prints <code>done</code>?</p>
+
+<pre id="@const_promise1_timeout-1000_const_promise2_timeout-2000_await_promise1_await"><a class="jump" href="index.html#@const_promise1_timeout-1000_const_promise2_timeout-2000_await_promise1_await"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise1 = timeout(<span class="hljs-number">1000</span>);
+<span class="hljs-keyword">const</span> promise2 = timeout(<span class="hljs-number">2000</span>);
+<span class="hljs-keyword">await</span> promise1;
+<span class="hljs-keyword">await</span> promise2;
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_1_0"><input type="radio" id="md_converted_choice_1_0" name="md_converted_radio_1">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_1_1"><input type="radio" id="md_converted_choice_1_1" name="md_converted_radio_1">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_1_2"><input type="radio" id="md_converted_choice_1_2" name="md_converted_radio_1">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_1_3"><input type="radio" id="md_converted_choice_1_3" name="md_converted_radio_1">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="6 seconds"><label for="md_converted_choice_1_4"><input type="radio" id="md_converted_choice_1_4" name="md_converted_radio_1">6 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@busywait-1000_busywait-2000_console-log-done"><a class="jump" href="index.html#@busywait-1000_busywait-2000_console-log-done"></a><code class="language-ts hljs typescript">busyWait(<span class="hljs-number">1000</span>);
+busyWait(<span class="hljs-number">2000</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_2_0"><input type="radio" id="md_converted_choice_2_0" name="md_converted_radio_2">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_2_1"><input type="radio" id="md_converted_choice_2_1" name="md_converted_radio_2">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_2_2"><input type="radio" id="md_converted_choice_2_2" name="md_converted_radio_2">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_2_3"><input type="radio" id="md_converted_choice_2_3" name="md_converted_radio_2">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="6 seconds"><label for="md_converted_choice_2_4"><input type="radio" id="md_converted_choice_2_4" name="md_converted_radio_2">6 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_promise1_timeout-1000_await_promise1_const_promise2_timeout-2000_await"><a class="jump" href="index.html#@const_promise1_timeout-1000_await_promise1_const_promise2_timeout-2000_await"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise1 = timeout(<span class="hljs-number">1000</span>);
+<span class="hljs-keyword">await</span> promise1;
+<span class="hljs-keyword">const</span> promise2 = timeout(<span class="hljs-number">2000</span>);
+<span class="hljs-keyword">await</span> promise2;
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_3_0"><input type="radio" id="md_converted_choice_3_0" name="md_converted_radio_3">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_3_1"><input type="radio" id="md_converted_choice_3_1" name="md_converted_radio_3">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_3_2"><input type="radio" id="md_converted_choice_3_2" name="md_converted_radio_3">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_3_3"><input type="radio" id="md_converted_choice_3_3" name="md_converted_radio_3">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="6 seconds"><label for="md_converted_choice_3_4"><input type="radio" id="md_converted_choice_3_4" name="md_converted_radio_3">6 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_promise1_timeout-1000_const_promise2_timeout-2000_console-log-done"><a class="jump" href="index.html#@const_promise1_timeout-1000_const_promise2_timeout-2000_console-log-done"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise1 = timeout(<span class="hljs-number">1000</span>);
+<span class="hljs-keyword">const</span> promise2 = timeout(<span class="hljs-number">2000</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_4_0"><input type="radio" id="md_converted_choice_4_0" name="md_converted_radio_4">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_4_1"><input type="radio" id="md_converted_choice_4_1" name="md_converted_radio_4">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_4_2"><input type="radio" id="md_converted_choice_4_2" name="md_converted_radio_4">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_4_3"><input type="radio" id="md_converted_choice_4_3" name="md_converted_radio_4">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="6 seconds"><label for="md_converted_choice_4_4"><input type="radio" id="md_converted_choice_4_4" name="md_converted_radio_4">6 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_promise1_timeout-1000_await_promise1_const_promise2_timeout-2000_console-log-done"><a class="jump" href="index.html#@const_promise1_timeout-1000_await_promise1_const_promise2_timeout-2000_console-log-done"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise1 = timeout(<span class="hljs-number">1000</span>);
+<span class="hljs-keyword">await</span> promise1;
+<span class="hljs-keyword">const</span> promise2 = timeout(<span class="hljs-number">2000</span>);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="e"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_5_0"><input type="radio" id="md_converted_choice_5_0" name="md_converted_radio_5">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_5_1"><input type="radio" id="md_converted_choice_5_1" name="md_converted_radio_5">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_5_2"><input type="radio" id="md_converted_choice_5_2" name="md_converted_radio_5">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_5_3"><input type="radio" id="md_converted_choice_5_3" name="md_converted_radio_5">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="6 seconds"><label for="md_converted_choice_5_4"><input type="radio" id="md_converted_choice_5_4" name="md_converted_radio_5">6 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_promise_timeout-1000_busywait-2000_await_promise"><a class="jump" href="index.html#@const_promise_timeout-1000_busywait-2000_await_promise"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise = timeout(<span class="hljs-number">1000</span>);
+busyWait(<span class="hljs-number">2000</span>);
+<span class="hljs-keyword">await</span> promise;
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="f"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_6_0"><input type="radio" id="md_converted_choice_6_0" name="md_converted_radio_6">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_6_1"><input type="radio" id="md_converted_choice_6_1" name="md_converted_radio_6">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_6_2"><input type="radio" id="md_converted_choice_6_2" name="md_converted_radio_6">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_6_3"><input type="radio" id="md_converted_choice_6_3" name="md_converted_radio_6">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="6 seconds"><label for="md_converted_choice_6_4"><input type="radio" id="md_converted_choice_6_4" name="md_converted_radio_6">6 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_promise_timeout-1000_await_promise_await"><a class="jump" href="index.html#@const_promise_timeout-1000_await_promise_await"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise = timeout(<span class="hljs-number">1000</span>);
+<span class="hljs-keyword">await</span> promise;
+<span class="hljs-keyword">await</span> promise;
+<span class="hljs-keyword">await</span> promise;
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'done'</span>);</code></pre>
+
+<div class="form-group exercise-part" data-outline="g"><div class="radio exercise-choice" data-outline="much less than 1 second"><label for="md_converted_choice_7_0"><input type="radio" id="md_converted_choice_7_0" name="md_converted_radio_7">much less than 1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="1 second"><label for="md_converted_choice_7_1"><input type="radio" id="md_converted_choice_7_1" name="md_converted_radio_7">1 second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="2 seconds"><label for="md_converted_choice_7_2"><input type="radio" id="md_converted_choice_7_2" name="md_converted_radio_7">2 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="3 seconds"><label for="md_converted_choice_7_3"><input type="radio" id="md_converted_choice_7_3" name="md_converted_radio_7">3 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="6 seconds"><label for="md_converted_choice_7_4"><input type="radio" id="md_converted_choice_7_4" name="md_converted_radio_7">6 seconds</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="asynchronous_functions"><a class="jump" href="index.html#asynchronous_functions"></a>Asynchronous functions</h2><div data-outline="asynchronous_functions">
+
+<p id="@functions_been_using"><a class="jump" href="index.html#@functions_been_using"></a>The functions we have been using that return promises – <code>readFile</code>, <code>fetch</code>, <code>timeout</code> – are examples of asynchronous functions.
+An <mark data-structure-text="asynchronous function" id="^asynchronous_function"><em>asynchronous function</em></mark> is a function that returns control to its caller before its computation is done.</p>
+
+<p id="@contrast_more_familiar"><a class="jump" href="index.html#@contrast_more_familiar"></a>Contrast that with the more familiar synchronous function, which returns control after its computation is finished, and its return value is already known.
+Almost every function we’ve used to this point in the course has been synchronous in this way.</p>
+
+<p id="@modern_ts-js_programming"><a class="jump" href="index.html#@modern_ts-js_programming"></a>In modern TS/JS programming, using promises, an asynchronous function can be declared using the <code>async</code> keyword, and must have return type <code>Promise</code>:</p>
+
+<pre id="@async_function_getbalance"><a class="jump" href="index.html#@async_function_getbalance"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+    <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+    <span class="hljs-keyword">if</span> ( <span class="hljs-built_in">isNaN</span>(balance) ) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'account does not contain a number'</span>)
+    <span class="hljs-keyword">return</span> balance;
+}</code></pre>
+
+<span id="throw-to-reject"></span>
+
+<p id="@note_body_async"><a class="jump" href="index.html#@note_body_async"></a>Note that the body of an <code>async</code> function can use <code>return</code> and <code>throw</code> statements in the same way that a synchronous function would.
+These are automatically converted into effects on the function’s promise.
+The <code>return balance</code> statement fulfills the promise with the value of <code>balance</code>, and the <code>throw</code> statement rejects the promise with the given <code>Error</code> object.</p>
+
+<p id="@since_getbalance_asynchronous"><a class="jump" href="index.html#@since_getbalance_asynchronous"></a>Since <code>getBalance()</code> is an asynchronous function returning a promise, a caller of <code>getBalance()</code> needs to interact with the promise appropriately, i.e. using <code>await</code>:</p>
+
+<pre id="@const_mybalance_await"><a class="jump" href="index.html#@const_mybalance_await"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> myBalance = <span class="hljs-keyword">await</span> getBalance();</code></pre>
+
+<p id="@note_await_cannot"><a class="jump" href="index.html#@note_await_cannot"></a>Note that <strong><code>await</code> cannot be used inside a synchronous function (i.e., a function not declared <code>async</code>).</strong>
+TypeScript statically checks this requirement.
+It will produce a static error if <code>await</code> occurs inside a non-<code>async</code> function.</p>
+
+<div class="clearfix"></div>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-asynchronous_functions"><h4 class="text-danger" id="@reading_exercises_1"><a class="jump" href="index.html#@reading_exercises_1"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-asynchronous_functions-windfall" data-target="#ex-asynchronous_functions-windfall" data-toggle="collapse"><a class="jump" href="index.html#@ex-asynchronous_functions-windfall"></a><span class="panel-title">Windfall</span></div><div class="panel-collapse collapse exercise-panel" id="ex-asynchronous_functions-windfall" data-outline="windfall" data-ex-id="asynchronous_functions/windfall" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@which_following_correct"><a class="jump" href="index.html#@which_following_correct"></a>Which of the following are correct ways to use <code>getBalance()</code> in an expression?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="await ( 10 * getBalance() )"><label for="md_converted_choice_8_0"><input type="checkbox" id="md_converted_choice_8_0"><code>await ( 10 * getBalance() )</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="10 * await getBalance()"><label for="md_converted_choice_8_1"><input type="checkbox" id="md_converted_choice_8_1"><code>10 * await getBalance()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="10 * getBalance()"><label for="md_converted_choice_8_2"><input type="checkbox" id="md_converted_choice_8_2"><code>10 * getBalance()</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-asynchronous_functions-double_balance" data-target="#ex-asynchronous_functions-double_balance" data-toggle="collapse"><a class="jump" href="index.html#@ex-asynchronous_functions-double_balance"></a><span class="panel-title">Double balance</span></div><div class="panel-collapse collapse exercise-panel" id="ex-asynchronous_functions-double_balance" data-outline="double_balance" data-ex-id="asynchronous_functions/double_balance" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@type_each_following"><a class="jump" href="index.html#@type_each_following"></a>What is the type of each of the following expressions?</p>
+
+<pre id="@getbalance_getbalance"><a class="jump" href="index.html#@getbalance_getbalance"></a><code class="language-ts hljs typescript">[ getBalance(), getBalance() ]</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="number"><label for="md_converted_choice_12_0"><input type="radio" id="md_converted_choice_12_0" name="md_converted_radio_12"><code>number</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Promise<number>"><label for="md_converted_choice_12_1"><input type="radio" id="md_converted_choice_12_1" name="md_converted_radio_12"><code>Promise&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Array<number>"><label for="md_converted_choice_12_2"><input type="radio" id="md_converted_choice_12_2" name="md_converted_radio_12"><code>Array&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Array<Promise<number>>"><label for="md_converted_choice_12_3"><input type="radio" id="md_converted_choice_12_3" name="md_converted_radio_12"><code>Array&lt;Promise&lt;number&gt;&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Promise<Array<number>>"><label for="md_converted_choice_12_4"><input type="radio" id="md_converted_choice_12_4" name="md_converted_radio_12"><code>Promise&lt;Array&lt;number&gt;&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@await_getbalance_await"><a class="jump" href="index.html#@await_getbalance_await"></a><code class="language-ts hljs typescript">[ <span class="hljs-keyword">await</span> getBalance(), <span class="hljs-keyword">await</span> getBalance() ]</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="number"><label for="md_converted_choice_13_0"><input type="radio" id="md_converted_choice_13_0" name="md_converted_radio_13"><code>number</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Promise<number>"><label for="md_converted_choice_13_1"><input type="radio" id="md_converted_choice_13_1" name="md_converted_radio_13"><code>Promise&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Array<number>"><label for="md_converted_choice_13_2"><input type="radio" id="md_converted_choice_13_2" name="md_converted_radio_13"><code>Array&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Array<Promise<number>>"><label for="md_converted_choice_13_3"><input type="radio" id="md_converted_choice_13_3" name="md_converted_radio_13"><code>Array&lt;Promise&lt;number&gt;&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Promise<Array<number>>"><label for="md_converted_choice_13_4"><input type="radio" id="md_converted_choice_13_4" name="md_converted_radio_13"><code>Promise&lt;Array&lt;number&gt;&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-asynchronous_functions-its_awaits_all_the_way_down" data-target="#ex-asynchronous_functions-its_awaits_all_the_way_down" data-toggle="collapse"><a class="jump" href="index.html#@ex-asynchronous_functions-its_awaits_all_the_way_down"></a><span class="panel-title">It’s awaits all the way down</span></div><div class="panel-collapse collapse exercise-panel" id="ex-asynchronous_functions-its_awaits_all_the_way_down" data-outline="its_awaits_all_the_way_down" data-ex-id="asynchronous_functions/its_awaits_all_the_way_down" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@consider_simple_program"><a class="jump" href="index.html#@consider_simple_program"></a>Consider this simple program, in which <code>main</code> calls <code>f</code> which calls <code>g</code>:</p>
+
+<pre id="@function_main_void_console-log-f_function_f"><a class="jump" href="index.html#@function_main_void_console-log-f_function_f"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">void</span> </span>{ <span class="hljs-built_in">console</span>.log(f()); }
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">f</span>(<span class="hljs-params"></span>): <span class="hljs-title">number</span> </span>{ <span class="hljs-keyword">return</span> g()+<span class="hljs-number">50</span>;  }
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">g</span>(<span class="hljs-params"></span>): <span class="hljs-title">number</span> </span>{ <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>; }</code></pre>
+
+<p id="@now_suppose_g"><a class="jump" href="index.html#@now_suppose_g"></a>Now suppose <code>g()</code> is changed to use <code>await</code>:</p>
+
+<pre id="@function_g_number"><a class="jump" href="index.html#@function_g_number"></a><code class="hljs javascript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">g</span>(<span class="hljs-params"></span>): <span class="hljs-title">number</span> </span>{ <span class="hljs-keyword">return</span> <span class="hljs-keyword">await</span> getBalance(); }</code></pre>
+
+<p id="@edited_program_not"><a class="jump" href="index.html#@edited_program_not"></a>The edited program is not compiling yet; there are static errors.</p>
+
+<p id="@which_additional_changes"><a class="jump" href="index.html#@which_additional_changes"></a>Which additional changes need to be made to <code>g()</code>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="change function to async function"><label for="md_converted_choice_9_0"><input type="checkbox" id="md_converted_choice_9_0">change <code>function</code> to <code>async function</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="change g(): number to g(): Promise<number>"><label for="md_converted_choice_9_1"><input type="checkbox" id="md_converted_choice_9_1">change <code>g(): number</code> to <code>g(): Promise&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="put try-catch around the return statement"><label for="md_converted_choice_9_2"><input type="checkbox" id="md_converted_choice_9_2">put <code>try</code>-<code>catch</code> around the <code>return</code> statement</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@changes_need_be_made_f"><a class="jump" href="index.html#@changes_need_be_made_f"></a>What changes need to be made to <code>f()</code>?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="change g()+50 to (await g())+50"><label for="md_converted_choice_10_0"><input type="checkbox" id="md_converted_choice_10_0">change <code>g()+50</code> to <code>(await g())+50</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="change function to async function"><label for="md_converted_choice_10_1"><input type="checkbox" id="md_converted_choice_10_1">change <code>function</code> to <code>async function</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="change f(): number to f(): Promise<number>"><label for="md_converted_choice_10_2"><input type="checkbox" id="md_converted_choice_10_2">change <code>f(): number</code> to <code>f(): Promise&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="put try-catch around the return statement"><label for="md_converted_choice_10_3"><input type="checkbox" id="md_converted_choice_10_3">put <code>try</code>-<code>catch</code> around the <code>return</code> statement</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="no changes need to be made to f"><label for="md_converted_choice_10_4"><input type="checkbox" id="md_converted_choice_10_4">no changes need to be made to <code>f</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@changes_need_be_made_main"><a class="jump" href="index.html#@changes_need_be_made_main"></a>What changes need to be made to <code>main()</code>?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="change console.log(f()) to console.log(await f())"><label for="md_converted_choice_11_0"><input type="checkbox" id="md_converted_choice_11_0">change <code>console.log(f())</code> to <code>console.log(await f())</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="change function to async function"><label for="md_converted_choice_11_1"><input type="checkbox" id="md_converted_choice_11_1">change <code>function</code> to <code>async function</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="change main(): void to main(): Promise<void>"><label for="md_converted_choice_11_2"><input type="checkbox" id="md_converted_choice_11_2">change <code>main(): void</code> to <code>main(): Promise&lt;void&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="put try-catch around the return statement"><label for="md_converted_choice_11_3"><input type="checkbox" id="md_converted_choice_11_3">put <code>try</code>-<code>catch</code> around the <code>return</code> statement</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="no changes need to be made to main"><label for="md_converted_choice_11_4"><input type="checkbox" id="md_converted_choice_11_4">no changes need to be made to <code>main</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+<h3 id="top-level_await"><a class="jump" href="index.html#top-level_await"></a>Top-level <code>await</code></h3><div data-outline="top-level_await">
+
+<p id="@saw_above_await"><a class="jump" href="index.html#@saw_above_await"></a>We saw above that <code>await</code> cannot be used in a synchronous function; a function must be declared <code>async</code> in order to use <code>await</code>.</p>
+
+<p id="@but_about_top-level"><a class="jump" href="index.html#@but_about_top-level"></a>But what about top-level code, outside of any function?  Consider the previous exercise, in which we had to change synchronous functions into <code>async</code> functions starting from <code>g</code> to <code>f</code> all the way up to the entry-point function <code>main</code>.  But somewhere in the top-level code, we will need to have a call to <code>main</code> to kick things off:</p>
+
+<pre id="@async_function_main_promise-void_main_do"><a class="jump" href="index.html#@async_function_main_promise-void_main_do"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{ ... }
+...
+main();  <span class="hljs-comment">// what do we do with the promise returned by main()?</span></code></pre>
+
+<p id="@can_change_line"><a class="jump" href="index.html#@can_change_line"></a>Can we change this line to <code>await main()</code>, when we don’t have a surrounding function to mark <code>async</code>?</p>
+
+<p id="@answer_unfortunately_depends"><a class="jump" href="index.html#@answer_unfortunately_depends"></a>The answer unfortunately depends on what kind of JavaScript context the code will run in.
+In code which is compiled and run as a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules#top_level_await">modern JavaScript module</a> (also called “ECMAScript 6 module” or “ES6 module” after the version of the JavaScript standard that introduced modules), you can use <code>await</code> in top-level code, and it behaves just as would inside an <code>async</code> function:</p>
+
+<pre id="@async_function_main_promise-void_await_main"><a class="jump" href="index.html#@async_function_main_promise-void_await_main"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{ ... }
+...
+<span class="hljs-keyword">await</span> main();  <span class="hljs-comment">// waits for main() to finish before moving on -- works in modern ES6 module contexts</span></code></pre>
+
+<p id="@our_code_6-102"><a class="jump" href="index.html#@our_code_6-102"></a>Our code in 6.102 is using these new modules as much as possible, so that <code>await</code> works at the top level.</p>
+
+<p id="@older_javascript_contexts"><a class="jump" href="index.html#@older_javascript_contexts"></a>In older JavaScript contexts, unfortunately, the top-level script runs synchronously and is not allowed to use <code>await</code>, so <code>await main()</code> would produce an error.
+If you find yourself in that kind of context, the best thing to do is to put all your top-level code inside an asynchronous <code>main</code> function (which we’ve already done here), and call it <em>without waiting for its promise</em>.
+Does this mean that the program will exit right away, before the promise is fulfilled?
+No — it turns out that <code>node</code> itself keeps track of pending promises, and the process will not exit until the promise returned by <code>main()</code> has either been fulfilled or rejected.  So <code>await</code> is not necessary if you are just calling one function at the top level.</p>
+
+<p id="@depending_your_configuration"><a class="jump" href="index.html#@depending_your_configuration"></a>Depending on your configuration, you may still get a warning at compile-time that you’re not handling the promise return value, so you can declare that you don’t intend to by preceding the call with the <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/void"><code>void</code> operator</a>:</p>
+
+<pre id="@async_function_main_promise-void_void_main"><a class="jump" href="index.html#@async_function_main_promise-void_void_main"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{ ... }
+...
+<span class="hljs-built_in">void</span> main();  <span class="hljs-comment">// calls main() but doesn't wait for it to finish -- works in all JavaScript contexts</span></code></pre>
+
+</div></div><h2 id="concurrency_model"><a class="jump" href="index.html#concurrency_model"></a>Concurrency model</h2><div data-outline="concurrency_model">
+
+<p id="@dig_little_deeper"><a class="jump" href="index.html#@dig_little_deeper"></a>Let’s dig a little deeper into how asynchronous functions are executed by the JavaScript runtime system, which is the interpreter that runs JavaScript code and manages the JavaScript environment, among other things. (We are mainly using Node as the runtime system in this class, but other runtimes exist, such as <a href="https://deno.com/">Deno</a>, <a href="https://bun.sh/">Bun</a>, or the web browser you’re viewing this reading in.)</p>
+
+<p id="@javascript_only_one"><a class="jump" href="index.html#@javascript_only_one"></a>JavaScript has only one <a href="../14-concurrency/index.html#processes_threads_time-slicing">thread of control</a> per global environment. (Although a <code>Worker</code> creates a new thread as we saw in a <a href="../14-concurrency/index.html#workers_in_typescript">previous reading</a>, each worker gets a fresh global environment, and generally communicates with other workers or the main program by message passing, not by directly sharing mutable objects in memory.)</p>
+
+<p id="@raises_some_questions"><a class="jump" href="index.html#@raises_some_questions"></a>This raises some questions: if there is only one thread in a JavaScript environment, then what does it mean to have multiple asynchronous functions in progress at the same time?  After an asynchronous function returns a promise to its caller, before having finished its computation, when and how does it get control back, so that it can compute some more and eventually fulfill or reject the promise?</p>
+
+<p id="@see_works_example"><a class="jump" href="index.html#@see_works_example"></a>Let’s see how this works with an example that gets the balances from two bank accounts and adds them together:</p>
+
+<div class="pull-right pull-margin hover-figure" style="margin-left:10px; margin-top:54px;" data-selector="#totalBalance-steps .step" data-target=".show-steps" data-attr="class" data-template="show-steps _{index}"><pre class="show-steps _0" id="@async_function_totalbalance"><a class="jump" href="index.html#@async_function_totalbalance"></a><code class="typescript small hljs"><span class="no-markdown"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">totalBalance</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="highlight-on _2"><span class="hljs-keyword">const</span> checkingPromise =</span> <span class="highlight-on _0">getBalance(<span class="hljs-string">'checking'</span>)</span>;
+    <span class="highlight-on _3"><span class="hljs-keyword">const</span> savingsPromise =</span> <span class="highlight-on _2">getBalance(<span class="hljs-string">'savings'</span>)</span>;
+    <span class="highlight-on _8"><span class="hljs-keyword">return</span></span> (<span class="highlight-on _4"><span class="hljs-keyword">await</span> checkingPromise</span>) + <span class="highlight-on _8">(<span class="hljs-keyword">await</span> savingsPromise)</span>;
+}
+
+<span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params">account: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="highlight-on _6 _7"><span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> =</span> <span class="highlight-on _3"><span class="highlight-on _1"><span class="hljs-keyword">await</span></span> <span class="highlight-on _0">fs.promises.readFile(account, { encoding: <span class="hljs-string">'utf-8'</span> })</span></span>;
+    <span class="highlight-on _6 _7"><span class="hljs-keyword">return</span> <span class="hljs-built_in">parseInt</span>(data);</span>
+}</span></code></pre></div>
+
+<p id="@suppose_client_calls"><a class="jump" href="index.html#@suppose_client_calls"></a>Suppose a client calls <code>totalBalance()</code>.
+Here’s what happens.
+(You can hover over each step in the text below and see the corresponding code highlighted on the right.)</p>
+
+<div id="totalBalance-steps"><ol id="@totalbalance_calls_getbalance-checking">
+<li><a class="jump" href="index.html#@totalbalance_calls_getbalance-checking"></a><span class="step hover-figure-select highlighted"><code>totalBalance</code> calls <code>getBalance('checking')</code>, which calls <code>readFile</code>, which starts reading the file and immediately returns a <code>Promise&lt;string&gt;</code> for its contents.</span></li>
+<li><span class="step hover-figure-select"><code>getBalance('checking')</code> reaches an <code>await</code> for that file promise, which means it must give up control. It constructs a new <code>Promise&lt;number&gt;</code> for its own result, and returns that promise back to its caller, <code>totalBalance</code>.</span></li>
+<li><span class="step hover-figure-select"><code>totalBalance</code> doesn’t wait for that promise yet, but stores it away in <code>checkingPromise</code>, and proceeds to call <code>getBalance('savings')</code>.</span></li>
+<li><span class="step hover-figure-select"><code>getBalance('savings')</code> evolves in the same way, reaching its <code>await</code> and returning a promise for the savings-account balance, which <code>totalBalance</code> stores in <code>savingsPromise</code>.</span>
+
+<ul><li>Note that <code>totalBalance</code> has now created two concurrent computations, one loading the checking account and the other the savings account.  By holding onto their promises and reserving the <code>await</code> for later, it allows the computations to run independently, rather than forcing one to finish before even starting the other.  This is the essence of promise-based concurrency.</li></ul></li>
+<li><span class="step hover-figure-select"><code>totalBalance</code> must <code>await</code> each of the promises before it can compute the final sum.  TypeScript/JavaScript evaluates expressions from left to right (<a href="https://en.wikipedia.org/wiki/Evaluation_strategy#Evaluation_orders">not all languages do…</a>), so <code>await checkingPromise</code> will happen first.  Since <code>checkingPromise</code> is still pending, this means that <code>totalBalance</code> constructs a new <code>Promise&lt;number&gt;</code> for its <em>own</em> eventual result, and returns that promise to the original caller.</span></li>
+<li><span class="step hover-figure-select">The original caller (not shown) continues executing. In order for JavaScript’s concurrency model to work correctly, we depend on the caller to eventually return control back to the JavaScript runtime system (the original caller of the starting point of our code). The runtime system handles low-level processing, like file loading.</span></li>
+<li><span class="step hover-figure-select">Suppose the savings file finishes loading first, and its promise fulfills with the string <code>"200"</code>.  The JavaScript runtime system then gives control to <code>getBalance('savings')</code>, which was waiting on that promise, and execution resumes with the <code>await</code> evaluating to <code>"200"</code>.  <code>getBalance('savings')</code> finishes its execution, fulfills <code>savingsPromise</code> with the number <code>200</code>, and returns control back to the runtime system.  But <code>totalBalance</code> is not awaiting <code>savingsPromise</code> (yet), so nothing further happens.</span></li>
+<li><span class="step hover-figure-select">The checking file finishes loading, and fulfills with the string <code>"50"</code>.  The runtime system gives control to <code>getBalance('checking')</code>, which fulfills <code>checkingPromise</code> with the number <code>50</code>, and returns control back to the runtime system.</span></li>
+<li><span class="step hover-figure-select">Since <code>totalBalance</code> was waiting for <code>checkingPromise</code>, the runtime system gives control to <code>totalBalance</code> with the value <code>50</code>.  <code>totalBalance</code> then does <code>await savingsPromise</code>, so it gives up control to the runtime system again.  But because <code>savingsPromise</code> is already fulfilled with the value <code>200</code>, the runtime system will very shortly (possibly immediately) give control back again.  <code>totalBalance</code> proceeds with its own computation, finally fulfilling its own promise with the sum <code>250</code>.</span></li>
+</ol></div>
+
+<p id="@example_reveals_some"><a class="jump" href="index.html#@example_reveals_some"></a>This example reveals some high-level points about the flow of control:</p>
+
+<ul id="@every_await_place">
+<li><a class="jump" href="index.html#@every_await_place"></a>Every <code>await</code> is a place where an asynchronous function gives up control.</li>
+<li>For the first <code>await</code> in an asynchronous function, “giving up control” means returning the function’s own promise to its caller.  Subsequent <code>await</code>s give up control directly back to the runtime system.</li>
+<li>When the <code>await</code> resumes, control comes back from the runtime system.</li>
+<li>An asynchronous function is effectively divided into pieces of computation between <code>await</code>s, and those pieces can interleave with pieces of other asynchronous function calls.</li>
+</ul>
+
+<p id="@model_concurrency_called"><a class="jump" href="index.html#@model_concurrency_called"></a>This model of concurrency is called <a href="https://en.wikipedia.org/wiki/Cooperative_multitasking"><mark data-mark-text="cooperative concurrency" data-structure-text="cooperative concurrency" id="^cooperative_concurrency"><em>cooperative</em></mark> or <mark data-mark-text="non-preemptive concurrency" data-structure-text="non-preemptive concurrency" id="^non-preemptive_concurrency"><em>non-preemptive</em></mark></a>.
+There is only one thread of control, and concurrent computations must <em>cooperate</em> to release control to each other at well-defined points (such as <code>await</code> and <code>return</code>).</p>
+
+<p id="@note_await_always"><a class="jump" href="index.html#@note_await_always"></a>Note that <strong><code>await</code> always gives up control</strong>, even if the promise it would wait for has already been fulfilled.
+It may gain control back almost immediately if that’s the case, but first it gives other concurrent computations a chance to continue their execution. </p>
+
+<p id="@good_moment_observe"><a class="jump" href="index.html#@good_moment_observe"></a>This is a good moment to observe a similarity in behavior between <code>await</code> in an asynchronous function, and <code>yield</code> in
+a <a href="../10-functional-programming/index.html#generator_functions_in_typescript">generator function</a>. Both give up control (i.e., pause running the function for the time being), but are ready
+to resume the function as soon as something happens. In the case of an asynchronous function using <code>await</code>, the function
+resumes running after the promise it’s waiting for has fulfilled. In the case of a generator function using <code>yield</code>, the
+function resumes running as soon as its caller requests the next value in the sequence (e.g. by calling <code>next()</code>, or by looping around a <code>for</code> loop).
+Asynchronous functions and generator functions are both considered examples of cooperative concurrency.</p>
+
+<p id="@also_worth_clarifying"><a class="jump" href="index.html#@also_worth_clarifying"></a>It’s also worth clarifying that “one thread of control” means that only one thread is running our TypeScript/JavaScript code.  But the JavaScript runtime system may be using other threads internally, to handle network connections, render web pages, read and write the filesystem, and so forth.  These other threads may cause promises to fulfill (such as the promises returned by <code>readFile()</code> or <code>fetch()</code>), but the code waiting for those promises won’t resume running until the single JavaScript execution thread is ready to turn its attention to them.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-concurrency_model"><h4 class="text-danger" id="@reading_exercises_2"><a class="jump" href="index.html#@reading_exercises_2"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-concurrency_model-promises_promises" data-target="#ex-concurrency_model-promises_promises" data-toggle="collapse"><a class="jump" href="index.html#@ex-concurrency_model-promises_promises"></a><span class="panel-title">Promises promises</span></div><div class="panel-collapse collapse exercise-panel" id="ex-concurrency_model-promises_promises" data-outline="promises_promises" data-ex-id="concurrency_model/promises_promises" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@step_6_totalbalance"><a class="jump" href="index.html#@step_6_totalbalance"></a>At step 6 in the <code>totalBalance</code> example above, when the computation first returns control back to the JavaScript runtime system…</p>
+
+<p id="@many_promise-number_promises"><a class="jump" href="index.html#@many_promise-number_promises"></a>How many <code>Promise&lt;number&gt;</code> promises are pending? (Just consider the code shown.)</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@many_promise-string_promises"><a class="jump" href="index.html#@many_promise-string_promises"></a>How many <code>Promise&lt;string&gt;</code> promises are pending?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="textfield exercise-choice"><input type="text" class="form-control" style="width: 25%;"><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-concurrency_model-checking_carefully" data-target="#ex-concurrency_model-checking_carefully" data-toggle="collapse"><a class="jump" href="index.html#@ex-concurrency_model-checking_carefully"></a><span class="panel-title">Checking carefully</span></div><div class="panel-collapse collapse exercise-panel" id="ex-concurrency_model-checking_carefully" data-outline="checking_carefully" data-ex-id="concurrency_model/checking_carefully" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@consider_some_other"><a class="jump" href="index.html#@consider_some_other"></a>Let’s consider some other ways to write the body of <code>totalBalance</code>, and how they might affect the concurrency of the computation.</p>
+
+<p id="@note_types_omitted"><a class="jump" href="index.html#@note_types_omitted"></a>Note that types are omitted in the variable declarations below.
+Some variables may be <code>number</code>, and others <code>Promise&lt;number&gt;</code>.
+Some examples may even fail to compile because of a static type error.
+Look carefully at the <code>await</code>s, and remember that they convert a promise into a value.</p>
+
+<p id="@concurrency_behavior_each"><a class="jump" href="index.html#@concurrency_behavior_each"></a>What is the concurrency behavior of each of the following?</p>
+
+<pre id="@const_savings_getbalance-savings"><a class="jump" href="index.html#@const_savings_getbalance-savings"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> savings = getBalance(<span class="hljs-string">'savings'</span>);
+<span class="hljs-keyword">const</span> checking = getBalance(<span class="hljs-string">'checking'</span>);
+<span class="hljs-keyword">return</span> (<span class="hljs-keyword">await</span> savings) + (<span class="hljs-keyword">await</span> checking);</code></pre>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="not concurrent – checking file always fully loaded before savings file starts loading "><label for="md_converted_choice_14_0"><input type="radio" id="md_converted_choice_14_0" name="md_converted_radio_14">not concurrent – checking file always fully loaded before savings file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="not concurrent – savings file always fully loaded before checking file starts loading "><label for="md_converted_choice_14_1"><input type="radio" id="md_converted_choice_14_1" name="md_converted_radio_14">not concurrent – savings file always fully loaded before checking file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="concurrent – both files load concurrently"><label for="md_converted_choice_14_2"><input type="radio" id="md_converted_choice_14_2" name="md_converted_radio_14">concurrent – both files load concurrently</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="fails to compile because of a static error"><label for="md_converted_choice_14_3"><input type="radio" id="md_converted_choice_14_3" name="md_converted_radio_14">fails to compile because of a static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_checking_await"><a class="jump" href="index.html#@const_checking_await"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> checking = <span class="hljs-keyword">await</span> getBalance(<span class="hljs-string">'checking'</span>);
+<span class="hljs-keyword">const</span> savings = <span class="hljs-keyword">await</span> getBalance(<span class="hljs-string">'savings'</span>);
+<span class="hljs-keyword">return</span> checking + savings;</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="not concurrent – checking file always fully loaded before savings file starts loading "><label for="md_converted_choice_15_0"><input type="radio" id="md_converted_choice_15_0" name="md_converted_radio_15">not concurrent – checking file always fully loaded before savings file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="not concurrent – savings file always fully loaded before checking file starts loading "><label for="md_converted_choice_15_1"><input type="radio" id="md_converted_choice_15_1" name="md_converted_radio_15">not concurrent – savings file always fully loaded before checking file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="concurrent – both files load concurrently"><label for="md_converted_choice_15_2"><input type="radio" id="md_converted_choice_15_2" name="md_converted_radio_15">concurrent – both files load concurrently</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="fails to compile because of a static error"><label for="md_converted_choice_15_3"><input type="radio" id="md_converted_choice_15_3" name="md_converted_radio_15">fails to compile because of a static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_checking_getbalance-checking_const_savings_getbalance-savings"><a class="jump" href="index.html#@const_checking_getbalance-checking_const_savings_getbalance-savings"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> checking = getBalance(<span class="hljs-string">'checking'</span>);
+<span class="hljs-keyword">const</span> savings = getBalance(<span class="hljs-string">'savings'</span>);
+<span class="hljs-keyword">return</span> checking + savings;</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="not concurrent – checking file always fully loaded before savings file starts loading "><label for="md_converted_choice_16_0"><input type="radio" id="md_converted_choice_16_0" name="md_converted_radio_16">not concurrent – checking file always fully loaded before savings file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="not concurrent – savings file always fully loaded before checking file starts loading "><label for="md_converted_choice_16_1"><input type="radio" id="md_converted_choice_16_1" name="md_converted_radio_16">not concurrent – savings file always fully loaded before checking file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="concurrent – both files load concurrently"><label for="md_converted_choice_16_2"><input type="radio" id="md_converted_choice_16_2" name="md_converted_radio_16">concurrent – both files load concurrently</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="fails to compile because of a static error"><label for="md_converted_choice_16_3"><input type="radio" id="md_converted_choice_16_3" name="md_converted_radio_16">fails to compile because of a static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@const_checking_getbalance-checking_return_await_getbalance-savings"><a class="jump" href="index.html#@const_checking_getbalance-checking_return_await_getbalance-savings"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> checking = getBalance(<span class="hljs-string">'checking'</span>);
+<span class="hljs-keyword">return</span> (<span class="hljs-keyword">await</span> getBalance(<span class="hljs-string">'savings'</span>)) + (<span class="hljs-keyword">await</span> checking);</code></pre>
+
+<div class="form-group exercise-part" data-outline="d"><div class="radio exercise-choice" data-outline="not concurrent – checking file always fully loaded before savings file starts loading "><label for="md_converted_choice_17_0"><input type="radio" id="md_converted_choice_17_0" name="md_converted_radio_17">not concurrent – checking file always fully loaded before savings file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="not concurrent – savings file always fully loaded before checking file starts loading "><label for="md_converted_choice_17_1"><input type="radio" id="md_converted_choice_17_1" name="md_converted_radio_17">not concurrent – savings file always fully loaded before checking file starts loading </label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="concurrent – both files load concurrently"><label for="md_converted_choice_17_2"><input type="radio" id="md_converted_choice_17_2" name="md_converted_radio_17">concurrent – both files load concurrently</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="fails to compile because of a static error"><label for="md_converted_choice_17_3"><input type="radio" id="md_converted_choice_17_3" name="md_converted_radio_17">fails to compile because of a static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@return_await_getbalance-savings"><a class="jump" href="index.html#@return_await_getbalance-savings"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">return</span> (<span class="hljs-keyword">await</span> getBalance(<span class="hljs-string">'savings'</span>)) + (<span class="hljs-keyword">await</span> getBalance(<span class="hljs-string">'checking'</span>));</code></pre>
+
+<div class="form-group exercise-part" data-outline="e"><div class="radio exercise-choice" data-outline="not concurrent – checking file always fully loaded before savings file starts loading"><label for="md_converted_choice_18_0"><input type="radio" id="md_converted_choice_18_0" name="md_converted_radio_18">not concurrent – checking file always fully loaded before savings file starts loading</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="not concurrent – savings file always fully loaded before checking file starts loading"><label for="md_converted_choice_18_1"><input type="radio" id="md_converted_choice_18_1" name="md_converted_radio_18">not concurrent – savings file always fully loaded before checking file starts loading</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="concurrent – both files load concurrently"><label for="md_converted_choice_18_2"><input type="radio" id="md_converted_choice_18_2" name="md_converted_radio_18">concurrent – both files load concurrently</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="fails to compile because of a static error"><label for="md_converted_choice_18_3"><input type="radio" id="md_converted_choice_18_3" name="md_converted_radio_18">fails to compile because of a static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-concurrency_model-tick_tock" data-target="#ex-concurrency_model-tick_tock" data-toggle="collapse"><a class="jump" href="index.html#@ex-concurrency_model-tick_tock"></a><span class="panel-title">Tick tock</span></div><div class="panel-collapse collapse exercise-panel" id="ex-concurrency_model-tick_tock" data-outline="tick_tock" data-ex-id="concurrency_model/tick_tock" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@recall_defined_timeout-milliseconds"><a class="jump" href="index.html#@recall_defined_timeout-milliseconds"></a>Recall that we have defined <code>timeout(milliseconds)</code> as an asynchronous function that creates a timer — a promise that will fulfill <code>milliseconds</code> after <code>timeout()</code> was called.</p>
+
+<p id="@now_consider_asynchronous"><a class="jump" href="index.html#@now_consider_asynchronous"></a>Now consider this asynchronous function:</p>
+
+<pre id="@async_function_clock-milliseconds"><a class="jump" href="index.html#@async_function_clock-milliseconds"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">clock</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">________</span> </span>{
+  <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
+    <span class="hljs-keyword">await</span> timeout(milliseconds);
+    <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'tick'</span>);
+  }
+}</code></pre>
+
+<p id="@return_type_clock"><a class="jump" href="index.html#@return_type_clock"></a>What is the return type of <code>clock()</code> (the blank in the code above)?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="radio exercise-choice" data-outline="number"><label for="md_converted_choice_19_0"><input type="radio" id="md_converted_choice_19_0" name="md_converted_radio_19"><code>number</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Promise<number>"><label for="md_converted_choice_19_1"><input type="radio" id="md_converted_choice_19_1" name="md_converted_radio_19"><code>Promise&lt;number&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="void"><label for="md_converted_choice_19_2"><input type="radio" id="md_converted_choice_19_2" name="md_converted_radio_19"><code>void</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="Promise<void>"><label for="md_converted_choice_19_3"><input type="radio" id="md_converted_choice_19_3" name="md_converted_radio_19"><code>Promise&lt;void&gt;</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@assume_blank_filled"><a class="jump" href="index.html#@assume_blank_filled"></a>Assume the blank is filled in with the correct return type.</p>
+
+<p id="@would_clock-1000_do"><a class="jump" href="index.html#@would_clock-1000_do"></a>What would <code>clock(1000)</code> do?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="radio exercise-choice" data-outline="fail to compile (static error)"><label for="md_converted_choice_20_0"><input type="radio" id="md_converted_choice_20_0" name="md_converted_radio_20">fail to compile (static error)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="return a promise after waiting one second and printing one tick"><label for="md_converted_choice_20_1"><input type="radio" id="md_converted_choice_20_1" name="md_converted_radio_20">return a promise after waiting one second and printing one <code>tick</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="return a promise almost immediately"><label for="md_converted_choice_20_2"><input type="radio" id="md_converted_choice_20_2" name="md_converted_radio_20">return a promise almost immediately</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never return, printing tick once per second"><label for="md_converted_choice_20_3"><input type="radio" id="md_converted_choice_20_3" name="md_converted_radio_20">never return, printing <code>tick</code> once per second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@would_await_clock-1000"><a class="jump" href="index.html#@would_await_clock-1000"></a>What would <code>await clock(1000)</code> do?</p>
+
+<div class="form-group exercise-part" data-outline="c"><div class="radio exercise-choice" data-outline="fail to compile (static error)"><label for="md_converted_choice_21_0"><input type="radio" id="md_converted_choice_21_0" name="md_converted_radio_21">fail to compile (static error)</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="return a promise after waiting one second and printing one tick"><label for="md_converted_choice_21_1"><input type="radio" id="md_converted_choice_21_1" name="md_converted_radio_21">return a promise after waiting one second and printing one <code>tick</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="return a promise almost immediately"><label for="md_converted_choice_21_2"><input type="radio" id="md_converted_choice_21_2" name="md_converted_radio_21">return a promise almost immediately</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="radio exercise-choice" data-outline="never return, printing tick once per second"><label for="md_converted_choice_21_3"><input type="radio" id="md_converted_choice_21_3" name="md_converted_radio_21">never return, printing <code>tick</code> once per second</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="aggregating_promises"><a class="jump" href="index.html#aggregating_promises"></a>Aggregating promises</h2><div data-outline="aggregating_promises">
+
+<p id="@running_multiple_concurrent"><a class="jump" href="index.html#@running_multiple_concurrent"></a>When running multiple concurrent computations, it’s often useful to combine their promises using operations similar to AND and OR.</p>
+
+<p id="@promise-all_like_logical"><a class="jump" href="index.html#@promise-all_like_logical"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all"><code>Promise.all()</code></a> is like a logical AND – it combines an iterable collection of promises into a single promise that waits for all the promises to fulfill, and returns an array of their results:</p>
+
+<pre id="@const_allresponses_array-response"><a class="jump" href="index.html#@const_allresponses_array-response"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> allResponses: <span class="hljs-built_in">Array</span>&lt;Response&gt; = 
+  <span class="hljs-keyword">await</span> <span class="hljs-built_in">Promise</span>.all( [ fetch(<span class="hljs-string">'http://www.mit.edu/'</span>),
+                       fetch(<span class="hljs-string">'http://www.harvard.edu/'</span>),
+                       fetch(<span class="hljs-string">'http://www.tufts.edu/'</span>) ] );</code></pre>
+
+<p id="@but_if_any"><a class="jump" href="index.html#@but_if_any"></a>But if any of the individual promises fail, then the entire <code>Promise.all()</code> also fails.</p>
+
+<p id="@logical_promise-any_produces"><a class="jump" href="index.html#@logical_promise-any_produces"></a>For logical OR, <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/any"><code>Promise.any()</code></a> produces a promise that waits for any of the individual promises to successfully fulfill (and returns that promise’s result), and only fails if all the promises fail.
+You might use it for running redundant computations that might fail independently:</p>
+
+<pre id="@const_firstresponse_response"><a class="jump" href="index.html#@const_firstresponse_response"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> firstResponse: Response = 
+  <span class="hljs-keyword">await</span> <span class="hljs-built_in">Promise</span>.any( [ fetch(<span class="hljs-string">'http://www.mit1.edu/'</span>),
+                       fetch(<span class="hljs-string">'http://www.mit2.edu/'</span>),
+                       fetch(<span class="hljs-string">'http://www.mit3.edu/'</span>) ] );</code></pre>
+
+<p id="@promise-race_logical_waits"><a class="jump" href="index.html#@promise-race_logical_waits"></a><a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/race"><code>Promise.race()</code></a> is a logical OR that waits for any individual promise to either fulfill or reject, and immediately fulfills or rejects in the same way.
+One use of <code>Promise.race()</code> is putting a timeout on an operation:</p>
+
+<pre id="@const_responseortimeout_response-void"><a class="jump" href="index.html#@const_responseortimeout_response-void"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> responseOrTimeout: Response|<span class="hljs-built_in">void</span> =
+  <span class="hljs-keyword">await</span> <span class="hljs-built_in">Promise</span>.race( [ fetch(<span class="hljs-string">'http://www.mit.edu/'</span>), 
+                        timeout(<span class="hljs-number">5000</span>) ] );</code></pre>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-aggregating_promises"><h4 class="text-danger" id="@reading_exercises_3"><a class="jump" href="index.html#@reading_exercises_3"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-aggregating_promises-dropped_promises" data-target="#ex-aggregating_promises-dropped_promises" data-toggle="collapse"><a class="jump" href="index.html#@ex-aggregating_promises-dropped_promises"></a><span class="panel-title">Dropped promises</span></div><div class="panel-collapse collapse exercise-panel" id="ex-aggregating_promises-dropped_promises" data-outline="dropped_promises" data-ex-id="aggregating_promises/dropped_promises" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@suppose_reorganizing_our"><a class="jump" href="index.html#@suppose_reorganizing_our"></a>Suppose that we are reorganizing our laptop’s file system, and as part of a larger effort to clean it up, we would like
+to keep some files from our <code>Downloads</code> folder by moving them to our <code>Documents</code> folder.
+We can start by writing the following <em>synchronous</em> function, using <code>fs.renameSync</code>:</p>
+
+<pre id="@function_keep-source_string"><a class="jump" href="index.html#@function_keep-source_string"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">keep</span>(<span class="hljs-params">source: <span class="hljs-built_in">string</span>, dest: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-keyword">const</span> sourcePath = <span class="hljs-string">`/Users/bitdiddle/Downloads/<span class="hljs-subst">${source}</span>`</span>;
+  <span class="hljs-keyword">const</span> destPath = <span class="hljs-string">`/Users/bitdiddle/Documents/<span class="hljs-subst">${dest}</span>`</span>;
+  fs.renameSync(sourcePath, destPath);
+}</code></pre>
+
+<p id="@suppose_use_function"><a class="jump" href="index.html#@suppose_use_function"></a>And suppose we use this function as part of a larger cleanup routine, like so:</p>
+
+<pre id="@function_cleanupfilesystem_void"><a class="jump" href="index.html#@function_cleanupfilesystem_void"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">cleanupFilesystem</span>(<span class="hljs-params"></span>): <span class="hljs-title">void</span> </span>{
+  <span class="hljs-comment">// combining multiple files into one...</span>
+
+  <span class="hljs-comment">// moving 6.102 folders</span>
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> folder of [<span class="hljs-string">'readings'</span>, <span class="hljs-string">'psets'</span>, <span class="hljs-string">'quizzes'</span>]) {
+    keep(folder, <span class="hljs-string">`6.102/<span class="hljs-subst">${folder}</span>`</span>);
+  }
+
+  <span class="hljs-comment">// emptying Downloads folder...</span>
+}</code></pre>
+
+<p id="@but_now_motivated"><a class="jump" href="index.html#@but_now_motivated"></a>But now, motivated by our newfound knowledge of <code>Promise</code>-based concurrency, we realize that <code>keep()</code> can be made
+asynchronous, overlapping multiple calls to the filesystem and moving folders concurrently. We modify <code>keep()</code> as
+follows:</p>
+
+<pre id="@async_function_keep-source"><a class="jump" href="index.html#@async_function_keep-source"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">keep</span>(<span class="hljs-params">source: <span class="hljs-built_in">string</span>, dest: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+  <span class="hljs-keyword">const</span> sourcePath = <span class="hljs-string">`/Users/bitdiddle/Downloads/<span class="hljs-subst">${source}</span>`</span>;
+  <span class="hljs-keyword">const</span> destPath = <span class="hljs-string">`/Users/bitdiddle/Documents/<span class="hljs-subst">${dest}</span>`</span>;
+  <span class="hljs-keyword">await</span> fs.promises.rename(sourcePath, destPath);
+}</code></pre>
+
+<p id="@but_forget_update"><a class="jump" href="index.html#@but_forget_update"></a>But we forget to update its caller, <code>cleanupFilesystem()</code>. What happens with <code>cleanupFilesystem()</code>?</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="static error"><label for="md_converted_choice_22_0"><input type="checkbox" id="md_converted_choice_22_0">static error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="dynamic error"><label for="md_converted_choice_22_1"><input type="checkbox" id="md_converted_choice_22_1">dynamic error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="no error but (potentially) wrong result"><label for="md_converted_choice_22_2"><input type="checkbox" id="md_converted_choice_22_2">no error but (potentially) wrong result</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@best_way_refactor"><a class="jump" href="index.html#@best_way_refactor"></a>What is the best way to refactor <code>cleanupFilesystem()</code>?</p>
+
+<div class="form-group exercise-part" data-outline="b"><div class="dropdown exercise-choice" data-outline="; using Promise.all(); using Promise.any(); using Promise.race(); no change needed"><select class="form-control"><option selected="selected"></option><option>using Promise.all()</option>,<option>using Promise.any()</option>,<option>using Promise.race()</option>,<option>no change needed</option></select><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div>
+
+<div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-aggregating_promises-from_synchronous_to_asynchronous" data-target="#ex-aggregating_promises-from_synchronous_to_asynchronous" data-toggle="collapse"><a class="jump" href="index.html#@ex-aggregating_promises-from_synchronous_to_asynchronous"></a><span class="panel-title">From synchronous to asynchronous</span></div><div class="panel-collapse collapse exercise-panel" id="ex-aggregating_promises-from_synchronous_to_asynchronous" data-outline="from_synchronous_to_asynchronous" data-ex-id="aggregating_promises/from_synchronous_to_asynchronous" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@suppose_you_start"><a class="jump" href="index.html#@suppose_you_start"></a>Suppose you start with this code, in which all functions (<code>f</code>, <code>g</code>, <code>h</code>, and <code>main</code>)
+are synchronous:</p>
+
+<pre id="@function_main_void_f_g_h"><a class="jump" href="index.html#@function_main_void_f_g_h"></a><code class="language-ts hljs typescript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">void</span> </span>{
+  f();
+  g();
+  h();
+}</code></pre>
+
+<p id="@does_code_behave"><a class="jump" href="index.html#@does_code_behave"></a>How does this code behave?  Choose all that apply.</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="serially: the calls to f, g, and h never overlap in time"><label for="md_converted_choice_23_0"><input type="checkbox" id="md_converted_choice_23_0">serially: the calls to <code>f</code>, <code>g</code>, and <code>h</code> never overlap in time</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="concurrently: the calls to f, g, and h may overlap with each other"><label for="md_converted_choice_23_1"><input type="checkbox" id="md_converted_choice_23_1">concurrently: the calls to <code>f</code>, <code>g</code>, and <code>h</code> may overlap with each other</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f always starts before g, and g always starts before h"><label for="md_converted_choice_23_2"><input type="checkbox" id="md_converted_choice_23_2"><code>f</code> always starts before <code>g</code>, and <code>g</code> always starts before <code>h</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f always finishes before g finishes, and g finishes before h finishes"><label for="md_converted_choice_23_3"><input type="checkbox" id="md_converted_choice_23_3"><code>f</code> always finishes before <code>g</code> finishes, and <code>g</code> finishes before <code>h</code> finishes</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="main always finishes after f, g, and h have all finished"><label for="md_converted_choice_23_4"><input type="checkbox" id="md_converted_choice_23_4"><code>main</code> always finishes after <code>f</code>, <code>g</code>, and <code>h</code> have all finished</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<p id="@now_suppose_three"><a class="jump" href="index.html#@now_suppose_three"></a>Now suppose the three functions <code>f</code>, <code>g</code>, and <code>h</code> have been changed to asynchronous functions,
+so we now need to change <code>main</code> into an asynchronous function as well.
+How does each of the versions of <code>main</code> below behave?</p>
+
+<pre id="@async_function_main_promise-void_await_f"><a class="jump" href="index.html#@async_function_main_promise-void_await_f"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+  <span class="hljs-keyword">await</span> f();
+  <span class="hljs-keyword">await</span> g();
+  <span class="hljs-keyword">await</span> h();
+}</code></pre>
+
+<div class="form-group exercise-part" data-outline="b"><div class="checkbox exercise-choice" data-outline="serially: the calls to f, g, and h never overlap in time"><label for="md_converted_choice_24_0"><input type="checkbox" id="md_converted_choice_24_0">serially: the calls to <code>f</code>, <code>g</code>, and <code>h</code> never overlap in time</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="concurrently: the calls to f, g, and h may overlap with each other"><label for="md_converted_choice_24_1"><input type="checkbox" id="md_converted_choice_24_1">concurrently: the calls to <code>f</code>, <code>g</code>, and <code>h</code> may overlap with each other</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f always starts before g, and g always starts before h"><label for="md_converted_choice_24_2"><input type="checkbox" id="md_converted_choice_24_2"><code>f</code> always starts before <code>g</code>, and <code>g</code> always starts before <code>h</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f always finishes before g finishes, and g finishes before h finishes"><label for="md_converted_choice_24_3"><input type="checkbox" id="md_converted_choice_24_3"><code>f</code> always finishes before <code>g</code> finishes, and <code>g</code> finishes before <code>h</code> finishes</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="main always finishes after f, g, and h have all finished"><label for="md_converted_choice_24_4"><input type="checkbox" id="md_converted_choice_24_4"><code>main</code> always finishes after <code>f</code>, <code>g</code>, and <code>h</code> have all finished</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@async_function_main_promise-void_f_g"><a class="jump" href="index.html#@async_function_main_promise-void_f_g"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+  f();
+  g();
+  <span class="hljs-keyword">await</span> h();
+}</code></pre>
+
+<div class="form-group exercise-part" data-outline="c"><div class="checkbox exercise-choice" data-outline="serially: the calls to f, g, and h never overlap in time"><label for="md_converted_choice_25_0"><input type="checkbox" id="md_converted_choice_25_0">serially: the calls to <code>f</code>, <code>g</code>, and <code>h</code> never overlap in time</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="concurrently: the calls to f, g, and h may overlap with each other"><label for="md_converted_choice_25_1"><input type="checkbox" id="md_converted_choice_25_1">concurrently: the calls to <code>f</code>, <code>g</code>, and <code>h</code> may overlap with each other</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f always starts before g, and g always starts before h"><label for="md_converted_choice_25_2"><input type="checkbox" id="md_converted_choice_25_2"><code>f</code> always starts before <code>g</code>, and <code>g</code> always starts before <code>h</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f always finishes before g finishes, and g finishes before h finishes"><label for="md_converted_choice_25_3"><input type="checkbox" id="md_converted_choice_25_3"><code>f</code> always finishes before <code>g</code> finishes, and <code>g</code> finishes before <code>h</code> finishes</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="main always finishes after f, g, and h have all finished"><label for="md_converted_choice_25_4"><input type="checkbox" id="md_converted_choice_25_4"><code>main</code> always finishes after <code>f</code>, <code>g</code>, and <code>h</code> have all finished</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div>
+
+<pre id="@async_function_main_promise-void_await_promise-all-f"><a class="jump" href="index.html#@async_function_main_promise-void_await_promise-all-f"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">main</span>(<span class="hljs-params"></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+  <span class="hljs-keyword">await</span> <span class="hljs-built_in">Promise</span>.all([f(), g(), h()]);
+}</code></pre>
+
+<div class="form-group exercise-part" data-outline="d"><div class="checkbox exercise-choice" data-outline="serially: the calls to f, g, and h never overlap in time"><label for="md_converted_choice_26_0"><input type="checkbox" id="md_converted_choice_26_0">serially: the calls to <code>f</code>, <code>g</code>, and <code>h</code> never overlap in time</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="concurrently: the calls to f, g, and h may overlap with each other"><label for="md_converted_choice_26_1"><input type="checkbox" id="md_converted_choice_26_1">concurrently: the calls to <code>f</code>, <code>g</code>, and <code>h</code> may overlap with each other</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="the call to f always starts before the call to g, and g always starts before h"><label for="md_converted_choice_26_2"><input type="checkbox" id="md_converted_choice_26_2">the call to <code>f</code> always starts before the call to <code>g</code>, and <code>g</code> always starts before <code>h</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f always finishes before g finishes, and g finishes before h finishes"><label for="md_converted_choice_26_3"><input type="checkbox" id="md_converted_choice_26_3"><code>f</code> always finishes before <code>g</code> finishes, and <code>g</code> finishes before <code>h</code> finishes</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="main always finishes after f, g, and h have all finished"><label for="md_converted_choice_26_4"><input type="checkbox" id="md_converted_choice_26_4"><code>main</code> always finishes after <code>f</code>, <code>g</code>, and <code>h</code> have all finished</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="never_busy-wait"><a class="jump" href="index.html#never_busy-wait"></a>Never busy-wait</h2><div data-outline="never_busy-wait">
+
+<p id="@we-ve_seen_promise"><a class="jump" href="index.html#@we-ve_seen_promise"></a>We’ve seen that a <code>Promise</code> has one observer operation, <code>await</code>, which lets a client obtain the promise’s value (and always gives up control, and waiting if necessary for the promise to fulfill).</p>
+
+<p id="@but_there_no"><a class="jump" href="index.html#@but_there_no"></a>But there is no method you can call to interrogate a promise directly for its state (“are you still pending?”), or to extract its value without giving up control.</p>
+
+<p id="@there_good_reason"><a class="jump" href="index.html#@there_good_reason"></a>There is a good reason why those operations are not provided.
+If they were, clients of the promise might be tempted to busy-wait, waiting for the promise to fulfill.
+<mark data-mark-text="busy-waiting" data-structure-text="busy-waiting" id="^busy-waiting"><em>Busy-waiting</em></mark> means sitting in a tight loop waiting for some event to occur, without giving up control.
+For example, here’s a busy-waiting timer:</p>
+
+<pre id="@async_function_busywait-milliseconds"><a class="jump" href="index.html#@async_function_busywait-milliseconds"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">busyWait</span>(<span class="hljs-params">milliseconds: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> now = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime(); <span class="hljs-comment">// new Date().getTime() is always the current clock time in milliseconds</span>
+    <span class="hljs-keyword">const</span> deadline = now + milliseconds;
+    <span class="hljs-keyword">while</span> (<span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime() &lt; deadline) {
+        <span class="hljs-comment">// do nothing, just busy-wait until the system clock time reaches deadline</span>
+    }
+}</code></pre>
+
+<p id="@code_works_narrow"><a class="jump" href="index.html#@code_works_narrow"></a>This code works in the narrow sense that calling <code>busyWait(500)</code> will indeed wait for 500 milliseconds, and its promise will fulfill after that time elapses.
+But because <code>busyWait</code> never releases control during that time period — notice that its loop body contains no <code>await</code> whatsoever — <em>no other asynchronous functions</em> in the program will have a chance to run during that time.
+We will never get back to the JavaScript runtime system to give control to them.
+The program will simply freeze until the entire body of <code>busyWait()</code> finishes and returns.
+So <code>busyWait()</code> is quite useless as an asynchronous function — it can’t run concurrently with any other asynchronous code.</p>
+
+<p id="@if_promise_provided"><a class="jump" href="index.html#@if_promise_provided"></a>If a <code>Promise</code> provided observers other than <code>await</code>, then programmers would be tempted to write busy-waiting code like this:</p>
+
+<pre id="@const_promise_readfile-account"><a class="jump" href="index.html#@const_promise_readfile-account"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise = readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+<span class="hljs-keyword">while</span> ( promise.isPending() ) { <span class="hljs-comment">// just hypothetical, isPending() doesn't exist</span>
+  <span class="hljs-comment">// busy-wait! bad idea</span>
+}
+<span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = promise.get() <span class="hljs-comment">// just hypothetical, get() doesn't exist</span></code></pre>
+
+<p id="@code_not_only"><a class="jump" href="index.html#@code_not_only"></a>This code not only freezes the program, but it doesn’t even do what the programmer wants.
+The busy-waiting loop never gives up control, which means that we never return to the top-level runtime system that is processing file input/output.
+So <code>readFile()</code> never marks its promise as fulfilled, the putative <code>promise.isPending()</code> operation never returns false, and we never exit the busy-waiting loop.</p>
+
+<p id="@busy-waiting_generally_bad"><a class="jump" href="index.html#@busy-waiting_generally_bad"></a>Busy-waiting is generally a bad idea in concurrent programming (with some rare exceptions like <a href="https://en.wikipedia.org/wiki/Spinlock">spinlocks</a>), but it is particularly deadly for promises and <code>async</code>/<code>await</code> code.
+Instead, use <code>await</code> to operate on the value of a promise, or to react to its state transition from pending to fulfilled.</p>
+
+</div><h2 id="promises_and_exception_handling"><a class="jump" href="index.html#promises_and_exception_handling"></a>Promises and exception handling</h2><div data-outline="promises_and_exception_handling">
+
+<p id="@most_reading_focused"><a class="jump" href="index.html#@most_reading_focused"></a>Most of this reading has focused on the normal case: an <code>async</code> function returns a value, which is stored in (and fulfills) its associated promise, and the return value is then produced by an <code>await</code> expression waiting on that promise.</p>
+
+<p id="@but_also_important"><a class="jump" href="index.html#@but_also_important"></a>But it’s also important to understand how errors are handled in asynchronous programming:</p>
+
+<ul id="@async_function_throws">
+<li><a class="jump" href="index.html#@async_function_throws"></a>When an <code>async</code> function throws an exception, the promise becomes <em>rejected</em>, and the exception object is stored in the associated promise.</li>
+<li>An <code>await</code> expression waiting on that promise is now able to continue executing, but instead of providing a value, it <em>continues throwing the exception</em>.</li>
+</ul>
+
+<p id="@one_way_think"><a class="jump" href="index.html#@one_way_think"></a>One way to think about this is that <code>await</code> provides the result of the asynchronous function, whether that result is a return value or a thrown exception.
+So where a call to a synchronous function sees the call and the result happen at the same line, including any exception handling:</p>
+
+<pre id="@try_fs-readfilesync_not"><a class="jump" href="index.html#@try_fs-readfilesync_not"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">try</span> {
+  <span class="hljs-comment">// fs.readFileSync() is *not* asynchronous: it is called, runs to completion, and either returns the file contents or throws an exception here</span>
+  fileContents = fs.readFileSync(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+} <span class="hljs-keyword">catch</span> (e) {
+  <span class="hljs-comment">// catches the exception thrown by fs.readFileSync()</span>
+  <span class="hljs-built_in">console</span>.error(<span class="hljs-string">"can't read account file"</span>);
+}</code></pre>
+
+<p id="@call_asynchronous_function"><a class="jump" href="index.html#@call_asynchronous_function"></a>… a call to an asynchronous function separates the call from its result, which also means postponing any exception handling:</p>
+
+<pre id="@fs-promises-readfile_asynchronous_returns"><a class="jump" href="index.html#@fs-promises-readfile_asynchronous_returns"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// fs.promises.readFile() *is* asynchronous; it returns a promise but *never* throws an exception here</span>
+promise = fs.promises.readFile(<span class="hljs-string">'account'</span>, { encoding: <span class="hljs-string">'utf-8'</span> });
+...
+<span class="hljs-comment">// some other place in the program waits for the promise and handles the exception if any</span>
+<span class="hljs-keyword">try</span> {
+  fileContents = <span class="hljs-keyword">await</span> promise;
+} <span class="hljs-keyword">catch</span> (e) {
+  <span class="hljs-comment">// catches the exception thrown by fs.promises.readFile()</span>
+  <span class="hljs-built_in">console</span>.error(<span class="hljs-string">"can't read account file"</span>);
+}</code></pre>
+
+<p id="@you_writing_asynchronous"><a class="jump" href="index.html#@you_writing_asynchronous"></a>When you are writing an asynchronous function (as opposed to calling one), the right way to reject your promise is to simply throw an exception.
+For example:</p>
+
+<pre id="@async_function_getbalance-account"><a class="jump" href="index.html#@async_function_getbalance-account"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getBalance</span>(<span class="hljs-params">account: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">number</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> data: <span class="hljs-built_in">string</span> = <span class="hljs-keyword">await</span> fs.promises.readFile(account, { encoding: <span class="hljs-string">'utf-8'</span> });
+    <span class="hljs-keyword">const</span> balance: <span class="hljs-built_in">number</span> = <span class="hljs-built_in">parseInt</span>(data);
+    <span class="hljs-keyword">if</span> (<span class="hljs-built_in">Number</span>.isNaN(balance)) {
+      <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'account balance is not an integer'</span>); <span class="hljs-comment">// throwing this exception rejects the promise</span>
+    }
+    <span class="hljs-keyword">return</span> balance;
+}</code></pre>
+
+<p id="@you_don-t_need"><a class="jump" href="index.html#@you_don-t_need"></a>You don’t need to use <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/reject"><code>Promise.reject()</code></a> to create a rejected promise.  Just use <code>throw</code> with an exception object, the same way you just use <code>return</code> to fulfill the promise with a return value.</p>
+
+<div class="reading-exercises exercises panel-group converted" id="ex-promises_and_exception_handling"><h4 class="text-danger" id="@reading_exercises_4"><a class="jump" href="index.html#@reading_exercises_4"></a>reading exercises</h4><div class="panel panel-danger"><div class="panel-heading" data-structure-tag="exercise" id="@ex-promises_and_exception_handling-assert" data-target="#ex-promises_and_exception_handling-assert" data-toggle="collapse"><a class="jump" href="index.html#@ex-promises_and_exception_handling-assert"></a><span class="panel-title">Assert</span></div><div class="panel-collapse collapse exercise-panel" id="ex-promises_and_exception_handling-assert" data-outline="assert" data-ex-id="promises_and_exception_handling/assert" data-ex-category="reading-exercises" data-ex-remote="https://handx.mit.edu/v1/6.102/sp26/submit" data-ex-handout="classes-15-promises"><div class="panel-body">
+
+<p id="@consider_asynchronous_function"><a class="jump" href="index.html#@consider_asynchronous_function"></a>Consider this asynchronous function that asserts its precondition:</p>
+
+<pre id="@requires_n_0"><a class="jump" href="index.html#@requires_n_0"></a><code class="language-ts hljs typescript"><span class="hljs-comment">// requires: n &gt;= 0</span>
+<span class="hljs-comment">// effects: ...</span>
+<span class="hljs-keyword">async</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">f</span>(<span class="hljs-params">n: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+  assert(n &gt;= <span class="hljs-number">0</span>);
+  ...
+}</code></pre>
+
+<p id="@call_violates_precondition"><a class="jump" href="index.html#@call_violates_precondition"></a>And this call that violates the precondition:</p>
+
+<pre id="@const_promise_f-1"><a class="jump" href="index.html#@const_promise_f-1"></a><code class="language-ts hljs typescript"><span class="hljs-keyword">const</span> promise = f(<span class="hljs-number">-1</span>);</code></pre>
+
+<p id="@happens_during_execution"><a class="jump" href="index.html#@happens_during_execution"></a>What happens during the execution of this line of code?  Choose all that apply (they are not necessarily in the order that they occur).</p>
+
+<div class="form-group exercise-part" data-outline="a"><div class="checkbox exercise-choice" data-outline="f() is called"><label for="md_converted_choice_27_0"><input type="checkbox" id="md_converted_choice_27_0"><code>f()</code> is called</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="f() returns a reference to a Promise object"><label for="md_converted_choice_27_1"><input type="checkbox" id="md_converted_choice_27_1"><code>f()</code> returns a reference to a <code>Promise</code> object</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="a reference to a Promise object is stored in the local variable promise"><label for="md_converted_choice_27_2"><input type="checkbox" id="md_converted_choice_27_2">a reference to a <code>Promise</code> object is stored in the local variable <code>promise</code></label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="assert() is called"><label for="md_converted_choice_27_3"><input type="checkbox" id="md_converted_choice_27_3"><code>assert()</code> is called</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="assert() throws an exception"><label for="md_converted_choice_27_4"><input type="checkbox" id="md_converted_choice_27_4"><code>assert()</code> throws an exception</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="a reference to an exception object is stored in a promise"><label for="md_converted_choice_27_5"><input type="checkbox" id="md_converted_choice_27_5">a reference to an exception object is stored in a promise</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="a promise is marked as fulfilled"><label for="md_converted_choice_27_6"><input type="checkbox" id="md_converted_choice_27_6">a promise is marked as fulfilled</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="a promise is marked as rejected"><label for="md_converted_choice_27_7"><input type="checkbox" id="md_converted_choice_27_7">a promise is marked as rejected</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+<div class="checkbox exercise-choice" data-outline="the program terminates with an error"><label for="md_converted_choice_27_8"><input type="checkbox" id="md_converted_choice_27_8">the program terminates with an error</label><span class="exercise-answer exercise-remote" style="display: none;">(missing answer)</span></div>
+</div>
+
+<div class="exercise-explain exercise-remote"><p>(missing explanation)</p></div><div class="form-inline"><div class="form-group"><button class="btn btn-default exercise-submit">check</button> <button class="btn btn-default exercise-reveal" style="display: none;">explain</button></div><div class="exercise-progress progress"><div class="progress-bar progress-bar-danger progress-bar-striped active"></div></div><div class="exercise-error"></div></div></div></div></div></div>
+
+</div><h2 id="summary"><a class="jump" href="index.html#summary"></a>Summary</h2><div data-outline="summary">
+
+<p id="@reading_talked_about"><a class="jump" href="index.html#@reading_talked_about"></a>This reading talked about asynchronous functions returning promises.</p>
+
+<ul id="@promise_concurrent_computation">
+<li><a class="jump" href="index.html#@promise_concurrent_computation"></a>A promise is a concurrent computation that has been started but might still be unfinished, whose result may not be ready yet.
+
+<ul><li>Promises allow us to write concurrent code that never busy-waits.</li></ul></li>
+<li><code>await</code> waits for and accesses the value that a promise computes.</li>
+<li><code>Promise.all()</code>, <code>Promise.any()</code>, <code>Promise.race()</code> are ways to aggregate multiple promises together.</li>
+<li>Functions that return a promise are <em>asynchronous</em>.
+
+<ul><li>These functions give up control to their caller or to the JavaScript runtime system.</li>
+<li>A normal function can be transformed to an asynchronous one by using the <code>async</code> and <code>await</code> keywords and returning a promise type.</li></ul></li>
+</ul>
+
+<p id="@these_ideas_connect"><a class="jump" href="index.html#@these_ideas_connect"></a>These ideas connect to our three key properties of good software as follows:</p>
+
+<ul>
+<li><p id="@safe_bugs_static"><a class="jump" href="index.html#@safe_bugs_static"></a><strong>Safe from bugs.</strong>  Static checking of promise types, and the requirement that a promise be turned into a value with <code>await</code>, ensures that code that depends on an asynchronous computation cannot continue until the values it needs are ready.</p></li>
+<li><p id="@easy_understand_using"><a class="jump" href="index.html#@easy_understand_using"></a><strong>Easy to understand.</strong>  Using <code>await</code> to transform a promise into a value makes asynchronous code read very much like straight-line synchronous code.  But like all concurrency, promises and asynchronous functions can be subtle and produce surprising effects.</p></li>
+<li><p id="@ready_change_promises"><a class="jump" href="index.html#@ready_change_promises"></a><strong>Ready for change.</strong>  Promises can be composed and combined in ways that other concurrency techniques (like threads and workers) do not easily support.</p></li>
+</ul></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-15-promises"></script></body><!--
+Handout delivered Tue May 26 2026 13:31:31 GMT+0000 (Coordinated Universal Time)
+--></html>

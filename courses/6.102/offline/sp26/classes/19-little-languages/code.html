@@ -1,0 +1,861 @@
+<!DOCTYPE html><html><head>
+<meta charset="utf-8">
+
+<title>Code for Reading 19</title>
+<script>
+window.onHandoutDidRender = function() {
+    $("span.hljs-comment:contains(code-page-anchor)").each(function(i, e) {
+        var $e = $(e);
+        var id = $e.text().match(/code-page-anchor\s*(.*)\s*\*\/$/)[1];
+        $e.attr('id', id);
+        $e.text('');
+    });
+};
+</script>
+
+<link href="../../web/handout-style.css" rel="stylesheet"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="shortcut icon" href="../../general/icons/6102.ico"><link rel="apple-touch-icon" href="../../general/icons/6102.png"></head>
+<body><header class="chip"><a href="../../index.html">6.102</a></header><header><a href="../../index.html">6.102 — Software Construction</a><div>Spring 2026</div></header><div class="margin col-sm-2"></div>
+<nav class="table-of-contents col-sm-2"><ul class="nav"><li><a href="code.html#code_for_reading_19">Code for Reading 19</a></li><li><a href="code.html#download">Download</a></li><li><a href="code.html#pitchts">Pitch.ts</a></li><li><a href="code.html#instrumentts">Instrument.ts</a></li><li><a href="code.html#musicts">Music.ts</a></li><li><a href="code.html#musiclanguagets">MusicLanguage.ts</a></li><li><a href="code.html#notets">Note.ts</a></li><li><a href="code.html#restts">Rest.ts</a></li><li><a href="code.html#concatts">Concat.ts</a></li><li><a href="code.html#scalesequencets">ScaleSequence.ts</a></li><li><a href="code.html#scalemusicts">ScaleMusic.ts</a></li><li><a href="code.html#rowyourboatinitialts">RowYourBoatInitial.ts</a></li><li><a href="code.html#sequenceplayerts">SequencePlayer.ts</a></li><li><a href="code.html#midisequenceplayerts">MidiSequencePlayer.ts</a></li><li><a href="code.html#musicplayerts">MusicPlayer.ts</a></li></ul></nav>
+<main class="container-fluid"><h1 class="handout-title col-sm-8 col-sm-offset-2" id="code_for_reading_19"><a class="jump" href="code.html#code_for_reading_19"></a>Code for Reading 19</h1><div data-outline="code_for_reading_19">
+
+<div class="markdown col-sm-8 col-sm-offset-2 converted"><h2 id="download"><a class="jump" href="code.html#download"></a>Download</h2><div data-outline="download">
+
+<p id="@you_can_also"><a class="jump" href="code.html#@you_can_also"></a>You can also download <a href="ex19-music-starting.zip">a ZIP file containing this code</a>.</p>
+
+<p id="@after_downloading_unpacking"><a class="jump" href="code.html#@after_downloading_unpacking"></a>After downloading and unpacking the ZIP file:</p>
+
+<ul id="@npm_install_install">
+<li><a class="jump" href="code.html#@npm_install_install"></a><code>npm install</code> to install package dependencies;</li>
+<li><code>npm run</code> to see a list of the ways this code can be run.
+
+<ul><li>For example, if <code>npm run</code> shows that there are scripts called <code>foo</code> and <code>bar</code>, you can run the code with either <code>npm run foo</code> or <code>npm run bar</code>.</li>
+<li>Two conventional script names are <code>test</code> and <code>start</code>.  If the code includes one of those script names, then you can omit <code>run</code> and just say <code>npm test</code> or <code>npm start</code>.</li></ul></li>
+</ul>
+
+<div style="display:none"><pre id="@seems_be_necessary"><a class="jump" href="code.html#@seems_be_necessary"></a><code class="language-java hljs">Seems to be necessary to have a triple-backtick block at the start of <span class="hljs-keyword">this</span> page,
+otherwise all the pre/code tags below aren<span class="hljs-string">'t syntax highlighted.
+So create a hidden one.</span></code></pre></div>
+
+</div><h2 id="pitchts"><a class="jump" href="code.html#pitchts"></a>Pitch.ts</h2><div data-outline="pitchts">
+
+<pre id="@import_assert_node-assert_pitch_immutable_type"><a class="jump" href="code.html#@import_assert_node-assert_pitch_immutable_type"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+
+<span class="hljs-comment">/**
+ * Pitch is an immutable type representing the frequency of a musical note.
+ * Standard music notation represents pitches by letters: A, B, C, ..., G.
+ * Pitches can be sharp or flat, or whole octaves up or down from these
+ * primitive generators.
+ * 
+ * &lt;p&gt; For example:
+ * &lt;br&gt; new Pitch('C') makes middle C
+ * &lt;br&gt; new Pitch('C').transpose(1) makes C-sharp
+ * &lt;br&gt; new Pitch('E').transpose(-1) makes E-flat
+ * &lt;br&gt; new Pitch('C').transpose(OCTAVE) makes high C
+ * &lt;br&gt; new Pitch('C').transpose(-OCTAVE) makes low C
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> Pitch {
+
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">
+        <span class="hljs-keyword">private</span> readonly value: <span class="hljs-built_in">number</span>
+    </span>) {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-comment">/*
+     * Rep invariant: value is an integer.
+     *
+     * Abstraction function AF(value):
+     *   AF(0),...,AF(11) map to middle C, C-sharp, D, ..., A, A-sharp, B.
+     *   AF(i+12n) maps to n octaves above middle AF(i)
+     *   AF(i-12n) maps to n octaves below middle AF(i)
+     *
+     * Safety from rep exposure:
+     *   all fields are private and immutable.
+     */</span>
+
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        assert(<span class="hljs-built_in">Number</span>.isInteger(<span class="hljs-keyword">this</span>.value));
+    }
+
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> readonly SCALE: {[letter:<span class="hljs-built_in">string</span>]: <span class="hljs-built_in">number</span>} = {
+            <span class="hljs-string">'A'</span>: <span class="hljs-number">9</span>,
+            <span class="hljs-string">'B'</span>: <span class="hljs-number">11</span>,
+            <span class="hljs-string">'C'</span>: <span class="hljs-number">0</span>,
+            <span class="hljs-string">'D'</span>: <span class="hljs-number">2</span>,
+            <span class="hljs-string">'E'</span>: <span class="hljs-number">4</span>,
+            <span class="hljs-string">'F'</span>: <span class="hljs-number">5</span>,
+            <span class="hljs-string">'G'</span>: <span class="hljs-number">7</span>,
+    };
+
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> readonly VALUE_TO_STRING: <span class="hljs-built_in">Array</span>&lt;<span class="hljs-built_in">string</span>&gt; = [
+            <span class="hljs-string">"C"</span>, <span class="hljs-string">"^C"</span>, <span class="hljs-string">"D"</span>, <span class="hljs-string">"^D"</span>, <span class="hljs-string">"E"</span>, <span class="hljs-string">"F"</span>, <span class="hljs-string">"^F"</span>, <span class="hljs-string">"G"</span>, <span class="hljs-string">"^G"</span>, <span class="hljs-string">"A"</span>, <span class="hljs-string">"^A"</span>, <span class="hljs-string">"B"</span>
+    ];
+    
+    <span class="hljs-comment">/**
+     * Middle C.
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> readonly MIDDLE_C: Pitch = Pitch.make(<span class="hljs-string">'C'</span>);
+
+    <span class="hljs-comment">/**
+     * Number of pitches in an octave.
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> readonly OCTAVE: <span class="hljs-built_in">number</span> = <span class="hljs-number">12</span>;
+
+    <span class="hljs-comment">/**
+     * </span><span id="Pitch_make"></span><span class="hljs-comment">Make a Pitch named `letter` in the middle octave of the piano keyboard.
+     * For example, new Pitch('C') constructs middle C.
+     * 
+     * @param letter must be in {'A',...,'G'}
+     * @returns pitch of the given note in the middle octave
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> make(letter: <span class="hljs-built_in">string</span>): Pitch {
+        <span class="hljs-keyword">const</span> value = Pitch.SCALE[letter];
+        <span class="hljs-keyword">if</span> (value === <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(letter + <span class="hljs-string">" must be in the range A-G"</span>); }
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> Pitch(value);
+    }
+
+    <span class="hljs-comment">/**
+     * </span><span id="Pitch_methods"></span><span class="hljs-comment">@param semitonesUp must be integer
+     * @returns pitch made by transposing this pitch by semitonesUp semitones;
+     *          for example, middle C transposed by 12 semitones is high C, and
+     *          E transposed by -1 semitones is E flat
+     */</span>
+    <span class="hljs-keyword">public</span> transpose(semitonesUp: <span class="hljs-built_in">number</span>): Pitch {
+        <span class="hljs-keyword">if</span> (<span class="hljs-built_in">Math</span>.floor(semitonesUp) !== semitonesUp) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(semitonesUp + <span class="hljs-string">' must be integer'</span>);
+        }
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> Pitch(<span class="hljs-keyword">this</span>.value + semitonesUp);
+    }
+
+    <span class="hljs-comment">/**
+     * @param that Pitch to compare `this` with
+     * @returns number of semitones between this and that; i.e., n such that
+     *          that.transpose(n).equalValue(this)
+     */</span>
+    <span class="hljs-keyword">public</span> difference(that: Pitch): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.value - that.value;
+    }
+
+    <span class="hljs-comment">/**
+     * @param that Pitch to compare `this` with
+     * @returns true iff this and that represent the same pitch, must be an
+     *          equivalence relation (reflexive, symmetric, and transitive)
+     */</span>
+    <span class="hljs-keyword">public</span> equalValue(that: Pitch): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.value === that.value;
+    }
+
+    <span class="hljs-comment">/**
+     * @returns this pitch in abc music notation
+     * @see "http://abcnotation.com/examples/"
+     */</span>
+    <span class="hljs-keyword">public</span> toString(): <span class="hljs-built_in">string</span> {
+        <span class="hljs-keyword">let</span> suffix = <span class="hljs-string">""</span>;
+        <span class="hljs-keyword">let</span> v = <span class="hljs-keyword">this</span>.value;
+
+        <span class="hljs-keyword">while</span> (v &lt; <span class="hljs-number">0</span>) {
+            suffix += <span class="hljs-string">","</span>;
+            v += Pitch.OCTAVE;
+        }
+
+        <span class="hljs-keyword">while</span> (v &gt;= Pitch.OCTAVE) {
+            suffix += <span class="hljs-string">"'"</span>;
+            v -= Pitch.OCTAVE;
+        }
+
+        <span class="hljs-keyword">return</span> Pitch.VALUE_TO_STRING[v] + suffix;
+    }
+}
+</code></pre>
+
+</div><h2 id="instrumentts"><a class="jump" href="code.html#instrumentts"></a>Instrument.ts</h2><div data-outline="instrumentts">
+
+<pre id="@instrument_represents_musical"><a class="jump" href="code.html#@instrument_represents_musical"></a><code class="language-typescript no-markdown hljs">
+<span class="hljs-comment">/**
+ * Instrument represents a musical instrument.
+ * 
+ * These instruments are the 128 standard General MIDI Level 1 instruments.
+ * See: http://www.midi.org/about-midi/gm/gm1sound.shtml
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">enum</span> Instrument {
+    <span class="hljs-comment">// Order is important in this enumeration because an instrument's</span>
+    <span class="hljs-comment">// position must correspond to its MIDI program number.</span>
+
+    PIANO,
+    BRIGHT_PIANO,
+    ELECTRIC_GRAND,
+    HONKY_TONK_PIANO,
+    ELECTRIC_PIANO_1,
+    ELECTRIC_PIANO_2,
+    HARPSICHORD,
+    CLAVINET,
+
+    <span class="hljs-comment">// ... omitting 120 more instruments here ...</span>
+}
+</code></pre>
+
+</div><h2 id="musicts"><a class="jump" href="code.html#musicts"></a>Music.ts</h2><div data-outline="musicts">
+
+<pre id="@import_sequenceplayer_sequenceplayer-ts_music_represents_piece"><a class="jump" href="code.html#@import_sequenceplayer_sequenceplayer-ts_music_represents_piece"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> { SequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'./SequencePlayer.ts'</span>;
+
+<span class="hljs-comment">/**
+ * Music represents a piece of music played by multiple instruments.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">interface</span> Music {
+
+    <span class="hljs-comment">/**
+     * </span><span id="Music_duration"></span><span class="hljs-comment">Total duration of this piece in beats.
+     */</span>
+    duration: <span class="hljs-built_in">number</span>;
+
+    <span class="hljs-comment">/**
+     * </span><span id="Music_play"></span><span class="hljs-comment">Play this piece.
+     * 
+     * @param player player to play on
+     * @param atBeat when to play
+     */</span>
+    play(player: SequencePlayer, atBeat:<span class="hljs-built_in">number</span>): <span class="hljs-built_in">void</span>;
+
+    <span class="hljs-comment">/**
+     * @param that Music to compare `this` with
+     * @returns true iff this and that represent the same Music expression.
+     *    Must be an equivalence relation (reflexive, symmetric, and transitive).
+     */</span>
+    equalValue(that: Music): <span class="hljs-built_in">boolean</span>;
+}
+</code></pre>
+
+</div><h2 id="musiclanguagets"><a class="jump" href="code.html#musiclanguagets"></a>MusicLanguage.ts</h2><div data-outline="musiclanguagets">
+
+<pre id="@import_assert_node-assert_import_pitch_pitch-ts"><a class="jump" href="code.html#@import_assert_node-assert_import_pitch_pitch-ts"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+
+<span class="hljs-keyword">import</span> { Pitch } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Pitch.ts'</span>;
+<span class="hljs-keyword">import</span> { Instrument } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Instrument.ts'</span>;
+<span class="hljs-keyword">import</span> { Note } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Note.ts'</span>;
+<span class="hljs-keyword">import</span> { Rest } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Rest.ts'</span>;
+<span class="hljs-keyword">import</span> { Concat } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Concat.ts'</span>;
+<span class="hljs-keyword">import</span> { Music } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Music.ts'</span>;
+
+<span class="hljs-comment">/**
+ * MusicLanguage defines functions for constructing and manipulating Music expressions.
+ */</span>
+
+<span class="hljs-comment">////////////////////////////////////////////////////</span>
+<span class="hljs-comment">// Factory functions</span>
+<span class="hljs-comment">////////////////////////////////////////////////////</span>
+
+<span class="hljs-comment">/**
+ * </span><span id="MusicLanguage_notes"></span><span class="hljs-comment">Make Music from a string using a variant of abc notation
+ *    (see http://abcnotation.com/examples/).
+ * 
+ * &lt;p&gt; The notation consists of whitespace-delimited symbols representing
+ * either notes or rests. The vertical bar | may be used as a delimiter
+ * for measures; notes() treats it as a space.
+ * Grammar:
+ * &lt;pre&gt;
+ *     notes ::= symbol*
+ *     symbol ::= . duration          // for a rest
+ *              | pitch duration      // for a note
+ *     pitch ::= accidental letter octave*
+ *     accidental ::= empty string    // for natural,
+ *                  | _               // for flat,
+ *                  | ^               // for sharp
+ *     letter ::= [A-G]
+ *     octave ::= '                   // to raise one octave
+ *              | ,                   // to lower one octave
+ *     duration ::= empty string      // for 1-beat duration
+ *                | /n                // for 1/n-beat duration
+ *                | n                 // for n-beat duration
+ *                | n/m               // for n/m-beat duration
+ * &lt;/pre&gt;
+ * &lt;p&gt; Examples (assuming 4/4 common time, i.e. 4 beats per measure):
+ *     C     quarter note, middle C
+ *     A'2   half note, high A
+ *     _D/2  eighth note, middle D flat
+ * 
+ * @param notes string of notes and rests in simplified abc notation given above
+ * @param instr instrument to play the notes with
+ * @returns the music in notes played by instr
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">notes</span>(<span class="hljs-params">notes: <span class="hljs-built_in">string</span>, instr: Instrument</span>): <span class="hljs-title">Music</span> </span>{
+    <span class="hljs-keyword">let</span> music: Music = rest(<span class="hljs-number">0</span>);
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> sym of notes.split(<span class="hljs-regexp">/[\s|]+/</span>)) {
+        <span class="hljs-keyword">if</span> (sym !== <span class="hljs-string">''</span>) {
+            music = concat(music, parseSymbol(sym, instr));
+        }
+    }
+    <span class="hljs-keyword">return</span> music;
+}
+
+<span class="hljs-comment">/* </span><span id="MusicLanguage_parseSymbol"></span><span class="hljs-comment">Parse a symbol into a Note or a Rest. */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">parseSymbol</span>(<span class="hljs-params">symbol: <span class="hljs-built_in">string</span>, instr: Instrument</span>): <span class="hljs-title">Music</span> </span>{
+    <span class="hljs-keyword">const</span> m = symbol.match(<span class="hljs-regexp">/^(?&lt;pitch&gt;[^\/0-9]+)(?&lt;numerator&gt;[0-9]+)?(?&lt;denominator&gt;\/[0-9]+)?$/</span>);
+    
+    <span class="hljs-keyword">if</span> ( ! (m &amp;&amp; m.groups)) { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"couldn't understand "</span> + symbol); }
+    <span class="hljs-keyword">const</span> { pitch, numerator, denominator } = m.groups;
+    assert(pitch);
+
+    <span class="hljs-keyword">let</span> duration = <span class="hljs-number">1.0</span>;
+    <span class="hljs-keyword">if</span> (numerator) { duration *= <span class="hljs-built_in">parseInt</span>(numerator); }
+    <span class="hljs-keyword">if</span> (denominator) { duration /= <span class="hljs-built_in">parseInt</span>(denominator.substring(<span class="hljs-number">1</span>)); }
+
+    <span class="hljs-keyword">if</span> (pitch === <span class="hljs-string">"."</span>) {
+        <span class="hljs-keyword">return</span> rest(duration);
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">return</span> note(duration, parsePitch(pitch), instr);
+    }
+}
+
+<span class="hljs-comment">/* </span><span id="MusicLanguage_parsePitch"></span><span class="hljs-comment">Parse a symbol into a Pitch. */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">parsePitch</span>(<span class="hljs-params">symbol: <span class="hljs-built_in">string</span></span>): <span class="hljs-title">Pitch</span> </span>{
+    <span class="hljs-keyword">if</span> (symbol.endsWith(<span class="hljs-string">"'"</span>)) {
+        <span class="hljs-keyword">return</span> parsePitch(symbol.substring(<span class="hljs-number">0</span>, symbol.length<span class="hljs-number">-1</span>)).transpose(Pitch.OCTAVE);
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (symbol.endsWith(<span class="hljs-string">","</span>)) {
+        <span class="hljs-keyword">return</span> parsePitch(symbol.substring(<span class="hljs-number">0</span>, symbol.length<span class="hljs-number">-1</span>)).transpose(-Pitch.OCTAVE);
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (symbol.startsWith(<span class="hljs-string">"^"</span>)) {
+        <span class="hljs-keyword">return</span> parsePitch(symbol.substring(<span class="hljs-number">1</span>)).transpose(<span class="hljs-number">1</span>);
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (symbol.startsWith(<span class="hljs-string">"_"</span>)) {
+        <span class="hljs-keyword">return</span> parsePitch(symbol.substring(<span class="hljs-number">1</span>)).transpose(<span class="hljs-number">-1</span>);
+    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (symbol.length != <span class="hljs-number">1</span>) {
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"can't understand "</span> + symbol);
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">return</span> Pitch.make(symbol.charAt(<span class="hljs-number">0</span>));
+    }
+}
+
+<span class="hljs-comment">/**
+ * @param duration duration in beats, must be &gt;= 0
+ * @param pitch pitch to play
+ * @param instrument instrument to use
+ * @returns pitch played by instrument for duration beats
+ */</span>
+<span id="MusicLanguage_note"></span><span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">note</span>(<span class="hljs-params">duration: <span class="hljs-built_in">number</span>, pitch: Pitch, instrument: Instrument </span>): <span class="hljs-title">Music</span> </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> Note(duration, pitch, instrument);
+}
+
+<span class="hljs-comment">/**
+ * @param duration duration in beats, must be &gt;= 0
+ * @returns rest that lasts for duration beats
+ */</span>
+<span id="MusicLanguage_rest"></span><span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">rest</span>(<span class="hljs-params">duration: <span class="hljs-built_in">number</span></span>): <span class="hljs-title">Music</span>  </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> Rest(duration);
+}
+
+<span class="hljs-comment">////////////////////////////////////////////////////</span>
+<span class="hljs-comment">// Producers</span>
+<span class="hljs-comment">////////////////////////////////////////////////////</span>
+
+<span class="hljs-comment">/**
+ * @param m1 first piece of music
+ * @param m2 second piece of music
+ * @returns m1 followed by m2
+ */</span>
+<span id="MusicLanguage_concat"></span><span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">concat</span>(<span class="hljs-params">m1: Music, m2: Music</span>): <span class="hljs-title">Music</span> </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> Concat(m1, m2);
+}
+</code></pre>
+
+</div><h2 id="notets"><a class="jump" href="code.html#notets"></a>Note.ts</h2><div data-outline="notets">
+
+<pre id="@import_assert_node-assert_import_music_music-ts_import_sequenceplayer_sequenceplayer-ts_import_pitch_pitch-ts"><a class="jump" href="code.html#@import_assert_node-assert_import_music_music-ts_import_sequenceplayer_sequenceplayer-ts_import_pitch_pitch-ts"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+<span class="hljs-keyword">import</span> { Music } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Music.ts'</span>;
+<span class="hljs-keyword">import</span> { SequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'./SequencePlayer.ts'</span>;
+<span class="hljs-keyword">import</span> { Pitch } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Pitch.ts'</span>;
+<span class="hljs-keyword">import</span> { Instrument } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Instrument.ts'</span>;
+
+<span class="hljs-comment">/**
+ * Note represents a note played by an instrument.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> Note <span class="hljs-keyword">implements</span> Music {
+
+    <span class="hljs-comment">/**
+     * Make a Note played by instrument for duration beats.
+     * 
+     * @param duration duration in beats, must be &gt;= 0
+     * @param pitch pitch to play
+     * @param instrument instrument to use
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">
+        <span class="hljs-keyword">public</span> readonly duration: <span class="hljs-built_in">number</span>,
+        <span class="hljs-keyword">public</span> readonly pitch: Pitch,
+        <span class="hljs-keyword">public</span> readonly instrument: Instrument
+    </span>) {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        assert(<span class="hljs-keyword">this</span>.duration &gt;= <span class="hljs-number">0</span>);
+    }
+
+    <span class="hljs-comment">/**
+     * </span><span id="Note_play"></span><span class="hljs-comment">Play this note.
+     */</span>
+    <span class="hljs-keyword">public</span> play(player: SequencePlayer, atBeat: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">void</span> {
+        player.addNote(<span class="hljs-keyword">this</span>.instrument, <span class="hljs-keyword">this</span>.pitch, atBeat, <span class="hljs-keyword">this</span>.duration);
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> equalValue(that: Music): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">return</span> (that <span class="hljs-keyword">instanceof</span> Note) 
+                &amp;&amp; <span class="hljs-keyword">this</span>.duration === that.duration
+                &amp;&amp; <span class="hljs-keyword">this</span>.instrument === that.instrument
+                &amp;&amp; <span class="hljs-keyword">this</span>.pitch.equalValue(that.pitch);
+    }
+
+    <span class="hljs-keyword">public</span> toString(): <span class="hljs-built_in">string</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.pitch.toString() + <span class="hljs-keyword">this</span>.duration;
+    }
+}
+</code></pre>
+
+</div><h2 id="restts"><a class="jump" href="code.html#restts"></a>Rest.ts</h2><div data-outline="restts">
+
+<pre id="@import_assert_node-assert_import_music_music-ts_import_sequenceplayer_sequenceplayer-ts_rest_represents_pause"><a class="jump" href="code.html#@import_assert_node-assert_import_music_music-ts_import_sequenceplayer_sequenceplayer-ts_rest_represents_pause"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+<span class="hljs-keyword">import</span> { Music } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Music.ts'</span>;
+<span class="hljs-keyword">import</span> { SequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'./SequencePlayer.ts'</span>;
+
+<span class="hljs-comment">/**
+ * Rest represents a pause in a piece of music.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> Rest <span class="hljs-keyword">implements</span> Music {
+
+    <span class="hljs-comment">/**
+     * Make a Rest that lasts for duration beats.
+     * 
+     * @param duration duration in beats, must be &gt;= 0
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">
+        <span class="hljs-keyword">public</span> readonly duration: <span class="hljs-built_in">number</span>
+    </span>) {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+        assert(<span class="hljs-keyword">this</span>.duration &gt;= <span class="hljs-number">0</span>);
+    }
+
+    <span class="hljs-comment">/**
+     * </span><span id="Rest_play"></span><span class="hljs-comment">Play this rest.
+     */</span>
+    <span class="hljs-keyword">public</span> play(player: SequencePlayer, atBeat: <span class="hljs-built_in">number</span>):<span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">return</span>;
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> equalValue(that: Music): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">return</span> (that <span class="hljs-keyword">instanceof</span> Rest) 
+                &amp;&amp; <span class="hljs-keyword">this</span>.duration === that.duration;
+    }
+
+    <span class="hljs-keyword">public</span> toString(): <span class="hljs-built_in">string</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"."</span> + <span class="hljs-keyword">this</span>.duration;
+    }
+}
+</code></pre>
+
+</div><h2 id="concatts"><a class="jump" href="code.html#concatts"></a>Concat.ts</h2><div data-outline="concatts">
+
+<pre id="@import_assert_node-assert_import_music_music-ts_import_sequenceplayer_sequenceplayer-ts_concat_represents_two"><a class="jump" href="code.html#@import_assert_node-assert_import_music_music-ts_import_sequenceplayer_sequenceplayer-ts_concat_represents_two"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+<span class="hljs-keyword">import</span> { Music } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Music.ts'</span>;
+<span class="hljs-keyword">import</span> { SequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'./SequencePlayer.ts'</span>;
+
+<span class="hljs-comment">/**
+ * Concat represents two pieces of music played one after the other.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> Concat <span class="hljs-keyword">implements</span> Music {
+
+    <span class="hljs-comment">/**
+     * Make a Music sequence that plays first followed by second.
+     * 
+     * @param first music to play first
+     * @param second music to play second
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">
+        <span class="hljs-keyword">public</span> readonly first: Music,
+        <span class="hljs-keyword">public</span> readonly second: Music
+    </span>) {
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+
+    <span class="hljs-keyword">private</span> checkRep(): <span class="hljs-built_in">void</span> {
+    }
+
+    <span class="hljs-comment">/**
+     * @returns duration of this concatenation
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">get</span> duration(): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.first.duration + <span class="hljs-keyword">this</span>.second.duration;
+    }
+
+    <span class="hljs-comment">/**
+     * </span><span id="Concat_play"></span><span class="hljs-comment">Play this concatenation.
+     */</span>
+    <span class="hljs-keyword">public</span> play(player: SequencePlayer, atBeat: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">this</span>.first.play(player, atBeat);
+        <span class="hljs-keyword">this</span>.second.play(player, atBeat + <span class="hljs-keyword">this</span>.first.duration);
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> equalValue(that: Music): <span class="hljs-built_in">boolean</span> {
+        <span class="hljs-keyword">return</span> (that <span class="hljs-keyword">instanceof</span> Concat)
+                &amp;&amp; <span class="hljs-keyword">this</span>.first.equalValue(that.first)
+                &amp;&amp; <span class="hljs-keyword">this</span>.second.equalValue(that.second);
+    }
+
+    <span class="hljs-keyword">public</span> toString(): <span class="hljs-built_in">string</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.first + <span class="hljs-string">" "</span> + <span class="hljs-keyword">this</span>.second;
+    }
+}
+</code></pre>
+
+</div><h2 id="scalesequencets"><a class="jump" href="code.html#scalesequencets"></a>ScaleSequence.ts</h2><div data-outline="scalesequencets">
+
+<pre id="@import_instrument_instrument-ts"><a class="jump" href="code.html#@import_instrument_instrument-ts"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> { Instrument } <span class="hljs-keyword">from</span> <span class="hljs-string">'../Instrument.ts'</span>;
+<span class="hljs-keyword">import</span> { Pitch } <span class="hljs-keyword">from</span> <span class="hljs-string">'../Pitch.ts'</span>;
+<span class="hljs-keyword">import</span> { SequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'../SequencePlayer.ts'</span>;
+<span class="hljs-keyword">import</span> { MidiSequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'../MidiSequencePlayer.ts'</span>;
+
+<span class="hljs-comment">/*
+ * Play an octave up and back down starting from middle C.
+ */</span>
+
+<span class="hljs-keyword">const</span> piano = Instrument.PIANO;
+
+<span class="hljs-comment">// create a new player</span>
+<span class="hljs-keyword">const</span> beatsPerMinute = <span class="hljs-number">120</span>; <span class="hljs-comment">// a beat is a quarter note, so this is 120 quarter notes per minute</span>
+<span class="hljs-keyword">const</span> ticksPerBeat = <span class="hljs-number">2</span>;
+<span class="hljs-keyword">const</span> player: SequencePlayer = <span class="hljs-keyword">new</span> MidiSequencePlayer(beatsPerMinute, ticksPerBeat);
+
+<span class="hljs-comment">// addNote(instr, pitch, startBeat, numBeats) schedules a note with pitch value 'pitch'</span>
+<span class="hljs-comment">// played by 'instr' starting at 'startBeat' to be played for 'numBeats' beats.</span>
+
+<span class="hljs-keyword">const</span> numBeats = <span class="hljs-number">1</span>;
+<span class="hljs-keyword">let</span> startBeat = <span class="hljs-number">0</span>;
+player.addNote(piano, Pitch.make(<span class="hljs-string">'C'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'D'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'E'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'F'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'G'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'A'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'B'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'C'</span>).transpose(Pitch.OCTAVE), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'B'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'A'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'G'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'F'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'E'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'D'</span>), startBeat++, numBeats);
+player.addNote(piano, Pitch.make(<span class="hljs-string">'C'</span>), startBeat++, numBeats);
+
+<span class="hljs-comment">// play!</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'playing now...'</span>);
+<span class="hljs-keyword">await</span> player.start();
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'playing done'</span>);
+</code></pre>
+
+</div><h2 id="scalemusicts"><a class="jump" href="code.html#scalemusicts"></a>ScaleMusic.ts</h2><div data-outline="scalemusicts">
+
+<pre id="@import_music_music-ts_import_notes_musiclanguage-ts_import_instrument_instrument-ts_import_playonmidiplayer_musicplayer-ts_play_octave_up"><a class="jump" href="code.html#@import_music_music-ts_import_notes_musiclanguage-ts_import_instrument_instrument-ts_import_playonmidiplayer_musicplayer-ts_play_octave_up"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> { Music } <span class="hljs-keyword">from</span> <span class="hljs-string">'../Music.ts'</span>;
+<span class="hljs-keyword">import</span> { notes } <span class="hljs-keyword">from</span> <span class="hljs-string">'../MusicLanguage.ts'</span>;
+<span class="hljs-keyword">import</span> { Instrument } <span class="hljs-keyword">from</span> <span class="hljs-string">'../Instrument.ts'</span>;
+<span class="hljs-keyword">import</span> { playOnMidiPlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'../MusicPlayer.ts'</span>;
+
+<span class="hljs-comment">/*
+ * Play an octave up and back down starting from middle C.
+ */</span>
+
+<span class="hljs-comment">// parse simplified abc into a Music</span>
+<span class="hljs-keyword">const</span> scale: Music = notes(<span class="hljs-string">"C D E F G A B C' B A G F E D C"</span>, Instrument.PIANO);
+
+<span class="hljs-built_in">console</span>.log(scale.toString());
+
+<span class="hljs-comment">// play!</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'playing now...'</span>);
+<span class="hljs-keyword">await</span> playOnMidiPlayer(scale);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'playing done'</span>);
+</code></pre>
+
+</div><h2 id="rowyourboatinitialts"><a class="jump" href="code.html#rowyourboatinitialts"></a>RowYourBoatInitial.ts</h2><div data-outline="rowyourboatinitialts">
+
+<pre id="@import_music_music-ts_import_notes_musiclanguage-ts_import_instrument_instrument-ts_import_playonmidiplayer_musicplayer-ts_play_song_const"><a class="jump" href="code.html#@import_music_music-ts_import_notes_musiclanguage-ts_import_instrument_instrument-ts_import_playonmidiplayer_musicplayer-ts_play_song_const"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> { Music } <span class="hljs-keyword">from</span> <span class="hljs-string">'../Music.ts'</span>;
+<span class="hljs-keyword">import</span> { notes } <span class="hljs-keyword">from</span> <span class="hljs-string">'../MusicLanguage.ts'</span>;
+<span class="hljs-keyword">import</span> { Instrument } <span class="hljs-keyword">from</span> <span class="hljs-string">'../Instrument.ts'</span>;
+<span class="hljs-keyword">import</span> { playOnMidiPlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'../MusicPlayer.ts'</span>;
+
+<span class="hljs-comment">/*
+ * Play a song!
+ */</span>
+
+<span class="hljs-keyword">const</span> rowYourBoat: Music =
+    notes(<span class="hljs-string">"C C C3/4 D/4 E |"</span>       <span class="hljs-comment">// Row, row, row your boat,</span>
+        + <span class="hljs-string">"E3/4 D/4 E3/4 F/4 G2 |"</span> <span class="hljs-comment">// Gently down the stream.</span>
+        + <span class="hljs-string">"C'/3 C'/3 C'/3 G/3 G/3 G/3 E/3 E/3 E/3 C/3 C/3 C/3 |"</span>
+                                   <span class="hljs-comment">// Merrily, merrily, merrily, merrily,</span>
+        + <span class="hljs-string">"G3/4 F/4 E3/4 D/4 C2"</span>,  <span class="hljs-comment">// Life is but a dream.</span>
+        Instrument.PIANO);
+
+
+<span class="hljs-built_in">console</span>.log(rowYourBoat.toString());
+
+<span class="hljs-comment">// play!</span>
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'playing now...'</span>);
+<span class="hljs-keyword">await</span> playOnMidiPlayer(rowYourBoat);
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">'playing done'</span>);
+</code></pre>
+
+</div><h2 id="sequenceplayerts"><a class="jump" href="code.html#sequenceplayerts"></a>SequencePlayer.ts</h2><div data-outline="sequenceplayerts">
+
+<pre id="@import_assert_node-assert_import_instrument_instrument-ts_import_pitch_pitch-ts_schedules_plays_sequence"><a class="jump" href="code.html#@import_assert_node-assert_import_instrument_instrument-ts_import_pitch_pitch-ts_schedules_plays_sequence"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+<span class="hljs-keyword">import</span> { Instrument } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Instrument.ts'</span>;
+<span class="hljs-keyword">import</span> { Pitch } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Pitch.ts'</span>;
+
+<span class="hljs-comment">/**
+ * Schedules and plays a sequence of notes at given times.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">interface</span> SequencePlayer {
+
+    <span class="hljs-comment">/**
+     * </span><span id="SequencePlayer_addNote"></span><span class="hljs-comment">Schedule a note to be played starting at startBeat for the duration numBeats.
+     * 
+     * @param instr instrument for the note
+     * @param pitch pitch value of the note
+     * @param startBeat the starting beat (while playing, must be now or in the future)
+     * @param numBeats the number of beats the note is played
+     */</span>
+    addNote(instr: Instrument, pitch: Pitch, startBeat: <span class="hljs-built_in">number</span>, numBeats: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">void</span>;
+
+    <span class="hljs-comment">/**
+     * </span><span id="SequencePlayer_start"></span><span class="hljs-comment">Play the scheduled music.
+     * 
+     * @returns (a promise that) resolves after the music has played
+     */</span>
+    start(): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt;;
+
+}
+</code></pre>
+
+</div><h2 id="midisequenceplayerts"><a class="jump" href="code.html#midisequenceplayerts"></a>MidiSequencePlayer.ts</h2><div data-outline="midisequenceplayerts">
+
+<pre id="@import_assert_node-assert_import_instrument_instrument-ts_import_pitch_pitch-ts_import_sequenceplayer_sequenceplayer-ts"><a class="jump" href="code.html#@import_assert_node-assert_import_instrument_instrument-ts_import_pitch_pitch-ts_import_sequenceplayer_sequenceplayer-ts"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> assert <span class="hljs-keyword">from</span> <span class="hljs-string">'node:assert'</span>;
+
+<span class="hljs-keyword">import</span> { Instrument } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Instrument.ts'</span>;
+<span class="hljs-keyword">import</span> { Pitch } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Pitch.ts'</span>;
+<span class="hljs-keyword">import</span> { SequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'./SequencePlayer.ts'</span>;
+
+<span class="hljs-keyword">import</span> JZZ <span class="hljs-keyword">from</span> <span class="hljs-string">'jzz'</span>;
+<span class="hljs-keyword">import</span> JZZ_MIDI_SMF <span class="hljs-keyword">from</span> <span class="hljs-string">'jzz-midi-smf'</span>;
+<span class="hljs-keyword">import</span> <span class="hljs-keyword">type</span> { MTrk } <span class="hljs-keyword">from</span> <span class="hljs-string">'jzz-midi-smf'</span>;
+
+JZZ_MIDI_SMF(JZZ);
+
+<span class="hljs-keyword">const</span> { MIDI } = JZZ;
+
+<span class="hljs-comment">/**
+ * Default tempo.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">const</span> DEFAULT_BEATS_PER_MINUTE = <span class="hljs-number">120</span>;
+
+<span class="hljs-comment">/**
+ * Default MIDI ticks per beat.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">const</span> DEFAULT_TICKS_PER_BEAT = <span class="hljs-number">64</span>;
+
+<span class="hljs-comment">// MIDI note number representing middle C</span>
+<span class="hljs-keyword">const</span> MIDI_NOTE_MIDDLE_C = <span class="hljs-number">60</span>;
+
+<span class="hljs-comment">// MIDI marker meta message type</span>
+<span class="hljs-keyword">const</span> MIDI_META_MARKER = <span class="hljs-number">6</span>;
+
+<span class="hljs-comment">/**
+ * </span><span id="MSP_getMidiNote"></span><span class="hljs-comment">@returns the MIDI note number for a pitch, defined as the number of
+ *          semitones above C 5 octaves below middle C; for example,
+ *          middle C is note 60
+ */</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getMidiNote</span>(<span class="hljs-params">pitch: Pitch</span>): <span class="hljs-title">number</span> </span>{
+    <span class="hljs-keyword">return</span> MIDI_NOTE_MIDDLE_C + pitch.difference(Pitch.MIDDLE_C);
+}
+
+<span class="hljs-comment">/**
+ * Schedules and plays a sequence of notes using the MIDI synthesizer.
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-keyword">class</span> MidiSequencePlayer <span class="hljs-keyword">implements</span> SequencePlayer {
+
+    <span class="hljs-comment">// queued MIDI events before playback begins</span>
+    <span class="hljs-keyword">private</span> readonly queued: MTrk;
+    
+    <span class="hljs-comment">// MIDI output device to handle callbacks</span>
+    <span class="hljs-keyword">private</span> readonly midiOut;
+    
+    <span class="hljs-comment">// time at which playback began, iff started</span>
+    <span class="hljs-keyword">private</span> playStartTime: <span class="hljs-built_in">number</span>|<span class="hljs-literal">undefined</span>;
+    
+    <span class="hljs-comment">// counter of future MIDI events</span>
+    <span class="hljs-keyword">private</span> unplayedEvents: <span class="hljs-built_in">number</span> = <span class="hljs-number">0</span>;
+    
+    <span class="hljs-comment">// instruments that have been used (selected into MIDI channels) so far</span>
+    <span class="hljs-comment">// maps an instrument to a MIDI channel number</span>
+    <span class="hljs-keyword">private</span> readonly channelForInstrument: Map&lt;Instrument, <span class="hljs-built_in">number</span>&gt; = <span class="hljs-keyword">new</span> Map();
+    
+    <span class="hljs-comment">// event callback functions</span>
+    <span class="hljs-keyword">private</span> readonly callbacks: Map&lt;<span class="hljs-built_in">number</span>, <span class="hljs-function"><span class="hljs-params">()</span>=&gt;</span><span class="hljs-built_in">void</span>&gt; = <span class="hljs-keyword">new</span> Map();
+    <span class="hljs-keyword">private</span> readonly doneCallback = <span class="hljs-number">-1</span>;
+
+    <span class="hljs-comment">/**
+     * Make a new MIDI sequence player.
+     * 
+     * @param beatsPerMinute number of beats per minute
+     * @param ticksPerBeat number of MIDI ticks per beat
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">constructor</span>(<span class="hljs-params">
+        <span class="hljs-keyword">private</span> readonly beatsPerMinute: <span class="hljs-built_in">number</span> = DEFAULT_BEATS_PER_MINUTE,
+        <span class="hljs-keyword">private</span> readonly ticksPerBeat: <span class="hljs-built_in">number</span> = DEFAULT_TICKS_PER_BEAT
+    </span>) {
+        <span class="hljs-keyword">this</span>.queued = <span class="hljs-keyword">new</span> MIDI.SMF.MTrk();
+        <span class="hljs-keyword">const</span> thisMSP = <span class="hljs-keyword">this</span>;
+        <span class="hljs-keyword">this</span>.midiOut = JZZ.Widget({
+            _receive(<span class="hljs-keyword">this</span>: ReturnType&lt;<span class="hljs-keyword">typeof</span> JZZ.Widget&gt;, msg: <span class="hljs-keyword">typeof</span> MIDI &amp; { ff?: <span class="hljs-built_in">number</span> }) {
+                <span class="hljs-keyword">if</span> (msg.isSMF() &amp;&amp; msg.ff === MIDI_META_MARKER) {
+                    <span class="hljs-comment">// meta event indicates `addEvent(..)` callback</span>
+                    <span class="hljs-keyword">const</span> id = <span class="hljs-built_in">parseInt</span>(msg.getText());
+                    <span class="hljs-keyword">const</span> callback = thisMSP.callbacks.get(id);
+                    <span class="hljs-keyword">if</span> (callback) {
+                        thisMSP.callbacks.delete(id);
+                        callback();
+                    }
+                }
+                <span class="hljs-comment">// send this message to the MIDI output device</span>
+                <span class="hljs-keyword">this</span>.emit(msg);
+                <span class="hljs-keyword">if</span> (--thisMSP.unplayedEvents &lt;= <span class="hljs-number">0</span>) {
+                    <span class="hljs-comment">// no future events, `start()` is done</span>
+                    thisMSP.callbacks.get(thisMSP.doneCallback)?.();
+                }
+            }
+        });
+        <span class="hljs-keyword">this</span>.checkRep();
+    }
+    
+    <span class="hljs-keyword">private</span> checkRep() {
+        assert(<span class="hljs-keyword">this</span>.beatsPerMinute &gt;= <span class="hljs-number">0</span>);
+        assert(<span class="hljs-keyword">this</span>.ticksPerBeat &gt;= <span class="hljs-number">0</span>);
+    }
+
+    <span class="hljs-comment">/** @returns milliseconds since playback began (requires currently playing) */</span>
+    <span class="hljs-keyword">private</span> msSincePlayStart(beat: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">number</span> {
+        assert(<span class="hljs-keyword">this</span>.playStartTime !== <span class="hljs-literal">undefined</span>);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.ms(beat) - (performance.now() - <span class="hljs-keyword">this</span>.playStartTime);
+    }
+
+    <span class="hljs-comment">/** @returns beats in milliseconds */</span>
+    <span class="hljs-keyword">private</span> ms(beats: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">number</span> {
+        <span class="hljs-keyword">return</span> beats / <span class="hljs-keyword">this</span>.beatsPerMinute * <span class="hljs-number">60</span> * <span class="hljs-number">1000</span>;
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> addNote(instr: Instrument, pitch: Pitch, startBeat: <span class="hljs-built_in">number</span>, numBeats: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">const</span> channel = <span class="hljs-keyword">this</span>.getChannel(instr);
+        <span class="hljs-keyword">const</span> note = getMidiNote(pitch);
+
+        <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.playStartTime !== <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">const</span> startTime = <span class="hljs-keyword">this</span>.msSincePlayStart(startBeat);
+            <span class="hljs-keyword">this</span>.midiOut.wait(startTime).noteOn(channel, note);
+            <span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> (removing 1 ms avoids some timing glitches) find a better way to stream events</span>
+            <span class="hljs-keyword">this</span>.midiOut.wait(startTime + <span class="hljs-keyword">this</span>.ms(numBeats) - <span class="hljs-number">1</span>).noteOff(channel, note);
+        } <span class="hljs-keyword">else</span> {
+            <span class="hljs-keyword">this</span>.queued.add(startBeat * <span class="hljs-keyword">this</span>.ticksPerBeat, MIDI.noteOn(channel, note));
+            <span class="hljs-keyword">this</span>.queued.add((startBeat + numBeats) * <span class="hljs-keyword">this</span>.ticksPerBeat, MIDI.noteOff(channel, note));
+        }
+        <span class="hljs-keyword">this</span>.unplayedEvents += <span class="hljs-number">2</span>;
+    }
+
+    <span class="hljs-keyword">public</span> addEvent(callback: <span class="hljs-function">(<span class="hljs-params">beat:<span class="hljs-built_in">number</span></span>)=&gt;</span><span class="hljs-built_in">void</span>, atBeat: <span class="hljs-built_in">number</span>): <span class="hljs-built_in">void</span> {
+        <span class="hljs-keyword">let</span> id = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">while</span> (<span class="hljs-keyword">this</span>.callbacks.has(id)) { id++; }
+        <span class="hljs-keyword">this</span>.callbacks.set(id, <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> callback(atBeat));
+        <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.playStartTime !== <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">this</span>.midiOut.wait(<span class="hljs-keyword">this</span>.msSincePlayStart(atBeat)).smfMarker(id.toString());
+        } <span class="hljs-keyword">else</span> {
+            <span class="hljs-keyword">this</span>.queued.add(atBeat * <span class="hljs-keyword">this</span>.ticksPerBeat, MIDI.smfMarker(id.toString()));
+        }
+        <span class="hljs-keyword">this</span>.unplayedEvents++;
+    }
+
+    <span class="hljs-comment">/**
+     * @inheritdoc
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">async</span> start(): <span class="hljs-built_in">Promise</span>&lt;<span class="hljs-built_in">void</span>&gt; {
+        <span class="hljs-keyword">await</span> <span class="hljs-keyword">this</span>.midiOut.connect(<span class="hljs-keyword">await</span> JZZ().openMidiOut().or(<span class="hljs-string">'cannot open MIDI output port'</span>));
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> midi of <span class="hljs-keyword">this</span>.queued) {
+            <span class="hljs-keyword">this</span>.midiOut.wait(midi.tt / <span class="hljs-keyword">this</span>.ticksPerBeat / <span class="hljs-keyword">this</span>.beatsPerMinute * <span class="hljs-number">60</span> * <span class="hljs-number">1000</span>).send(midi);
+        }
+        <span class="hljs-keyword">this</span>.playStartTime = performance.now();
+        <span class="hljs-keyword">const</span> { promise, resolve } = <span class="hljs-built_in">Promise</span>.withResolvers&lt;<span class="hljs-built_in">void</span>&gt;();
+        <span class="hljs-keyword">this</span>.callbacks.set(<span class="hljs-keyword">this</span>.doneCallback, resolve);
+        <span class="hljs-keyword">return</span> promise;
+    }
+
+    <span class="hljs-comment">/**
+     * Get a MIDI channel for the given instrument, allocating one if necessary.
+     * 
+     * @param instr instrument
+     * @returns channel for the instrument
+     */</span>
+    <span class="hljs-keyword">private</span> getChannel(instr: Instrument): <span class="hljs-built_in">number</span> {
+        <span class="hljs-comment">// check whether this instrument already has a channel</span>
+        <span class="hljs-keyword">let</span> channel = <span class="hljs-keyword">this</span>.channelForInstrument.get(instr);
+        <span class="hljs-keyword">if</span> (channel === <span class="hljs-literal">undefined</span>) {
+            channel = <span class="hljs-keyword">this</span>.channelForInstrument.size;
+            <span class="hljs-comment">// <span class="hljs-doctag">TODO:</span> check whether nextChannel exceeds # of possible channels for this midi device</span>
+            <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.playStartTime !== <span class="hljs-literal">undefined</span>) {
+                <span class="hljs-keyword">this</span>.midiOut.send(MIDI.program(channel, instr));
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">this</span>.queued.add(<span class="hljs-number">0</span>, MIDI.program(channel, instr));
+            }
+            <span class="hljs-keyword">this</span>.unplayedEvents++;
+            <span class="hljs-keyword">this</span>.channelForInstrument.set(instr, channel);
+        }
+        <span class="hljs-keyword">return</span> channel;
+    }
+}
+</code></pre>
+
+</div><h2 id="musicplayerts"><a class="jump" href="code.html#musicplayerts"></a>MusicPlayer.ts</h2><div data-outline="musicplayerts">
+
+<pre id="@import_sequenceplayer_sequenceplayer-ts_import_midisequenceplayer_midisequenceplayer-ts"><a class="jump" href="code.html#@import_sequenceplayer_sequenceplayer-ts_import_midisequenceplayer_midisequenceplayer-ts"></a><code class="language-typescript no-markdown hljs"><span class="hljs-keyword">import</span> { SequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'./SequencePlayer.ts'</span>;
+<span class="hljs-keyword">import</span> { MidiSequencePlayer } <span class="hljs-keyword">from</span> <span class="hljs-string">'./MidiSequencePlayer.ts'</span>;
+<span class="hljs-keyword">import</span> { Music } <span class="hljs-keyword">from</span> <span class="hljs-string">'./Music.ts'</span>;
+
+<span class="hljs-comment">/**
+ * Play music with the MIDI synthesizer.
+ * 
+ * @param music music to play
+ * @returns (a promise that) resolves after the music has played
+ * @throws Error if MIDI device unavailable or MIDI play fails
+ */</span>
+<span class="hljs-keyword">export</span> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">playOnMidiPlayer</span>(<span class="hljs-params">music: Music</span>): <span class="hljs-title">Promise</span>&lt;<span class="hljs-title">void</span>&gt; </span>{
+    <span class="hljs-keyword">const</span> player: SequencePlayer = <span class="hljs-keyword">new</span> MidiSequencePlayer();
+    
+    <span class="hljs-comment">// load the player with a sequence created from music (add a small delay at the beginning)</span>
+    <span class="hljs-keyword">const</span> warmup = <span class="hljs-number">0.125</span>;
+    music.play(player, warmup);
+    
+    <span class="hljs-comment">// start playing</span>
+    <span class="hljs-keyword">return</span> player.start();
+}
+</code></pre></div></div>
+
+</div></main>
+<footer class="col-sm-2 footer-margin"><div>Collaboratively authored by Rob Miller and Max Goldman, with contributions from Saman Amarasinghe, Adam Chlipala, Srini Devadas, Gabriella Ecanow, Michael Ernst, John Guttag, Daniel Jackson, Josiah McMenamy, Martin Rinard, and Armando Solar-Lezama, and from Robert Durfee, Jenna Himawan, Stacia Johanna, Jessica Shi, Daniel Whatley, and Elizabeth Zhou. This work is licensed under <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">CC&nbsp;BY-SA&nbsp;4.0</a>.</div></footer>
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+
+<script type="text/javascript" charset="utf-8" src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script><footer>MIT EECS</footer><footer class="footer-archived"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="display: inline-block; vertical-align: text-bottom;"><path fill-rule="evenodd" d="M1.75 2.5a.25.25 0 00-.25.25v1.5c0 .138.112.25.25.25h12.5a.25.25 0 00.25-.25v-1.5a.25.25 0 00-.25-.25H1.75zM0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v1.5A1.75 1.75 0 0114.25 6H1.75A1.75 1.75 0 010 4.25v-1.5zM1.75 7a.75.75 0 01.75.75v5.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-5.5a.75.75 0 111.5 0v5.5A1.75 1.75 0 0113.25 15H2.75A1.75 1.75 0 011 13.25v-5.5A.75.75 0 011.75 7zm4.5 1a.75.75 0 000 1.5h3.5a.75.75 0 100-1.5h-3.5z"></path></svg>  spring 2026 course site archive  |  latest&nbsp;site&nbsp;at&nbsp;<a href="http://web.mit.edu/6.102/">mit.edu/6.102</a>  |  <a href="http://accessibility.mit.edu/">accessibility</a></footer><script type="text/javascript" charset="utf-8" src="../../web/handout-run.js" data-handx-url="https://handx.mit.edu/v1/6.102/sp26/" data-handx-id="classes-19-little-languages-code"></script></body><!--
+Handout delivered Tue May 26 2026 13:32:19 GMT+0000 (Coordinated Universal Time)
+--></html>
