@@ -43,6 +43,28 @@ function localStyles(file, html) {
   return styles;
 }
 
+function localResources(file, html) {
+  const baseHref = (html.match(/<base[^>]*href=["']([^"']*)/i) || [])[1] || '';
+  const baseDirectory = baseHref
+    ? path.resolve(path.dirname(file), baseHref)
+    : path.dirname(file);
+  const resources = [];
+  for (const tagMatch of html.matchAll(/<[^>]+>/gi)) {
+    const tag = tagMatch[0];
+    for (const match of tag.matchAll(/\b(src|data)=["']([^"']*)/gi)) {
+      const value = match[2];
+      const resourcePath = value.split(/[?#]/)[0];
+      if (!resourcePath || /^(?:https?:|data:|#|\/\/|\/)/i.test(resourcePath)) continue;
+      resources.push({
+        attribute: match[1],
+        href: value,
+        file: path.resolve(baseDirectory, resourcePath),
+      });
+    }
+  }
+  return resources;
+}
+
 walk(courseRoot);
 
 if (!i18nSource.includes('i18n-switch')) {
@@ -55,6 +77,11 @@ for (const file of pages) {
   const missingStyles = styles.filter(style => !fs.existsSync(style.file));
   if (missingStyles.length) {
     failures.push(`${file}: missing stylesheet(s): ${missingStyles.map(style => style.href).join(', ')}`);
+  }
+
+  const missingResources = localResources(file, html).filter(resource => !fs.existsSync(resource.file));
+  if (missingResources.length) {
+    failures.push(`${file}: missing local resource(s): ${missingResources.map(resource => `${resource.attribute}=${resource.href}`).join(', ')}`);
   }
 
   if (!/<script\b[^>]*src=["'][^"']*i18n\.js/i.test(html)) {

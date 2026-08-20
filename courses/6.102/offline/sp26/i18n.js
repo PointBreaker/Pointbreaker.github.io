@@ -529,12 +529,27 @@
   function addStyles() {
     const style = document.createElement('style');
     style.textContent = `
+      header.i18n-header {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-areas: 'brand term switch';
+        align-items: center;
+        column-gap: 16px;
+      }
+      header.i18n-header > a {
+        grid-area: brand;
+        min-width: 0;
+      }
+      header.i18n-header > div:not(.i18n-switch) {
+        grid-area: term;
+        float: none;
+        white-space: nowrap;
+      }
       .i18n-switch {
-        position: fixed;
-        top: 4px;
-        right: 12px;
-        z-index: 9999;
+        grid-area: switch;
+        position: static;
         display: inline-flex;
+        justify-self: end;
         gap: 2px;
         padding: 2px;
         border: 1px solid rgba(255, 255, 255, .58);
@@ -544,9 +559,13 @@
         font-family: inherit;
         line-height: 1;
       }
+      header.i18n-header > div.i18n-switch {
+        float: none;
+      }
       .i18n-switch button {
-        min-width: 30px;
-        padding: 4px 8px;
+        min-width: 36px;
+        min-height: 32px;
+        padding: 6px 9px;
         border: 0;
         border-radius: 999px;
         background: transparent;
@@ -574,13 +593,21 @@
         opacity: .45;
       }
       @media (max-width: 600px) {
-        .i18n-switch {
-          top: 4px;
-          right: 8px;
+        header.i18n-header {
+          grid-template-columns: minmax(0, 1fr) auto;
+          grid-template-areas:
+            'brand switch'
+            'term term';
+          row-gap: 6px;
+          padding: 12px 16px;
+        }
+        header.i18n-header > div:not(.i18n-switch) {
+          font-size: .9em;
+          white-space: normal;
         }
         .i18n-switch button {
-          min-width: 28px;
-          padding-inline: 6px;
+          min-width: 36px;
+          padding-inline: 8px;
         }
       }
     `;
@@ -606,8 +633,51 @@
       group.appendChild(button);
     }
 
-    document.body.appendChild(group);
+    const header = document.querySelector('header:not(.chip)') || document.querySelector('header');
+    if (header) {
+      header.classList.add('i18n-header');
+      header.appendChild(group);
+    } else {
+      document.body.appendChild(group);
+    }
     return group;
+  }
+
+  function setupMobileTableOfContents() {
+    const nav = document.querySelector('nav.table-of-contents');
+    if (!nav || nav.querySelector('.toc-toggle')) return;
+
+    const isChinese = document.documentElement.lang === 'zh-CN' || /[\u3400-\u9fff]/.test(document.title);
+    const label = isChinese ? '本页目录' : 'On this page';
+    const list = nav.querySelector(':scope > ul');
+    if (!list) return;
+
+    if (!list.id) list.id = 'handout-toc-list';
+    nav.classList.add('mobile-toc');
+    nav.setAttribute('aria-label', label);
+
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'toc-toggle';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', list.id);
+    toggle.innerHTML = `<span>${label}</span><span class="toc-toggle-icon" aria-hidden="true"></span>`;
+    nav.insertBefore(toggle, list);
+
+    const close = () => {
+      nav.classList.remove('is-open');
+      toggle.setAttribute('aria-expanded', 'false');
+    };
+
+    toggle.addEventListener('click', () => {
+      const open = !nav.classList.contains('is-open');
+      nav.classList.toggle('is-open', open);
+      toggle.setAttribute('aria-expanded', String(open));
+    });
+
+    list.addEventListener('click', event => {
+      if (event.target.closest('a')) close();
+    });
   }
 
   async function checkChineseAvailability(group) {
@@ -626,6 +696,7 @@
     document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
     addStyles();
     const group = addSwitch();
+    setupMobileTableOfContents();
     rewriteRootMirrorLinks();
     checkChineseAvailability(group);
   }
