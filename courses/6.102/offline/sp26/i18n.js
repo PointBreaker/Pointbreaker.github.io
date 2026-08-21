@@ -431,16 +431,25 @@
     return [...new Set(values.filter(Boolean))];
   }
 
+  // Chinese pages exist in two layouts in the delivered course tree:
+  // nested pages (the canonical interactive pages) and root mirrors. Try
+  // every directory boundary so generated API docs such as
+  // psets/ps0/zh/doc/index.html are found before the root mirror fallback.
+  function chineseCandidatesForEnglish(relative) {
+    const parts = relative.split('/');
+    const candidates = [];
+    for (let index = 1; index < parts.length; index += 1) {
+      candidates.push([...parts.slice(0, index), 'zh', ...parts.slice(index)].join('/'));
+    }
+    candidates.push(`zh/${relative}`);
+    return unique(candidates);
+  }
+
   function candidatePaths(target) {
     if (target === currentLang) return [currentRelative];
 
     if (target === 'zh') {
-      const slash = currentRelative.lastIndexOf('/');
-      const directory = slash === -1 ? '' : currentRelative.slice(0, slash);
-      const filename = currentRelative.slice(slash + 1);
-      const inPlace = directory ? `${directory}/zh/${filename}` : `zh/${filename}`;
-      const rootMirror = `zh/${currentRelative}`;
-      return unique([inPlace, rootMirror]);
+      return chineseCandidatesForEnglish(currentRelative);
     }
 
     if (isRootChinesePath(currentRelative)) {
@@ -453,15 +462,8 @@
     return [parts.join('/')];
   }
 
-  function chineseCandidatesForEnglish(relative) {
-    const slash = relative.lastIndexOf('/');
-    const directory = slash === -1 ? '' : relative.slice(0, slash);
-    const filename = relative.slice(slash + 1);
-    const inPlace = directory ? `${directory}/zh/${filename}` : `zh/${filename}`;
-    return unique([inPlace, `zh/${relative}`]);
-  }
-
   async function pageExists(relative) {
+    if (STATIC_HTML_PAGES.has(relative)) return true;
     if (window.location.protocol === 'file:') return STATIC_HTML_PAGES.has(relative);
     try {
       const response = await fetch(pageUrl(relative), { method: 'HEAD', cache: 'no-store' });
@@ -497,12 +499,102 @@
     return url.href;
   }
 
+  function currentReadingPosition() {
+    if (window.location.hash) return null;
+    const headings = [...document.querySelectorAll('h1[id], h2[id], h3[id], h4[id]')];
+    const headingRects = headings.map(heading => ({ heading, rect: heading.getBoundingClientRect() }));
+    const heading = headingRects
+      .filter(({ rect }) => rect.bottom >= 0 && rect.top <= window.innerHeight)
+      .at(-1)?.heading;
+    return heading
+      ? { anchor: heading.id, offset: Math.round(heading.getBoundingClientRect().top) }
+      : null;
+  }
+
+  function saveNavigationPosition(destinationUrl) {
+    const reading = currentReadingPosition();
+    const position = {
+      path: destinationUrl.pathname,
+      anchor: reading?.anchor || null,
+      anchorOffset: reading?.offset ?? null,
+      scrollY: window.scrollY,
+    };
+    try {
+      sessionStorage.setItem('mit6102-pending-position', JSON.stringify(position));
+    } catch (_error) {
+      // A blocked sessionStorage should not prevent language switching.
+    }
+  }
+
+  function restoreNavigationPosition() {
+    if (window.location.hash) return;
+    let position;
+    try {
+      position = JSON.parse(sessionStorage.getItem('mit6102-pending-position') || 'null');
+      sessionStorage.removeItem('mit6102-pending-position');
+    } catch (_error) {
+      return;
+    }
+    if (!position || position.path !== window.location.pathname) return;
+
+    const restore = () => {
+      const anchor = position.anchor && document.getElementById(position.anchor);
+      if (anchor) {
+        anchor.scrollIntoView({ block: 'start' });
+        if (Number.isFinite(position.anchorOffset)) {
+          window.scrollBy(0, anchor.getBoundingClientRect().top - position.anchorOffset);
+        }
+      } else {
+        window.scrollTo(0, position.scrollY || 0);
+      }
+    };
+    requestAnimationFrame(() => requestAnimationFrame(restore));
+  }
+
+  async function canonicalizeRootMirror() {
+    if (!isRootChinesePath(currentRelative)) return false;
+    const englishRelative = currentRelative.replace(/^zh\/?/, '');
+    const candidates = chineseCandidatesForEnglish(englishRelative);
+    const destination = await findExistingCandidate(candidates);
+    if (!destination || destination === currentRelative) return false;
+
+    const destinationUrl = pageUrl(destination);
+    destinationUrl.search = window.location.search;
+    destinationUrl.hash = window.location.hash;
+    document.documentElement.classList.add('i18n-leaving');
+    window.location.replace(destinationUrl.href);
+    return true;
+  }
+
+  let switching = false;
+
+  function setSwitching(group, active) {
+    if (!group) return;
+    group.classList.toggle('is-switching', active);
+    group.setAttribute('aria-busy', String(active));
+    group.querySelectorAll('button').forEach(button => {
+      button.disabled = active;
+    });
+  }
+
   async function switchLanguage(target) {
-    if (target === currentLang) return;
+    if (target === currentLang || switching) return;
+    switching = true;
+    const group = document.getElementById('i18n-switch');
+    setSwitching(group, true);
     const destination = await findDestination(target);
-    if (!destination) return;
+    if (!destination) {
+      switching = false;
+      setSwitching(group, false);
+      return;
+    }
+    const destinationUrl = pageUrl(destination);
+    saveNavigationPosition(destinationUrl);
     localStorage.setItem('mit6102-lang', target);
-    window.location.assign(preserveUrlParts(pageUrl(destination)));
+    document.documentElement.classList.add('i18n-leaving');
+    window.setTimeout(() => {
+      window.location.assign(preserveUrlParts(destinationUrl));
+    }, 120);
   }
 
   async function rewriteRootMirrorLinks() {
@@ -562,6 +654,19 @@
       header.i18n-header > div.i18n-switch {
         float: none;
       }
+      .i18n-switch.is-switching {
+        cursor: progress;
+      }
+      .i18n-switch.is-switching::after {
+        width: 10px;
+        height: 10px;
+        margin: auto 4px auto 2px;
+        border: 2px solid rgba(255, 255, 255, .38);
+        border-top-color: #fff;
+        border-radius: 50%;
+        content: '';
+        animation: i18n-spin .7s linear infinite;
+      }
       .i18n-switch button {
         min-width: 36px;
         min-height: 32px;
@@ -591,6 +696,32 @@
       .i18n-switch button:disabled {
         cursor: not-allowed;
         opacity: .45;
+      }
+      html.i18n-entering body {
+        animation: i18n-page-enter .24s ease-out both;
+      }
+      html.i18n-leaving body {
+        opacity: .3;
+        transform: translateY(4px);
+        transition: opacity .12s ease, transform .12s ease;
+      }
+      @keyframes i18n-page-enter {
+        from { opacity: .3; transform: translateY(4px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes i18n-spin {
+        to { transform: rotate(360deg); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html.i18n-entering body,
+        html.i18n-leaving body {
+          animation: none;
+          transition: none;
+          transform: none;
+        }
+        .i18n-switch.is-switching::after {
+          animation: none;
+        }
       }
       @media (max-width: 600px) {
         header.i18n-header {
@@ -692,13 +823,17 @@
     }
   }
 
-  function init() {
+  async function init() {
     document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
     addStyles();
+    document.documentElement.classList.add('i18n-entering');
+    requestAnimationFrame(() => document.documentElement.classList.remove('i18n-entering'));
+    if (await canonicalizeRootMirror()) return;
     const group = addSwitch();
     setupMobileTableOfContents();
     rewriteRootMirrorLinks();
     checkChineseAvailability(group);
+    restoreNavigationPosition();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

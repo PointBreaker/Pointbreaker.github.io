@@ -65,6 +65,11 @@ function localResources(file, html) {
   return resources;
 }
 
+function externalUrls(html) {
+  return [...html.matchAll(/(?:href|src|data-[\w-]+)=["'](https?:[^"']+)/gi)]
+    .map(match => match[1]);
+}
+
 walk(courseRoot);
 
 if (!i18nSource.includes('i18n-switch')) {
@@ -91,6 +96,27 @@ for (const file of pages) {
   const source = sourcePage(file);
   if (!fs.existsSync(source)) {
     failures.push(`${file}: cannot map to its English source page`);
+    continue;
+  }
+
+  // Root mirrors are legacy redirect targets. Their markup predates the
+  // canonical nested pages, so compare external resources on canonical
+  // Chinese pages only; those URLs must remain byte-for-byte identical to
+  // the English source so embedded exercises and external docs keep working.
+  const rootMirror = `${courseRoot}${path.sep}zh${path.sep}`;
+  if (!file.startsWith(rootMirror)) {
+    const sourceUrls = externalUrls(fs.readFileSync(source, 'utf8'));
+    const chineseUrls = externalUrls(html);
+    if (sourceUrls.length !== chineseUrls.length) {
+      failures.push(`${file}: external URL count differs from English source (${chineseUrls.length} vs ${sourceUrls.length})`);
+    } else {
+      const mismatches = chineseUrls
+        .map((url, index) => url === sourceUrls[index] ? null : `${index}: ${url} != ${sourceUrls[index]}`)
+        .filter(Boolean);
+      if (mismatches.length) {
+        failures.push(`${file}: external URL mismatch (${mismatches.slice(0, 3).join('; ')})`);
+      }
+    }
   }
 }
 
