@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 10 课：推理优化 — CS336</title>
-  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/course.css?v=20260827a">
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
@@ -231,7 +231,7 @@ S=100,000, L=80:
     <div class="prose-outline"><p><strong>跨层共享 KV:</strong><br>GQA 是共享 KV across heads<br>CLA 是共享 KV across layers</p><p>例如: 每 4 层共享一组 KV<br>KV cache 缩小 4×</p></div>
 
     <h3>Local Attention</h3>
-    <div class="prose-outline"><p>部分层用 local attention（只关注附近 token）<br>KV cache 不依赖序列长度！</p><p><strong>混合策略（character.ai）:</strong><br>- 每 6 层有 1 层 global attention<br>- 其余 5 层用 local attention<br>- 有效上下文 = window_size × num_layers</p></div>
+    <div class="prose-outline"><p>部分层用 local attention（只关注附近 token）。若实现会淘汰窗口外 K/V，那么这些 local layers 的 cache <strong>不再随完整历史 context 无限增长，而被 attention window size 上界约束</strong>；它仍然线性依赖 window size。</p><p><strong>混合策略（character.ai）:</strong><br>- 每 6 层有 1 层 global attention<br>- 其余 5 层用 local attention<br>- 有效信息传播范围会随 window 与层数扩大，但不等于单层可直接访问完整历史</p></div>
 
     <hr class="rule">
 
@@ -312,7 +312,7 @@ x_quantized = round(x / scale)
     <div class="prose-outline"><p>训练: 固定 batch, 固定长度<br>batch_size × sequence_length × hidden_dim</p><p>推理: 请求动态到达，长度不一<br>请求 1: 已生成 10 tokens<br>请求 2: 刚到达，prefill 中<br>请求 3: 已生成 100 tokens</p><p>朴素方案: 等所有请求完成再返回<br>→ 先到的请求被后到的拖慢</p></div>
 
     <h3>Continuous Batching（迭代级调度）</h3>
-    <div class="prose-outline"><p>Yu et al. (2022) - Orca<br>不是等整个 batch 完成，而是每步都可以加入/移除请求</p><p><strong>每个 decode step:</strong><br>1. 检查是否有新请求到达 → 加入 batch<br>2. 检查是否有请求完成 → 移除<br>3. 对所有活跃请求做一步 decode</p><p>效果: 吞吐量 10-20× 提升</p></div>
+    <div class="prose-outline"><p>Yu et al. (2022) - Orca<br>不是等整个 batch 完成，而是每步都可以加入/移除请求</p><p><strong>每个 decode step:</strong><br>1. 检查是否有新请求到达 → 加入 batch<br>2. 检查是否有请求完成 → 移除<br>3. 对所有活跃请求做一步 decode</p><p><strong>Paper-specific result：</strong>Orca 在论文的 GPT-3 175B、指定硬件与请求负载下，相对 NVIDIA FasterTransformer 报告了同等 latency 下最高 36.9× throughput。这个数字不能脱离 baseline、模型、arrival trace 与 latency target 当成 continuous batching 的普适倍数。</p></div>
 
     <h3>Selective Batching</h3>
     <div class="prose-outline"><p>问题: 不同请求长度不同，不能组成规则 tensor</p><p><strong>解决方案:</strong><br>- Attention: 每个序列单独处理（或 padding）<br>- 非 attention: 拼接所有序列 [total_tokens, hidden_dim]</p><p>这样非 attention 部分仍然高效</p></div>
@@ -367,7 +367,7 @@ x_quantized = round(x / scale)
       <tr><td>减少 KV cache</td><td>GQA, MLA, CLA, local</td><td>2-32× 内存节省</td></tr>
       <tr><td>减少模型成本</td><td>量化、结构化剪枝、蒸馏</td><td>降低权重流量与计算量；收益需实测</td></tr>
       <tr><td>投机解码</td><td>draft model</td><td>2-3× 加速</td></tr>
-      <tr><td>系统优化</td><td>continuous batching, paged attention</td><td>10-20× 吞吐</td></tr>
+      <tr><td>系统优化</td><td>continuous batching, paged attention</td><td>减少空槽与 KV 碎片；收益依 engine、请求分布与 latency 目标实测</td></tr>
     </table>
 
     <div class="card idea">
@@ -523,7 +523,9 @@ x_quantized = round(x / scale)
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script src="../assets/practice-bank.js?v=20260826a"></script>
+  <script src="../assets/practice-bank-advanced.js?v=20260826a"></script>
   <script src="../assets/deep-practice.js?v=20260826a"></script>
+  <script src="../assets/lesson-layout.js?v=20260826a"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260814f"></script>

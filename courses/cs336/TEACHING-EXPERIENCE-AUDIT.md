@@ -1,6 +1,38 @@
-# CS336 Lesson 1–10 教学体验重构审查
+# CS336 Lesson 1–19 教学体验重构审查
 
 日期：2026-08-26
+
+## 第二阶段：Lesson 11–19 与统一教材页骨架
+
+日期：2026-08-27
+
+- Lesson 11–19 已接入与 Lesson 1–10 相同的诊断练习系统。每课新增 3 个课前回收题、4 个正文内 Concept Check、4 个二次验证题、5 个四级 Deep Quiz 和 3 个闭卷开放题。
+- 19 课统一使用紧凑 lesson hero、30 秒知识地图、最多 4 个 learning outcomes、约 820px 正文和 200–230px sticky lesson TOC；移动端 TOC 折叠到正文上方。
+- Deep Quiz 统一区分 `Understand / Distinguish / Derive / Transfer`。错误反馈不只显示正确项，还指出所选 distractor 对应的 misconception，并立即给同机制变体题。
+- 正文视觉语法收敛为 `Mental Model / Derivation / Misconception / Concept Check / Deep Dive` 五类；普通正文保持无卡片，Deep Dive 默认折叠，课尾能力清单升级为闭卷复述区。
+- 全 19 课运行时回归通过：每课 4 个 inline checks、5 个 Deep Quiz、3 个开放题、0 个重复旧 quiz、0 个默认展开 Deep Dive、0px 横向溢出。
+
+### Lesson 11–19 新增练习重点
+
+| Lesson | 核心操作 | 重点诊断的 misconception | Inline + Follow-up | Deep Quiz | 开放题 |
+|---|---|---|---:|---:|---:|
+| 11 · Scaling details | residual、bootstrap、外推、lifetime cost | 拟合好=外推可靠；一次训练成本=全生命周期成本 | 4 + 4 | 5 | 3 |
+| 12 · Evaluation | PPL、judge bias、contamination、test-time compute | 单 benchmark=整体能力；高分自动等于有用/可靠/安全 | 4 + 4 | 5 | 3 |
+| 13 · Data sources | provenance、mixture、license、data pipeline | 数据更多必更好；可访问=可训练；mixture 只看规模 | 4 + 4 | 5 | 3 |
+| 14 · Filtering / Dedup | extraction、filter error、Jaccard、MinHash | 过滤器准确率高就无偏；MinHash 给 exact duplicate | 4 + 4 | 5 | 3 |
+| 15 · SFT / RLHF | loss mask、preference、KL、reward hacking | SFT 对 prompt 求 loss；reward 上升=真实偏好必上升 | 4 + 4 | 5 | 3 |
+| 16 · RLVR | group advantage、sparse reward、verifier exploit、on-policy | verifier 可判分=任务已解决；old rollouts 永远可复用 | 4 + 4 | 5 | 3 |
+| 17 · Multimodal / RL | CLIP/SigLIP、projector shape、visual token budget | projector 消除模态差异；更多视觉 token 永远更好 | 4 + 4 | 5 | 3 |
+| 18 · Formal reasoning | proof/test/spec、verifier loop、trusted kernel | 通过测试=证明正确；verifier 强=无奖励漏洞 | 4 + 4 | 5 | 3 |
+| 19 · Systems / FlashAttention | IO-aware dataflow、roofline、Amdahl、profiling | FLOPs 不变=速度不变；kernel 2×=端到端 2× | 4 + 4 | 5 | 3 |
+
+### 本阶段技术准确性收紧
+
+- Lesson 1 的 tokenizer efficiency 统一使用 bytes/token；pre-tokenization 明确为“不得跨 specification 产生的 boundary merge”。
+- Lesson 4 将 `O(n²)` 精确限定为 naive attention intermediate，而不是笼统的“推理内存”；decode KV cache 单独说明为随 cached context 线性增长。
+- Lesson 8 将 FSDP 表述为 PyTorch 原生 fully sharded data parallelism；仅说明 `FULL_SHARD` 的状态分片行为与 ZeRO Stage 3 高度类似，不再把二者写成同一个实现。
+- Lesson 10 将 local-attention KV cache 表述为受 window size 上界约束；continuous batching 数字绑定 Orca 的模型、baseline、负载和 latency 条件，不再写成普适倍数。
+- 同时修复 Lesson 9 与 Lesson 15 两处错误闭合标签，避免浏览器将后续页面错误继承为粗体。
 
 ## 本轮统一验收口径
 

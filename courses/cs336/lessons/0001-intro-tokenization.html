@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 1 课：课程总览与 Tokenization — CS336</title>
-  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/course.css?v=20260827a">
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
@@ -242,7 +242,7 @@ ord("你") = 20320</code></pre>
       <li>语义粒度太细——单个字符几乎没有意义</li>
     </ul>
 
-    <p>字符级 tokenization 的压缩比 ≈ 1 字符/token，压缩效率极低。</p>
+    <p>若统一使用前面定义的 <strong>bytes/token</strong>，字符级 tokenizer 的数值取决于 UTF-8：ASCII 字符约为 1 byte/token，而常见中文字符通常约为 3 bytes/token。不能把“1 字符/token”与 bytes/token 当成同一个单位；这里真正的问题是 token 数仍大致随字符数增长。</p>
 
     <hr class="rule">
 
@@ -288,7 +288,7 @@ segments = regex.findall(pattern, "I'll say supercalifragilisticexpialidocious!"
       <li>未见过的词只能映射到 <code>UNK</code> token——这既丑陋，又会扰乱 perplexity 计算</li>
     </ul>
 
-    <p>词级 tokenization 的压缩比高（~4 字符/token），但词表问题让它不实用。</p>
+    <p>词级 tokenization 往往能得到更高的 bytes/token，但具体数值取决于语言、UTF-8 byte 长度和语料中的词长分布；不能把“约 4 字符/token”直接塞进 bytes/token 口径。它更根本的问题仍是开放词表、UNK 与巨大 vocabulary。</p>
 
     <hr class="rule">
 
@@ -370,7 +370,7 @@ merge table 记录 rank 1: (ab,c) → abc</code></pre>
     </div>
 
     <p><strong>Training 会做的事：</strong>统计 frequency；创建新 token；扩展 vocabulary；修改训练 corpus segmentation；按学习次序产生 merge rank。</p>
-    <p><strong>训练停止条件：</strong>达到目标词表大小、达到 merge 次数，或已没有可合并 pair。若有 256 个基础 byte 且没有额外 special tokens，做 (M) 次有效 merge 后词表大小是 (256+M)。这是 <span class="claim-tag">Exact identity</span>，不是经验近似。</p>
+    <p><strong>训练停止条件：</strong>达到目标词表大小、达到 merge 次数，或已没有可合并 pair。若有 256 个基础 byte 且没有额外 special tokens，做 \(M\) 次有效 merge 后词表大小是 \(256+M\)。这是 <span class="claim-tag">Exact identity</span>，不是经验近似。</p>
 
     <h3 id="bpe-encoding">算法二：Encoding 只执行已有规则</h3>
     <p>现在假设训练已经结束，得到：</p>
@@ -475,7 +475,7 @@ merge table:
     <h3>GPT-2 的改进</h3>
     <p>原始的 BPE 直接在字节上运行。GPT-2 做了两个关键改动：</p>
     <ul>
-      <li><strong>Pre-tokenization</strong>：先用正则把文本拆成"词"，再在每个词内部运行 BPE。这防止跨词边界合并（如把 "cat" + "erpillar" 合并）。</li>
+      <li><strong>Pre-tokenization</strong>：先按 tokenizer specification 把文本切成 pieces，再只在每个 piece 内运行 BPE。关键不是禁止某种“词片段”，而是<strong>任何 merge 都不能跨 pre-token boundary</strong>；例如若 pre-tokenizer 得到 <code>[cat] [!]</code>，边界两侧的 <code>t</code> 与 <code>!</code> 就不是合法候选 pair。</li>
       <li><strong>特殊 token</strong>：如 <code>&lt;|endoftext|&gt;</code>，不参与 BPE 合并，始终作为一个整体。</li>
     </ul>
 
@@ -626,7 +626,9 @@ merge table:
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script src="../assets/practice-bank.js?v=20260826a"></script>
+  <script src="../assets/practice-bank-advanced.js?v=20260826a"></script>
   <script src="../assets/deep-practice.js?v=20260826a"></script>
+  <script src="../assets/lesson-layout.js?v=20260826a"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260814f"></script>

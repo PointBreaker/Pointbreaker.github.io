@@ -1,7 +1,7 @@
 (function () {
   const bank = window.CS336PracticeBank;
   const page = document.querySelector('.page');
-  const lessonMatch = location.pathname.match(/\/(00(?:0[1-9]|10))-[^/]+\.html$/);
+  const lessonMatch = location.pathname.match(/\/(00(?:0[1-9]|1[0-9]))-[^/]+\.html$/);
   if (!bank || !page || !lessonMatch) return;
 
   const lesson = bank[lessonMatch[1]];
@@ -72,13 +72,14 @@
       });
       feedback.className = 'practice-explanation ' + (correct ? 'is-correct' : 'is-incorrect');
       const heading = correct
-        ? '✓ 正确：你使用了正确的对象关系。'
+        ? '✓ 正确：这条推理链成立。'
         : '✗ 需要修正：你选择了 ' + letters[choice] + '。';
       const reasons = options.map((option, index) =>
         '<li class="' + (index === answer ? 'is-answer' : '') + '"><strong>' +
         letters[index] + '.</strong> ' + explanations[index] + '</li>'
       ).join('');
-      feedback.innerHTML = '<p class="practice-result">' + heading + '</p>' +
+      const selectedReason = correct ? '' : '<p><strong>你的选择错在哪里：</strong>' + explanations[choice] + '</p>';
+      feedback.innerHTML = '<p class="practice-result">' + heading + '</p>' + selectedReason +
         '<p><strong>正确答案为什么成立：</strong>' + explanations[answer] + '</p>' +
         '<ol class="option-reasons">' + reasons + '</ol>';
       submit.hidden = true;
@@ -157,7 +158,7 @@
     if (!anchor || !lesson.deep?.length) return;
     const section = el('section', 'deep-quiz');
     section.setAttribute('aria-labelledby', 'deep-quiz-heading');
-    const heading = el('h2', '', 'Deep Concept Quiz · 跨章节迁移');
+    const heading = el('h2', '', 'Deep Quiz · 四级理解验证');
     heading.id = 'deep-quiz-heading';
     const description = el('p', '', '这些题不按正文顺序排列。提交后会解释四个选项各自对应的 reasoning；可以重试。');
     const progress = el('p', 'deep-quiz-progress', '已完成 0 / ' + lesson.deep.length + ' · 答对 0');
@@ -165,10 +166,18 @@
     const stack = el('div', 'deep-quiz-stack');
     let completed = 0;
     let correctCount = 0;
+    const levels = [
+      ['Level 1', 'Understand'],
+      ['Level 2', 'Distinguish'],
+      ['Level 3', 'Derive'],
+      ['Level 4', 'Transfer']
+    ];
     lesson.deep.forEach((question, index) => {
       const wrapper = el('details', 'deep-quiz-item');
       if (index === 0) wrapper.open = true;
-      const summary = el('summary', '', '综合题 ' + (index + 1));
+      const level = levels[Math.min(index, levels.length - 1)];
+      const summary = el('summary');
+      summary.innerHTML = '<span class="deep-quiz-level">' + level[0] + ' · ' + level[1] + '</span>题目 ' + (index + 1);
       const body = createQuestion(question, 'deep', (correct) => {
         completed += 1;
         if (correct) correctCount += 1;
@@ -186,7 +195,7 @@
     if (!anchor || !lesson.open?.length) return;
     const section = el('section', 'open-practice');
     section.setAttribute('aria-labelledby', 'open-practice-heading');
-    const heading = el('h2', '', '不用选项，自己讲一遍');
+    const heading = el('h2', '', 'Explain It Yourself · 不看正文先讲一遍');
     heading.id = 'open-practice-heading';
     section.appendChild(heading);
     lesson.open.forEach(([prompt, guide]) => {

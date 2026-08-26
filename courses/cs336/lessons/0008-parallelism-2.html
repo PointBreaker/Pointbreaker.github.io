@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 8 课：ZeRO 与 FSDP — CS336</title>
-  <link rel="stylesheet" href="../assets/course.css">
+  <link rel="stylesheet" href="../assets/course.css?v=20260827a">
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
@@ -49,7 +49,8 @@
 DDP                 copy        copy          copy
 ZeRO-1              copy        copy          shard
 ZeRO-2              copy        shard         shard
-ZeRO-3 / FSDP       shard       shard         shard
+ZeRO-3 / FSDP FULL_SHARD
+                    shard       shard         shard
 
 steady-state shard ≠ peak memory during all-gather
 state sharding ≠ activation sharding</code></pre></div>
@@ -165,10 +166,10 @@ ZeRO Stage 3: 2P  = 140 GB/GPU   ← 还是放不下（但接近了！）
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="fsdp">FSDP：PyTorch 的 ZeRO 实现</h2>
+    <h2 id="fsdp">FSDP：PyTorch 原生的 fully sharded data parallelism</h2>
 
     <h3>什么是 FSDP？</h3>
-    <p>FSDP (Fully Sharded Data Parallel) 是 PyTorch 1.11+ 内置的 ZeRO Stage 3 实现。</p>
+    <p>FSDP (Fully Sharded Data Parallel) 是 PyTorch 原生的 fully sharded data parallelism。其 <code>FULL_SHARD</code> 会分片 parameters、gradients 与 optimizer states，因此<strong>状态分片行为与 ZeRO Stage 3 的核心思想高度类似</strong>；但两者不是同一个框架实现，也不应把所有 FSDP 配置都等同于 ZeRO-3。</p>
 
     <details class="deep-dive">
       <summary>Implementation · PyTorch FSDP 包装示例</summary>
@@ -209,7 +210,7 @@ model = FSDP(
       <h3>FSDP 策略对比</h3>
       <table>
       <tr><th>策略</th><th>描述</th><th>内存</th><th>通信</th></tr>
-      <tr><td>FULL_SHARD</td><td>ZeRO Stage 3，全分片</td><td>持久模型状态最低</td><td>参数 gather 最频繁</td></tr>
+      <tr><td>FULL_SHARD</td><td>参数、梯度、optimizer state 全分片；行为与 ZeRO-3 高度类似</td><td>持久模型状态最低</td><td>参数 gather 最频繁</td></tr>
       <tr><td>SHARD_GRAD_OP</td><td>反向后分片梯度与 optimizer states；前向参数保持未分片</td><td>介于 DDP 与 FULL_SHARD</td><td>依 PyTorch 版本和 reshard 行为而定</td></tr>
       <tr><td>NO_SHARD</td><td>不分片；新代码通常直接使用 DDP</td><td>模型状态复制</td><td>梯度 All-Reduce</td></tr>
       <tr><td>HYBRID_SHARD</td><td>组内 FULL_SHARD，组间复制</td><td>按 shard group 缩小</td><td>组内 gather/scatter + 组间同步</td></tr>
@@ -468,7 +469,9 @@ MFU ≈ 0.5
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
   <script src="../assets/practice-bank.js?v=20260826a"></script>
+  <script src="../assets/practice-bank-advanced.js?v=20260826a"></script>
   <script src="../assets/deep-practice.js?v=20260826a"></script>
+  <script src="../assets/lesson-layout.js?v=20260826a"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
