@@ -255,7 +255,7 @@ x_quantized = round(x / scale)
     <div class="prose-outline"><p><strong>Dettmers et al. (2022):</strong><br>1. 对大多数元素做 int8 量化<br>2. 对 outlier 保持 fp16<br>3. 矩阵乘法: outlier 用 fp16, 其余用 int8</p><p>效果: 几乎无损，但 15-23% 更慢（因为混合精度）</p></div>
 
     <h3>AWQ (Activation-aware Weight Quantization)</h3>
-    <div class="prose-outline"><p><strong>Lin et al. (2023):</strong><br>关键洞察: 不是所有权重都同等重要<br>对应大 activation 的权重更重要</p><p><strong>方法:</strong><br>1. 分析 activation 找出重要权重 (0.1-1%)<br>2. 重要权重保持 fp16<br>3. 其余量化到 int3/int4</p><p>效果: 4× 内存降低, 3.2× 加速</p></div>
+    <div class="prose-outline"><p><strong>Lin et al. (2023) 的关键洞察：</strong>权重是否难以量化，不能只看权重自身；输入 activation 的分布会放大量化误差。AWQ 用一小批校准 activation 识别 salient channels，再搜索每个输入通道的缩放因子。</p><p><strong>方法：</strong><br>1. 统计 activation，定位对输出更敏感的输入通道<br>2. 对 activation 与 weight 做数学等价的逆向缩放：一边乘 \(s\)，另一边除 \(s\)<br>3. 把缩放后的权重统一量化到低比特，而不是永久保留一小撮 FP16 权重</p><p class="small"><strong>Implementation-specific：</strong>压缩率与端到端加速取决于 bit width、group size、kernel、batch 与硬件。论文中的单个速度数字不是所有 workload 的保证。</p></div>
 
     <details class="deep-dive">
       <summary>Supplement · 模型剪枝与蒸馏</summary>
@@ -290,7 +290,7 @@ x_quantized = round(x / scale)
     </div>
 
     <h3>算法</h3>
-    <div class="prose-outline"><p>投机解码 (Leviathan et al., 2023; Chen et al., 2023)</p><p>1. Draft 模型（小）生成 γ 个 token: d₁, d₂, ..., dᵧ<br>2. Target 模型（大）一次性评估: p(x|prefix + d₁ + ... + dᵧ)<br>3. 逐个验证:<br>   - 如果 p(d₁) > q(d₁) → 接受 d₁<br>   - 否则 → 从修正分布采样<br>4. 如果 d₁ 被接受，继续验证 d₂，直到拒绝或全部接受<br>5. 至少生成 1 个 token（保证进度）</p><p>关键: 生成的分布和直接采样完全一样！（数学保证）</p></div>
+    <div class="prose-outline"><p>投机解码 (Leviathan et al., 2023; Chen et al., 2023)</p><p>1. Draft 模型（小）按 \(q\) 生成 γ 个候选 token：\(d_1,d_2,\ldots,d_\gamma\)<br>2. Target 模型（大）一次并行算出这些位置的 \(p\)<br>3. 对每个候选抽一个随机数 \(u\sim U(0,1)\)：若 \(u\le \min(1,p(d_i)/q(d_i))\)，接受 \(d_i\)<br>4. 首次拒绝时，从归一化后的正差分布 \([p-q]_+\) 采样校正 token，并停止本轮验证<br>5. 若全部候选都接受，再从 target 的下一个位置采一个 token</p><p><strong>为什么不能只写“\(p(d_i)&gt;q(d_i)\) 就接受”？</strong>当 \(p&lt;q\) 时仍应有 \(p/q\) 的接受概率；少了这个随机步骤与拒绝校正，最终序列就不再严格服从 target 分布。</p><p><strong>Exact：</strong>规则正确实现时，输出分布与直接从 target 采样相同。<strong>Implementation-specific：</strong>是否加速取决于接受率、draft 成本、target 验证 shape 与系统实现。</p></div>
 
     <h3>为什么能加速？</h3>
     <div class="prose-outline"><p><strong>不使用投机解码:</strong><br>生成 γ 个 token → γ 次大模型前向 → γ × T_large</p><p><strong>使用投机解码:</strong><br>1 次 draft 前向 + 1 次大模型前向<br>→ T_small × γ + T_large<br>→ 如果 draft 足够准 ≈ T_large（一次前向生成 γ 个 token）</p><p>实际加速: 2-3×（取决于 draft 质量和接受率）</p></div>
@@ -429,11 +429,11 @@ x_quantized = round(x / scale)
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
-    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！AWQ 根据 activation 找出重要权重，只对重要权重保持高精度。" data-incorrect="AWQ 的核心是 activation-aware——根据 activation 找出重要权重，只对它们保持高精度。">
+    <div class="quiz" data-quiz="5" data-answer="b" data-correct="正确！AWQ 用 activation 识别敏感通道，再通过等价缩放改善统一低比特权重量化。" data-incorrect="AWQ 的关键不是永久保留一小撮 FP16 权重，而是 activation-aware 的通道缩放与统一低比特权重量化。">
       <p><strong>问题 5：</strong>AWQ 量化的核心思想是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">所有权重统一量化</button>
-        <button data-choice="b" aria-pressed="false">根据 activation 找出重要权重，只对它们保持高精度</button>
+        <button data-choice="b" aria-pressed="false">根据 activation 找出敏感通道，通过等价缩放降低统一低比特量化误差</button>
         <button data-choice="c" aria-pressed="false">只量化 attention 层</button>
         <button data-choice="d" aria-pressed="false">量化到 1 bit</button>
       </div>
@@ -522,6 +522,8 @@ x_quantized = round(x / scale)
   <script src="../assets/prism-python.js"></script>
   <script src="../assets/prism-bash.js"></script>
   <script src="../assets/quiz.js"></script>
+  <script src="../assets/practice-bank.js?v=20260826a"></script>
+  <script src="../assets/deep-practice.js?v=20260826a"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
