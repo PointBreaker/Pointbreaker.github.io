@@ -44,6 +44,20 @@
       <p>并行 workload → SM / tensor core 执行 → registers / shared memory / HBM 数据移动 → arithmetic intensity 与 roofline → coalescing / tiling / occupancy → CUDA、Triton 和 TPU 如何映射同一组约束。</p>
     </div>
 
+    <div class="lesson-contract"><h3>问题与 prerequisite refresher</h3><p>GPU 快不是因为单个 core 神奇，而是大量线程用相似控制流处理数据。先区分 FLOPs（工作量）、FLOP/s（计算速率）、bytes（容量/流量）与 bytes/s（带宽），本课才回答“慢在算，还是慢在搬”。</p></div>
+    <div class="object-map"><h3>数据离计算越近，容量通常越小</h3><pre><code class="language-plaintext">HBM → L2 → shared memory / L1 → registers → arithmetic units
+大/慢                                                   小/快
+
+kernel workload
+├─ math FLOPs
+├─ memory traffic bytes
+├─ parallel work / synchronization
+└─ resource use per block（registers, shared memory）
+     ↓
+occupancy 与 achieved throughput</code></pre></div>
+    <div class="worked-example"><h3>先算一个 vector add</h3><p>对 BF16 的 \(y=x+z\)，每元素约 1 FLOP，却至少读 \(x,z\) 各 2 bytes、写 \(y\) 2 bytes，算术强度约 \(1/6\) FLOP/byte；再多 ALUs 也无法消除这 6 bytes。相比之下，tile matmul 可让加载的元素参与多次 multiply-add，提高 reuse。Roofline 的意义正是把 toy traffic 推到真实 hardware ceiling。</p></div>
+    <div class="misconception"><h3>反例：GPU utilization 100% 仍可能很慢</h3><p>一个 bandwidth-bound kernel 可以持续占用 GPU，使 utilization 显示 100%，却只实现很低的峰值 FLOP/s；occupancy 也不是越高越好，若更大的 tile 用更多 registers、减少 occupancy，却显著增加数据复用，最终反而可能更快。</p></div>
+
     <h3>先看 GPU 为什么适合这类 workload</h3>
 
     <h3>CPU vs GPU</h3>
@@ -425,6 +439,12 @@ def fused_operation(x, w):
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · FLOPs 少为什么仍会慢</summary><p>BF16 <code>y=x+z</code> 每元素约 1 FLOP，最少读写 6 bytes。算术强度是多少，增加 Tensor Cores 能直接解决吗？</p><p><strong>答案：</strong>约 \(1/6\) FLOP/byte；主要瓶颈是数据流量时，增加计算峰值不会消除 HBM bytes。</p><p class="diagnosis">若只因 FLOPs 少便判断“必然快”，你遗漏了 roofline 的 bandwidth ceiling。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>FLOPs、FLOP/s、bytes、bandwidth 四个单位分别回答什么。</li><li>如何从 toy kernel 的读写量算 arithmetic intensity。</li><li>roofline 为什么给上界而不是性能承诺。</li><li>coalescing、tiling 与 fusion 分别减少哪类浪费。</li><li>为什么 utilization、occupancy 与 MFU 不能互换。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 6 课</h3><p>硬件层次给出了限制；下一课把一个 PyTorch expression 拆成 kernel launches，亲手用 benchmark、fusion 和 tiling改变数据路径。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <ol class="takeaways">
       <li>GPU 通过大量并行执行单元追求 throughput；性能来自并行度，不是单个 thread 更快。</li>

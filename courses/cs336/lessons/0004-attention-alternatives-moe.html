@@ -39,6 +39,17 @@
       <p>标准 attention 成本 → GQA / local 等减少 attention 开销 → MoE 让每 token 只激活部分参数 → routing / load balance / communication 成为新约束。</p>
     </div>
 
+    <div class="lesson-contract"><h3>本课问题与 prerequisite refresher</h3><p>标准 Transformer 的两种扩展压力不同：attention 随 context 增长，dense MLP 则让每个 token 使用全部 FFN 参数。先复习 \(QK^\top\) 的序列轴与 MLP 的逐 token 独立性，再比较“共享”“稀疏激活”究竟改的是哪个对象。</p></div>
+    <div class="object-map"><h3>不要把三种“变小”混在一起</h3><pre><code class="language-plaintext">GQA: query heads 保留，KV heads 共享 → KV cache / KV projection 变小
+local attention: 每个 query 可见的 key positions 变少 → attention edges 变少
+MoE: total expert parameters 很大，每 token 只路由到 top-k → active FLOPs 变小
+
+total parameters ≠ active parameters per token
+router probability ≠ attention probability
+capacity ≠ guaranteed throughput</code></pre></div>
+    <div class="worked-example"><h3>Toy routing</h3><p>4 个 experts、top-1 routing、8 个 tokens。若 7 个都选 expert 0，理论上每 token 仍只算一个 expert，但 expert 0 排队而其余空闲；若 capacity factor 只容纳 3 个 token，还会 drop 或 reroute。这个反例说明 MoE 的 FLOPs 优势不自动变成 wall-clock 优势，load balancing 与 all-to-all 是机制的一部分。</p></div>
+    <div class="misconception"><h3>关键误区</h3><p>“GQA 把整个模型缩小 \(h_q/h_{kv}\) 倍”错误，它主要减少 K/V 相关对象；“local attention 让所有长程依赖消失”也不必然成立，多层传播或间歇 global layers 仍可传递信息；“MoE 参数更多所以每 token FLOPs 必更多”混淆了 total 与 active parameters。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -392,6 +403,12 @@ def load_balancing_loss(router_logits, top_k, num_experts):
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · active parameters 与负载</summary><p>4 experts、top-1、8 tokens 全选 expert 0。每 token 是否仍只激活一个 expert？系统是否仍理想并行？</p><p><strong>答案：</strong>前者是，后者否；active FLOPs 稀疏，但负载集中且可能超过 capacity。</p><p class="diagnosis">若认为“只激活一个所以一定快”，你把算法 FLOPs 上限当成了均衡后的硬件吞吐。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>给定 query/KV heads，如何推 KV cache 的缩放比例。</li><li>local attention 为什么把每层 attention edges 从全连接改为窗口连接。</li><li>MoE 的 total、active、expert-capacity 三种规模为何不同。</li><li>为什么 router imbalance 会同时伤吞吐和训练信号。</li><li>为什么替代方案必须同时比较质量、FLOPs、memory 与 communication。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 5 课</h3><p>现在已经知道算法想减少哪些 FLOPs 与 bytes；下一课把这些逻辑对象放进真实 GPU memory hierarchy，解释为什么同样的数学量会有完全不同的 wall time。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

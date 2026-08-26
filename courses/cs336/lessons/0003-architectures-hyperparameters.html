@@ -39,6 +39,30 @@
       <p>Transformer block 数据流 → normalization / activation / position choices → attention 与 FFN shape → 参数和 FLOPs 核算 → 超参数组合成完整模型。</p>
     </div>
 
+    <div class="lesson-contract">
+      <h3>问题与 prerequisite refresher</h3>
+      <p>本课不是记组件名，而是回答：一个 token representation 怎样经过 attention、MLP 与 residual path，为什么某些改动让梯度、位置表达或资源账本更合理？先确认你会用最后一维做 linear projection，并知道 residual addition 要求两侧 shape 完全相同。</p>
+    </div>
+    <div class="object-map">
+      <h3>Transformer block 的对象关系</h3>
+      <pre><code class="language-plaintext">x:[B,T,d]
+├─ norm → Q,K,V → causal attention → [B,T,d] ─┐
+│                                             ├─ residual add
+└─────────────────────────────────────────────┘
+      ↓ norm → MLP d→d_ff→d → residual add → next block
+
+architecture choice → tensor shape → parameters / FLOPs / memory
+hyperparameter value → capacity / optimization / hardware efficiency</code></pre>
+    </div>
+    <div class="worked-example">
+      <h3>从 toy shape 到真实模型</h3>
+      <p>令 \(B=2,T=4,d=8,h=2\)，则每头 \(d_h=4\)。Q/K/V 均从 <code>[2,4,8]</code> 投影并 reshape 为 <code>[2,2,4,4]</code>；每头 score 是 <code>[4,4]</code>，合并 heads 后回到 <code>[2,4,8]</code>，才能与 residual 相加。一般化后 score 元素随 \(B h T^2\) 增长，这是 <span class="claim-tag">Exact shape</span>；写成 \(O(T^2)\) 是 <span class="claim-tag">Asymptotic</span>，并不告诉你常数或真实 kernel 时间。</p>
+    </div>
+    <div class="misconception">
+      <h3>为什么不是“组件越新越好”</h3>
+      <p>Pre-Norm 不是因为 LayerNorm “更准确”，而是给梯度保留更直接的 residual path；RMSNorm 少做 mean-centering 不代表对任何模型都更优；FlashAttention 改变 IO 顺序而不近似 attention 数学。反例：若把 attention 输出宽度改成 \(2d\) 却不加 output projection，residual addition 直接 shape 不合法。</p>
+    </div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -501,6 +525,19 @@ w = torch.randn(d_model, d_model) * 0.02
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · residual shape 迁移题</summary><p>输入 \(x:[3,128,512]\)，attention 输出若为 <code>[3,128,1024]</code>，能否直接 residual add？</p><p><strong>答案：</strong>不能；逐元素加法要求 shape 可广播且这里应保持 model width。需先用 output projection 映射回 512。</p><p class="diagnosis">若答“能，因为 token 数相同”，说明你只检查了 sequence 轴，漏掉 residual 的 feature-axis invariant。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain">
+      <h2 id="can-explain">你现在应该能够解释</h2>
+      <ul>
+        <li>如何沿 block 数据流检查每个 tensor shape 与 residual invariant。</li>
+        <li>Pre-Norm 为什么给梯度更直接的路径，以及它并非无条件更优。</li>
+        <li>attention 与 MLP 的参数/FLOPs 如何由 \(d,h,d_{ff},T\) 推出。</li>
+        <li>RoPE 编码的是相对位置信息关系，而不是“给 token 加一个编号”。</li>
+        <li>FlashAttention 为什么减少 HBM traffic 却保持 exact attention。</li>
+      </ul>
+    </section>
+    <div class="lesson-connection"><h3>通往第 4 课</h3><p>标准 attention 与 dense MLP 的对象和成本已经明确；下一课才有资格问：共享 KV、限制 attention 范围或只激活部分 experts 时，究竟省了哪项成本、又新增了什么误差与通信。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

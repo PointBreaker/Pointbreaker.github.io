@@ -39,6 +39,18 @@
       <p>经验 loss 曲线 → 参数 / 数据 / compute 幂律 → Chinchilla compute-optimal 配比 → 拟合与外推 → 用不确定性约束训练规模决策。</p>
     </div>
 
+    <div class="lesson-contract"><h3>本课问题与 prerequisite refresher</h3><p>Scaling law 不是自然定律，而是指定 model family、data mixture、optimizer 与训练区间上的经验模型。先复习 log：若 \(y=ax^{-\alpha}\)，则 \(\log y=\log a-\alpha\log x\)，log-log 图上的斜率才对应 exponent。</p></div>
+    <div class="object-map"><h3>把预算与观测分开</h3><pre><code class="language-plaintext">choice: N parameters, D processed tokens, recipe
+        ↓ approximate compute C ≈ 6ND
+training runs → observed validation losses
+        ↓ fit empirical function + uncertainty
+prediction inside range / extrapolation outside range
+        ↓ decision under compute, time, memory, inference constraints
+
+curve fit ≠ causal explanation ≠ guaranteed capability</code></pre></div>
+    <div class="worked-example"><h3>同一 toy compute budget</h3><p>忽略常数，令 \(ND=10^6\)。可选 \(N=10^3,D=10^3\) 或 \(N=10^4,D=10^2\)。两者一阶训练 compute 相同，却可能分别受 model capacity 与 data scarcity 限制。IsoFLOP 实验是在多个预算上各训练多组 \((N,D)\)，找每条预算曲线的最低点，再拟合最优 \(N(C),D(C)\)；不是从 6ND 单独推导出 Chinchilla 比例。</p></div>
+    <div class="misconception"><h3>反例与结论类型</h3><p><span class="claim-tag approx">Napkin math</span>\(C\approx6ND\)；<span class="claim-tag hardware">Empirical / implementation-specific</span>拟合 exponent 与“约 20 tokens/parameter”都依赖实验范围。若数据质量改变、重复多 epoch、架构或目标变了，同一比例可能不再最优。Loss 平滑下降也不保证某项离散能力在相同比例上变化。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -371,6 +383,12 @@ D_opt = 20 × N_opt
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · 6ND 能否推出最优比例</summary><p>固定 \(ND=10^6\)，为什么不能仅凭这个约束断言 \(N=D=1000\) 最优？</p><p><strong>答案：</strong>6ND 只给等计算预算组合；还需要经验 loss surface 或 IsoFLOP runs 比较 model-limited 与 data-limited 区域。</p><p class="diagnosis">若认为乘积固定就应两数相等，你把对称的代数约束误当成了对称的学习曲线。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>幂律在 log-log 坐标为何近似直线。</li><li>IsoFLOP 实验如何从多组 run 找 compute-optimal 点。</li><li>6ND 约束为什么不能单独决定 \(N:D\) 比例。</li><li>Kaplan 与 Chinchilla 差异为何可能来自实验方法与范围。</li><li>为什么 interpolation、extrapolation 与能力预测风险不同。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 10 课</h3><p>训练 compute-optimal 并不等于部署最优：增大 \(N\) 会增加每个 decode step 的权重流量，增大 context 会增加 KV。下一课把 inference 成本加入决策。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

@@ -39,6 +39,17 @@
       <p>Base model → instruction / response demonstrations → SFT → preference pairs → reward / preference optimization → 检查 helpfulness、honesty 与 reward hacking。</p>
     </div>
 
+    <div class="lesson-contract"><h3>本课问题与 prerequisite refresher</h3><p>预训练学的是 next-token distribution，不等于学会服从 instruction。SFT 提供目标 response tokens；preference learning 比较同一 prompt 下的候选；RL 再改变采样 policy。先分清 demonstration、preference pair、reward model、policy 与 reference policy。</p></div>
+    <div class="object-map"><h3>三种信号的对象不同</h3><pre><code class="language-plaintext">SFT: prompt + target response → token cross-entropy → policy
+Preference: prompt + chosen/rejected → comparison objective → reward/preference model
+RLHF: policy rollouts → reward - KL pressure → advantage → policy update
+
+human preference label ≠ scalar reward truth
+reward model score ≠ real-world helpfulness
+KL penalty ≠ safety guarantee</code></pre></div>
+    <div class="worked-example"><h3>为什么 SFT 常只对 response 算 loss</h3><p>序列是 <code>[system][user][assistant]</code>。Prompt tokens 是条件，assistant tokens 是要模仿的目标；mask prompt loss 可避免训练目标被长 prompt 主导。若把所有 tokens 都算 loss，模型主要学复述输入格式也可能得到低 loss，却没有更好回答。</p></div>
+    <div class="misconception"><h3>Reward hacking 反例</h3><p>若偏好数据中较长答案常获胜，reward model 可能把长度当代理；policy 于是堆砌文字提高 reward，却降低真实质量。KL 约束防止一步漂得太远，但 reference policy 本身有缺陷时，靠近它不等于 honest 或 safe。必须用独立 eval 与 adversarial probes 检查。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -372,6 +383,12 @@ for batch in prompts:
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · SFT loss mask</summary><p>Prompt 900 tokens、response 100 tokens。若全部 token 等权算 loss，哪类目标更容易主导？</p><p><strong>答案：</strong>prompt reconstruction 占 90% positions，可能压过 response imitation；response-only mask 把 prompt 作为条件。</p><p class="diagnosis">若认为每个样本只算一次所以长度无关，你忽略了 token-level cross-entropy 的求和/平均对象。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>base model、SFT policy、reward model 与 reference policy 各是什么。</li><li>SFT response-only masking 为什么改变有效训练目标。</li><li>偏好 pair 如何提供相对而非绝对监督。</li><li>KL penalty 控制什么、为什么不是安全保证。</li><li>reward hacking 是代理目标与真实目标分离，而非简单“模型作弊”。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 16 课</h3><p>人类偏好昂贵且主观；下一课转向数学答案、代码测试等可验证奖励，并追踪 rollout group 如何形成相对 advantage。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

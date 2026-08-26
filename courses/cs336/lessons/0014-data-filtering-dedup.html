@@ -39,6 +39,19 @@
       <p>HTML 提取 → 规则 / 模型过滤 → 文档与片段去重 → contamination 检查 → 数据配比 → 用下游指标验证过滤是否真的有益。</p>
     </div>
 
+    <div class="lesson-contract"><h3>问题与 prerequisite refresher</h3><p>过滤器不是“质量真相”，而是一个会产生 false positive/negative 的决策器；去重也先要定义 equality 或 similarity。集合 \(A,B\) 的 Jaccard 是 \(|A∩B|/|A∪B|\)，MinHash 只是高效估计它，不直接理解语义。</p></div>
+    <div class="object-map"><h3>每个门都改变数据分布</h3><pre><code class="language-plaintext">HTML → extracted text → normalized document → shingles
+             ↓ filter scores             ↓ signatures
+        accept / reject             exact / near-duplicate graph
+             └──────────────┬──────────────┘
+                       selected corpus
+                            ↓ mixture → tokenize → train → evaluate
+
+filter score ≠ ground-truth quality
+hash collision ≠ guaranteed duplicate</code></pre></div>
+    <div class="worked-example"><h3>手算一个 Jaccard 反例</h3><p>A 的 shingles 为 {语言, 模型, 训练}，B 为 {语言, 模型, 推理}，交集 2、并集 4，所以 Jaccard=0.5。若阈值 0.8，它们不会被判 near-duplicate；若 shingle 太小，常见模板又可能让无关页面相似。MinHash 增加 hash 数只减少估计方差，不修复错误的 document normalization 或 threshold。</p></div>
+    <div class="misconception"><h3>为什么“过滤越严，质量越高”会错</h3><p>用百科风格训练的 classifier 可能删掉口语、方言、代码或少数语言，分数变“干净”却损害目标覆盖。先去重还是先过滤也会影响计算量与代表文档选择。正确验收不是只报 retained ratio，而是审计样本、subgroup recall、contamination 与训练后的下游变化。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -433,6 +446,12 @@ def minhash_signature(shingles, num_hashes=128):
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · Jaccard 迁移题</summary><p>A={a,b,c,d}，B={b,c,e}，Jaccard 是多少？阈值 0.5 时是否判 near-duplicate？</p><p><strong>答案：</strong>交集 2、并集 5，\(J=0.4\)，不通过 0.5。</p><p class="diagnosis">若用 \(2/7\)，你把集合并集误算成元素数直接相加，没有扣除交集。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>exact、near 与 semantic dedup 的对象和错误类型。</li><li>如何手算 shingles 的 Jaccard，并说明 MinHash估计什么。</li><li>Bloom filter false positive 会怎样影响保留数据。</li><li>过滤 threshold 为什么是 precision/recall 与分布覆盖的权衡。</li><li>为什么最终要用训练结果验证 data pipeline。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 15 课</h3><p>预训练数据决定 base model 的分布；下一课换成更小但目标更明确的 demonstrations 与 preferences，学习“像助手一样回答”而不只是续写。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

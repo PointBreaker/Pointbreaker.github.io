@@ -39,6 +39,18 @@
       <p>选择函数形式 → 设计小规模 runs → 拟合参数与置信区间 → 检查 residual / regime shift → 外推候选规模 → 用敏感性分析做决策。</p>
     </div>
 
+    <div class="lesson-contract"><h3>问题与 prerequisite refresher</h3><p>本课把“曲线看起来像直线”升级为可审计预测。Parameter 是模型中待拟合的系数，hyperparameter 是训练设置，两者不要混淆；residual = observation − fitted prediction，它的结构比单个 \(R^2\) 更能暴露模型错在哪里。</p></div>
+    <div class="object-map"><h3>一次可信外推的证据链</h3><pre><code class="language-plaintext">run design → observations → fit parameters
+                         ├→ held-out residuals
+                         ├→ bootstrap / uncertainty
+                         └→ regime-shift checks
+                                  ↓
+candidate extrapolation → sensitivity analysis → decision
+
+point estimate ≠ confidence interval ≠ guarantee</code></pre></div>
+    <div class="worked-example"><h3>为什么 1B→1T 不是“多一点”</h3><p>参数规模从 \(10^9\) 到 \(10^{12}\) 是 1000×。即使 log-space 只向右移动 3 个 decade，任何很小的 exponent 或 floor 偏差都会被外推放大。用 runs 拟合后，应故意留出最大的若干规模做 pseudo-extrapolation：如果连已知的大 run 都预测不好，就没有理由信任更远预测。</p></div>
+    <div class="misconception"><h3>为什么不是选训练误差最低的函数</h3><p>更灵活的函数可追噪声并给出荒谬 asymptote；随机 split 也可能让相邻规模泄漏趋势。反例：所有 residual 在小 \(N\) 为正、大 \(N\) 为负，即使平均 residual 为零，也说明函数形式存在系统偏差。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -515,6 +527,12 @@ print(f"预测 loss: {result.fun:.4f}")</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · residual 平均为零够不够</summary><p>小模型 residual 全为正、大模型全为负，但整体平均为零。Fit 是否可信？</p><p><strong>答案：</strong>不可信；残差随规模有系统结构，说明函数形式或 regime 假设错误。</p><p class="diagnosis">若只看均值，你把“误差互相抵消”错当成了“误差是无结构噪声”。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>log-linear 与 nonlinear fitting 各自隐含什么误差模型。</li><li>为什么 held-out 最大规模比随机 holdout 更接近真实外推测试。</li><li>bootstrap 区间表示什么、不表示什么。</li><li>如何从 residual pattern 识别 floor、regime shift 或坏 run。</li><li>为什么决策要报告敏感性而不是只给一个最优整数。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 12 课</h3><p>Scaling law 预测的是某个测量量；下一课追问这个量是否真的代表我们关心的能力，以及 tokenizer、prompt、judge 和 contamination 如何改变测量。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

@@ -39,6 +39,19 @@
       <p>视觉编码器 → 图文对比对齐 → projector 接入 LLM → 动态分辨率与位置编码 → 多图 / 视频 → 离散视觉 token 支持理解与生成。</p>
     </div>
 
+    <div class="lesson-contract"><h3>本课问题与 prerequisite refresher</h3><p>LLM 接收的是 \(d_{model}\) 维 token embeddings，图片却是 \(H×W×C\) pixels。视觉模型首先把 image patches 变成一串 vectors；projector 再把视觉维度映射到 LLM embedding space。维度对齐只是接口合法，不等于语义已经对齐。</p></div>
+    <div class="object-map"><h3>两条多模态路线</h3><pre><code class="language-plaintext">understanding:
+image → patches → vision encoder → visual features → projector → LLM tokens → text
+
+unified generation:
+image → discrete visual tokenizer ↔ visual token IDs
+text  → text tokenizer          ↔ text token IDs
+                  ↓ joint sequence model
+
+pixel ≠ patch ≠ visual embedding ≠ discrete visual token</code></pre></div>
+    <div class="worked-example"><h3>分辨率为什么变成 token budget</h3><p>一张 \(224×224\) 图用 \(16×16\) patches 得 \(14×14=196\) visual tokens；长宽各翻倍到 \(448\)，token 数变 \(28×28=784\)，是 4×。若做 full attention，相关 score 规模随总 sequence length 平方增长。动态分辨率保留细节，却不是免费“看得更清楚”。</p></div>
+    <div class="misconception"><h3>为什么不是把图片直接塞进 tokenizer</h3><p>文本 BPE 的 merge table定义 UTF-8 bytes 的切分，不能给连续 pixels 自动赋语义。CLIP 相似度高也只表示 learned embedding 上接近，不保证 OCR、计数或空间定位正确；projector 参数很少也不表示视觉信息没有瓶颈。</p></div>
+
     <hr class="rule">
 
     <h2 id="objectives">学习目标</h2>
@@ -202,6 +215,12 @@
     </div>
 
     <hr class="rule">
+
+    <details class="concept-check"><summary>Concept Check · 分辨率与 token 数</summary><p>16×16 patch 下，224×224 图有多少 patches？长宽都翻倍后多少？</p><p><strong>答案：</strong>\(14×14=196\)；翻倍后 \(28×28=784\)，是 4×。</p><p class="diagnosis">若答 2×，你只追踪了一条空间轴，漏掉 image token grid 有高和宽两维。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>pixel、patch、feature、embedding 与 visual token 的区别。</li><li>CLIP/SigLIP alignment 与 LLaVA-style generation 各训练什么。</li><li>分辨率如何推导为 visual token count 与 attention cost。</li><li>projector 为什么解决维度接口却不保证语义 grounding。</li><li>理解型与统一生成型模型为何需要不同表示取舍。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 18 课</h3><p>多模态输出更开放，也更难只靠 reference answer 检验；下一课转向 formal specification 与 verifier，理解“可检查”如何改变生成与搜索。</p></div>
 
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <ol class="takeaways">

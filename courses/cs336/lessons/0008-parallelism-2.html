@@ -44,6 +44,18 @@
       <p>DDP 状态冗余 → ZeRO 分阶段分片 optimizer / gradient / parameter → FSDP 按 unit All-Gather 参数、Reduce-Scatter 梯度 → mixed precision 与 checkpointing 继续压缩峰值 → 与 TP / PP 组合成多维并行。</p>
     </div>
 
+    <div class="lesson-contract"><h3>本课问题与 prerequisite refresher</h3><p>上一课知道 DDP 每卡有完整副本。本课逐项问：parameter、gradient、Adam \(m/v\) 在 forward、backward、update 的哪个时刻必须完整？若某对象只在局部时刻需要，就可能其余时间只保存 shard。</p></div>
+    <div class="object-map"><h3>ZeRO stages 改的是不同对象</h3><pre><code class="language-plaintext">                 parameter   gradient   optimizer m/v
+DDP                 copy        copy          copy
+ZeRO-1              copy        copy          shard
+ZeRO-2              copy        shard         shard
+ZeRO-3 / FSDP       shard       shard         shard
+
+steady-state shard ≠ peak memory during all-gather
+state sharding ≠ activation sharding</code></pre></div>
+    <div class="worked-example"><h3>4 ranks、12 个参数元素</h3><p>ZeRO-3 steady state 可让每 rank 常驻约 3 个 parameter elements。但某 FSDP unit forward 前，要 All-Gather 该 unit 的完整参数进行 matmul，计算后 reshard；backward 又可能 gather，随后 Reduce-Scatter gradients。由此可见“除以 4”描述常驻份额，不自动描述峰值。</p></div>
+    <div class="misconception"><h3>为什么不是 stage 越高永远越好</h3><p>Stage 3 容量最好，却增加 parameter materialization、通信次数与管理开销；小模型或慢网络上 DDP 可能更快。Activation checkpointing 也不是 sharding：它丢弃部分 forward activations，backward 时重算，用额外 FLOPs 换显存。</p></div>
+
     <h3>DDP 的冗余</h3>
     <p>在标准 Data Parallelism 中，每个 GPU 都存了完整副本：</p>
 
@@ -411,6 +423,12 @@ MFU ≈ 0.5
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · stage 与 peak</summary><p>ZeRO-3 在 4 ranks 上把参数常驻份额约降到 1/4，某 FSDP unit 计算时该 rank 是否永远只持有 1/4 unit 参数？</p><p><strong>答案：</strong>否；计算前通常 All-Gather 完整 unit，因此峰值包含 materialized unit。</p><p class="diagnosis">若答“永远 1/4”，你把 steady-state shard 账本当成了时间轴上的 peak 账本。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>ZeRO 1/2/3 分别消除哪一份复制。</li><li>FSDP unit 在 forward/backward 前后为何 gather、reshard、reduce-scatter。</li><li>为什么 steady-state 账本不能替代 peak-memory 账本。</li><li>checkpointing 与 sharding 分别交换计算和通信中的哪一种成本。</li><li>为什么 bytes/parameter 必须结合 dtype、stage 与临时 buffers。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 9 课</h3><p>系统已经给出可承受的模型、token 与计算预算；下一课反过来问：固定 compute 时，参数量 \(N\) 与数据量 \(D\) 应如何分配才可能获得更低 loss。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <ol class="takeaways">
       <li>DDP 的容量问题来自模型状态复制；集群总显存很多，不代表单个 rank 能容纳完整副本。</li>

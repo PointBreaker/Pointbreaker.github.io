@@ -39,6 +39,20 @@
       <p>可验证任务 → rollout sampling → verifier reward → group-relative advantage → policy update → 分析 exploration、reward hacking 与泛化。</p>
     </div>
 
+    <div class="lesson-contract"><h3>问题与 prerequisite refresher</h3><p>Policy 给完整 response 一个概率；rollout 是从 policy 采样的一条轨迹；verifier 把结果映射为 reward；advantage 衡量“比 baseline 好多少”。RLVR 的关键不是奖励绝对客观，而是某类结果可以低成本、可重复检查。</p></div>
+    <div class="object-map"><h3>从题目到更新</h3><pre><code class="language-plaintext">prompt
+  ↓ current policy samples G responses
+responses → verifier → rewards
+                     ↓ group baseline / normalization
+                  advantages
+                     ↓ clipped / KL-regularized objective
+                 updated policy
+
+verifiable outcome ≠ verified reasoning path
+group-relative advantage ≠ correctness probability</code></pre></div>
+    <div class="worked-example"><h3>4 条 rollout 的 group-relative 信号</h3><p>奖励为 [1,1,0,0]，均值 0.5；简单中心化 advantage 为 [0.5,0.5,-0.5,-0.5]（实际实现还可除标准差）。正 advantage 提高对应采样序列的相对概率，负 advantage 降低。若四条奖励全相同，组内信号为零：不是 loss 出 bug，而是当前 group 没有提供可比较 variation。</p></div>
+    <div class="misconception"><h3>反例：答案可验证，不代表过程可靠</h3><p>数学 final answer 正确可能来自猜测、格式 exploit 或 verifier 漏洞；代码通过公开 tests 也可能 hard-code cases。RL 会放大 reward 能区分的行为，不会自动优化 verifier 看不见的 honesty、readability 或 robustness。因此需要 hidden tests、格式隔离、难度 curriculum 与独立评估。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -323,6 +337,12 @@ def compute_reward(response, ground_truth, task_type):
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · 全组都正确</summary><p>同一 prompt 的 4 条 rollout reward 都是 1，简单 group-centered advantage 是什么？这是否表示任务“学得最好”？</p><p><strong>答案：</strong>全为 0；组内没有相对更新信号。它可能表示题太容易，而非继续提供强学习信号。</p><p class="diagnosis">若答 advantage=1，你把 raw reward 当成了相对 baseline 后的 advantage。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>rollout、reward、baseline、advantage 与 policy update 的因果顺序。</li><li>group-relative normalization 为什么减少对独立 value model 的依赖。</li><li>全组相同 reward 为什么没有学习信号。</li><li>on-policy 与 off-policy 数据为何带来 distribution mismatch。</li><li>verifier coverage 如何定义 RLVR 的可靠性上限。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 17 课</h3><p>到这里模型目标主要在文本 token 空间；下一课加入视觉输入，重新解决 representation、alignment、position 与 token budget 问题。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

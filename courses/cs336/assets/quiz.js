@@ -26,10 +26,10 @@ document.querySelectorAll(".quiz, [data-quiz]").forEach((quiz) => {
         ? button.dataset.answer === "correct"
         : button.dataset.choice === answer;
       const correctText = quiz.dataset.correct || button.dataset.correct || button.dataset.incorrect || "正确！";
-      const incorrectText = quiz.dataset.incorrect || button.dataset.incorrect || "再想想。";
+      const incorrectText = button.dataset.diagnosis || quiz.dataset.incorrect || button.dataset.incorrect || "再想想。";
 
       feedback.dataset.state = isCorrect ? "correct" : "incorrect";
-      feedback.textContent = isCorrect ? correctText : incorrectText;
+      feedback.textContent = isCorrect ? correctText : `理解诊断：${incorrectText}`;
       window.renderCourseMath?.(feedback);
     });
   });

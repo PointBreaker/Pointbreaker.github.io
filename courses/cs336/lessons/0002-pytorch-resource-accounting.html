@@ -76,62 +76,32 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
-    <h2 id="napkin-math">激发思考：餐巾纸数学</h2>
+    <h2 id="napkin-math">先建立账本，再做餐巾纸估算</h2>
 
-    <h3>问题 1：训练 70B 模型要多久？</h3>
-
-    <div class="card idea">
-      <p><strong>场景：</strong>用 1024 张 H100 训练一个 70B 参数模型，数据量 15T tokens。</p>
+    <div class="lesson-contract">
+      <h3>本课真正要解决的问题</h3>
+      <p>面对“训练要多久”“模型能否放下”“kernel 为什么慢”，不要先找一个经验数字。先列出<strong>对象、单位、计算路径和边界条件</strong>，再从最小矩阵乘法推到真实 Transformer。</p>
+      <p><strong>Prerequisite refresher：</strong>shape 描述每个轴有多少元素；dtype 决定每元素 bytes；forward 产生输出与 loss；backward 用 chain rule 求梯度；optimizer 再用梯度更新权重。FLOP 是一次浮点运算，FLOP/s 才是速度。</p>
     </div>
 
-    <p><strong>Step 1：计算总 FLOPs</strong></p>
-    <pre><code class="language-python">总 FLOPs = 6 × P × T
-         = 6 × 70×10⁹ × 15×10¹²
-         = 6.3×10²⁴ FLOPs</code></pre>
+    <div class="object-map">
+      <h3>统一对象关系图</h3>
+      <pre><code class="language-plaintext">Training
+tokens → forward → loss → backward → gradients → optimizer → new weights
 
-    <p>这个 <strong>6PD 公式</strong>（6 × Parameters × Data）是整个领域最常用的估算公式。它来自：</p>
-    <ul>
-      <li>前向传播：~2 × P × T FLOPs</li>
-      <li>反向传播：~4 × P × T FLOPs（前向的约 2 倍）</li>
-    </ul>
+显存
+├─ model states（通常随 P 缩放）
+│  ├─ parameters / master parameters
+│  ├─ gradients
+│  └─ optimizer moments m, v
+├─ activations（随 batch、sequence、layers、hidden shape 缩放）
+├─ temporary tensors / CUDA workspace
+└─ communication buffers / allocator fragmentation
 
-    <p><strong>Step 2：估算实际吞吐</strong></p>
-    <pre><code class="language-python">H100 稠密峰值（bf16）: ~989 TFLOP/s
-假设 MFU = 0.5（50% 利用率）
-单卡实际: 989 × 0.5 ≈ 495 TFLOP/s
-1024 卡集群: 495 × 1024 ≈ 5.07×10¹⁷ FLOP/s</code></pre>
-
-    <p><strong>Step 3：计算时间</strong></p>
-    <pre><code class="language-python">时间 = 6.3×10²⁴ / 5.07×10¹⁷ ≈ 1.24×10⁷ 秒 ≈ 144 天 ≈ 5 个月</code></pre>
-
-    <p>这个结果只是<strong>理想化的算力下界估算</strong>：它假设所有 GPU 始终以固定 MFU 工作，并忽略通信、检查点、故障恢复和数据管道开销。Meta 的 Llama 3 论文公开的是 405B 参数、15.6T tokens、最多 16K 张 H100；论文并没有给出一个可以直接引用为“约 30 天”的简单墙钟时间。因此不要用不同模型和集群的公开数字反推单一训练天数。</p>
-
-    <h3>问题 2：8 张 H100 能训多大的模型？</h3>
-
-    <div class="card warning">
-      <p><strong>关键：</strong>这取决于你用什么优化器、什么精度。</p>
-    </div>
-
-    <p><strong>用 AdamW + float32（最坏情况）：</strong></p>
-    <pre><code class="language-python">每参数内存:
-  - 参数（fp32）:     4 bytes
-  - 梯度（fp32）:     4 bytes
-  - 优化器状态（m+v）: 8 bytes（fp32）
-  总计: 16 bytes/parameter
-
-8 × 80GB = 640 GB
-最大模型 ≈ 640×10⁹ / 16 ≈ 40B 参数</code></pre>
-
-    <p><strong>典型 mixed precision + AdamW：</strong></p>
-    <pre><code class="language-python">一种常见核算（具体实现会不同）:
-  2（bf16 参数）+ 4（fp32 主参数）+ 4（fp32 梯度）+ 8（Adam m、v）
-  = 18 bytes/parameter
-
-若参数、梯度和优化器状态都能在 8 卡间完全分片：
-理论参数上限 ≈ 640×10⁹ / 18 ≈ 35.6B 参数</code></pre>
-
-    <div class="card idea">
-      <p><strong>注意：</strong>这只是理论上限，不是“8 卡一定能训练 35B”。只有 ZeRO/FSDP 等方案才能接近聚合显存；普通数据并行会在每张卡复制模型。这里还没算 activations、临时缓冲区、通信 bucket 和显存碎片，实际可训练规模会更小。</p>
+Inference
+weights + KV cache + temporary activations
+（没有 backward、gradients、Adam states）</code></pre>
+      <p><strong>先不要算 70B。</strong>如果连一个 <code>[100,256] @ [256,512]</code> 的 forward/backward shape 与 FLOPs 都不能手推，直接套 6PD 只会得到没有解释力的数字。</p>
     </div>
 
     <hr class="rule">
@@ -201,6 +171,28 @@ y.contiguous().view(2, 3)  # OK，但会拷贝</code></pre>
     <h2 id="memory">内存核算：数据类型</h2>
     <p class="bridge">餐巾纸估算要先把模型中的对象换算成 bytes。参数、梯度、optimizer state 和 activation 都是 tensor；dtype 决定每个元素占多少空间，也决定动态范围和可使用的硬件路径。</p>
 
+    <h3>Adam 训练到底保存了哪些对象</h3>
+    <table>
+      <tr><th>对象</th><th>为什么存在</th><th>是否天然是 per-parameter state</th></tr>
+      <tr><td>parameter</td><td>forward 使用的可学习权重</td><td>是</td></tr>
+      <tr><td>gradient</td><td>loss 对每个参数的导数，optimizer update 使用</td><td>是</td></tr>
+      <tr><td>first moment \(m\)</td><td>Adam 的梯度指数移动平均</td><td>是</td></tr>
+      <tr><td>second moment \(v\)</td><td>Adam 的平方梯度指数移动平均</td><td>是</td></tr>
+      <tr><td>FP32 master parameter</td><td>某些 mixed-precision recipe 用于稳定地累积小更新</td><td>实现相关，未必独立存在</td></tr>
+      <tr><td>activation</td><td>backward 需要的中间结果</td><td>否；取决于 batch、sequence、层与 checkpointing</td></tr>
+    </table>
+    <p>因此 <code>16 bytes/param</code> 或 <code>18 bytes/param</code> 都只是某个 precision + optimizer + framework recipe 的账本。真正方法是逐项写“元素数 × dtype bytes × 是否复制/分片”，不能背一个常数。</p>
+
+    <div class="worked-example">
+      <h3>“8 张 80GB H100”必须回答三层</h3>
+      <p><strong>Layer 1 · model-state capacity upper bound。</strong>假设一种 recipe 为每参数保存 2-byte BF16 weight、4-byte FP32 master weight、4-byte gradient、两个 4-byte Adam moments，共 18 bytes/parameter：</p>
+      <pre><code class="language-plaintext">aggregate HBM = 8 × 80 GB = 640 GB
+upper bound = 640×10^9 / 18 ≈ 35.6B parameters</code></pre>
+      <p><strong>Layer 2 · 能否使用 aggregate memory。</strong>DDP 在每张 GPU 都复制完整 model states，单卡 80GB 才是主要上限，不能把 640GB 当成一个池。ZeRO/FSDP 对 optimizer states、gradients、parameters 做不同程度 sharding，才可能逐步接近 aggregate capacity。</p>
+      <p><strong>Layer 3 · real training。</strong>即使 model states 完全分片，activations、temporary tensors、communication buffers、allocator fragmentation、CUDA workspace 仍占空间；sequence length、microbatch size、checkpointing 策略都会改变余量。</p>
+      <p class="diagnosis"><strong>结论：</strong>“35.6B”只能叫 theoretical model-state capacity upper bound，不能改写成“8 张 H100 可以训练 35.6B 模型”。</p>
+    </div>
+
     <h3>精度与动态范围</h3>
     <table>
       <tr><th>类型</th><th>字节</th><th>指数位</th><th>尾数位</th><th>动态范围</th><th>精度</th></tr>
@@ -266,30 +258,77 @@ GPT-3 有 96 层 → 一个模型光参数就 175 GB（fp32）</code></pre>
     </ul>
 
     <h3>矩阵乘法的 FLOPs</h3>
-    <p>深度学习中几乎一切计算量都来自矩阵乘法。对于 <code>Y = XW</code>，X 是 (B×D)，W 是 (D×F)：</p>
+    <p>在 dense Transformer 中，参数相关计算主要来自矩阵乘法。先看具体 shape：</p>
 
-    <pre><code class="language-python">每个输出元素需要 D 次乘法和 (D-1) 次加法 ≈ 2D 次 FLOP
-总共 B × F 个输出元素
-FLOPs = 2 × B × D × F</code></pre>
+    <div class="worked-example">
+      <h3>最小推导：forward 与 backward 分别算什么</h3>
+      <pre><code class="language-plaintext">X:  [100, 256]
+W:  [256, 512]
+Y = X @ W
+Y:  [100, 512]       # 内维 256 消去，外维保留
+
+给定 dY: [100, 512]
+dW = X.T @ dY
+   = [256,100] @ [100,512]
+   = [256,512]       # 必须与 W 同 shape
+
+dX = dY @ W.T
+   = [100,512] @ [512,256]
+   = [100,256]       # 必须与 X 同 shape</code></pre>
+      <p>每个输出元素是长度 256 的 dot product：256 次乘法与 255 次加法。资源核算把它近似记作 \(2×256\) FLOPs；这一步的“2”来自乘与加，不是来自 forward/backward。</p>
+      <pre><code class="language-plaintext">forward Y: 2 × 100 × 256 × 512 = 26,214,400 FLOPs
+backward dW: 2 × 256 × 100 × 512 = 26,214,400 FLOPs
+backward dX: 2 × 100 × 512 × 256 = 26,214,400 FLOPs
+
+所以这一线性层：backward ≈ 2 × forward
+不是经验魔法，而是 backward 有两个同量级 matmul。</code></pre>
+    </div>
+
+    <p><span class="claim-tag">Exact identity</span>矩阵相乘的合法 shape 与 \(dW\)、\(dX\) 的 shape。</p>
+    <p><span class="claim-tag approx">Napkin-math approximation</span>把长度 \(D\) 的 dot product 记作 \(2D\) FLOPs，以及忽略 bias、activation、normalization 等较小项。</p>
 
     <h3>从矩阵乘法到 6PD 公式</h3>
-    <p>考虑一个简单的线性模型：输入 x（B 个 token，每个 D 维），通过权重 W（D×K）映射到 K 维输出：</p>
-    <pre><code class="language-python">前向: FLOPs = 2 × B × D × K = 2 × tokens × parameters
-反向: FLOPs ≈ 2 × 前向 = 4 × tokens × parameters
-总计: 6 × tokens × parameters</code></pre>
+    <p>现在只看<strong>一个 token</strong>穿过所有参数主导的线性层。令 \(P\) 为被该 token 使用的 dense parameter count：</p>
+    <pre><code class="language-plaintext">one token forward  ≈ 2P     # 每个权重参与一次 multiply-add
+one token backward ≈ 4P     # weight-gradient 与 input-gradient 两条 matmul
+one token training ≈ 6P
+
+D 个实际处理的 training tokens:
+training compute ≈ 6P × D = 6PD</code></pre>
+    <p><strong>\(D\) 是训练过程中实际 processed token count。</strong>它不是数据文件的 GB 数，也不必等于 unique dataset token count。100B-token dataset 训练 3 epochs，若每个 token 每轮都使用，则 \(D=300B\)。这里用 \(D\) 而不是 \(T\)，避免把总数据 token 数与单个 sequence length 混淆。</p>
+
+    <h3>为什么 batch size 没出现在 6PD</h3>
+    <pre><code class="language-plaintext">固定 D = 1,000,000 processed tokens
+
+方案 A: 1,000 tokens/step × 1,000 steps = 1,000,000
+方案 B: 2,000 tokens/step ×   500 steps = 1,000,000
+
+两者一阶 parameter-related compute 都约为 6P × 1,000,000。</code></pre>
+    <p>Batch size 改变的是如何把同一批 token 分组，而不是 token 总数。因此它不单独出现在总 FLOPs 的一阶式中；但它会改变 GPU utilization、activation memory、optimizer step 次数、优化动力学与多卡通信形态，所以“总 FLOPs 相同”绝不等于“训练时间和最终模型相同”。</p>
+
+    <div class="worked-example">
+      <h3>最后才算 70B：量纲一路保留</h3>
+      <pre><code class="language-plaintext">P = 70×10^9 parameters
+D = 15×10^12 processed tokens
+
+C ≈ 6PD
+  = 6 × 70×10^9 × 15×10^12
+  = 6.3×10^24 FLOPs</code></pre>
+      <p>若 1024 张 H100 的<strong>所选精度对应</strong>峰值按 989 TFLOP/s 计，并假设端到端 MFU 为 50%，模型有效吞吐约为 \(989×10^{12}×1024×0.5\) FLOP/s，理想化时间约 144 天。硬件峰值与 MFU 都是条件，不是模型本身的常数。</p>
+    </div>
 
     <div class="card idea">
-      <p><strong>关键洞察：</strong>6PD 是 dense Transformer 预训练的常用一阶近似。它在参数相关的线性层计算占主导时很好用；长上下文、小模型或稀疏/MoE 架构需要单独计入 attention、路由和通信成本，不能机械套用。</p>
+      <p><span class="claim-tag approx">Napkin-math approximation</span><strong>6PD</strong> 适合参数相关线性层主导的 dense Transformer 预训练。长上下文、小模型、embedding/output 占比高、稀疏/MoE、weight tying 或 activation checkpoint recomputation 都会使精确账本偏离它；通信、数据加载和故障时间本来就不是 FLOPs。</p>
     </div>
 
     <h3>其他操作的 FLOPs</h3>
     <table>
       <tr><th>操作</th><th>FLOPs</th><th>和 matmul 对比</th></tr>
       <tr><td>矩阵乘法 (m×n × n×p)</td><td>2mnp</td><td>基准</td></tr>
-      <tr><td>逐元素运算 (m×n)</td><td>O(mn)</td><td>可忽略</td></tr>
-      <tr><td>加法 (m×n + m×n)</td><td>mn</td><td>可忽略</td></tr>
-      <tr><td>LayerNorm</td><td>O(mn)</td><td>可忽略</td></tr>
-      <tr><td>Softmax</td><td>O(mn)</td><td>可忽略</td></tr>
+      <tr><td>逐元素运算 (m×n)</td><td>O(mn)</td><td>在大 dense matmul 的 FLOPs 账本中常为低阶项</td></tr>
+      <tr><td>加法 (m×n + m×n)</td><td>mn</td><td>FLOPs 少，但仍可能受 memory traffic 限制</td></tr>
+      <tr><td>LayerNorm</td><td>O(mn)</td><td>FLOPs 低不等于 wall time 可忽略</td></tr>
+      <tr><td>Softmax</td><td>O(mn)</td><td>需结合 shape、fusion 与数据搬运判断</td></tr>
     </table>
 
     <hr class="rule">
@@ -301,7 +340,17 @@ FLOPs = 2 × B × D × F</code></pre>
     <h3>定义</h3>
     <pre><code class="language-python">MFU = 实际 FLOP/s / 硬件峰值 FLOP/s</code></pre>
 
-    <p>MFU 衡量你的代码"吃满"了硬件的百分之多少。主要损失来自：</p>
+    <p>更准确地说，MFU 是<strong>模型按约定 FLOPs 口径得到的有效 FLOP/s</strong>占<strong>对应 dtype、dense/sparse 模式下理论峰值</strong>的比例。分子不是 GPU 上发生过的所有指令。</p>
+
+    <div class="misconception">
+      <h3>MFU ≠ GPU utilization</h3>
+      <p>监控面板中的 GPU utilization 常表示采样窗口内 GPU 是否有 kernel 在执行，不说明 Tensor Core 每个周期完成了多少有效模型 FLOPs。因此完全可能：</p>
+      <pre><code class="language-plaintext">GPU utilization = 100%
+MFU             = 40%</code></pre>
+      <p>GPU 可能一直在运行低效率 kernel、等待/搬运 memory、处理通信，或矩阵 shape 没有充分利用 Tensor Core。前者回答“GPU 忙不忙”，后者回答“模型有效计算离选定硬件峰值多远”。</p>
+    </div>
+
+    <p>MFU 的损失可能来自：</p>
     <ul>
       <li>内存读写等待（memory-bound 操作）</li>
       <li>通信开销（多 GPU 时）</li>
@@ -346,7 +395,7 @@ mfu = actual_flops_per_sec / promised_flops_per_sec
 print(f"MFU: {mfu:.2%}")  # 通常 40-60%</code></pre>
 
     <div class="card warning">
-      <p><strong>经验法则：</strong>MFU ≥ 0.5（50%）被认为是良好的。当矩阵乘法主导时（大 batch、大模型），MFU 会更高。低 MFU 通常意味着你的代码是 memory-bound 的。</p>
+      <p><span class="claim-tag hardware">Hardware / implementation-specific</span>“40–60%”或“≥50% 很好”只能在指定模型、精度、并行策略与硬件上作为经验参照。低 MFU 可能来自 memory bandwidth，也可能来自通信、bubble、data stall、小 shape 或 kernel launch 开销；不能只凭 MFU 给出单一病因。</p>
     </div>
 
     <hr class="rule">
@@ -373,10 +422,11 @@ FLOPs: 2BDF
     <p>每个硬件有一个<strong>ridge point</strong>——计算和内存带宽的平衡点：</p>
     <pre><code class="language-python">H100 ridge point = 989 TFLOP/s / 3.35 TB/s ≈ 295
 
-如果算术强度 > 295 → compute-bound（好！）
-如果算术强度 < 295 → memory-bound（坏！）
+如果算术强度 > 295 → 在该简化 roofline 下更可能 compute-bound
+如果算术强度 < 295 → 在该简化 roofline 下更可能 memory-bound
 
-结论: 矩阵乘法要 compute-bound，需要 B > 295</code></pre>
+在 D,F >> B 且 traffic 模型成立时，B > 295 才可能跨过 ridge point</code></pre>
+    <p>Compute-bound 与 memory-bound 不是“好/坏”标签，而是当前 workload 的性能上限分别由计算峰值还是带宽决定。优化方向也不同：前者减少 FLOPs 或提高矩阵单元效率，后者减少 bytes 或增加数据复用。</p>
 
     <h3>逐 token decode 为什么容易受带宽限制？</h3>
     <p>当并发规模很小、每次只生成一个 token 时，线性层接近矩阵—向量乘法：读取大量权重，却只为少量 token 做计算，因此权重复用不足，往往更容易落入 memory-bound 区域。</p>
@@ -677,13 +727,68 @@ bf16 激活值: ~half → 显著节省！
       <div class="quiz-feedback" data-feedback></div>
     </div>
 
+    <details class="concept-check">
+      <summary>Concept Check · 不背结论，重推 backward shape</summary>
+      <p><code>X:[100,256]</code>、<code>W:[256,512]</code>、<code>Y=X@W</code>。请先写 \(Y\)、\(dY\)、\(dW\)、\(dX\) 的 shape，再数三个 matmul 的 FLOPs。</p>
+      <p><strong>答案：</strong>\(Y,dY:[100,512]\)，\(dW:[256,512]\)，\(dX:[100,256]\)；forward、\(dW\)、\(dX\) 各约 26.2M FLOPs，所以本例 backward 约为 forward 两倍。</p>
+      <p class="diagnosis">若 \(dW\) 或 \(dX\) shape 不对应原 tensor，说明你在背转置位置，还没有用“梯度必须与被求导对象同 shape”校验。</p>
+    </details>
+
+    <details class="concept-check">
+      <summary>Concept Check · 100B-token dataset 训练 3 epochs</summary>
+      <p><strong>答案：</strong>若每轮完整处理，6PD 中 \(D=300B\) processed tokens。Dataset 文件有多少 GB 与这个式子没有直接等价关系。</p>
+      <p class="diagnosis">若答 100B，你把 unique corpus size 当成了训练实际处理量；若答文件 bytes，你混淆了 storage unit 与 token count。</p>
+    </details>
+
+    <details class="concept-check">
+      <summary>Concept Check · batch 翻倍，总 FLOPs 为什么不自动翻倍？</summary>
+      <p><strong>答案：</strong>固定 \(D\) 时，batch 翻倍通常让 steps 约减半；每 step FLOPs 翻倍、step 数减半，一阶总量抵消。但 activation memory、utilization、通信粒度与 optimizer updates 都改变。</p>
+      <p class="diagnosis">若只看单 step 得出总 FLOPs 翻倍，说明你没有把“每步成本 × 步数”放在同一账本。</p>
+    </details>
+
+    <details class="concept-check">
+      <summary>Concept Check · GPU utilization 100%，MFU 能否只有 40%？</summary>
+      <p><strong>答案：</strong>能。GPU 可一直执行 kernel，却因 memory、通信、低效 shape 或未充分使用 Tensor Core，只完成峰值 40% 的模型有效 FLOP/s。</p>
+      <p class="diagnosis">若答“不能”，说明你把“有 kernel 在忙”误当成“有效数学吞吐达到峰值”。</p>
+    </details>
+
+    <details class="concept-check">
+      <summary>Concept Check · 8×80GB / 18 bytes 得到 35.6B 后，还缺哪两问？</summary>
+      <p><strong>答案：</strong>先问并行策略能否分片 model states（DDP 不能把显存简单相加，FSDP/ZeRO 才能接近）；再问 activations、buffers、fragmentation、workspace、sequence 与 batch 还要多少显存。</p>
+      <p class="diagnosis">若直接回答“能训 35.6B”，说明你把 model-state capacity upper bound 当成了 end-to-end feasibility。</p>
+    </details>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <section class="explain-checklist" aria-labelledby="can-explain">
+      <h2 id="can-explain">你现在应该能够解释</h2>
+      <ul>
+        <li>如何从一个 dot product 推出 \(2BDF\)，并检查矩阵 shape。</li>
+        <li>为什么 backward 约为 forward 两倍，而不是把“2”当经验常数。</li>
+        <li>为什么 6PD 中 \(D\) 是 processed tokens，batch size 没有单独出现。</li>
+        <li>6PD 是哪类近似、忽略了哪些计算与系统成本。</li>
+        <li>Adam 的 parameter、gradient、\(m\)、\(v\) 与可能的 master weight 各为何存在。</li>
+        <li>为什么 16/18 bytes per parameter 都不是普遍定律。</li>
+        <li>为什么 DDP 下不能直接使用 8 张卡的 aggregate HBM。</li>
+        <li>为什么 GPU utilization 100% 与 MFU 40% 可以同时成立。</li>
+        <li>如何用 arithmetic intensity 与 ridge point 判断优化方向，而不是给 workload 贴永久标签。</li>
+        <li>训练与推理的显存对象为什么根本不同。</li>
+      </ul>
+    </section>
+
+    <div class="lesson-connection">
+      <h3>通往第 3 课：架构选择就是资源选择</h3>
+      <p>下一课的 RMSNorm、SwiGLU、RoPE、GQA 与 FlashAttention 不只是“现代组件清单”。你要继续追问：它改变了哪一个 tensor shape、哪一项 FLOPs、哪一份 activation 或 KV memory，以及为什么不采用更直觉的替代方案。</p>
+    </div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <ol class="takeaways">
       <li>先把参数、梯度、optimizer state、activation 和临时 buffer 都换算成 bytes，再判断模型能否放下。</li>
-      <li>Transformer dense training 的一阶计算量可用 \(6PT\) 估算，但它不包含通信、数据管道、故障和评估时间。</li>
+      <li>Transformer dense training 的一阶计算量可用 \(6PD\) 估算，但它不包含通信、数据管道、故障和评估时间。</li>
       <li>MFU 把端到端吞吐与理论模型 FLOPs、硬件峰值连接起来；比较时必须说明模型、精度和硬件。</li>
       <li>Arithmetic intensity 是 FLOPs / bytes；与 ridge point 的相对位置决定当前更可能受计算还是带宽限制。</li>
       <li>PyTorch 的 tensor layout、view/copy、autograd 和 mixed precision 都会改变真实资源账本，不能只看数学公式。</li>

@@ -46,6 +46,28 @@
       <p>prefill / decode workload → arithmetic intensity → 权重与 KV traffic → 压缩数据（GQA / MLA / quantization）→ 减少必须执行的步骤（speculative decoding）→ 用 continuous batching 与 PagedAttention 管理动态请求。</p>
     </div>
 
+    <div class="lesson-contract">
+      <h3>Prerequisite refresher：三件事不补齐，就无法理解 KV cache</h3>
+      <ol>
+        <li><strong>Causal self-attention：</strong>位置 \(i\) 只能关注位置 \(1\ldots i\)，不能看未来。</li>
+        <li><strong>Q/K/V：</strong>\(Q=XW_Q,\ K=XW_K,\ V=XW_V\)；query 与 keys 算相关性，权重再对 values 加权求和。</li>
+        <li><strong>Autoregressive generation：</strong>生成一个 token 后把它追加到 prefix，再预测下一个；后一个 token 依赖更长的历史。</li>
+      </ol>
+    </div>
+
+    <div class="object-map">
+      <h3>训练与推理：同一权重，不同对象生命周期</h3>
+      <pre><code class="language-plaintext">Training
+tokens → forward → loss → backward → gradients → optimizer → updated weights
+memory = weights + activations + gradients + optimizer states + buffers
+
+Inference
+prompt → prefill → KV cache → decode one token → append new K/V → repeat
+memory = weights + KV cache + temporary activations
+         (no gradients, no optimizer states, no backward)</code></pre>
+      <p>推理不是“训练减掉 optimizer”这么简单：自回归请求新增了随 batch、层数和 context 增长的 KV cache，也新增了 TTFT、inter-token latency 与动态调度问题。</p>
+    </div>
+
     <h3>推理的应用场景</h3>
     <ul>
       <li><strong>实际使用</strong>：chatbots、代码补全、批处理</li>
@@ -148,8 +170,56 @@ Bytes = 4BSD + 4BTD + 4BTD ≈ 4BSD + 4BTD
     <!-- ============================================================ -->
     <h2 id="kv-cache-compress">KV Cache 压缩</h2>
 
-    <h3>为什么 KV cache 是瓶颈？</h3>
-    <div class="prose-outline"><p><strong>KV cache 大小（每 token 每 layer）:</strong><br>MHA: n_heads × d_head × 2 (K+V) × 2 (bf16)<br>    = 64 × 128 × 2 × 2 = 32 KB/token/layer</p><p><strong>100K 序列, 80 层:</strong><br>= 32 KB × 100K × 80 = 256 GB！</p><p>大 batch 时 KV cache 远超模型参数大小</p></div>
+    <h3>先推导：为什么保存 K/V，而不是背定义</h3>
+    <p>设已有 prefix token \(x_1,\ldots,x_n\)。在某一 attention layer，它们已经产生：</p>
+    <pre><code class="language-plaintext">Q₁...Qₙ, K₁...Kₙ, V₁...Vₙ</code></pre>
+    <p>生成新 token \(x_{n+1}\) 时，本层先计算 \(Q_{new},K_{new},V_{new}\)。新的 query 必须与所有允许看到的历史 keys 比较，并用 attention weights 读取历史 values：</p>
+    \[
+      a=\operatorname{softmax}\left(\frac{Q_{new}[K_1;\ldots;K_n;K_{new}]^\top}{\sqrt{d_h}}\right),\qquad
+      y_{new}=a[V_1;\ldots;V_n;V_{new}]
+    \]
+    <p>所以历史 \(K_1\ldots K_n\) 和 \(V_1\ldots V_n\) 在未来每一步还会被读取。若不保存，每生成一个 token 都要让整个 prefix 重新经过各层来重算它们。</p>
+
+    <div class="worked-example">
+      <h3>为什么不 cache 历史 Q</h3>
+      <pre><code class="language-plaintext">past Q_i
+→ 只在“token i 作为 query”那一次计算自己的 attention output
+→ 未来 token 有自己的 Q_new，不再查询 Q_i
+→ discard
+
+past K_i / V_i
+→ 每个未来 Q_new 都可能匹配 K_i 并读取 V_i
+→ cache</code></pre>
+      <p>KV cache 是由<strong>未来数据依赖</strong>推出来的，不是因为 K/V 比 Q 特殊或更容易存。</p>
+    </div>
+
+    <h3>Prefill 与 decode 必须分开</h3>
+    <table>
+      <tr><th>阶段</th><th>toy 场景</th><th>做什么</th><th>主要输出</th></tr>
+      <tr><td>Prefill</td><td>一次输入 5000 prompt tokens</td><td>并行处理整个 prompt；causal mask 保持语义</td><td>每层 5000 个历史 K/V + 首个 next-token logits</td></tr>
+      <tr><td>Decode</td><td>每轮新增 1 token</td><td>只算新 token 的层输出，同时读取历史 KV</td><td>新 logits，并向每层 cache 追加一个 K/V</td></tr>
+    </table>
+    <p>Prefill 的较大 token 维通常更容易形成高效 GEMM，因而常更 compute-heavy；decode 尤其是长上下文 attention，每步计算一个小 query 却读取大量历史 KV，常更 bandwidth-sensitive。这些是 <span class="claim-tag hardware">workload-dependent</span> 判断，不是无条件定律。</p>
+
+    <h3>从 shape 推 KV cache bytes</h3>
+    <p>对 MHA，若每层有 \(n_{kv}\) 个 KV heads、每 head 维度 \(d_h\)、缓存 dtype 每元素 \(s\) bytes，则每个 sequence 的 cache：</p>
+    \[
+      M_{KV}=2\times L\times S\times n_{kv}\times d_h\times s
+    \]
+    <p>其中 2 来自 K 与 V，\(L\) 是层数，\(S\) 是当前 cache token 数。若 batch 中每个请求各有 cache，再乘或逐请求求和；padding、block metadata 与 allocator overhead 另算。</p>
+    <pre><code class="language-plaintext">toy MHA: n_kv=64, d_h=128, bf16 s=2 bytes
+per token per layer = 2 × 64 × 128 × 2 = 32 KiB
+
+S=100,000, L=80:
+32 KiB × 100,000 × 80 ≈ 244 GiB（十进制约 262 GB）</code></pre>
+    <p>原始数字若把 KB、GB 与 KiB、GiB 混用会看似得到“256GB”。资源账本必须声明单位制；方向结论不变：长 context 与大 concurrent batch 会让 KV 成为主导显存对象。</p>
+
+    <div class="misconception">
+      <h3>三个反例</h3>
+      <p><strong>“不用 cache，显存就更省，所以一定更快。”</strong>显存少了，但每一步重算 prefix；生成 \(N\) 个 token 时会重复执行大量历史计算。</p>
+      <p><strong>“cache 全部 Q/K/V 更完整。”</strong>历史 Q 没有未来消费者，只增加约 50% cache 元素而不避免重算。</p>
+      <p><strong>“decode 永远 memory-bound。”</strong>大 batch 可显著提高 MLP 权重复用；短 context 或不同 kernel 下瓶颈可能变化。应把 decode MLP 与 decode attention 分开。</p>
+    </div>
 
     <h3>GQA（复习）</h3>
     <div class="prose-outline"><p>GQA 把 KV cache 缩小 n_heads / n_kv_heads 倍<br>Llama 2 70B: 64 Q heads, 8 KV heads → 8× 缩小</p></div>
@@ -368,6 +438,46 @@ x_quantized = round(x / scale)
         <button data-choice="d" aria-pressed="false">量化到 1 bit</button>
       </div>
       <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <details class="concept-check">
+      <summary>Concept Check · 未来 token 为什么需要历史 K/V，却不需要历史 Q？</summary>
+      <p><strong>答案：</strong>新 token 用自己的 \(Q_{new}\) 查询所有历史 \(K_i\)，再读取对应 \(V_i\)。历史 \(Q_i\) 只在 token \(i\) 产生自身 attention output 时消费过一次，未来没有数据依赖。</p>
+      <p class="diagnosis">若回答“因为 Q 更小/更大”，说明你在用存储大小解释机制；真正原因是张量的未来消费者不同。</p>
+    </details>
+
+    <details class="concept-check">
+      <summary>Concept Check · 5000-token prompt 的 prefill 是不是生成了 5000 个输出 token？</summary>
+      <p><strong>答案：</strong>不是。它并行计算 5000 个 prompt positions 的层表示并建立 KV cache，最后用末位置 logits 开始采样第一个新 token。Prompt tokens 是输入，不是响应输出。</p>
+      <p class="diagnosis">若答“是”，说明你把并行处理输入 positions 与 autoregressive 输出步骤混在了一起。</p>
+    </details>
+
+    <details class="concept-check">
+      <summary>Concept Check · GQA 把 KV heads 从 64 减到 8，哪些对象不变？</summary>
+      <p><strong>答案：</strong>在其他条件不变时，query heads 与模型输出宽度可以不变；每 token 每 layer 的 K/V 元素约缩到 1/8。质量、kernel 效率与实际显存收益仍需实测。</p>
+      <p class="diagnosis">若认为整个模型 FLOPs/参数/显存都自动缩到 1/8，说明你把局部 KV 结构变化错误扩展到了所有对象。</p>
+    </details>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <section class="explain-checklist" aria-labelledby="can-explain">
+      <h2 id="can-explain">你现在应该能够解释</h2>
+      <ul>
+        <li>训练与推理分别保存哪些对象，为什么 inference 不需要 Adam states。</li>
+        <li>如何从 causal attention 的数据依赖推出“cache K/V，不 cache 历史 Q”。</li>
+        <li>Prefill 与 decode 的输入 shape、输出和性能目标为何不同。</li>
+        <li>为什么不重算整个 prefix 是以 KV memory 换取计算。</li>
+        <li>如何从 layers、context、KV heads、head dim 与 dtype 推导 KV cache bytes。</li>
+        <li>为什么 decode MLP 与 decode attention 不能共享一个永久 bottleneck 标签。</li>
+        <li>GQA/MLA、量化、speculative decoding、continuous batching 与 paging 分别减少哪一种成本。</li>
+        <li>为什么吞吐提高不保证单请求 latency 或 tail latency 改善。</li>
+      </ul>
+    </section>
+
+    <div class="lesson-connection">
+      <h3>通往第 11 课：训练最优与部署最优不是同一个目标</h3>
+      <p>Scaling law 若只优化 training loss，可能选出部署时权重/KV 太大、延迟太高的模型。下一课会把 inference cost 加进外推与决策，并区分拟合区间内证据和区间外假设。</p>
     </div>
 
     <hr class="rule">

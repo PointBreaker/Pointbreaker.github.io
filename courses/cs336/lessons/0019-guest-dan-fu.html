@@ -39,6 +39,18 @@
       <p>workload 与 bottleneck → IO-aware algorithm → kernel mapping → benchmark / profiler → 规模化系统约束 → 把同一分析方法迁移到新硬件与新模型。</p>
     </div>
 
+    <div class="lesson-contract"><h3>来源边界与本课问题</h3><p>Spring 2026 官方日程只确认 Dan Fu guest lecture；无本地 handout 的细节均应视作基于公开研究的补充框架。本课不是收集“加速技巧”，而是练习闭环：定义 workload，列 FLOPs/bytes，定位 bottleneck，改变 dataflow，再验证端到端收益。</p></div>
+    <div class="object-map"><h3>系统思维闭环</h3><pre><code class="language-plaintext">model workload + hardware hierarchy
+            ↓ resource accounting
+hypothesized bottleneck
+            ↓ algorithm / layout / kernel change
+microbenchmark + profiler
+            ↓
+end-to-end quality / latency / throughput / cost
+            └──────── new bottleneck ────────┘</code></pre></div>
+    <div class="worked-example"><h3>FlashAttention 为什么是 IO-aware</h3><p>朴素 attention 物化 \(T×T\) score/probability matrices 到 HBM；FlashAttention 按 tiles 流式维护 softmax statistics，让 Q/K/V blocks 在片上复用，避免写回完整中间矩阵。输出仍是 exact attention（在浮点舍入允许范围内），所以收益来自减少 HBM IO，不是把 \(O(T^2)\) 数学 interactions 变成 \(O(T)\)。</p></div>
+    <div class="misconception"><h3>反例：microbenchmark 2×，训练不一定 2×</h3><p>若该 kernel 只占 step 的 20%，即使自身变成 2×，Amdahl 上总 step 也只从 \(1\) 降到 \(0.9\)，约 1.11×；随后通信或输入管线可能成为新瓶颈。算法-硬件协同不是针对某张 GPU 背参数，而是让对象、数据路径与测量保持一致。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -291,6 +303,12 @@
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · Amdahl 迁移题</summary><p>某 kernel 占 step 20%，自身加速 2×，其余不变。端到端约加速多少？</p><p><strong>答案：</strong>新时间 \(0.8+0.2/2=0.9\)，speedup \(1/0.9≈1.11×\)。</p><p class="diagnosis">若答 2×，你把局部 benchmark improvement 直接当成了整条 critical path。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>FlashAttention 保持什么数学语义、改变什么 dataflow。</li><li>为什么减少 HBM IO 可在 FLOPs 不变时加速。</li><li>如何用 Amdahl 反驳“局部 2× 等于端到端 2×”。</li><li>benchmark、profiler 与 end-to-end eval 分别排除什么错误结论。</li><li>如何把课程统一成 representation、compute、memory、communication、data、objective 六本账。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>完成课程后的迁移任务</h3><p>面对一个新模型或新硬件，不先问“用了什么名词”，而按顺序问：对象是什么、shape 是什么、数据依赖是什么、算多少 FLOPs、搬多少 bytes、跨哪些 links、优化目标怎样被测量。能独立重建这条链，才真正完成 CS336。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

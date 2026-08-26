@@ -48,6 +48,16 @@
       <p>单卡容量或速度不足 → 多 GPU 引入通信 → collective 描述“交换什么” → cost model 核算“多少 bytes” → topology 决定“这些 bytes 走多快” → DP / FSDP / TP / PP 按通信模式映射到合适的硬件域。</p>
     </div>
 
+    <div class="lesson-contract"><h3>问题与 prerequisite refresher</h3><p>并行不是“加卡自动加速”，而是选择复制、切分和通信哪些 tensors。Rank 是一个参与进程；collective 是所有 ranks 共同遵守的数据变换。先能画出每个 rank 操作前后的 tensor，才使用 All-Reduce 等名字。</p></div>
+    <div class="object-map"><h3>并行策略是在切不同轴</h3><pre><code class="language-plaintext">DP: batch shards | full model replicas | synchronize gradients
+FSDP: batch shards | model-state shards | gather/scatter states
+TP: same tokens   | tensor dimension shards | communicate layer partials
+PP: microbatches  | layer-range shards | send activations/gradients
+
+logical tensor bytes → collective algorithm → physical links → wall time</code></pre></div>
+    <div class="worked-example"><h3>两卡 DDP 为什么要平均梯度</h3><p>GPU0 在样本 A 得梯度 \(g_A\)，GPU1 在样本 B 得 \(g_B\)。若两卡各自 update，下一步权重分叉；All-Reduce 得到 \(g_A+g_B\)，再除以 2（或按 loss reduction 约定缩放），两卡用同一 global-batch gradient 更新，权重继续一致。通信的是 gradient，不是“把两个完整模型合成一个更大模型”。</p></div>
+    <div class="misconception"><h3>为什么不总用 DDP</h3><p>DDP 简单且计算局部，但每个 rank 保存完整 model states；一个模型若单卡放不下，加 8 张卡仍然每卡放不下。FSDP/TP/PP 通过 sharding 解决容量，却引入更频繁、shape 不同的通信。反例也说明 aggregate HBM 不是天然共享内存。</p></div>
+
     <h3>先记住一个统一视角</h3>
     <p>并行策略不是一组互不相关的名词。它们都在同一组资源之间做交换：可以复制计算、保留更多显存，或把数据放到另一张 GPU 后再通信。后文每介绍一种策略，都只问三件事：<strong>分片了什么、通信了什么、通信发生多频繁</strong>。</p>
 
@@ -448,6 +458,12 @@ DP = 128 / (8 × 4) = 4 (数据并行)
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · 两卡 DDP 新题</summary><p>两卡从同一权重出发，分别得到 \(g_0=[2,4]\)、\(g_1=[6,0]\)，global loss 取样本均值。同步后每卡用于更新的 gradient 是什么？</p><p><strong>答案：</strong>\((g_0+g_1)/2=[4,2]\)，两卡必须使用相同结果保持副本一致。</p><p class="diagnosis">若直接拼成四维向量，你把“聚合同一参数的梯度”误解成了“拼接不同 batch 的数据”。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>All-Reduce、All-Gather、Reduce-Scatter 的逐 rank 输入输出。</li><li>DDP 为什么保持副本一致，却不能解决单卡模型容量。</li><li>ring cost model 中 latency 与 bandwidth 项各来自哪里。</li><li>为什么相同 logical bytes 经过 NVLink 与跨节点网络时间不同。</li><li>如何先按通信模式、再按 topology 放置 DP/TP/PP。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 8 课</h3><p>DDP 的梯度同步已清楚，但每卡状态复制仍是容量瓶颈；下一课逐项分片 optimizer、gradient 与 parameter，并追踪 FSDP 的峰值生命周期。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <ol class="takeaways">
       <li>多 GPU 的核心新成本是 communication；先问交换什么数据，再讨论并行名称。</li>

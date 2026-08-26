@@ -39,6 +39,21 @@
       <p>目标能力 → 候选数据源 → 采集与许可边界 → 数据集组成和 mixture → 探索统计 → 为下一讲过滤与去重建立输入。</p>
     </div>
 
+    <div class="lesson-contract"><h3>本课问题与 prerequisite refresher</h3><p>“数据量”不是一个自足变量。同一 URL 可有多个 crawl snapshots，一个 document 可被抽取成多个 text records，tokenizer 又把 text 变成 tokens。先分清 source、snapshot、record、document、token 与 mixture weight，才谈多少数据。</p></div>
+    <div class="object-map"><h3>数据对象与边界</h3><pre><code class="language-plaintext">source / license / collection policy
+  ↓ snapshot (WARC, repo archive, book dump)
+raw records + metadata
+  ↓ extraction / normalization
+documents
+  ↓ filtering / dedup / PII handling
+accepted documents
+  ↓ tokenizer + mixture sampler
+processed training tokens D
+
+source bytes ≠ extracted text ≠ unique text ≠ processed tokens</code></pre></div>
+    <div class="worked-example"><h3>100GB 为什么不能直接变成 D</h3><p>一个 100GB crawl 可能包含压缩、HTML、图片、重复模板与 metadata。抽取后也许只有 30GB 文本，过滤去重后 12GB；具体 tokenizer 才把它变成 token count，训练 2 epochs 又让 processed \(D\) 翻倍。每一步都需要 manifest 与 provenance，否则无法复现实验或响应删除请求。</p></div>
+    <div class="misconception"><h3>为什么不是“抓得越多越好”</h3><p>更多来源可能同时增加重复、低质量、隐私风险、版权不确定性与 benchmark contamination。Domain mixture 也不是静态占比：按 token sampling 10% 与按 document 采样 10% 对长文档域给出的训练权重不同。法律判断依司法辖区与具体事实，页面中的案例不是通用法律结论。</p></div>
+
     <hr class="rule">
 
     <!-- ============================================================ -->
@@ -444,6 +459,12 @@ for sample in samples:
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · 文件大小不能代入 6PD</summary><p>100GB WARC 为什么不能直接说 \(D=100B\) tokens？</p><p><strong>答案：</strong>WARC 含压缩、HTML、metadata 与重复；需抽取、过滤、去重、tokenize，并乘实际 epochs 才得到 processed \(D\)。</p><p class="diagnosis">若把 bytes 当 tokens，你混淆了 storage representation 与模型消费的离散单位。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>source、snapshot、document 与 processed token 的区别。</li><li>为什么 storage GB 不能直接代入 6PD 的 \(D\)。</li><li>mixture weight 的采样单位为何会改变实际暴露量。</li><li>provenance、license 与 deletion lineage 为什么属于数据工程核心。</li><li>为什么数据探索应先于自动过滤。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 14 课</h3><p>候选数据源已经进入 raw corpus；下一课逐步决定保留什么、判重到什么粒度，并用 false positive/negative 与下游训练结果审计每个门。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <div class="loop">
       <article>

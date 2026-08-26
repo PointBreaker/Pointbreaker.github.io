@@ -44,6 +44,17 @@
       <p>可靠 benchmark → profiler 定位瓶颈 → fusion 消除中间 HBM 往返 → tiling 建立片上复用 → Triton 表达 block-level 数据流 → PTX / hardware detail 用于解释剩余差距。</p>
     </div>
 
+    <div class="lesson-contract"><h3>本课问题与 prerequisite refresher</h3><p>数学 expression 不等于 GPU kernel：前者定义结果，后者定义线程怎样分工、数据经过哪些 memory levels。先会同步 GPU 计时、知道异步 launch 与 warm-up，才谈优化。</p></div>
+    <div class="object-map"><h3>从表达式到时间</h3><pre><code class="language-plaintext">PyTorch ops → kernel graph → launches + HBM intermediates
+                           ↓ profile
+fusion → fewer launches / fewer HBM round trips
+tiling → more on-chip reuse
+masking → boundary correctness
+
+correctness baseline → warm-up → synchronized timing → profiler → hypothesis</code></pre></div>
+    <div class="worked-example"><h3>为什么 fusion 有效</h3><p>计算 \(z=\mathrm{relu}(x+1)\)。两个 kernels 会读 \(x\)、写中间 \(u\)，再读 \(u\)、写 \(z\)；fused kernel 每个元素加载一次 \(x\)，在 register 做 add 与 relu，只写一次 \(z\)。数学 FLOPs 几乎不变，HBM traffic 与 launch 数减少。若算子中间结果必须跨设备或被别处消费，这个 fusion 就可能不成立。</p></div>
+    <div class="misconception"><h3>反例：更少 kernel 不保证更快</h3><p>过度 fusion 可能增加 registers、产生 spill、降低可并行 blocks，或让一个通用 kernel 失去专用 Tensor Core path。Triton 也不会自动消除错误的 tile、非 coalesced access 或不正确 mask；DSL 降低表达门槛，不替代性能模型。</p></div>
+
     <h3>Benchmarking 与 Profiling</h3>
 
     <h3>为什么要 benchmark？</h3>
@@ -490,6 +501,12 @@ st.global.v4.f32  [%rd1], {%f0, %f1, %f2, %f3};  # 写 4 个 float</code></pre>
     <hr class="rule">
 
     <!-- ============================================================ -->
+    <details class="concept-check"><summary>Concept Check · fusion 改的是哪本账</summary><p><code>u=x+1; z=relu(u)</code> 融合后，数学 FLOPs 与 HBM traffic 分别怎样变化？</p><p><strong>答案：</strong>FLOPs 基本不变；中间 \(u\) 不再写回/重读 HBM，launch 也少一次。</p><p class="diagnosis">若答“FLOPs 减半”，说明你把执行图的数据移动与数学表达式混在了一起。</p></details>
+    <section class="explain-checklist" aria-labelledby="can-explain"><h2 id="can-explain">你现在应该能够解释</h2><ul>
+      <li>为什么 GPU benchmark 必须 warm-up 与 synchronize。</li><li>fusion 在 toy example 中具体省掉哪些 bytes。</li><li>tiling 如何让一次 HBM load 服务多次计算。</li><li>program id、block size 与 mask 分别负责什么。</li><li>为什么 profiler 证据应先于“这个 kernel 是 memory-bound”的结论。</li>
+    </ul></section>
+    <div class="lesson-connection"><h3>通往第 7 课</h3><p>单卡 kernel 已经在优化片上与 HBM traffic；当单卡容量或速度不足，数据必须跨 GPU，下一课把“搬 bytes”扩展到 collective 与 topology。</p></div>
+
     <h2 id="takeaways">如果只能记住 5 件事</h2>
     <ol class="takeaways">
       <li>优化从同步正确的 benchmark 和 profiler 时间线开始；没有基线就无法判断改动是否有效。</li>
