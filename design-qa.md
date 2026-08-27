@@ -62,6 +62,49 @@ final result: passed
 
 ---
 
+# CS336 / CS267 single-TOC + semantic framework diagrams design QA
+
+- Date: `2026-08-27`
+- Browser: headless Firefox through WebDriver
+- Desktop viewport request: `1600 × 900`
+- Mobile viewport request: `500 × 900`
+- Pages covered by shared diagram assets: 46 lesson pages
+
+## Navigation finding and fix
+
+- The duplicate rail was reproduced on CS267 lessons and workbooks: shared `lesson-ui.js` generated `.pb-toc`, while the course learning layer generated `.lesson-toc` or `.workbook-side`.
+- CS267 now keeps the course-aware navigation and suppresses the redundant generic rail. CS336's existing single-TOC protection remains intact.
+- Runtime checks confirmed one visible rail on CS267 Lesson 16, CS267 Homework 1 and CS336 Lesson 3.
+
+## Diagram system
+
+- 29 high-value ASCII framework sketches now render as semantic HTML/CSS figures: 19 in CS336 and 10 in CS267.
+- Layouts include connected flows, comparison lanes, object cards, memory hierarchies, dependency trees and a CSS Roofline chart.
+- Original text diagrams remain available in a collapsed `查看文本版 / 精确符号` fallback; they are no longer the primary visual.
+- The renderer uses page-scoped, exact source markers, so formula/code blocks that merely contain arrows are not transformed accidentally.
+
+## Visual and responsive evidence
+
+- Before captures: `/tmp/cs336-framework-before.png`, `/tmp/cs267-framework-before.png`.
+- Final desktop captures: `/tmp/cs336-framework-after.png`, `/tmp/cs267-framework-after.png`, `/tmp/cs267-roofline-after.png`.
+- Final mobile captures: `/tmp/cs336-framework-mobile.png`, `/tmp/cs267-framework-mobile.png`.
+- Desktop diagrams align with the reading column and preserve the existing warm-paper, green-accent editorial language.
+- Mobile flow diagrams collapse vertically; tree diagrams scroll inside their own viewport. Tested pages have no page-level horizontal overflow.
+
+## Regression coverage
+
+- Dedicated lint checks asset loading on all 46 lesson pages, all 29 diagram definitions, semantic layout styles, and preserved text fallbacks.
+- CS267 content lint now asserts the single-TOC rule for both lessons and workbooks.
+- Runtime rendering verified every diagram target; responsive smoke checks covered flow, tree and Roofline layouts.
+
+## Result
+
+No actionable P0, P1 or P2 visual, interaction or responsive findings remain.
+
+final result: passed
+
+---
+
 # CS267 Interactive Textbook + Engineering Workbook design QA
 
 - Date: `2026-08-27`

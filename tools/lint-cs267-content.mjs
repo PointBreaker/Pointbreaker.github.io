@@ -22,8 +22,10 @@ for (const file of lessonFiles) {
   const id = file.replace(/\.html$/, '');
   const html = read(`lessons/${file}`);
   ok(practice[id], `${file}: missing practice-bank entry`);
-  ok(html.includes('learning-system.css?v=20260827a'), `${file}: missing learning-system.css`);
+  ok(html.includes('learning-system.css?v=20260827b'), `${file}: missing learning-system.css`);
   ok(html.includes('lesson-experience.js?v=20260827a'), `${file}: missing lesson-experience.js`);
+  ok(html.includes('framework-diagrams.css?v=20260827c'), `${file}: missing framework diagram styles`);
+  ok(html.includes('framework-diagrams.js?v=20260827c'), `${file}: missing framework diagram renderer`);
   ok(html.includes('practice-bank-core.js?v=20260827a'), `${file}: missing core practice bank`);
   ok(html.includes('practice-bank-applications.js?v=20260827a'), `${file}: missing applications practice bank`);
 }
@@ -48,6 +50,7 @@ ok(lessonRenderer.includes("correct ? 'details' : 'div'"), 'adaptive follow-up: 
 ok(lessonRenderer.includes('follow-up--required'), 'adaptive follow-up: wrong path must auto-open');
 const quiz = read('assets/quiz.js');
 ok(quiz.includes('compactCorrect'), 'legacy quiz handler must normalize data-correct="a-d"');
+ok(read('assets/learning-system.css').includes('body.cs267-textbook > .pb-toc'), 'lesson CSS must suppress the redundant shared TOC');
 
 const assignmentFiles = [...htmlFiles('homeworks').map((file) => `homeworks/${file}`), 'projects/index.html'];
 ok(assignmentFiles.length === 7, `expected 7 work items, found ${assignmentFiles.length}`);
@@ -59,7 +62,7 @@ for (const relative of assignmentFiles) {
   const id = relative === 'projects/index.html' ? 'project' : path.basename(relative, '.html');
   const html = read(relative);
   ok(assignments[id], `${relative}: missing assignment-bank entry`);
-  ok(html.includes('workbook.css?v=20260827a'), `${relative}: missing workbook.css`);
+  ok(html.includes('workbook.css?v=20260827b'), `${relative}: missing workbook.css`);
   ok(html.includes('assignment-workbook.js?v=20260827a'), `${relative}: missing assignment renderer`);
   ok((html.match(/class="quiz/g) || []).length > 0 || id === 'project', `${relative}: original Chinese guide/self-check appears missing`);
 }
@@ -90,6 +93,7 @@ for (const [lessonId, lesson] of Object.entries(practice)) {
   ok(assignments[assignmentId]?.stages.some((stage) => stage.id === match[2]), `${lessonId}: broken assignment stage bridge ${href}`);
 }
 const assignmentRenderer = read('assets/assignment-workbook.js');
+ok(read('assets/workbook.css').includes('body.cs267-workbook > .pb-toc'), 'workbook CSS must suppress the redundant shared TOC');
 for (const marker of ['Engineering Workbook', '中文完整任务说明', 'Official Sources', 'Failure signatures', 'Tiny sanity check', 'Prediction → Experiment → Explanation', 'Retrospective']) {
   ok(assignmentRenderer.includes(marker), `assignment renderer missing: ${marker}`);
 }
