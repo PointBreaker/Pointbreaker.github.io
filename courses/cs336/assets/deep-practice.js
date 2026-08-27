@@ -89,10 +89,17 @@
         onResult?.(correct);
       }
       if (followUp) {
-        const follow = el('div', 'follow-up');
-        const followLabel = el('p', 'follow-up-label', '再验证一次 → 换一个表面形式，检查 mental model 是否真的修正');
-        follow.append(followLabel, createQuestion(followUp, 'follow-up'));
-        feedback.appendChild(follow);
+        if (correct) {
+          const follow = el('details', 'follow-up follow-up--optional');
+          const followLabel = el('summary', 'follow-up-label', '再验证一次');
+          follow.append(followLabel, createQuestion(followUp, 'follow-up'));
+          feedback.appendChild(follow);
+        } else {
+          const follow = el('div', 'follow-up follow-up--required');
+          const followLabel = el('p', 'follow-up-label', '再验证一次 → 用不同表面形式确认这个 mental model 已修正');
+          follow.append(followLabel, createQuestion(followUp, 'follow-up'));
+          feedback.appendChild(follow);
+        }
       }
       renderMath(article);
     });
@@ -158,7 +165,7 @@
     if (!anchor || !lesson.deep?.length) return;
     const section = el('section', 'deep-quiz');
     section.setAttribute('aria-labelledby', 'deep-quiz-heading');
-    const heading = el('h2', '', 'Deep Quiz · 四级理解验证');
+    const heading = el('h2', '', '综合理解验证 · Deep Quiz');
     heading.id = 'deep-quiz-heading';
     const description = el('p', '', '这些题不按正文顺序排列。提交后会解释四个选项各自对应的 reasoning；可以重试。');
     const progress = el('p', 'deep-quiz-progress', '已完成 0 / ' + lesson.deep.length + ' · 答对 0');
@@ -195,7 +202,7 @@
     if (!anchor || !lesson.open?.length) return;
     const section = el('section', 'open-practice');
     section.setAttribute('aria-labelledby', 'open-practice-heading');
-    const heading = el('h2', '', 'Explain It Yourself · 不看正文先讲一遍');
+    const heading = el('h2', '', '闭卷自测 · Explain It Yourself');
     heading.id = 'open-practice-heading';
     section.appendChild(heading);
     lesson.open.forEach(([prompt, guide]) => {

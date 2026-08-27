@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>第 10 课：推理优化 — CS336</title>
-  <link rel="stylesheet" href="../assets/course.css?v=20260827a">
+  <link rel="stylesheet" href="../assets/course.css?v=20260827f">
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
   <script defer src="../assets/katex.min.js"></script>
@@ -293,7 +293,7 @@ x_quantized = round(x / scale)
     <div class="prose-outline"><p>投机解码 (Leviathan et al., 2023; Chen et al., 2023)</p><p>1. Draft 模型（小）按 \(q\) 生成 γ 个候选 token：\(d_1,d_2,\ldots,d_\gamma\)<br>2. Target 模型（大）一次并行算出这些位置的 \(p\)<br>3. 对每个候选抽一个随机数 \(u\sim U(0,1)\)：若 \(u\le \min(1,p(d_i)/q(d_i))\)，接受 \(d_i\)<br>4. 首次拒绝时，从归一化后的正差分布 \([p-q]_+\) 采样校正 token，并停止本轮验证<br>5. 若全部候选都接受，再从 target 的下一个位置采一个 token</p><p><strong>为什么不能只写“\(p(d_i)&gt;q(d_i)\) 就接受”？</strong>当 \(p&lt;q\) 时仍应有 \(p/q\) 的接受概率；少了这个随机步骤与拒绝校正，最终序列就不再严格服从 target 分布。</p><p><strong>Exact：</strong>规则正确实现时，输出分布与直接从 target 采样相同。<strong>Implementation-specific：</strong>是否加速取决于接受率、draft 成本、target 验证 shape 与系统实现。</p></div>
 
     <h3>为什么能加速？</h3>
-    <div class="prose-outline"><p><strong>不使用投机解码:</strong><br>生成 γ 个 token → γ 次大模型前向 → γ × T_large</p><p><strong>使用投机解码:</strong><br>1 次 draft 前向 + 1 次大模型前向<br>→ T_small × γ + T_large<br>→ 如果 draft 足够准 ≈ T_large（一次前向生成 γ 个 token）</p><p>实际加速: 2-3×（取决于 draft 质量和接受率）</p></div>
+    <div class="prose-outline"><p><strong>不使用投机解码:</strong><br>生成 γ 个 token → γ 次大模型前向 → γ × T_large</p><p><strong>使用投机解码:</strong><br>1 次 draft 前向 + 1 次大模型验证<br>→ γ × T_small + T_verify<br>→ 只有接受率足够高、draft 足够便宜且 target 能高效并行验证时才会加速</p><p class="small"><strong>Benchmark-specific：</strong>论文与 serving engine 报告的倍数都绑定 target/draft 模型、硬件、batch、prompt/decode 长度、sampling 参数与实现；这里不把某个速度倍数当作普适结论。</p></div>
 
     <h3>Draft 模型的选择</h3>
     <ul>
@@ -524,8 +524,8 @@ x_quantized = round(x / scale)
   <script src="../assets/quiz.js"></script>
   <script src="../assets/practice-bank.js?v=20260826a"></script>
   <script src="../assets/practice-bank-advanced.js?v=20260826a"></script>
-  <script src="../assets/deep-practice.js?v=20260826a"></script>
-  <script src="../assets/lesson-layout.js?v=20260826a"></script>
+  <script src="../assets/deep-practice.js?v=20260827f"></script>
+  <script src="../assets/lesson-layout.js?v=20260827f"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../assets/code-format.js?v=20260814a"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
