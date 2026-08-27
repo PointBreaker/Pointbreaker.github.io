@@ -2,6 +2,7 @@
 import argparse
 import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -40,21 +41,63 @@ def text_content(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", value)).strip()
 
 
-def validate_page(path: Path) -> list[str]:
+def extract_outline(html: str) -> str:
+    if "COMPLETE_SOURCE_OUTLINE_START" not in html or "COMPLETE_SOURCE_OUTLINE_END" not in html:
+        return ""
+    return html.split("<!-- COMPLETE_SOURCE_OUTLINE_START -->", 1)[1].split(
+        "<!-- COMPLETE_SOURCE_OUTLINE_END -->", 1
+    )[0]
+
+
+def extract_problem_ids(outline: str) -> list[str]:
+    return [
+        text_content(value)
+        for value in re.findall(
+            r'<(?:span|code)\b[^>]*class=["\'][^"\']*\bproblem-number\b[^"\']*["\'][^>]*>([\s\S]*?)</(?:span|code)>',
+            outline,
+            re.I,
+        )
+    ]
+
+
+def read_git_page(repo: Path, baseline_ref: str, page: Path) -> str | None:
+    relative = page.relative_to(repo).as_posix()
+    result = subprocess.run(
+        ["git", "show", f"{baseline_ref}:{relative}"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return None
+    return result.stdout
+
+
+def validate_page(path: Path, baseline_html: str | None = None) -> tuple[list[str], dict]:
     html = path.read_text(encoding="utf-8")
     if "COMPLETE_SOURCE_OUTLINE_START" not in html:
-        return []
+        return [], {"rows": 0, "problemIds": [], "baselineIds": []}
 
     errors = []
-    before, rest = html.split("<!-- COMPLETE_SOURCE_OUTLINE_START -->", 1)
-    outline = rest.split("<!-- COMPLETE_SOURCE_OUTLINE_END -->", 1)[0]
+    if html.count("<!-- COMPLETE_SOURCE_OUTLINE_START -->") != 1 or html.count("<!-- COMPLETE_SOURCE_OUTLINE_END -->") != 1:
+        errors.append("complete source outline markers must appear exactly once")
+    before = html.split("<!-- COMPLETE_SOURCE_OUTLINE_START -->", 1)[0]
+    outline = extract_outline(html)
     rows = len(re.findall(r'class="problem-row"', outline))
     offline = len(re.findall(r'class="offline-ready"', outline))
+    problem_ids = extract_problem_ids(outline)
+    baseline_ids = extract_problem_ids(extract_outline(baseline_html or ""))
 
     if not re.search(r'<html[^>]+lang="zh(?:-CN)?"', html, re.I):
         errors.append("page language is not zh/zh-CN")
     if rows == 0:
         errors.append("generated outline has no problem rows")
+    if len(problem_ids) != rows:
+        errors.append(f"problem IDs {len(problem_ids)} do not match problem rows {rows}")
+    duplicate_ids = sorted({value for value in problem_ids if problem_ids.count(value) > 1})
+    if duplicate_ids:
+        errors.append("duplicate problem IDs: " + ", ".join(duplicate_ids))
     if offline != rows:
         errors.append(f"offline markers {offline} do not match problem rows {rows}")
     if "assignment-guide" not in before and "<h2" not in before:
@@ -112,13 +155,22 @@ def validate_page(path: Path) -> list[str]:
         if re.search(r"竖直(?:的)?\s*(?:x\s*轴|横轴)|(?:x\s*轴|横轴)\s*(?:是|为)?\s*竖直", student_text, re.I):
             errors.append(f"problem {index} contradicts vertical direction and the x-axis")
 
-    return errors
+    if baseline_ids:
+        missing_ids = [value for value in baseline_ids if value not in problem_ids]
+        if missing_ids:
+            errors.append("localized problem IDs disappeared since baseline: " + ", ".join(missing_ids))
+
+    return errors, {"rows": rows, "problemIds": problem_ids, "baselineIds": baseline_ids}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True)
     parser.add_argument("--slug", required=True)
+    parser.add_argument(
+        "--baseline-ref",
+        help="optional Git ref whose localized problem IDs must remain present, e.g. origin/main",
+    )
     args = parser.parse_args()
 
     repo = Path(args.repo).resolve()
@@ -126,6 +178,18 @@ def main() -> int:
     info = json.loads((course / "course-info.json").read_text(encoding="utf-8"))
     checked = 0
     failures = []
+    page_stats = []
+
+    if args.baseline_ref:
+        verified = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{args.baseline_ref}^{{commit}}"],
+            cwd=repo,
+            capture_output=True,
+            check=False,
+        )
+        if verified.returncode:
+            print(f"ASSIGNMENT_LOCALIZATION_FAILED\n- invalid baseline Git ref: {args.baseline_ref}")
+            return 1
 
     for item in info.get("assignments", []):
         relative = item.get("contentFile") or item.get("assGuideFile")
@@ -135,9 +199,11 @@ def main() -> int:
         if not page.exists():
             failures.append(f"{relative}: file does not exist")
             continue
-        errors = validate_page(page)
+        baseline_html = read_git_page(repo, args.baseline_ref, page) if args.baseline_ref else None
+        errors, stats = validate_page(page, baseline_html)
         if "COMPLETE_SOURCE_OUTLINE_START" in page.read_text(encoding="utf-8"):
             checked += 1
+            page_stats.append((relative, stats))
         failures.extend(f"{relative}: {error}" for error in errors)
 
     if failures:
@@ -147,6 +213,10 @@ def main() -> int:
         return 1
 
     print(f"ASSIGNMENT_LOCALIZATION_OK pages={checked}")
+    for relative, stats in page_stats:
+        baseline = len(stats["baselineIds"])
+        suffix = f" baseline={baseline}" if args.baseline_ref else ""
+        print(f"- {relative}: problems={stats['rows']} ids={len(stats['problemIds'])}{suffix}")
     return 0
 
 

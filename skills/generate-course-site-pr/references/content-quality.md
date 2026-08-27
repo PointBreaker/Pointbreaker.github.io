@@ -24,19 +24,20 @@ Respect task-specific source and network restrictions. Prefer complete local cop
 
 ## Lecture composition
 
-Use this structure when it fits the source:
+Use this dependency order when it fits the source:
 
-1. Course/lecture eyebrow, title, lede, instructor/time/difficulty metadata.
-2. Learning objectives and prerequisite recap.
-3. Conceptual map of the lecture.
-4. Main ideas organized by dependency, not slide order.
-5. Derivations, algorithms, systems diagrams, or worked examples.
-6. Implementation notes or code where the official material supports them.
-7. Common misconceptions and boundary conditions.
-8. Two to five quizzes that test understanding, not trivia.
-9. Summary and primary references.
+1. The actual problem the lesson resolves.
+2. Prerequisite recovery and a compact object-relation map.
+3. Main ideas organized by dependency, not slide order.
+4. Toy examples and derivations before large-model or production claims.
+5. Implementation consequences where official material supports them.
+6. Common misconceptions, alternative designs, counterexamples, and boundary conditions.
+7. Inline checks close to the mechanism plus optional cross-section validation.
+8. Closed-book explanation prompts, course connections, and primary references.
 
 Use concise Chinese explanations while retaining important English terms in parentheses on first use. Avoid bloating pages with generic history, motivational filler, or claims unrelated to the course sources.
+
+Follow [lesson-learning-system.md](lesson-learning-system.md) for reasoning-gap audits, claim labels, practice behavior, reading hierarchy, and browser QA. Do not equate page length or repeated template headings with teaching depth.
 
 ## Visual and interactive explanations
 
@@ -67,6 +68,9 @@ Use concise Chinese explanations while retaining important English terms in pare
 - Never leave directions such as “see the textbook,” “refer to the figure,” or “open the source PDF.” Replace missing figures with sufficient coordinates, matrices, labeled relationships, or a locally owned redrawn diagram.
 - Preserve an existing human-written guide. Generated problem extraction must live between dedicated markers and may replace only that region. A work-item page must contain both a guide and a complete problem outline.
 - Do not expose solution keys. Hints should identify an entry point, and checks should validate dimensions, units, signs, boundary behavior, or substitution without revealing the final result.
+- Treat the complete localized problem outline as a peer of the Engineering Workbook and official source, never as an appendix hidden inside Deep Reference. Follow [assignment-learning-system.md](assignment-learning-system.md) for semantic classification, stable IDs, version boundaries, Stage links, disclosure depth, and regression checks.
+- Preserve the original problem ID exactly. If current-term mapping uses a normalized alias, use it only for navigation and document the alias; do not rewrite the displayed source identifier.
+- Distinguish `current-term ID matched` from `current-term statement verified`. An older translation remains labeled with its actual source term until interfaces, tests, constraints, and deliverables are checked.
 
 ## Quiz contract
 

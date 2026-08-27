@@ -182,7 +182,7 @@ For a source figure:
 Run:
 
 ```bash
-python <skill-root>/scripts/validate_interactive.py --repo /path/to/repo --slug <slug>
+python3 <skill-root>/scripts/validate_interactive.py --repo /path/to/repo --slug <slug>
 ```
 
 Then verify in a browser:
