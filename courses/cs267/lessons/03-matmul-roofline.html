@@ -11,6 +11,7 @@
   <script defer src="../assets/math-render.js"></script>
   <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260814f">
   <link rel="stylesheet" href="../../../assets/course/interactive.css?v=20260814f">
+  <link rel="stylesheet" href="../assets/learning-system.css?v=20260827a">
   <script defer src="../../../assets/course/math-render.js?v=20260814f"></script>
 </head>
 <body>
@@ -41,7 +42,7 @@ CI = f / m = 计算强度 (Computational Intensity)
 实际时间 = f × tf + m × tm = f × tf × (1 + tm/tf × 1/CI)</code></pre>
 
     <p><strong>Machine Balance</strong> = Peak FLOPS / Peak Bandwidth</p>
-    <p>当 CI ≈ Machine Balance 时，算法达到最佳效率。</p>
+    <p><strong>Exact（模型内的分界）：</strong>当 CI = Machine Balance 时，两条 Roofline 上界相交；它是 bandwidth-bound 与 compute-bound 的分界，<strong>不表示实现已经达到最佳效率</strong>。</p>
 
     <h3>分块矩阵乘法的 CI</h3>
     <p>\[CI = \frac{f}{m} = \frac{2n^3}{(2N+2) \cdot n^2} \approx \frac{n}{N} = b \text{ (大 n 时)}\]</p>
@@ -118,7 +119,8 @@ Attainable GFLOP/s
       <li>当 CI &gt; Machine Balance：计算受限</li>
     </ul>
 
-    <h3>典型 Machine Balance 值</h3>
+    <h3>Lecture-era Machine Balance 示例</h3>
+    <p class="small"><strong>Hardware-specific：</strong>下表是课程材料中的平台示例，只能在指定精度、内存层级和峰值口径下使用。新硬件应重新用 (P_{peak}/B_{peak}) 计算，不能套用一个“典型 GPU”常数。</p>
     <table>
       <thead>
         <tr>
@@ -131,14 +133,14 @@ Attainable GFLOP/s
         <tr><td>KNL (to DRAM)</td><td>34</td></tr>
         <tr><td>KNL (to HBM)</td><td>7</td></tr>
         <tr><td>Perlmutter CPU</td><td>12</td></tr>
-        <tr><td>GPU (典型)</td><td>5-10</td></tr>
+        <tr><td>具体 GPU</td><td>按 precision、memory tier 与官方规格重新计算</td></tr>
       </tbody>
     </table>
 
     <h2>Roofline 应用示例</h2>
     <h3>示例 1：TRIAD</h3>
     <pre><code>#pragma omp parallel for
-for(i = 0; i & N; i++) {
+for(i = 0; i &lt; N; i++) {
   Z[i] = X[i] + alpha * Y[i];
 }</code></pre>
     <ul>
@@ -153,7 +155,7 @@ for(i = 0; i & N; i++) {
           Current[x,y-1,z] + Current[x,y+1,z] +
           Current[x,y,z-1] + Current[x,y,z+1]);</code></pre>
     <p>无缓存时：8 FLOPs，8 个 double 引用 → CI = 8/64 = 0.125 FLOP/byte</p>
-    <p>有缓存时：缓存过滤后只需 1 读 1 写 → CI = 8/16 = 0.5 FLOP/byte</p>
+    <p><strong>Napkin-math approximation：</strong>若理想的空间复用让相邻点大多由 cache 命中，并且只按一次 DRAM 读入与一次 write-back 计数，则可近似为 1 读 1 写 → CI ≈ 8/16 = 0.5 FLOP/byte。真实流量还受 write allocate、边界、cache 容量与遍历顺序影响。</p>
 
     <div class="card warning">
       <p><strong>重要：</strong>常数因子很重要！虽然 stencil 的渐近 CI 是 O(1)，但常数决定了实际性能。</p>
@@ -296,10 +298,9 @@ for(i = 0; i & N; i++) {
       </article>
       <article>
         <h3>Machine Balance 是关键</h3>
-        <p>典型值为 5-10 FLOP/byte，且随时间在恶化（计算增长快于带宽）。</p>
+        <p>它是特定硬件、精度与内存层级的比值；必须按目标平台重新计算，不能把历史示例当成普适常数。</p>
       </article>
       <article>
-        <article>
         <h3>提升 CI 是优化目标</h3>
         <p>通过分块、融合等技术提升计算强度，使算法从带宽受限转向计算受限。</p>
       </article>
@@ -328,6 +329,9 @@ for(i = 0; i & N; i++) {
     </footer>
   </div>
   <script src="../assets/quiz.js"></script>
+  <script src="../assets/practice-bank-core.js?v=20260827a"></script>
+  <script src="../assets/practice-bank-applications.js?v=20260827a"></script>
+  <script defer src="../assets/lesson-experience.js?v=20260827a"></script>
   <script defer src="../../../assets/course/lesson-ui.js?v=20260814f"></script>
   <script defer src="../../../assets/course/interactive.js?v=20260814f"></script>
 </body>

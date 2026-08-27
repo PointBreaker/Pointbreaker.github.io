@@ -59,3 +59,58 @@ The combined comparison confirms that the established CourseStack visual languag
 No actionable P0, P1 or P2 design findings remain.
 
 final result: passed
+
+---
+
+# CS267 Interactive Textbook + Engineering Workbook design QA
+
+- Date: `2026-08-27`
+- Browser: headless Firefox through WebDriver
+- Desktop comparison viewport: `1440 × 914` (content screenshot `1440 × 828`)
+- Mobile viewport: `500 × 844` (content screenshot `500 × 758`)
+- Pages smoke-tested: 27 Lessons + 6 Homeworks + Final Project
+
+## Visual truth and comparison evidence
+
+- Existing CourseStack pages were used as the visual source of truth; no new palette, typography, hero, imagery or icon system was invented.
+- Lesson 03 before/after source captures: `/tmp/cs267-before-lesson03-top.png`, `/tmp/cs267-after-lesson03-top-1440.png`.
+- Same-viewport Lesson comparison: `/tmp/cs267-compare-lesson03.png`.
+- Homework 1 before/after source captures: `/tmp/cs267-before-hw1-top.png`, `/tmp/cs267-after-hw1-top-1440.png`.
+- Same-viewport Homework comparison: `/tmp/cs267-compare-hw1.png`.
+- Focused Concept Check: `/tmp/cs267-after-lesson03-check2.png`.
+- Mobile Workbook: `/tmp/cs267-after-hw1-mobile.png`.
+
+Combined images confirm that the warm paper surface, dark global header, editorial serif hierarchy, green accent and restrained borders remain intact. The material changes are instructional hierarchy, a two-column long-reading shell, and first-class Workbook/source navigation.
+
+## Lesson findings
+
+- The 30-second knowledge map starts below the existing hero instead of increasing the hero's visual weight.
+- Desktop uses one readable main column plus a 200–230px sticky lesson TOC; there is no third rail.
+- Concept Check is visually distinct but uses a quiet green tint and border rather than a dashboard-style card wall.
+- Wrong answers auto-reveal diagnosis and follow-up; correct answers expose only an optional disclosure.
+- Existing quizzes are preserved in one collapsed quick-review disclosure.
+- All 27 lessons render their learning layer; Lesson 24's malformed suffix-array code closing tag was fixed after visual/runtime QA exposed swallowed content.
+
+## Assignment findings
+
+- Existing dark green assignment banner remains the visual anchor.
+- Source/version notice and the three peer resources appear directly after the banner.
+- Workbook stages preserve normal document reading; Contract, sanity check, failure signatures, hints and Gate use a small, consistent visual vocabulary.
+- Chinese task mappings are a first-class section and not nested under Deep Reference.
+- Desktop stage navigation stays within a 220px rail; mobile removes the rail and keeps only component-level horizontal scrolling.
+- Original Chinese guide content remains visible after the task mapping instead of being moved into a disclosure.
+
+## Interaction and responsive checks
+
+- Full browser smoke result: 27 / 27 lesson renderers and 7 / 7 workbook renderers initialized.
+- Every page tested at 1280px has no page-level horizontal overflow.
+- Homework 1 at 500px has no page-level horizontal overflow; primary navigation and stage map scroll locally.
+- Stage → Chinese task opens the matching problem disclosure.
+- Gate checkboxes persist only local capability state and do not lock navigation.
+- No new image asset was required; the experience is information-architecture and typography driven.
+
+## Result
+
+No actionable P0, P1 or P2 visual, interaction or responsive findings remain.
+
+final result: passed
