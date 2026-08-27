@@ -53,6 +53,19 @@ vm.createContext(context);
 vm.runInContext(bankSource, context, { filename: 'assignment-bank.js' });
 const assignmentBank = context.window.CS336AssignmentBank;
 const expectedStages = { '01': 4, '02': 6, '03': 5, '04': 6, '05': 6 };
+const expectedLocalization = {
+  '01': { translated: 39, matched: 38, officialOnly: 0, legacyOnly: 1 },
+  '02': { translated: 22, matched: 18, officialOnly: 9, legacyOnly: 4 },
+  '03': { translated: 3, matched: 2, officialOnly: 0, legacyOnly: 1 },
+  '04': { translated: 14, matched: 13, officialOnly: 0, legacyOnly: 1 },
+  '05': { translated: 43, matched: 21, officialOnly: 23, legacyOnly: 22 }
+};
+const localizationAudit = [];
+const officialProblemId = (entry) => {
+  const candidate = String(entry).split(' · ')[0].trim();
+  return /^[a-z0-9_]+$/.test(candidate) ? candidate : '';
+};
+const normalizedProblemId = (id) => String(id).toLowerCase().replace(/[^a-z0-9]/g, '');
 let assignmentLessonLinkCount = 0;
 for (const [id, stageCount] of Object.entries(expectedStages)) {
   const assignment = assignmentBank?.[id];
@@ -87,6 +100,22 @@ for (const [id, stageCount] of Object.entries(expectedStages)) {
   const html = fs.readFileSync(path.join(root, `courses/cs336/lessons/assignments/ass${id}-${['basics', 'systems', 'scaling', 'data', 'alignment'][Number(id) - 1]}.html`), 'utf8');
   requireText(html, 'assignment-bank.js', `Assignment ${id} loads the workbook bank`);
   requireText(html, 'assignment-workbook.js', `Assignment ${id} loads the workbook renderer`);
+  requireText(html, 'Handout 完整本土化', `Assignment ${id} retains localized handout markers`);
+  requireText(html, '完整任务', `Assignment ${id} retains full-task copy`);
+
+  const translatedIds = [...html.matchAll(/<span class="problem-number">([^<]+)<\/span>/g)].map((match) => match[1].trim());
+  const uniqueTranslatedIds = new Set(translatedIds);
+  if (translatedIds.length !== uniqueTranslatedIds.size) failures.push(`Assignment ${id}: duplicate localized problem IDs`);
+  const officialIds = new Set(assignment.stages.flatMap((stage) => stage.official.map(officialProblemId)).filter(Boolean));
+  const normalizedTranslatedIds = new Set(translatedIds.map(normalizedProblemId));
+  const matched = [...officialIds].filter((problemId) => normalizedTranslatedIds.has(normalizedProblemId(problemId)));
+  const officialOnly = [...officialIds].filter((problemId) => !normalizedTranslatedIds.has(normalizedProblemId(problemId)));
+  const legacyOnly = translatedIds.filter((problemId) => ![...officialIds].some((officialId) => normalizedProblemId(officialId) === normalizedProblemId(problemId)));
+  const actualLocalization = { translated: translatedIds.length, matched: matched.length, officialOnly: officialOnly.length, legacyOnly: legacyOnly.length };
+  localizationAudit.push({ assignment: id, ...actualLocalization });
+  Object.entries(expectedLocalization[id]).forEach(([field, expected]) => {
+    if (actualLocalization[field] !== expected) failures.push(`Assignment ${id}: expected localization ${field}=${expected}, got ${actualLocalization[field]}`);
+  });
 }
 
 if (assignmentLessonLinkCount !== 52) failures.push(`expected 52 Assignment → Lesson links, got ${assignmentLessonLinkCount}`);
@@ -99,10 +128,29 @@ buildLinks.forEach(([, assignmentId, stageId]) => {
   if (!targetExists) failures.push(`Lesson build link targets missing Assignment ${assignmentId} stage ${stageId}`);
 });
 
+const workbookRenderer = fs.readFileSync(path.join(root, 'courses/cs336/assets/assignment-workbook.js'), 'utf8');
+for (const phrase of ['semanticContent', 'translatedProblems', 'officialSourceContent', 'legacyGuide', 'legacySupplement', 'miscReference', 'problemAnchor', 'data-problem-target', 'activateProblem', '完整中文题面', '2026 ID Matched · Needs Review']) {
+  requireText(workbookRenderer, phrase, `Assignment renderer localization architecture: ${phrase}`);
+}
+forbid(workbookRenderer, /\bconst\s+oldNodes\b|oldNodes\.push/, 'Assignment renderer must not collect all old nodes indiscriminately');
+
+const recoveryReport = fs.readFileSync(path.join(root, 'courses/cs336/ASSIGNMENT-LOCALIZATION-RECOVERY-REPORT.md'), 'utf8');
+for (const phrase of [
+  '39 / 39',
+  '22 / 22',
+  '3 / 3',
+  '14 / 14',
+  '43 / 43',
+  'Current-version verified',
+  '从 Git 历史恢复的译文数量为 **0**'
+]) requireText(recoveryReport, phrase, `localization recovery report claim: ${phrase}`);
+
 if (failures.length) {
   console.error('CS336 content lint failed:');
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
 
-console.log('CS336 content lint passed (Lesson accuracy assertions + Assignment 1–5 workbook structure).');
+console.log('Assignment localization audit:');
+localizationAudit.forEach((row) => console.log(`- A${row.assignment}: translated=${row.translated}, matched=${row.matched}, official-only=${row.officialOnly}, legacy-only=${row.legacyOnly}`));
+console.log('CS336 content lint passed (Lesson accuracy + Workbook structure + localization regression).');

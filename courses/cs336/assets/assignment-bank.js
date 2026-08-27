@@ -16,6 +16,7 @@
       version: 'Spring 2026 · v26.0.3',
       basis: 'Spring 2026 repository and handout',
       legacy: '页面下方保留旧版详细中文题面；接口、题号、限制冲突时以 2026 PDF / repository 为准。',
+      localization: '完整中文题面主要基于 Spring 2025 PDF / README 本土化；Stage 与 official problem mapping 依据 Spring 2026 v26.0.3。ID 匹配只表示可导航，不代表接口、测试或约束已经逐题核验。',
       mission: '把 raw text 变成可训练、可恢复、可生成文本的 Transformer language-model system。',
       capabilities: ['Tokenizer', 'Transformer Forward', 'Optimization', 'Training System'],
       stages: [
@@ -141,6 +142,7 @@
     '02': {
       title: 'Systems', version: 'Spring 2026 · v26.1.3', basis: 'Spring 2026 repository and handout',
       legacy: '旧版 2025 详细任务只作 Legacy Reference；2026 problem map、接口与硬件条件优先。',
+      localization: '完整中文题面来自 Spring 2025 handout 本土化；Workbook 与 2026 problem map 依据 Spring 2026 v26.1.3。2026 新增 FSDP、parallelism calculations 与 B200 条件尚无对应完整中文译文。',
       mission: '把“模型能跑”推进到“性能可测、瓶颈可解释、训练可扩展”。',
       capabilities: ['Measurement', 'Memory Trade-off', 'IO-aware Kernel', 'Communication Overlap', 'State Sharding', 'Parallelism'],
       stages: [
@@ -228,6 +230,7 @@
     '03': {
       title: 'Scaling', version: 'Spring 2026 · v26.0.5', basis: 'Spring 2026 repository and handout',
       legacy: '旧版完整中文题面作为方法参考；2026 hosted API、预算和 leaderboard 要求优先。',
+      localization: '完整中文题面主要基于 Spring 2025 handout 本土化；Stage、hosted API、预算和 problem mapping 依据 Spring 2026 v26.0.5。相同 problem 可能服务多个研究 stage。',
       mission: '用受控实验和不确定性诊断，在固定 compute budget 下提出可辩护的 compute-optimal 配置。',
       capabilities: ['Experiment Design', 'Curve Fitting', 'Fit Validation', 'IsoFLOPs', 'Extrapolation'],
       stages: [
@@ -290,6 +293,7 @@
     '04': {
       title: 'Data', version: 'Spring 2026 · v26.0.1', basis: 'Spring 2026 repository and handout',
       legacy: '旧版本土化细节保留为 Deep Reference；2026 repository 的 schema、训练入口与 B200 配置优先。',
+      localization: '完整中文题面主要基于 Spring 2025 PDF / README 本土化；Stage 与 official problem mapping 依据 Spring 2026 v26.0.1。相同 ID 仍需按 2026 repository 复核 schema 与测试。',
       mission: '把 Common Crawl 转成可审计、可复现、可训练并能用模型效果验证的数据集。',
       capabilities: ['Extraction', 'Filtering', 'Deduplication', 'Tokenization', 'Pipeline', 'Data Evaluation'],
       stages: [
@@ -357,6 +361,7 @@
     '05': {
       title: 'Alignment & Reasoning RL', version: 'Spring 2026 · v26.0.0', basis: 'Required reasoning-RL handout + optional SFT/DPO safety supplement',
       legacy: '主作业是 reasoning RL；SFT、DPO 与 safety evaluation 属于 2026 optional supplement。旧版 2025 内容仅作 Legacy Reference。',
+      localization: '完整中文题面来自 Spring 2025 主作业与 safety/RLHF supplement 本土化；Spring 2026 v26.0.0 已重构 reasoning-RL / GRPO 主线。SFT、DPO 与安全评估只在 2026 optional supplement 中对应。',
       mission: '建立 baseline，正确实现并比较 on-policy / variant / off-policy GRPO，同时区分 reward proxy 与真实 desired behavior。',
       capabilities: ['Baseline & Grader', 'Rollout Contract', 'On-policy GRPO', 'RL Variants', 'Off-policy RL', 'Safety & Preference Evaluation'],
       stages: [
@@ -410,7 +415,7 @@
         },
         {
           id: 'safety-eval', title: 'Safety & Preference Evaluation', capability: 'Safety & Preference Evaluation', build: '可选 supplement：SFT、DPO、red-team 与多 construct evaluation 证据。', why: 'reward 或 benchmark 上升不自动代表 true preference、helpfulness 或 safety 上升。',
-          lessons: [L('0015-alignment-sft-rlhf', 'sft', 'Lesson 15 · SFT'), L('0015-alignment-sft-rlhf', 'preference-data', 'Lesson 15 · Preference data'), L('0012-evaluation', 'safety', 'Lesson 12 · Safety evaluation')], readiness: ['SFT loss mask 为什么只覆盖 response？', 'preference label 与 true desired behavior 有何距离？'], official: ['Optional supplement: mmlu_baseline, gsm8k_baseline, alpaca_eval_baseline, sst_baseline', 'look_at_sft, data_loading, sft_script, sft', 'mmlu_sft, gsm8k_sft, alpaca_eval_sft, sst_sft, red_teaming', 'look_at_hh, dpo_loss, dpo_training'],
+          lessons: [L('0015-alignment-sft-rlhf', 'sft', 'Lesson 15 · SFT'), L('0015-alignment-sft-rlhf', 'preference-data', 'Lesson 15 · Preference data'), L('0012-evaluation', 'safety', 'Lesson 12 · Safety evaluation')], readiness: ['SFT loss mask 为什么只覆盖 response？', 'preference label 与 true desired behavior 有何距离？'], official: ['mmlu_baseline', 'gsm8k_baseline', 'alpaca_eval_baseline', 'sst_baseline', 'look_at_sft', 'data_loading', 'sft_script', 'sft', 'mmlu_sft', 'gsm8k_sft', 'alpaca_eval_sft', 'sst_sft', 'red_teaming', 'look_at_hh', 'dpo_loss', 'dpo_training'],
           contract: { input: ['demonstrations / preference pairs / eval suites'], output: ['SFT/DPO model and construct-specific evidence'], shape: ['prompt/response and chosen/rejected boundaries explicit'], invariants: ['objective, proxy, desired behavior and evidence separated', 'optional supplement labeled optional'], forbidden: ['reward↑ = safety↑', 'evaluating on training preferences only', 'hiding red-team failures behind average score'] },
           done: { ...commonDone, evidence: ['Objective、Proxy metric、Desired behavior、Potential exploit、Evaluation evidence'] },
           sanity: { title: '一条 preference pair', body: ['same prompt, chosen/rejected responses'],  },
