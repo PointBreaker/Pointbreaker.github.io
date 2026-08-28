@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>互斥 — MIT 6.102</title>
+<meta name="description" content="互斥：为异步抽象数据类型防御竞态条件与死锁，用 Deferred 创建 Promise，在 await 之间的代码段实现互斥执行，并了解锁、信号量与事务等其他互斥技术。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="../index.html#lectures">课程</a><a href="../index.html#psets">作业</a><a href="../index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<div class="eyebrow">CLASS 16 · 2026-04-08 · 14-16 并发</div>
+<h1>互斥</h1>
+<p class="lede">当异步抽象数据类型需要等待资源时，竞态条件和死锁就会悄悄潜入。互斥保证某段代码同一时刻只有一个计算在执行，是守护共享状态的关键机制。</p>
+
+<h2>图书馆示例</h2>
+<p>设想一个图书馆系统，支持 <code>checkout</code>（借书）和 <code>checkin</code>（还书）。当一本书被借走时，后来的读者必须等待它归还。这个场景把异步等待、竞态和互斥都集中到了一起。</p>
+
+<h2>同步 ADT</h2>
+<p>最朴素的实现是<strong>同步抽象数据类型</strong>：<code>checkout</code> 要么立即成功，要么立即失败。它简单直接，但无法表达「书被借走时我愿意等」的需求。</p>
+
+<h2>异步方法</h2>
+<p>把 <code>checkout</code> 改成异步的：当书不可用时，它返回一个 <code>Promise&lt;void&gt;</code>，等书被归还时才完成。这让调用者不必阻塞，而是可以继续做别的事。</p>
+
+<h2>创建并持有 Promise</h2>
+<p>问题来了：<code>checkout</code> 需要返回一个 Promise，但此刻还没有书可以归还——Promise 要在未来某个时刻才被解决。为此我们需要一种「先创建、后解决」的工具。</p>
+<blockquote><strong>Deferred&lt;T&gt;</strong>：一个辅助 ADT，把 Promise 的创建与解决分离。它暴露 <code>promise</code>（给客户端）和 <code>resolve</code>/<code>reject</code>（给未来触发者）。</blockquote>
+<p>现代 JavaScript 可以用 <code>Promise.withResolvers()</code> 直接获得一个 Deferred：</p>
+<pre><code class="language-ts">const { promise, resolve, reject } = Promise.withResolvers&lt;void&gt;();
+// promise 返回给等待的读者，resolve 在书归还时调用</code></pre>
+
+<h2>异步方法如何持有 Promise</h2>
+<p>图书馆为每本被借出的书维护一个等待队列。<code>checkout</code> 把一个 Deferred 推入队列；<code>checkin</code> 归还书时，从队列取出 Deferred 并 resolve 它。</p>
+<pre><code class="language-ts">class Library {
+  private holds: Map&lt;string, Deferred&lt;void&gt;[]&gt; = new Map();
+
+  async checkout(book: string): Promise&lt;void&gt; {
+    if (this.isAvailable(book)) {
+      this.markBorrowed(book);
+      return; // 立即成功
+    }
+    const { promise, resolve } = Promise.withResolvers&lt;void&gt;();
+    this.holds.get(book)!.push({ promise, resolve });
+    return promise; // 等待归还
+  }
+
+  checkin(book: string): void {
+    const queue = this.holds.get(book)!;
+    const next = queue.shift();
+    if (next) next.resolve();      // 唤醒等待者
+    else this.markAvailable(book); // 书重新可借
+  }
+}</code></pre>
+
+<h2>竞态条件</h2>
+<p>当读者想借多本书时，一个微妙的竞态出现了：如果先等第一本书、拿到后再借第二本，而另一个读者恰好在这时借走了第二本书，双方可能陷入互相等待。这就是「持有并等待」导致的竞态。</p>
+
+<h2>修复竞态</h2>
+<p>修复思路是<strong>尽快借到每一本书</strong>：不要等前一本借到再去借下一本，而是为每本书独立排队，一旦某本就绪就立即锁定它。</p>
+
+<h2>死锁</h2>
+<blockquote><strong>死锁</strong>（deadlock）：并发模块互相等待对方持有的资源，导致所有相关方都无法继续执行。</blockquote>
+<p>死锁通常需要四个条件同时成立：互斥、持有并等待、不可抢占、循环等待。破坏其中任意一个，就能预防死锁。</p>
+
+<h2>交错与互斥</h2>
+<p>在 TypeScript/JavaScript 中，<code>await</code> 之间的代码是<strong>连续执行</strong>的，不会被其他任务交错。这给了我们一个天然的互斥区域：只要把关键操作放在同一个 <code>await</code> 区间内，它们就等价于原子执行。</p>
+<blockquote><strong>互斥</strong>（mutual exclusion）：保证某段区域同一时刻只有一个计算在执行。</blockquote>
+
+<h2>重新设计 checkout</h2>
+<p>利用这一性质，我们可以先通过 <code>await</code> 排队等待每本书就绪，然后在一个无 <code>await</code> 的临界区里一次性借出所有书。这样既避免了竞态，又不会死锁。</p>
+
+<h2>其他互斥技术</h2>
+<p>互斥是一个普适问题，不同层次有不同的解法：</p>
+<ul>
+<li><strong>抢占式并发</strong>使用锁（lock）、互斥量（mutex）、信号量（semaphore）。</li>
+<li><strong>数据库</strong>使用<strong>事务</strong>（transaction）保证一组操作的原子性。</li>
+<li>TypeScript 的单线程模型则让我们用 <code>await</code> 之间的代码段天然实现互斥。</li>
+</ul>
+
+<div class="card">
+<h4>关键要点</h4>
+<ul>
+<li><span class="tag">Deferred</span>把 Promise 的创建与解决分离，用于异步 ADT。</li>
+<li><span class="tag">竞态</span>多本书借阅时「持有并等待」导致的时序问题。</li>
+<li><span class="tag">死锁</span>互相等待导致所有方停滞，需破坏四条件之一。</li>
+<li><span class="tag">互斥</span>await 之间代码天然互斥，可构造临界区。</li>
+<li><span class="tag">其他</span>锁、互斥量、信号量、事务是不同层次的互斥手段。</li>
+</ul>
+</div>
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

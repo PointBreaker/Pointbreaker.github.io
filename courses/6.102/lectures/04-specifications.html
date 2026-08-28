@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>规格说明 — MIT 6.102</title>
+<meta name="description" content="函数规格说明：前置条件、后置条件与异常。规格是模块实现者与使用者之间的契约，是团队合作的支点。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="../index.html#lectures">课程</a><a href="../index.html#psets">作业</a><a href="../index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 04 · 2026-02-11 · 规格与设计</p>
+<h1>规格说明</h1>
+<p class="lede">规格说明是模块实现者与使用者之间的契约，是团队合作的支点。本讲学习前置条件、后置条件、异常的使用，以及如何写出清晰、无歧义的函数规格。</p>
+
+<h2>为什么需要规格</h2>
+<blockquote>规格说明是团队合作的<strong>支点</strong>（linchpin）。它在模块的实现者与使用者之间充当契约。</blockquote>
+<p>精确的规格让你能够<strong>分摊责任</strong>（apportion blame）：当程序出错时，规格告诉你错在调用者（违反了前置条件）还是实现者（未满足后置条件）。没有规格，调试就变成了无头苍蝇。</p>
+
+<h2>行为等价性</h2>
+<p>判断两个实现是否<strong>行为等价</strong>（behavioral equivalence），就看能否在不影响正确性的前提下互相替换。规格正是判断等价性的依据——满足同一规格的所有实现，从使用者角度看都是等价的。</p>
+
+<h2>规格的结构</h2>
+<p>一个完整的函数规格包含三部分：</p>
+<ol>
+<li><strong>函数签名</strong>：函数名、参数类型、返回类型。</li>
+<li><strong>前置条件</strong>（requires clause）：调用者必须满足的义务。</li>
+<li><strong>后置条件</strong>（effects clause）：实现者必须保证的结果。</li>
+</ol>
+<p>用一句话概括：<strong>当前置条件满足时，实现者必须使后置条件成立</strong>。前置条件是调用者的责任，后置条件是实现者的责任。</p>
+
+<pre><code class="language-ts">/**
+ * 在已排序数组中查找目标值的索引。
+ * @param arr 按升序排列的数组（前置条件：arr 已排序）
+ * @param target 要查找的目标值
+ * @returns 目标值的索引；若不存在则返回 -1（后置条件）
+ */
+function binarySearch(arr: number[], target: number): number {
+  // 实现...
+}
+</code></pre>
+
+<h2>规格中可以谈论什么</h2>
+<p>规格只能谈论<strong>参数</strong>和<strong>返回值</strong>，绝不能提及局部变量或内部实现细节。这是保持「实现者与使用者解耦」的关键。</p>
+
+<h2>避免 null</h2>
+<p><code>null</code> 值是麻烦与不安全的源头。Tony Hoare 自称引入 null 是「十亿美元的错误」。好的规格应避免让参数或返回值为 <code>null</code>，必要时用联合类型表达「可能缺失」的语义。</p>
+<pre><code class="language-ts">// 不好：返回值可能是 null
+function findUser(id: number): User | null { /* ... */ }
+
+// 更好：用异常或 Option 类型表达缺失，并在规格中明确说明
+function findUser(id: number): User {
+  // @throws Error 当用户不存在时
+}
+</code></pre>
+
+<h2>包含空值情形</h2>
+<p>空值（空数组、空字符串等）总是被允许的，除非规格明确禁止。写规格时要主动考虑空输入的行为。</p>
+
+<h2>测试与规格</h2>
+<p>即便是白盒测试也必须遵循规格。测试用例可以针对实现细节设计覆盖，但断言的内容必须是规格所承诺的行为。</p>
+
+<h2>修改函数的规格</h2>
+<blockquote>程序员默认<strong>修改是不允许的</strong>，除非规格明确声明函数会修改参数。</blockquote>
+<p>如果函数会修改参数，必须在后置条件中写明 <code>@modifies</code>。这让调用者知道哪些值会被改变。</p>
+<pre><code class="language-ts">/**
+ * 将元素添加到数组末尾。
+ * @param arr 要修改的数组（@modifies arr）
+ * @param elem 要添加的元素
+ * @returns 无（后置条件：arr 比调用前多一个元素 elem）
+ */
+function push&lt;T&gt;(arr: T[], elem: T): void {
+  arr.push(elem);
+}
+</code></pre>
+
+<h2>异常</h2>
+<p>异常分为两类：</p>
+<ul>
+<li><strong>表示 bug 的异常</strong>：例如前置条件被违反，通常不捕获，让程序快速失败。</li>
+<li><strong>可预见的失败</strong>：例如文件不存在、网络超时，应在规格中用 <code>@throws</code> 文档化。</li>
+</ul>
+
+<h2>特殊返回值</h2>
+<p>用联合类型表达特殊情形的结果，而不是返回 <code>null</code> 或魔术数字：</p>
+<pre><code class="language-ts">type Result&lt;T&gt; = { ok: true; value: T } | { ok: false; error: string };
+
+function parseNumber(s: string): Result&lt;number&gt; {
+  const n = Number(s);
+  if (Number.isNaN(n)) return { ok: false, error: "not a number" };
+  return { ok: true, value: n };
+}
+</code></pre>
+
+<h2>模块</h2>
+<p>在现代 TypeScript/JavaScript 中，每个文件就是一个模块。规格是模块对外暴露的契约，模块内部实现可以随时重构，只要规格不变，使用者就不受影响。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">契约</span>规格 = 签名 + 前置条件 + 后置条件；调用者满足前置，实现者保证后置。</p>
+<p style="margin-top:10px"><span class="tag">解耦</span>规格只谈参数和返回值，不谈内部实现。</p>
+<p style="margin-top:10px"><span class="tag">异常</span>区分 bug（快速失败）和可预见失败（文档化 @throws）。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>静态检查 — MIT 6.102</title>
+<meta name="description" content="静态类型、静态检查与三大软件品质：在程序运行之前捕获错误，理解 TypeScript 如何通过类型系统在编译时发现 bug。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="../index.html#lectures">课程</a><a href="../index.html#psets">作业</a><a href="../index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 01 · 2026-02-04 · 基础</p>
+<h1>静态检查</h1>
+<p class="lede">静态类型是软件安全的第一道防线。本讲以冰雹数列为引例，引入类型、静态检查的概念，并阐述 6.102 对好软件的三大品质追求：免于错误、易于理解、便于修改。</p>
+
+<h2>从冰雹数列说起</h2>
+<p>我们将用一个贯穿本课的例子——<strong>冰雹数列</strong>（Hailstone sequence）——来理解静态检查的价值。规则如下：从正整数 \(n\) 开始，若 \(n\) 为偶数则下一项是 \(n/2\)，若 \(n\) 为奇数则下一项是 \(3n+1\)，直到数列到达 1 为止。</p>
+<p>例如从 \(n=10\) 开始：\(10 \to 5 \to 16 \to 8 \to 4 \to 2 \to 1\)，长度为 7。</p>
+
+<h2>什么是类型</h2>
+<blockquote><strong>类型</strong>（type）是一组值以及可在这些值上执行的运算的集合。</blockquote>
+<p>例如，<code>number</code> 是 TypeScript 中表示数字的类型，支持加减乘除等运算；<code>string</code> 是字符串类型，支持拼接、切片等运算。类型告诉我们一个表达式「能是什么、能做什么」。</p>
+
+<h2>静态类型语言</h2>
+<p>TypeScript 是一门<strong>静态类型</strong>（statically-typed）语言。变量可以在<strong>编译时</strong>被赋予类型，由此编译器能推导出使用这些变量的表达式的类型。</p>
+<pre><code class="language-ts">// 显式类型注解：在变量名后写 :type
+let n: number = 10;
+let name: string = "hailstone";
+
+// 类型不匹配会立即被编译器发现
+n = "oops"; // Error: Type 'string' is not assignable to type 'number'.
+</code></pre>
+
+<h2>三种检查方式</h2>
+<p>编程语言发现错误的能力可以分为三个层次：</p>
+<ul>
+<li><strong>静态检查</strong>（static checking）：程序运行之前就自动发现错误。</li>
+<li><strong>动态检查</strong>（dynamic checking）：程序执行期间自动发现错误（例如运行时抛出异常）。</li>
+<li><strong>不做检查</strong>（no checking）：语言根本不帮你定位这个错误，程序可能静默地给出错误结果。</li>
+</ul>
+<p>静态检查是最理想的情形——错误在萌芽阶段、尚未造成任何运行时损失时就被捕获。</p>
+
+<pre><code class="language-ts">function hailstoneLength(n: number): number {
+  let length = 1;
+  while (n !== 1) {
+    if (n % 2 === 0) {
+      n = n / 2;
+    } else {
+      n = 3 * n + 1;
+    }
+    length = length + 1;
+  }
+  return length;
+}
+
+// 静态检查：下面这行在编译阶段就会报错
+console.log(hailstoneLength("ten"));
+//               ^^^^^^^^^^^^^^^ Argument of type 'string' is not assignable to parameter of type 'number'.
+</code></pre>
+
+<h2>数组与函数</h2>
+<p>TypeScript 的数组是另一种类型，写法是 <code>Array&lt;T&gt;</code> 或 <code>T[]</code>，表示「元素类型为 <code>T</code> 的可变长序列」。</p>
+<pre><code class="language-ts">let primes: number[] = [2, 3, 5, 7, 11];
+let empty: string[] = []; // 空数组也是合法的
+</code></pre>
+<p>把一段逻辑封装成可复用的模块时，我们编写函数并附上规格注释：</p>
+<pre><code class="language-ts">/**
+ * 计算冰雹数列的长度。
+ * @param n 起始正整数 (n > 0)
+ * @returns 从 n 到达 1 所需的步数（含首尾）
+ */
+function hailstoneLength(n: number): number { /* ... */ }
+</code></pre>
+
+<h2>修改值 vs. 重新赋值</h2>
+<p>这是两个常被混淆的概念：</p>
+<ul>
+<li><strong>修改</strong>（mutation）：改变某个值本身的内容。</li>
+<li><strong>重新赋值</strong>（reassignment）：让变量指向另一个值。</li>
+</ul>
+<pre><code class="language-ts">let a: number = 5;
+a = 10;          // 重新赋值：a 现在指向 10
+
+let arr: number[] = [1, 2, 3];
+arr[0] = 99;     // 修改：数组对象本身被改变了
+</code></pre>
+
+<h2>把假设写下来</h2>
+<p>为一个变量写下类型，就是在<strong>文档化你对它的假设</strong>。类型注解既是给编译器的指令，也是给未来读者（包括未来的你自己）的承诺：「这个变量始终是一个 <code>number</code>」。</p>
+
+<h2>黑客式编程 vs. 工程</h2>
+<p>软件工程不是「先跑起来再说」。工程师是悲观主义者：他们假设自己会犯错、假设需求会变化、假设后来者会误读代码，于是用静态类型、规格说明、测试等工具在错误造成损失之前就将其捕获。</p>
+
+<h2>6.102 的目标：好软件的三大品质</h2>
+<ul>
+<li><strong>免于错误</strong>（Safe from bugs）：现在正确，在未来未知的情形下也保持正确。</li>
+<li><strong>易于理解</strong>（Easy to understand）：与未来的程序员（包括未来的自己）清晰地沟通。</li>
+<li><strong>便于修改</strong>（Ready for change）：设计时就为变化留出余地，而非每次变化都推倒重来。</li>
+</ul>
+<p>这三大品质贯穿整个课程，也是我们做每一个工程取舍时的坐标系。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">静态检查</span>在编译时自动发现类型错误，优于运行时才发现或静默出错。</p>
+<p style="margin-top:10px"><span class="tag">类型</span>是一组值及其运算的集合；静态类型语言让编译器替你守住类型约定。</p>
+<p style="margin-top:10px"><span class="tag">三大品质</span>免于错误、易于理解、便于修改——这是 6.102 所有技术决策的出发点。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

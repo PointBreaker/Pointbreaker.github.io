@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Promise — MIT 6.102</title>
+<meta name="description" content="Promise：表示尚未完成的并发计算，通过 await 获取结果，用 Promise.all/any/race 聚合多个计算，并理解异步函数与异常处理的语义。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="../index.html#lectures">课程</a><a href="../index.html#psets">作业</a><a href="../index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<div class="eyebrow">CLASS 15 · 2026-04-06 · 14-16 并发</div>
+<h1>Promise</h1>
+<p class="lede">Promise 是「将来才会有结果」的信封。它让你不必阻塞等待，而是用 <code>await</code> 在结果就绪时再继续，同时用聚合函数把多个并发计算组合成新的逻辑。</p>
+
+<h2>Promise 是什么？</h2>
+<blockquote><strong>Promise</strong>：一个表示并发计算的对象，该计算已经启动，但结果可能尚未就绪。</blockquote>
+<p><code>Promise&lt;T&gt;</code> 是一个<strong>可变</strong>值——它的状态会随时间改变，但持有的结果类型 <code>T</code> 由泛型保证。一个 Promise 有三种状态：</p>
+<ul>
+<li><strong>待定</strong>（pending）：计算还在进行。</li>
+<li><strong>已完成</strong>（fulfilled）：计算成功，带有结果值。</li>
+<li><strong>已拒绝</strong>（rejected）：计算失败，带有错误。</li>
+</ul>
+
+<h2>await</h2>
+<p><code>await</code> 关键字把一个 <code>Promise&lt;T&gt;</code>「打开」，变成 <code>T</code>。如果 Promise 还在待定状态，<code>await</code> 会让出控制权，让其他代码先跑，直到结果就绪再恢复。</p>
+<pre><code class="language-ts">async function fetchUser(id: number): Promise&lt;User&gt; {
+  const res = await fetch(`/api/users/${id}`); // 让出控制权
+  const data: User = await res.json();
+  return data;
+}</code></pre>
+
+<h2>异步函数</h2>
+<p>用 <code>async</code> 声明的函数是<strong>异步函数</strong>。它在计算完成前就把控制权交还给调用者，返回值自动包装成 <code>Promise&lt;T&gt;</code>。</p>
+<pre><code class="language-ts">async function greet(): Promise&lt;string&gt; {
+  return "hello";
+}
+// greet() 返回的是 Promise&lt;string&gt;，而非 string</code></pre>
+
+<h2>JavaScript 的并发模型</h2>
+<p>TypeScript/JavaScript 在每个全局环境中只有<strong>一条控制线程</strong>。<code>await</code> 是唯一能让出控制权的地方——这让单线程上的多任务协作成为可能，也意味着长计算会阻塞整个事件循环。</p>
+
+<h2>聚合多个 Promise</h2>
+<p>Promise 提供了几种把多个并发计算组合成新逻辑的方式：</p>
+<ul>
+<li><code>Promise.all(promises)</code>：等待<strong>全部</strong>完成（逻辑与），任一失败则整体失败。</li>
+<li><code>Promise.any(promises)</code>：等待<strong>任意一个</strong>完成（逻辑或），全部失败才失败。</li>
+<li><code>Promise.race(promises)</code>：等待<strong>任意一个</strong>完成或拒绝，以第一个敲定者为准。</li>
+</ul>
+<pre><code class="language-ts">const [user, orders] = await Promise.all([
+  fetchUser(42),
+  fetchOrders(42),
+]);
+// 两个请求并发发出，全部完成后继续</code></pre>
+
+<h2>永远不要忙等待</h2>
+<p>Promise <strong>没有</strong>公开方法让你查询它当前处于哪种状态。你不能用一个循环反复检查「好了没」——那叫<strong>忙等待</strong>（busy-waiting），会浪费 CPU 并阻塞事件循环。正确做法永远是 <code>await</code>。</p>
+
+<h2>Promise 与异常处理</h2>
+<ul>
+<li>异步函数里抛出异常，会让返回的 Promise 进入<strong>已拒绝</strong>状态。</li>
+<li>对已拒绝的 Promise 使用 <code>await</code>，会把异常重新抛出。</li>
+</ul>
+<pre><code class="language-ts">async function risky(): Promise&lt;number&gt; {
+  throw new Error("boom");
+}
+async function main() {
+  try {
+    await risky();
+  } catch (e) {
+    console.log("捕获到", e); // 正常捕获
+  }
+}</code></pre>
+
+<div class="card">
+<h4>关键要点</h4>
+<ul>
+<li><span class="tag">状态</span>Promise 三种状态：pending、fulfilled、rejected。</li>
+<li><span class="tag">await</span>打开 Promise，让出控制权直到结果就绪。</li>
+<li><span class="tag">async</span>异步函数返回 Promise，是并发计算的入口。</li>
+<li><span class="tag">聚合</span>all（全部）、any（任一成功）、race（首个敲定）。</li>
+<li><span class="tag">异常</span>throw → rejected，await rejected → 抛出。</li>
+<li><span class="tag">禁忙等</span>没有状态查询方法，永远用 await。</li>
+</ul>
+</div>
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

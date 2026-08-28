@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>接口与子类型 — MIT 6.102</title>
+<meta name="description" content="用接口、泛型、枚举定义 ADT：子类型多态、参数化类型与有限值集合，让一个抽象拥有多种实现。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="../index.html#lectures">课程</a><a href="../index.html#psets">作业</a><a href="../index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 08 · 2026-03-02 · 类型与函数式</p>
+<h1>接口与子类型</h1>
+<p class="lede">本讲学习用 TypeScript 接口、泛型和枚举来定义 ADT。接口让一个抽象支持多种实现，泛型让类型参数化，枚举让有限值集合成为类型安全的 ADT。</p>
+
+<h2>接口</h2>
+<p>TypeScript 中的<strong>接口</strong>（interface）是一组方法签名的列表，没有方法体。它定义了「能做什么」，而不规定「怎么做」。</p>
+<pre><code class="language-ts">// 接口定义了字符串抽象的操作集合
+interface MyString {
+  length(): number;
+  charAt(index: number): string;
+  concat(other: MyString): MyString;
+  substring(start: number, end: number): MyString;
+}
+</code></pre>
+
+<h2>子类型</h2>
+<blockquote>B 是 A 的<strong>子类型</strong>（subtype），当且仅当 B 满足 A 的规格——即每个 B 都能在任何需要 A 的地方使用。</blockquote>
+<p>子类型关系实现了「里氏替换原则」：如果 <code>MyArrayString</code> 实现了 <code>MyString</code> 接口，那么任何接受 <code>MyString</code> 的代码都可以传入 <code>MyArrayString</code>。</p>
+<pre><code class="language-ts">// 两种不同的实现，满足同一接口
+class MyArrayString implements MyString {
+  private readonly chars: string[];
+  // 实现所有方法...
+}
+
+class MyLinkedString implements MyString {
+  private readonly head: CharNode | null;
+  // 实现所有方法...
+}
+
+// 使用者代码只依赖接口，不依赖具体实现
+function printLength(s: MyString): void {
+  console.log(s.length());
+}
+</code></pre>
+
+<h2>为什么用接口</h2>
+<ul>
+<li><strong>文档化</strong>：接口是 ADT 操作的精确文档。</li>
+<li><strong>允许性能权衡</strong>：不同实现可以在时间/空间上做出不同取舍。</li>
+<li><strong>一个类的多个视图</strong>：一个类可以实现多个接口，扮演多种角色。</li>
+</ul>
+
+<h2>子类化</h2>
+<p><strong>子类化</strong>（Subclassing）是定义一个类作为另一个类的扩展。子类继承父类的实现，同时获得子类型关系。但子类化会暴露父类的实现细节，因此应谨慎使用；优先使用接口来实现多态。</p>
+
+<h2>泛型类型</h2>
+<blockquote><strong>泛型类型</strong>（Generic type）是用占位类型参数化的类型，其规格不依赖具体元素类型。</blockquote>
+<p>泛型让我们写出类型安全且可复用的代码：</p>
+<pre><code class="language-ts">interface List&lt;T&gt; {
+  length(): number;
+  get(index: number): T;
+  append(item: T): List&lt;T&gt;;
+}
+
+// 实例化时指定类型参数
+let numbers: List&lt;number&gt; = new ArrayList&lt;number&gt;();
+let names: List&lt;string&gt; = new ArrayList&lt;string&gt;();
+</code></pre>
+
+<h2>枚举</h2>
+<blockquote><strong>枚举</strong>（Enumeration）定义一个小的、有限的不可变值集合作为命名常量。</blockquote>
+<p>枚举适合表示固定集合的类型，例如方向、状态、星期：</p>
+<pre><code class="language-ts">enum Direction {
+  NORTH, SOUTH, EAST, WEST
+}
+
+enum Color {
+  RED = "#FF0000",
+  GREEN = "#00FF00",
+  BLUE = "#0000FF"
+}
+
+function turn(dir: Direction): void {
+  switch (dir) {
+    case Direction.NORTH: /* ... */ break;
+    // TypeScript 会检查 switch 是否覆盖所有枚举值
+  }
+}
+</code></pre>
+
+<h2>Getter 与 Setter</h2>
+<p>使用 <code>get</code> 关键字可以定义<strong>getter 方法</strong>，让方法调用看起来像属性访问：</p>
+<pre><code class="language-ts">class Rectangle {
+  constructor(
+    private readonly width: number,
+    private readonly height: number
+  ) {}
+
+  get area(): number {
+    return this.width * this.height;
+  }
+}
+
+const r = new Rectangle(3, 4);
+console.log(r.area); // 12，像访问属性一样调用方法
+</code></pre>
+
+<h2>非面向对象语言中的 ADT</h2>
+<p>ADTs 不仅限于面向对象语言。在非 OOP 语言中，ADT 可以定义为在 opaque（不透明）数据类型上操作的函数集合——使用者只能通过函数操作数据，无法直接访问内部表示。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">接口</span>定义操作集合，支持多种实现；优先于子类化。</p>
+<p style="margin-top:10px"><span class="tag">子类型</span>B 是 A 的子类型 = B 满足 A 的规格，可替换使用。</p>
+<p style="margin-top:10px"><span class="tag">泛型与枚举</span>泛型参数化类型，枚举定义有限值集合。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>

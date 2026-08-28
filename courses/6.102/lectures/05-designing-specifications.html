@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>设计规格说明 — MIT 6.102</title>
+<meta name="description" content="如何设计好的规格说明：声明式 vs. 操作式、规格的强弱、前置与后置条件的工程取舍，以及可变性带来的风险。">
+<style>
+:root{--bg:#0a0a0c;--bg-soft:#141418;--bg-card:#1a1a20;--fg:#f0ece4;--fg-muted:#8a8680;--accent:#c4302b;--accent-glow:rgba(196,48,43,.25);--line:rgba(240,236,228,.1);--radius:14px;--sans:"Inter","SF Pro Display","Segoe UI",system-ui,sans-serif;--serif:"Cormorant Garamond","Georgia",serif;--mono:"JetBrains Mono","SF Mono",ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--sans);background:var(--bg);color:var(--fg);line-height:1.7;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 70% -10%,var(--accent-glow),transparent 60%),radial-gradient(ellipse 60% 50% at 10% 80%,rgba(196,48,43,.08),transparent 50%);pointer-events:none;z-index:0}
+.wrap{width:min(880px,92vw);margin:0 auto}
+nav.top{position:sticky;top:0;z-index:100;padding:14px 0;background:rgba(10,10,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+nav.top .inner{display:flex;align-items:center;justify-content:space-between;width:min(880px,92vw);margin:0 auto}
+nav.top a{color:var(--fg-muted);text-decoration:none;font-size:13px;font-weight:500;transition:color .2s}
+nav.top a:hover{color:var(--fg)}
+nav.top .brand{font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+nav.top .brand .mark{width:28px;height:28px;display:grid;place-items:center;background:var(--accent);border-radius:7px;font-size:12px;font-weight:800}
+article{position:relative;z-index:1;padding:60px 0 80px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+h1{font-family:var(--serif);font-size:clamp(36px,6vw,56px);font-weight:600;line-height:1;letter-spacing:-.03em;margin-bottom:16px}
+h2{font-family:var(--serif);font-size:clamp(24px,4vw,32px);font-weight:600;letter-spacing:-.02em;margin:48px 0 16px}
+h3{font-size:18px;font-weight:600;margin:32px 0 12px}
+.lede{font-size:17px;color:var(--fg-muted);line-height:1.7;margin-bottom:40px;max-width:600px}
+p{margin-bottom:14px}ul,ol{margin-bottom:14px;padding-left:22px}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.88em;background:rgba(240,236,228,.08);padding:2px 6px;border-radius:4px}
+pre{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin:20px 0;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.6}
+blockquote{border-left:3px solid var(--accent);padding-left:18px;margin:20px 0;color:var(--fg-muted)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin:24px 0}
+.card h4{font-size:15px;font-weight:600;margin-bottom:8px}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--accent);background:var(--accent-glow);padding:4px 10px;border-radius:6px;margin-right:8px}
+footer.bottom{position:relative;z-index:1;border-top:1px solid var(--line);padding:40px 0;text-align:center;font-size:12px;color:var(--fg-muted)}
+footer.bottom a{color:var(--fg);text-decoration:none}
+@media(max-width:600px){article{padding:40px 0 60px}}
+</style>
+</head>
+<body>
+<nav class="top"><div class="inner">
+  <a class="brand" href="../index.html"><span class="mark">6</span> 6.102</a>
+  <div style="display:flex;gap:20px"><a href="../index.html#lectures">课程</a><a href="../index.html#psets">作业</a><a href="../index.html#exams">考试</a></div>
+</div></nav>
+
+<article><div class="wrap">
+<p class="eyebrow">CLASS 05 · 2026-02-18 · 规格与设计</p>
+<h1>设计规格说明</h1>
+<p class="lede">不是所有规格都有用。本讲学习如何设计出清晰、恰当的规格：区分声明式与操作式、理解规格的强弱、掌握前置与后置条件的工程取舍，并认识可变性带来的风险。</p>
+
+<h2>确定规格 vs. 欠确定规格</h2>
+<p>如果一个规格对同一输入允许不同的结果，则称为<strong>欠确定</strong>（underdetermined）。完全确定的规格每次调用都唯一决定结果；欠确定规格则给实现者留出了自由度（例如排序算法可以返回任意一种稳定排序结果）。</p>
+
+<h2>声明式规格 vs. 操作式规格</h2>
+<ul>
+<li><strong>操作式</strong>（Operational）：描述「怎么做」——一步步的流程。</li>
+<li><strong>声明式</strong>（Declarative）：描述「做什么」——只给出最终结果的性质。</li>
+</ul>
+<blockquote>声明式规格几乎总是更可取的。</blockquote>
+<p>声明式规格更简洁、更易于理解，且给实现者更大的优化空间。</p>
+<pre><code class="language-ts">// 操作式（不好）：描述步骤
+// "遍历数组，把每个元素逐个添加到一个新数组中..."
+
+// 声明式（好）：描述结果
+/**
+ * 返回数组的一个副本，其中元素按升序排列。
+ * @param arr 输入数组
+ * @returns 新数组，包含 arr 的所有元素且按升序排列
+ */
+function sort(arr: number[]): number[];
+</code></pre>
+
+<h2>更强 vs. 更弱的规格</h2>
+<blockquote>S2 比 S1 <strong>更强</strong>（stronger），当且仅当满足 S2 的实现集合是满足 S1 的实现集合的真子集。等价地说：S2 的前置条件弱于或等于 S1，且 S2 的后置条件强于或等于 S1。</blockquote>
+<ul>
+<li><strong>更弱的前置条件</strong>：对调用者更友好（更多输入被接受）。</li>
+<li><strong>更强的后置条件</strong>：对调用者更有用（更多关于结果的保证）。</li>
+</ul>
+<p>好的规格应该<strong>对调用者足够强</strong>（提供有用的保证），同时<strong>对实现者足够弱</strong>（留出实现自由度）。</p>
+
+<pre><code class="language-ts">// 弱规格：只要求返回数组中的某个元素
+// @returns arr 中的某个元素
+
+// 中等规格：返回最大值
+// @returns arr 中的最大元素
+
+// 强规格：返回最大值及其索引
+// @returns { value: arr 中的最大元素, index: 其索引 }
+</code></pre>
+
+<h2>用图表示规格</h2>
+<p>把「所有可能的实现」看作一个空间，一个规格就定义了这个空间中的一个<strong>区域</strong>——区域内所有实现都满足该规格。更强的规格对应更小的区域。</p>
+
+<h2>可变性的风险</h2>
+<p>可变性（mutability）是许多 bug 的根源。两个典型风险：</p>
+<ul>
+<li><strong>传递可变值</strong>：把可变对象传给函数，函数可能在内部修改它，违反调用者预期。</li>
+<li><strong>返回可变值</strong>：返回内部可变对象的引用，调用者可能修改内部状态。</li>
+</ul>
+
+<h2>别名是可变类型风险的根源</h2>
+<p>当多个引用（别名，alias）指向同一个可变对象时，任何一个引用都可能修改该对象，而其他引用浑然不觉。这就是可变类型危险的本质。</p>
+
+<h2>TypeScript 中的只读集合</h2>
+<p>TypeScript 提供了只读类型来防御修改：<code>ReadonlyArray</code>、<code>ReadonlySet</code>、<code>ReadonlyMap</code>。它们省略了所有修改操作，让编译器替你守住不变性。</p>
+<pre><code class="language-ts">// 返回只读视图，防止调用者修改内部状态
+function getItems(): ReadonlyArray&lt;string&gt; {
+  return ["a", "b", "c"];
+}
+
+const items = getItems();
+// items.push("d"); // Error: Property 'push' does not exist on type 'readonly string[]'.
+</code></pre>
+
+<h2>设计好规格的原则</h2>
+<ul>
+<li><strong>连贯</strong>（Coherent）：规格逻辑自洽，不自相矛盾。</li>
+<li><strong>慎重考虑可变性</strong>：明确哪些参数可被修改。</li>
+<li><strong>足够强</strong>：对调用者提供真正有用的保证。</li>
+<li><strong>足够弱</strong>：给实现者留出优化和变更的空间。</li>
+</ul>
+
+<h2>前置条件还是后置条件</h2>
+<p>是否使用前置条件是一个工程判断。前置条件把验证负担推给调用者（更弱的前置 = 更友好的 API）；后置条件把验证负担留给实现者（更强的后置 = 更多的检查）。选择取决于错误的代价和验证的成本。</p>
+
+<h2>规格用在哪里</h2>
+<p>规格不仅用于公开 API，也用于辅助函数、导出函数、库函数和语言标准。任何需要他人（或未来的自己）理解的代码，都值得配上规格。</p>
+
+<div class="card">
+<h4>核心要点</h4>
+<p><span class="tag">声明式</span>描述「做什么」而非「怎么做」；声明式规格更优。</p>
+<p style="margin-top:10px"><span class="tag">强弱</span>弱前置（对调用者友好）+ 强后置（对调用者有用）= 好规格。</p>
+<p style="margin-top:10px"><span class="tag">可变性</span>别名 + 可变对象 = bug；用只读类型防御。</p>
+</div>
+
+</div></article>
+
+<footer class="bottom"><div class="wrap">
+  <p>中文精读设计为学习辅助 · 课程材料与原始内容版权归 MIT 6.102 Spring 2026 教学团队</p>
+</div></footer>
+</body>
+</html>
