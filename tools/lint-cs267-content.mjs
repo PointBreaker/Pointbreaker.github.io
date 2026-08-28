@@ -14,7 +14,7 @@ const lessonFiles = htmlFiles('lessons');
 ok(lessonFiles.length === 27, `expected 27 lessons, found ${lessonFiles.length}`);
 const lessonSandbox = { window: {} };
 vm.createContext(lessonSandbox);
-for (const source of ['assets/practice-bank-core.js', 'assets/practice-bank-applications.js']) {
+for (const source of ['assets/practice-bank-core.js', 'assets/practice-bank-applications.js', 'assets/practice-bank-depth.js']) {
   vm.runInContext(read(source), lessonSandbox, { filename: source });
 }
 const practice = lessonSandbox.window.CS267PracticeBank || {};
@@ -22,12 +22,13 @@ for (const file of lessonFiles) {
   const id = file.replace(/\.html$/, '');
   const html = read(`lessons/${file}`);
   ok(practice[id], `${file}: missing practice-bank entry`);
-  ok(html.includes('learning-system.css?v=20260827b'), `${file}: missing learning-system.css`);
-  ok(html.includes('lesson-experience.js?v=20260827a'), `${file}: missing lesson-experience.js`);
+  ok(html.includes('learning-system.css?v=20260828d'), `${file}: missing learning-system.css`);
+  ok(html.includes('lesson-experience.js?v=20260828d'), `${file}: missing lesson-experience.js`);
   ok(html.includes('framework-diagrams.css?v=20260827c'), `${file}: missing framework diagram styles`);
   ok(html.includes('framework-diagrams.js?v=20260827c'), `${file}: missing framework diagram renderer`);
   ok(html.includes('practice-bank-core.js?v=20260827a'), `${file}: missing core practice bank`);
   ok(html.includes('practice-bank-applications.js?v=20260827a'), `${file}: missing applications practice bank`);
+  ok(html.includes('practice-bank-depth.js?v=20260828d'), `${file}: missing depth practice bank`);
 }
 ok(Object.keys(practice).length === lessonFiles.length, `practice bank has ${Object.keys(practice).length} entries for ${lessonFiles.length} lessons`);
 for (const [id, lesson] of Object.entries(practice)) {
@@ -36,6 +37,7 @@ for (const [id, lesson] of Object.entries(practice)) {
   ok(Array.isArray(lesson.deep) && lesson.deep.length >= 2, `${id}: needs >=2 Deep Quiz items`);
   ok(Array.isArray(lesson.open) && lesson.open.length >= 2, `${id}: needs >=2 closed-book prompts`);
   ok(Array.isArray(lesson.explain) && lesson.explain.length >= 4, `${id}: needs >=4 explain outcomes`);
+  ok(lesson.reasoning?.toy && lesson.reasoning?.whyNot, `${id}: needs toy derivation and why-not counterfactual`);
 }
 
 const lesson03 = read('lessons/03-matmul-roofline.html');

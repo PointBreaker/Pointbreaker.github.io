@@ -156,18 +156,47 @@
   mental.append(el('p', '', lesson.mental));
   before.insertAdjacentElement('afterend', mental);
 
-  const heading = [...page.querySelectorAll(':scope > h2')].find((node) =>
-    node.textContent.includes(lesson.check.after)
-  ) || page.querySelector(':scope > h2');
-  if (heading) {
+  if (lesson.reasoning) {
+    const reasoning = el('section', 'reasoning-start');
+    reasoning.id = 'reasoning-start';
+    reasoning.appendChild(el('h2', '', '推导起点 · 从 tiny case 到系统结论'));
+    reasoning.querySelector('h2').id = 'reasoning-start-heading';
+    const grid = el('div', 'reasoning-grid');
+    const objects = el('article');
+    objects.append(el('p', 'reasoning-label', 'Objects'), el('p', '', `先区分对象：${lesson.map.join('、')}。这些词属于同一条因果链，但不是同一份状态。`));
+    const toy = el('article');
+    toy.append(el('p', 'reasoning-label', 'Toy Example'), el('p', '', lesson.reasoning.toy));
+    const mechanism = el('article');
+    mechanism.append(el('p', 'reasoning-label', 'Mechanism'), el('p', '', `从 ${lesson.map[0]} 出发，逐步经过 ${lesson.map.slice(1).join(' → ')}；每一步都要说明改变了哪个对象、付出了什么成本。`));
+    const whyNot = el('article');
+    whyNot.append(el('p', 'reasoning-label', 'Why not?'), el('p', '', lesson.reasoning.whyNot));
+    grid.append(objects, toy, mechanism, whyNot);
+    reasoning.appendChild(grid);
+    mental.insertAdjacentElement('afterend', reasoning);
+  }
+
+  const contentHeadings = [...page.querySelectorAll(':scope > h2')].filter((node) =>
+    !/测验|知识检查|要点总结|本课要点|延伸阅读/.test(node.textContent)
+  );
+  const inlineChecks = [lesson.check];
+  if (lesson.reasoning && lesson.deep[0]) {
+    inlineChecks.push({
+      after: contentHeadings[Math.max(0, Math.floor(contentHeadings.length * 0.62))]?.textContent || lesson.check.after,
+      label: '换一个系统状态再推一次',
+      question: lesson.deep[0]
+    });
+  }
+  inlineChecks.forEach((check, index) => {
+    const heading = contentHeadings.find((node) => node.textContent.includes(check.after)) || contentHeadings[index];
+    if (!heading) return;
     const lab = el('aside', 'concept-lab teaching-block concept-check-block');
-    lab.id = 'inline-concept-check';
+    lab.id = `inline-concept-check-${index + 1}`;
     lab.dataset.blockLabel = 'Concept Check';
-    lab.append(el('p', 'concept-lab-eyebrow', `Concept Check · ${lesson.check.label}`), createQuestion(lesson.check.question, 'section'));
+    lab.append(el('p', 'concept-lab-eyebrow', `理解检查 ${index + 1}/${inlineChecks.length} · ${check.label}`), createQuestion(check.question, 'section'));
     let boundary = heading.nextElementSibling;
     while (boundary && boundary.tagName !== 'H2') boundary = boundary.nextElementSibling;
     (boundary || heading).insertAdjacentElement(boundary ? 'beforebegin' : 'afterend', lab);
-  }
+  });
 
   const legacyQuizzes = [...page.querySelectorAll(':scope > .quiz')];
   const legacyHeading = [...page.querySelectorAll(':scope > h2')].find((node) => /测验|知识检查/.test(node.textContent));
@@ -190,12 +219,13 @@
   deep.id = 'deep-quiz';
   deep.append(el('h2', '', '综合理解验证 · Deep Quiz'), el('p', '', '这些题不按正文顺序复述术语，而是要求区分、推导或迁移。可以跳过，不影响继续阅读。'));
   deep.querySelector('h2').id = 'deep-quiz-heading';
-  const progress = el('p', 'deep-quiz-progress', `已完成 0 / ${lesson.deep.length} · 首次答对 0`);
+  const deepQuestions = lesson.reasoning ? lesson.deep.slice(1) : lesson.deep;
+  const progress = el('p', 'deep-quiz-progress', `已完成 0 / ${deepQuestions.length} · 首次答对 0`);
   deep.appendChild(progress);
   let completed = 0;
   let correctCount = 0;
   const levels = [['Level 1', 'Distinguish'], ['Level 2', 'Derive'], ['Level 3', 'Transfer']];
-  lesson.deep.forEach((question, index) => {
+  deepQuestions.forEach((question, index) => {
     const details = el('details', 'deep-quiz-item');
     if (index === 0) details.open = true;
     const summary = el('summary');
@@ -203,7 +233,7 @@
     details.append(summary, createQuestion(question, 'deep', (correct) => {
       completed += 1;
       if (correct) correctCount += 1;
-      progress.textContent = `已完成 ${completed} / ${lesson.deep.length} · 首次答对 ${correctCount}`;
+      progress.textContent = `已完成 ${completed} / ${deepQuestions.length} · 首次答对 ${correctCount}`;
     }));
     deep.appendChild(details);
   });

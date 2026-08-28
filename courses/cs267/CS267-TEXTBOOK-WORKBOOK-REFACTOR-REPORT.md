@@ -1,5 +1,7 @@
 # CS267 Interactive Textbook + Engineering Workbook 重构报告
 
+> 2026-08-28 depth pass：27 课全部增加 `Objects → Tiny Example → Mechanism → Why not?` 推导起点；原每课 1 个 inline check 扩展为 2 个分节检查，第二题从课末 reasoning 题前移到正文学习点。原课末题库继续保留为快速复习，避免用重复题堆页面长度。
+
 日期：2026-08-27  
 课程版本：UC Berkeley CS267 Spring 2025
 
@@ -101,4 +103,3 @@ Assignment: Stage → Contract → Tiny sanity check → Debug → Prediction/Ex
 - UPC++ completion / progress 行为、MPI implementation 与机器网络会影响实测。
 - PCG 收敛与预处理收益依赖矩阵谱、容差和 stopping criterion。
 - Project 中所有 empirical claim 都需要学生按自己的硬件、数据和 baseline 重新验证。
-
