@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import vm from "node:vm";
 
 const root = process.cwd();
 const lessonsDir = path.join(root, "courses/eecs498/lessons");
@@ -55,6 +56,46 @@ for (const file of files) {
     console.error(`FAIL: course homepage missing ${file}`);
     failures += 1;
   }
+}
+
+const parsedInfo = JSON.parse(courseInfo);
+const parsedStatus = JSON.parse(fs.readFileSync(path.join(root, "courses/eecs498/api/status.json"), "utf8"));
+const reviewDir = path.join(root, "courses/eecs498/reviews");
+const reviewFiles = fs.readdirSync(reviewDir).filter((file) => /^a[1-6]\.html$/.test(file)).sort();
+if (reviewFiles.length !== 6) {
+  console.error(`FAIL: expected 6 Review Lab wrappers, found ${reviewFiles.length}`);
+  failures += 1;
+}
+for (const inventory of [parsedInfo.assignments, parsedStatus.assignments]) {
+  if (inventory?.length !== 6) {
+    console.error("FAIL: course-info/status must expose all 6 Review Labs");
+    failures += 1;
+  }
+  for (const item of inventory || []) {
+    if (!item.contentFile || !fs.existsSync(path.join(root, "courses/eecs498", item.contentFile))) {
+      console.error(`FAIL: missing Review Lab ${item.contentFile || item.number}`);
+      failures += 1;
+    }
+  }
+}
+const reviewContext = { window: {} };
+vm.createContext(reviewContext);
+vm.runInContext(fs.readFileSync(path.join(root, "courses/eecs498/assets/review-lab-bank.js"), "utf8"), reviewContext);
+const reviewBank = reviewContext.window.EECS498ReviewLabs || {};
+if (Object.keys(reviewBank).length !== 6) {
+  console.error(`FAIL: expected 6 Review Lab data entries, found ${Object.keys(reviewBank).length}`);
+  failures += 1;
+}
+for (const [id, lab] of Object.entries(reviewBank)) {
+  if ((lab.stages || []).length < 3) { console.error(`FAIL: ${id} needs at least 3 stages`); failures += 1; }
+  for (const stage of lab.stages || []) {
+    if (!stage.contract?.input || !stage.contract?.output || stage.contract?.invariants?.length < 2 || stage.contract?.forbidden?.length < 2) { console.error(`FAIL: ${id}/${stage.id} contract incomplete`); failures += 1; }
+    if (stage.failures?.length < 2 || stage.hints?.length !== 3 || stage.evidence?.length < 3 || stage.gate?.length < 3) { console.error(`FAIL: ${id}/${stage.id} workbook scaffold incomplete`); failures += 1; }
+  }
+}
+const reviewRenderer = fs.readFileSync(path.join(root, "courses/eecs498/assets/review-labs.js"), "utf8");
+for (const marker of ["Tiny sanity check", "Prediction → Experiment → Evidence", "Progressive hints", "Retrospective"]) {
+  if (!reviewRenderer.includes(marker)) { console.error(`FAIL: Review Lab renderer missing ${marker}`); failures += 1; }
 }
 
 const homeCatalog = fs.readFileSync(path.join(root, "courses.json"), "utf8");

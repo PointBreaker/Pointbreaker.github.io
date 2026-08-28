@@ -33,7 +33,31 @@
   const page = document.querySelector('.page');
   if (page) {
     const filename = location.pathname.split('/').pop();
+    const reviewMap = {
+      '0001-neural-networks-are-functions.html': ['a1', 'A1 · Tensor Foundations'],
+      '0002-backprop-computational-graphs.html': ['a2', 'A2 · Classifiers'],
+      '0003-optimization-training-dynamics.html': ['a2', 'A2 · Classifiers'],
+      '0004-cnn-spatial-structure.html': ['a3', 'A3 · Deep Networks'],
+      '0005-vision-representations.html': ['a4', 'A4 · Representations & Sequences'],
+      '0006-detection-structured-prediction.html': ['a5', 'A5 · Detection'],
+      '0007-rnn-through-time.html': ['a4', 'A4 · Representations & Sequences'],
+      '0008-lstm-memory.html': ['a4', 'A4 · Representations & Sequences'],
+      '0009-transformer-token-embedding.html': ['a4', 'A4 · Representations & Sequences'],
+      '0010-transformer-attention-routing.html': ['a4', 'A4 · Representations & Sequences'],
+      '0011-transformer-encoder-decoder.html': ['a4', 'A4 · Representations & Sequences'],
+      '0012-transformer-seq2seq-training.html': ['a4', 'A4 · Representations & Sequences'],
+      '0013-transformer-to-modern-llms.html': ['a4', 'A4 · Representations & Sequences'],
+      '0014-generative-models.html': ['a6', 'A6 · Generative Models'],
+    };
     const state = readProgress();
+    const review = reviewMap[filename];
+    if (review) {
+      const bridge = document.createElement('aside');
+      bridge.className = 'eecs-review-bridge';
+      bridge.innerHTML = `<div><strong>Learn → Inspect → Explain</strong><p>在 Review Lab 中回到真实代码，用 tiny input、prediction 和 evidence 验证这一课。</p></div><a href="../reviews/${review[0]}.html">进入 ${review[1]} →</a>`;
+      const end = document.querySelector('#pb-page-end');
+      page.insertBefore(bridge, end || null);
+    }
     const wrap = document.createElement('section');
     wrap.className = 'eecs-completion';
     wrap.setAttribute('aria-label', '本课程学习进度');

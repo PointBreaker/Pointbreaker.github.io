@@ -104,7 +104,7 @@
   }
 
   function getAssignments() {
-    return info.assignments || status.assignments || [];
+    return info.assignments?.length ? info.assignments : (status.assignments || []);
   }
 
   function hydrateHeader() {
