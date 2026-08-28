@@ -8,9 +8,13 @@ document.querySelectorAll(".quiz, [data-quiz]").forEach((quiz) => {
     feedback.dataset.feedback = "";
     quiz.appendChild(feedback);
   }
+  feedback.setAttribute("role", "status");
+  feedback.setAttribute("aria-live", "polite");
+  feedback.setAttribute("aria-atomic", "true");
 
   const buttons = quiz.querySelectorAll("button[data-choice], button[data-answer]");
   buttons.forEach((button) => {
+    if (!button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", "false");
     button.addEventListener("click", () => {
       buttons.forEach((candidate) => candidate.setAttribute("aria-pressed", "false"));
       button.setAttribute("aria-pressed", "true");

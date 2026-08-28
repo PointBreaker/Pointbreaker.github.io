@@ -2,6 +2,11 @@
   document.querySelectorAll('.depth-check[data-answer]').forEach((check) => {
     const answer = check.dataset.answer;
     const feedback = check.querySelector('.depth-feedback, .check-feedback');
+    if (feedback) {
+      feedback.setAttribute('role', 'status');
+      feedback.setAttribute('aria-live', 'polite');
+      feedback.setAttribute('aria-atomic', 'true');
+    }
     check.querySelectorAll('button[data-choice]').forEach((button) => {
       button.addEventListener('click', () => {
         check.querySelectorAll('button[data-choice]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
