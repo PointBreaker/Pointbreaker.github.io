@@ -1,0 +1,41 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer III · Encoder Decoder — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
+<p class="eyebrow">EECS498 · Transformer III · 11</p><h1>Encoder, Decoder, and Cross Attention</h1><p class="lede">Self-attention 让一组 representations 内部交流；cross-attention 让 decoder 带着“我现在需要什么”的 query，去 encoder 的整组输出里检索。</p><div class="meta"><span>70–90 分钟</span><span>WI22 A5</span><span>Self · Cross · Causal</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 EncoderBlock、DecoderBlock、LayerNormalization、FeedForwardBlock 和 subsequent mask。</p><ol><li>Self 与 Cross 的 Q/K/V 分别来自哪里？</li><li>residual/MLP 在 attention 之外做什么？</li><li>causal mask 为什么不是可选优化？</li></ol></section>
+<div class="transformer-thread"><strong>当前样本：</strong>encoder 读完整问题 <code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code>；decoder 逐步产生 <code>BOS POSITIVE 0 4 EOS</code>。</div>
+<h2 id="why">Why Did We Need This?</h2><p>问题与答案是两组不同角色的 sequence。Encoder 可以双向理解完整 expression；decoder 的每一步既要读已生成的 answer prefix，又要查询 expression 中与当前输出相关的位置。</p>
+<h2 id="self-cross">One View, Two Sources</h2><div class="compare-grid"><article><h3>Self-attention · 我内部交流</h3><pre><code class="language-plaintext">Q = same sequence
+K = same sequence
+V = same sequence</code></pre><p>expression 内各 token 互相 contextualize；或 answer prefix 内部交流。</p></article><article><h3>Cross-attention · 我向另一组查询</h3><pre><code class="language-plaintext">Q = decoder states
+K = encoder states
+V = encoder states</code></pre><p>answer position 根据当前需求读取问题 representations。</p></article></div>
+<div class="mental-model"><small>Mental model</small><p>Encoder 把输入改写成可被检索的 contextual memory；decoder 一边维护答案上下文，一边用 cross-attention 动态查询这份 memory。</p></div>
+<h2 id="block">Block Data Flow</h2><pre><code class="language-plaintext">Encoder block
+x [N,Kq,M] → self-attention → residual+norm → MLP → residual+norm → [N,Kq,M]
+
+Decoder block
+answer [N,Ka,M] → masked self-attention
+                    ↓
+encoder [N,Kq,M] → cross-attention(Q=answer, K/V=encoder)
+                    ↓
+                  MLP → [N,Ka,M]</code></pre>
+<p>MLP 对每个位置独立地改写 feature channels；attention 在位置之间搬运信息。两者分别负责 token mixing 与 channel mixing。</p>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · DecoderBlock.forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L838">View source →</a></div><pre><code class="language-python">out_1 = self.attention_self(dec_inp, dec_inp, dec_inp, mask)
+out_2 = self.dropout(self.norm1(dec_inp + out_1))
+out_3 = self.attention_cross(out_2, enc_inp, enc_inp)
+out_4 = self.dropout(self.norm2(out_3 + out_2))
+out_5 = self.feed_forward(out_4)
+y = self.dropout(self.norm3(out_5 + out_4))</code></pre></div>
+<h2 id="mask">Causal Mask · 为什么不能看未来</h2><pre><code class="language-plaintext">decoder input prefix     prediction target
+BOS                      POSITIVE
+BOS POSITIVE             0
+BOS POSITIVE 0           4
+BOS POSITIVE 0 4         EOS</code></pre><p>训练时整条 target 已在 tensor 中；若位置 i 能 attention 到 i 之后的 token，就直接看到了答案，产生 label leakage。你的 <code>get_subsequent_mask</code> 构造上三角 <code>True</code>，在 softmax 前把未来 scores 设为极小值。</p>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · get_subsequent_mask()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L711">View source →</a></div><pre><code class="language-python">N, K = seq.shape
+mask = torch.tril(torch.ones((N, K, K), device=seq.device))
+mask = mask != 1</code></pre></div>
+<h2 id="why-design">Why Residual + Norm?</h2><p>Attention/MLP 学的是对当前 representation 的更新，residual 保留原表示并提供直接 gradient path；normalization 控制每个 token 的 feature scale。没有 residual，深层 block 必须每次完整重建表示。</p>
+<div class="historical-note"><p><strong>Historical implementation note：</strong>Notebook 的 DecoderBlock saved checks 为 0.5016 / 0.4971，并留下 “I think the bug is with the skeleton”。本课基于源码解释实际 data flow，不把该 check 写成通过，也不替历史仓库静默修复。</p></div>
+<div class="card warning"><p><strong>Common misconceptions：</strong>Cross-attention 不是 encoder/decoder concat；encoder output 也不是一个单一向量。K/V 保留 <code>Kq</code> 个位置，decoder 的每个 query row 都可采用不同读取分布。</p></div>
+<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>decoder length Ka=4，encoder length Kq=9，cross-attention matrix shape？</summary><p>每个 batch/head 为 <code>[4,9]</code>：4 个 decoder queries，各对 9 个 encoder keys 分配读取权重。</p></details><details class="concept-check"><summary>Self-attention 中第 3 个 answer token 能看到第 5 个吗？encoder 中呢？</summary><p>decoder causal self-attention 不能；encoder self-attention 通常可以双向看完整输入。</p></details><details class="concept-check"><summary>Cross-attention 中为什么 K=V=encoder，却仍要两份 projection？</summary><p>来源 tensor 相同，但 K projection 产出可匹配地址特征，V projection 产出被读取的内容特征。</p></details><details class="concept-check"><summary>如果 causal mask 在 softmax 后才乘 0，会有什么问题？</summary><p>剩余权重行不再归一化；更重要的是未来位置先参与了 softmax denominator。标准做法在 softmax 前屏蔽 score。</p></details>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>WI22 A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L581">EncoderBlock</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L727">DecoderBlock</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">Notebook validation outputs</a></li></ul></section><footer><p>下一课：把所有 blocks 接上 loss，看看你当年到底训练了什么模型。</p></footer>
+</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

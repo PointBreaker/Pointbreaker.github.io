@@ -1,0 +1,31 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer II · Attention as Routing — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
+<p class="eyebrow">EECS498 · Transformer II · 10</p><h1>Attention as Dynamic Information Routing</h1><p class="lede">Attention 的核心不是一条公式，而是一个可计算的问题：当前位置想找什么、其他位置凭什么被找到、找到后实际读回什么。</p><div class="meta"><span>70–90 分钟</span><span>WI22 A5</span><span>Q · K · V · Shapes</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你从 two-loop 写到 batched no-loop attention，再封装 <code>SelfAttention</code> 与 <code>MultiHeadAttention</code>。</p><ol><li>Q/K/V 为什么是三份 projection？</li><li><code>[K,K]</code> 两个轴各是谁？</li><li>output 如何真的包含其他 token 的信息？</li></ol></section>
+<div class="transformer-thread"><strong>仍用同一任务：</strong>expression 的每个 digit/operator representation 需要根据其他位置判断符号、操作与位值。</div>
+<h2 id="problem">Concrete Problem First</h2><p>看一句 <em>The animal slept</em>。处理 <em>slept</em> 时，它需要知道“谁 slept”。RNN 让信息沿相邻 time steps 传过来；attention 允许 <em>slept</em> 直接对所有位置提出查询。</p>
+<div class="compare-grid"><article><h3>Q · Query</h3><p>当前 token 想找什么？例如谓词在找可能的主语特征。</p></article><article><h3>K · Key</h3><p>每个候选 token 可以用什么特征被匹配？</p></article><article><h3>V · Value</h3><p>如果候选被关注，它实际提供哪份信息？</p></article><article><h3>Weights</h3><p>当前 query 对所有 keys 的归一化读取比例。</p></article></div>
+<h2 id="flow">Data / Shape Flow</h2><div class="shape-flow"><div><strong>Q, K, V</strong><span>[N,K,D]</span></div><div><strong>QKᵀ</strong><span>[N,K,K]</span></div><div><strong>softmax weights A</strong><span>[N,K,K]</span></div><div><strong>AV</strong><span>[N,K,D]</span></div></div>
+<p>第一个 K 轴是<strong>谁在读取（query position i）</strong>；第二个 K 轴是<strong>从谁读取（key/value position j）</strong>。因此 <code>A[i,j]</code> 很大表示：新的第 i 个 representation 大量读取第 j 个 value。</p>
+<div class="mental-model"><small>Mental model</small><p>Attention 是由内容动态决定路由权重的信息读取机制；A 不是旁观的可视化，而是实际参与计算的 token-to-token routing matrix。</p></div>
+<h2 id="mechanism">Mechanism · 公式终于出现</h2><pre><code class="language-plaintext">score(i,j) = q_i · k_j / √D
+A_i = softmax(score(i,:))
+Y_i = Σ_j A_ij V_j
+
+QKᵀ: matching scores
+softmax: reading weights (each query row sums to 1)
+×V: information aggregation</code></pre><p><code>Y_i</code> 数学上就是其他位置 values 的加权和。“token 交换信息”不是比喻。</p>
+<h2 id="implemented">What You Actually Implemented</h2><p>同一机制有三种版本：<code>scaled_dot_product_two_loop_single</code>、<code>scaled_dot_product_two_loop_batch</code>、<code>scaled_dot_product_no_loop_batch</code>。Notebook 保存的 relative errors 约为 4–5×10⁻⁶，随后 <code>SelfAttention</code> 学习 Q/K/V projections。</p>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · scaled_dot_product_no_loop_batch()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L235">View source →</a></div><pre><code class="language-python">scores = torch.bmm(query, key.transpose(1, 2))
+scores /= math.sqrt(M)
+scores = torch.masked_fill(scores, mask, -1e9)
+weights_softmax = F.softmax(scores, dim=-1)
+y = torch.bmm(weights_softmax, value)</code></pre></div>
+<h2 id="qkv">Why Separate Q, K, V?</h2><p>若匹配特征与被传递内容必须相同，模型受限。独立 projections 允许一个 token 用语法特征被找到，却把语义/数值特征送出去。Q 与 K 决定地址，V 决定 payload。</p>
+<h2 id="mha">Multi-head: several routing spaces</h2><p>你为每个 head 创建独立 <code>SelfAttention</code>，拼接各 head 输出，再投影回 <code>dim_in</code>。每个 head 都能学习不同的 matching subspace；不是把同一 attention matrix 复制多次。</p>
+<div class="shape-flow"><div><strong>input</strong><span>[N,K,M]</span></div><div><strong>H heads</strong><span>H × [N,K,Dh]</span></div><div><strong>concat</strong><span>[N,K,H·Dh]</span></div><div><strong>project</strong><span>[N,K,M]</span></div></div>
+<h2 id="why-design">Why Scale by √D?</h2><p>若 q/k 分量方差相近，dot product 的 variance 随 D 增长；不缩放会让 softmax 过早饱和，只有极少数位置拿到权重，gradient 变弱。</p>
+<div class="card warning"><p><strong>Common misconceptions：</strong>Attention 不等于单纯 similarity visualization；self-attention 不等于每个 token 广播自己；<code>[K,K]</code> 也不是 feature covariance，而是 query-position × key-position。</p></div>
+<h2 id="now">Then vs Now</h2><p>FlashAttention 改变的是精确 attention 的计算与内存调度，不改变 <code>softmax(QKᵀ)V</code> 的结果语义。MQA/GQA 共享部分 K/V 以降低 cache；“query 找地址，value 提供内容”的 mental model 仍成立。</p>
+<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>A[i,j] 很大，究竟是谁从谁读取？</summary><p>输出位置 i（query i）从输入/value 位置 j 大量读取。读者是行，来源是列。</p></details><details class="concept-check"><summary>Q=[32,9,16]，K=[32,9,16]，QKᵀ 与 attention output shape？</summary><p>scores/weights <code>[32,9,9]</code>；若 V=<code>[32,9,16]</code>，output 是 <code>[32,9,16]</code>。</p></details><details class="concept-check"><summary>如果所有 keys 对某个 query 得分完全相同，softmax 后怎样？</summary><p>该行是均匀的 <code>1/K</code>，输出是所有 values 的平均；没有内容选择性。</p></details><details class="concept-check"><summary>为什么 Y_i 不只是“知道 j 很相关”，而是真的含有 j 的信息？</summary><p>因为计算直接执行 <code>Σ_j A_ij V_j</code>；只要 A_ij 非零，V_j 的分量就在 Y_i 中。</p></details>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L91">three scaled dot-product implementations</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L256">SelfAttention</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L340">MultiHeadAttention</a></li></ul></section><footer><p>下一课：同一套读取机制，在 encoder、decoder 与两组 representations 之间如何分工。</p></footer>
+</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

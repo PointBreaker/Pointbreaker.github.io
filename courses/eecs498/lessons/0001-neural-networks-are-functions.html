@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>第 1 课 · Neural Networks Are Functions — EECS498 Revisited</title>
+<link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css">
+</head><body><main class="page">
+<p class="eyebrow">EECS498 · Deep Learning Revisited · 01</p><h1>Neural Networks Are Functions</h1>
+<p class="lede">你当年从 KNN、linear classifier 走到 two-layer net，真正发生的变化不是 API 变多了，而是“数据怎样变成可学习的 representation”第一次闭环。</p>
+<div class="meta"><span>45–60 分钟</span><span>A1–A2</span><span>Shape first</span></div>
+
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你当年实现了距离矩阵、线性 scores、ReLU hidden layer、softmax loss 和参数更新。</p><ol><li>一个 batch 在每层代表什么？</li><li>参数与 activation 有什么不同？</li><li>训练为何最终能写成一条函数链？</li></ol></section>
+
+<h2 id="why">Why Did We Need This?</h2>
+<p>KNN 没有学习一个参数化表示：预测时仍要把测试样本与训练集比较。A2 的线性分类器第一次把经验压进 <code>W</code>；two-layer net 又允许数据先经过一个可学习 hidden representation，再变成 class scores。</p>
+<div class="shape-flow"><div><strong>images</strong><span>X [N,D]</span></div><div><strong>hidden</strong><span>H [N,H]</span></div><div><strong>scores</strong><span>S [N,C]</span></div><div><strong>loss</strong><span>L scalar</span></div></div>
+
+<h2 id="implemented">What You Actually Implemented</h2>
+<table><thead><tr><th>File</th><th>Implemented in repository</th><th>Evidence</th></tr></thead><tbody>
+<tr><td><code>A1/knn.py</code></td><td>three distance kernels, label vote, K-fold CV</td><td>zip diff；Notebook test 33.86%</td></tr>
+<tr><td><code>A2/linear_classifier.py</code></td><td>SVM / softmax naive+vectorized, minibatch SGD</td><td>zip diff；two saved checkpoints</td></tr>
+<tr><td><code>A2/two_layer_net.py</code></td><td>affine → ReLU → affine, softmax, manual gradients</td><td>zip diff；test 53.59%</td></tr>
+</tbody></table>
+<p><span class="course-explanation">CourseStack Explanation</span> “函数链”是本课程为复习建立的统一视角，不声称是你当年的原话。</p>
+
+<div class="mental-model"><small>Mental model</small><p>神经网络不是一袋 layer；它是把输入 representation 逐层改写，最后让正确答案的 score 更容易胜出的参数化函数。</p></div>
+
+<h2 id="mechanism">Mechanism · 每个 tensor 到底是谁</h2>
+<p>把 CIFAR-10 图片 flatten 后，<code>X[n]</code> 是第 n 个样本；<code>W1[:,h]</code> 是生成第 h 个 hidden feature 的参数；<code>hidden[n,h]</code> 是这个样本在该 feature 上的 activation。参数跨样本共享，activation 随输入改变。</p>
+<p>用最小公式恢复链条：</p>
+<pre><code class="language-plaintext">H = ReLU(XW₁ + b₁)      [N,D]·[D,H] → [N,H]
+S = HW₂ + b₂             [N,H]·[H,C] → [N,C]
+L = softmax_loss(S, y)   [N,C] + [N] → scalar</code></pre>
+
+<h2 id="code">Code Lens</h2>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2022</p><p class="your-code-file">A2/two_layer_net.py · nn_forward_pass()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A2/two_layer_net.py#L116">View source →</a></div><pre><code class="language-python">hidden = X.mm(W1) + b1
+hidden *= 1 * (hidden &gt; 0)  # ReLU
+scores = hidden.mm(W2) + b2</code></pre></div>
+<p>这三行已经包含了深度学习最持久的结构：线性混合负责“组合已有特征”，非线性负责让多层不坍缩成一次矩阵乘法。</p>
+
+<h2 id="why-design">Why This Design?</h2>
+<div class="compare-grid"><article><h3>如果没有 hidden layer</h3><p>每个 class 只能用一个线性分界面组织像素，表示能力受限。</p></article><article><h3>如果没有 ReLU</h3><p><code>XW1W2</code> 仍等价于单个线性变换；“两层”只有记账意义。</p></article></div>
+
+<h2 id="misconception">Common Misconception</h2>
+<div class="card warning"><p><strong>Score 不是 probability，hidden unit 也不是预先命名的“眼睛检测器”。</strong>它们先是训练过程塑造出的数值 representation；softmax 才把相对 score 解释成归一化分布。</p></div>
+
+<h2 id="now">Then vs Now</h2><p>现代 Transformer 仍做同一件事：token IDs → embedding → 多层 hidden representations → vocabulary scores → scalar loss。模型更大、block 更复杂，但“参数共享的函数链”没有改变。</p>
+
+<h2 id="checks">Concept Checks</h2>
+<details class="concept-check"><summary>输入 X=[32,3072]，W1=[3072,128]，hidden 是什么 shape？</summary><p><strong>[32,128]</strong>。每个样本得到 128 个 hidden features；3072 是被加权汇总的输入维。</p></details>
+<details class="concept-check"><summary>如果删掉 ReLU，再堆十个 linear layer，表达能力发生什么？</summary><p>忽略 bias 后仍可合并成一个矩阵；加入 bias 仍只是 affine。深度没有创造分段非线性边界。</p></details>
+<details class="concept-check"><summary>为什么参数 W 不带 batch 维，而 hidden 带 N？</summary><p>W 是所有样本共享的规则；hidden 是每个样本经过规则后产生的状态。</p></details>
+
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 · A1 — <a href="https://github.com/PointBreaker/EECS498/tree/1b495ae8c4db1343a12a39ac626a0a84dcada300/A1">Notebook + KNN / tensor implementations</a></li><li>EECS498 · A2 — <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A2/linear_classifier.py">linear_classifier.py</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A2/two_layer_net.py">two_layer_net.py</a></li></ul></section>
+<footer><p>CourseStack Explanation 与 repository implementation 已分开标注。</p></footer>
+</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

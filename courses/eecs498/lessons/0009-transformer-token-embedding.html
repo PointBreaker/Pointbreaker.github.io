@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer I · Token to Embedding — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
+<p class="eyebrow">EECS498 · Transformer I · 09</p><h1>From Raw Sequence to Embedding</h1><p class="lede">Transformer 看不到字符串。你当年的 arithmetic pipeline 先把符号变成 16-token vocabulary 的 IDs，再把每个 ID 查成一个可学习向量，最后加入位置信息。</p><div class="meta"><span>60–75 分钟</span><span>WI22 A5</span><span>Token → ID → vector</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 <code>generate_token_dict</code>、<code>prepocess_input_sequence</code>、position encoding 与 <code>nn.Embedding</code>，并在 5,000 条算术 pairs 上训练。</p><ol><li>token、token ID、embedding 各是什么？</li><li>为什么数字按 digit 切分？</li><li>position 解决 embedding 的什么缺口？</li></ol></section>
+<div class="transformer-thread"><strong>贯穿五课的真实样本：</strong><code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code> → <code>BOS POSITIVE 04 EOS</code></div>
+<h2 id="why">Why Did We Need This?</h2><p>神经网络接收 tensor，离散字符串既没有固定 shape，也不能直接求梯度。Tokenizer 负责确定离散单元与 ID；embedding table 负责把 ID 映射到可学习连续空间。两步不能混为一谈。</p>
+<h2 id="implemented">What You Actually Implemented</h2><table><tr><th>Repository object</th><th>Role</th><th>Ownership</th></tr><tr><td><code>two_digit_op.json</code></td><td>5,000 input/output arithmetic pairs</td><td>Assignment data</td></tr><tr><td><code>generate_token_dict</code></td><td>16 symbols → IDs 0…15</td><td>Implemented in repository</td></tr><tr><td><code>prepocess_input_sequence</code></td><td>special tokens stay whole; numbers split to digits</td><td>Implemented in repository</td></tr><tr><td><code>Transformer.emb_layer</code></td><td>ID lookup → M-dimensional vector</td><td>Implemented in repository</td></tr></table>
+<h2 id="flow">Data Flow · 一条字符串怎样进入模型</h2>
+<pre><code class="language-plaintext">"BOS NEGATIVE 30 subtract NEGATIVE 34 EOS"
+  ↓ whitespace + special-token rule
+[BOS, NEGATIVE, 3, 0, subtract, NEGATIVE, 3, 4, EOS]
+  ↓ vocab lookup
+[14, 11, 3, 0, 13, 11, 3, 4, 15]          [K=9]
+  ↓ batch
+token IDs                                    [N,K]
+  ↓ nn.Embedding(V=16, M)
+token embeddings                             [N,K,M]
+  + positional encoding                      [1 or N,K,M]
+Transformer input representation             [N,K,M]</code></pre>
+<div class="mental-model"><small>Mental model</small><p>Tokenizer 选择离散字典与切分规则；token ID 只是表格索引；embedding 才是模型会学习的连续表示，而且此时还没有上下文。</p></div>
+<h2 id="code">Code Lens</h2>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · preprocess</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L75">View source →</a></div><pre><code class="language-python">for letter in input_str.split(" "):
+    if letter in token_dict:
+        out.append(token_dict[letter])
+    else:
+        for digit in letter:
+            out.append(token_dict[digit])</code></pre></div>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · Transformer</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L1069">View source →</a></div><pre><code class="language-python">self.emb_layer = nn.Embedding(
+    num_embeddings=vocab_len,
+    embedding_dim=emb_dim,
+)
+q_emb = self.emb_layer(ques_b)
+q_emb_inp = q_emb + ques_pos</code></pre></div>
+<h2 id="position">Why Position?</h2><p>同一个 token ID 每次从 table 取出的初始向量相同；attention 若没有 position，本身只看到一个无序集合。把 position vector 加进去，让“第一个 3”与“第二个 3”在进入 block 前已经可区分。</p>
+<div class="historical-note"><p><strong>Historical implementation note：</strong>保存的 sinusoidal implementation 使用 <code>floor(a / M)</code> 生成 denominator，导致测试维度中的频率没有按标准公式展开。它通过了 Notebook 给定的 saved check，但现代严格实现应使用不被 floor 抹平的 <code>2i/M</code> 频率指数。</p></div>
+<h2 id="why-design">Why This Design?</h2><ul><li>把数字拆成 digits，可用 10 个数字 token 组合未见过的两位数；代价是模型必须学习位值和进位。</li><li>共享 embedding table，让同一符号在 encoder/decoder 都从同一基础向量出发。</li><li>position 与 token vector 同 shape，相加后不改变后续 block 的接口。</li></ul>
+<div class="card warning"><p><strong>Common misconceptions：</strong>Token ID 11 不比 ID 3 “更大”；embedding 不是 contextual representation；两个相同 digit 的初始 embedding 可相同，但 position 与 attention 之后 representation 会不同。</p></div>
+<h2 id="now">Then vs Now · 连接 CS336</h2><div class="compare-grid"><article><h3>EECS498 toy tokenizer</h3><p>人工定义 16-token vocab；special words 保持整体；数字按 digit 切分。</p></article><article><h3>Modern LLM tokenizer</h3><p>Unicode → UTF-8 bytes → BPE/subword merges → token IDs；vocab 从数据学习。</p></article></div><p>概念链没变：string → discrete tokens → IDs → embedding。变化的是 token boundary 如何确定，以及 vocabulary 的规模与训练方式。</p>
+<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>V=16, M=64，输入 IDs shape=[32,9]，embedding 后 shape？embedding 参数 shape？</summary><p>输出 <code>[32,9,64]</code>；table 参数 <code>[16,64]</code>。每个 ID 选择一行，不增加 one-hot 维。</p></details><details class="concept-check"><summary>为什么 token ID 14 不能理解成“语义数值 14”？</summary><p>它只是 <code>BOS</code> 所在的 row index；任意重排 IDs 并同步重排 embedding rows，模型语义不变。</p></details><details class="concept-check"><summary>两个 token ID 都是 3，进入 embedding 时相同，经过 Transformer 后为什么可不同？</summary><p>位置向量不同；并且每个位置根据周围 tokens 读取不同信息，逐层形成不同 contextual representation。</p></details>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">Transformers.ipynb</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py">transformers.py</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/two_digit_op.json">two_digit_op.json</a></li></ul></section><footer><p>下一课：这些 [N,K,M] vectors 如何直接读取彼此的信息？</p></footer>
+</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>
