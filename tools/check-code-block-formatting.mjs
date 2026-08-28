@@ -18,6 +18,14 @@ const walk = (target) => {
 const failures = [];
 for (const file of roots.flatMap(walk)) {
   const html = fs.readFileSync(file, 'utf8');
+  for (const match of html.matchAll(/<code\b(?:[^>"']|"[^"]*"|'[^']*')*>[^<]*<\/(?:em|strong|span)>/gi)) {
+    const line = html.slice(0, match.index).split('\n').length;
+    failures.push(`${file}:${line}: <code> is closed by a different inline tag`);
+  }
+  for (const match of html.matchAll(/<(?:em|strong|span)\b(?:[^>"']|"[^"]*"|'[^']*')*>[^<]*<\/code>/gi)) {
+    const line = html.slice(0, match.index).split('\n').length;
+    failures.push(`${file}:${line}: </code> closes a different inline tag`);
+  }
   for (const match of html.matchAll(/<code\b[^>]*>([\s\S]*?)<\/code>/gi)) {
     const lastPreOpen = html.lastIndexOf('<pre', match.index);
     const lastPreClose = html.lastIndexOf('</pre>', match.index);
@@ -30,7 +38,7 @@ for (const file of roots.flatMap(walk)) {
 
 if (failures.length) {
   console.error(failures.join('\n'));
-  console.error(`\n${failures.length} malformed multiline code block(s) found.`);
+  console.error(`\n${failures.length} malformed code tag or multiline code block(s) found.`);
   process.exit(1);
 }
 
