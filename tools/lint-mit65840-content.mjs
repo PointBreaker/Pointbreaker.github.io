@@ -26,6 +26,12 @@ for (const file of lessonFiles) {
   ok(lesson, `${file}: missing practice entry`);
   for (const asset of ['learning-system.css?v=20260828a', 'practice-bank-core.js?v=20260828a', 'practice-bank-systems.js?v=20260828a', 'learning-experience.js?v=20260828a']) ok(html.includes(asset), `${file}: missing ${asset}`);
   ok((html.match(/class="quiz"/g) || []).length === 3, `${file}: expected 3 existing Deep Quiz questions`);
+  const assignmentLinks = [...html.matchAll(/href="([^"]*assignments\/[^"#]+\.html(?:#[^"]*)?)"/g)].map((match) => match[1]);
+  for (const href of assignmentLinks) {
+    const target = href.split('#')[0];
+    const resolved = path.resolve(course, 'lessons', path.dirname(file), target);
+    ok(fs.existsSync(resolved), `${file}: broken Assignment link ${href}`);
+  }
   if (!lesson) continue;
   ok(lesson.before?.length >= 3, `${slug}: needs >=3 prerequisite prompts`);
   ok(lesson.map?.length >= 4, `${slug}: object map is incomplete`);
