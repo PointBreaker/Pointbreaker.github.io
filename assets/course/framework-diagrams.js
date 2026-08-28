@@ -137,6 +137,191 @@
       nodes: [N('Workload + hardware'), N('Resource accounting'), N('Hypothesized bottleneck'), N('Algorithm / layout / kernel change'), N('Measure again', 'accept or revise', '', 'accent')]
     },
     {
+      page: '/6.1810/lessons/01-introduction.html', afterHeading: '什么是操作系统？', layout: 'stack',
+      kicker: 'Operating-system stack', title: '应用通过受保护的接口共享硬件', note: 'System call boundary 同时承担抽象与隔离：应用请求服务，但不能直接控制 kernel state 或 hardware。',
+      levels: [
+        { title: 'Applications', meta: 'shell · compiler · database', tag: 'untrusted', width: 100 },
+        { title: 'System calls', meta: 'open · read · fork · exec', tag: 'protected boundary', width: 92 },
+        { title: 'Kernel services', meta: 'process · VM · FS · network', tag: 'policy + multiplexing', width: 84 },
+        { title: 'Hardware', meta: 'CPU · RAM · disk · NIC', tag: 'resources', width: 76 }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/02-c-in-xv6.html', afterHeading: 'C 程序在 xv6 中的内存布局', layout: 'stack',
+      kicker: 'Process address space', title: '同一个虚拟地址空间容纳不同生命周期的对象', note: 'Stack 向低地址增长，heap 向高地址增长；text 的权限通常是 R+X，而 data/heap/stack 需要 R+W。',
+      levels: [
+        { title: 'High addresses', meta: 'trampoline / trapframe', tag: 'xv6 mappings', width: 100 },
+        { title: 'Stack ↓', meta: 'frames · locals · return addresses', tag: 'R+W', width: 94 },
+        { title: 'Unmapped gap', meta: 'room for growth', tag: 'guard', width: 88 },
+        { title: 'Heap ↑', meta: 'sbrk / dynamic objects', tag: 'R+W', width: 82 },
+        { title: 'Data', meta: 'globals · static variables', tag: 'R+W', width: 76 },
+        { title: 'Text', meta: 'machine instructions', tag: 'R+X', width: 70 }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/03-os-design.html', afterHeading: '操作系统全景', layout: 'flow',
+      kicker: 'Protected kernel path', title: '每次系统调用都把不可信请求变成受检查的资源操作',
+      nodes: [N('Application', 'untrusted state'), N('System call', 'small interface'), N('Kernel validation', 'arguments + permissions', '', 'accent'), N('Kernel abstraction', 'process / file / VM'), N('Hardware resource')]
+    },
+    {
+      page: '/6.1810/lessons/04-organization.html', match: '用户进程:\n  fork() → libc', layout: 'flow',
+      kicker: 'Microkernel service path', title: 'L4 把 Unix 语义移到用户态 server', note: '隔离边界更小，但一次服务可能引入额外 IPC、context switch 与 copy。',
+      nodes: [N('User process', 'fork()'), N('libc stub'), N('IPC call', 'block for reply'), N('L4 kernel', 'route message', '', 'accent'), N('Linux server', 'implement fork'), N('IPC reply', 'resume process')]
+    },
+    {
+      page: '/6.1810/lessons/05-page-tables.html', match: 'CPU 发出 VA', layout: 'lanes',
+      kicker: 'Address translation', title: 'TLB hit 直接复用翻译；只有 miss 才遍历页表',
+      lanes: [
+        { label: 'TLB hit', nodes: [N('CPU virtual address'), N('Cached PTE + permission'), N('Physical address'), N('RAM access', '', '', 'accent')] },
+        { label: 'TLB miss', nodes: [N('CPU virtual address'), N('Sv39 page-table walk'), N('Fill TLB'), N('Physical address'), N('RAM access', '', '', 'accent')] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/05-page-tables.html', match: 'Level 2 目录', layout: 'flow',
+      kicker: 'Sv39 page-table walk', title: '三个 9-bit index 逐级找到叶 PTE', note: '12-bit page offset 不参与查表，最终原样拼到 physical page number 后面。',
+      nodes: [N('VA fields', 'L2 · L1 · L0 · offset'), N('Level 2', 'index 9 bits'), N('Level 1', 'index 9 bits'), N('Level 0', 'leaf PTE', '', 'accent'), N('Physical page', '+ unchanged offset')]
+    },
+    {
+      page: '/6.1810/lessons/06-syscall-entry.html', match: 'write()                 write() returns', layout: 'lanes',
+      kicker: 'System-call round trip', title: '进入内核和返回用户态必须成对保存、切换与恢复状态',
+      lanes: [
+        { label: 'Entry', nodes: [N('write()'), N('ecall'), N('uservec', 'save registers'), N('usertrap'), N('sys_write', '', '', 'accent')] },
+        { label: 'Return', nodes: [N('syscall result'), N('usertrapret'), N('userret', 'restore registers'), N('sret'), N('write returns', '', '', 'accent')] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/07-interposition.html', afterHeading: '为什么选择系统调用作为拦截点？', layout: 'flow',
+      kicker: 'Interposition boundary', title: 'Policy monitor 必须位于应用无法绕过的资源边界', note: '仅在 libc 拦截不安全：应用与 libc 共享地址空间，恶意代码可以绕过或篡改它。',
+      nodes: [N('Untrusted process'), N('System-call request'), N('Monitor', 'copy + inspect arguments', '', 'accent'), N('Policy decision', 'allow / deny'), N('Kernel resource', 'file · process · network')]
+    },
+    {
+      page: '/6.1810/lessons/08-page-faults.html', match: 'sbrk() 只增加 p->sz', layout: 'flow',
+      kicker: 'Lazy allocation', title: '先承诺虚拟地址，第一次实际访问时才分配物理页',
+      nodes: [N('sbrk grows p→sz', 'no physical page'), N('Application touches VA'), N('Page fault'), N('Validate address'), N('Allocate + map page', '', '', 'accent'), N('Retry instruction')]
+    },
+    {
+      page: '/6.1810/lessons/08-page-faults.html', match: 'fork() 不复制物理页，而是共享', layout: 'flow',
+      kicker: 'Copy-on-write fork', title: '父子先共享只读页，只有写入者承担复制成本', note: 'Reference count 决定旧 physical page 何时真正可释放。',
+      nodes: [N('fork'), N('Share physical pages', 'mark both PTEs read-only'), N('Write attempt'), N('COW page fault'), N('Allocate + copy', '', '', 'accent'), N('Remap writer R/W')]
+    },
+    {
+      page: '/6.1810/lessons/09-superpages.html', afterHeading: 'TLB 与超级页动机', layout: 'cards',
+      kicker: 'TLB reach', title: '同样数量的 TLB entries，page size 决定可覆盖多少内存', note: 'Superpage 减少 TLB miss，但会增加连续物理内存、promotion 与 internal fragmentation 的压力。',
+      cards: [
+        { title: '4 KiB pages', rows: [['128 entries', '512 KiB reach'], ['1024 entries', '4 MiB reach'], ['优势', '细粒度分配']] },
+        { title: '2 MiB superpages', rows: [['128 entries', '256 MiB reach'], ['1024 entries', '2 GiB reach'], ['代价', 'collapse / fragmentation']] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/10-uservm.html', afterHeading: '应用级虚拟内存原语', layout: 'flow',
+      kicker: 'User-level VM control', title: '内核暴露机制，应用用自己的 metadata 决定映射策略',
+      nodes: [N('Memory access'), N('Protection / missing mapping'), N('Page-fault trap'), N('User handler', 'GC / migration policy', '', 'accent'), N('Map / protect page'), N('Resume instruction')]
+    },
+    {
+      page: '/6.1810/lessons/11-interrupts.html', afterHeading: '中断路径', layout: 'flow',
+      kicker: 'Device interrupt path', title: '设备只发出通知，driver 仍必须读取状态并完成工作', note: 'Interrupt 是“可能有工作”的提示，不是设备状态本身；driver 必须读取 MMIO registers 确认。',
+      nodes: [N('Device', 'UART / disk / NIC'), N('PLIC', 'route IRQ'), N('CPU trap'), N('devintr', 'identify source'), N('Driver handler', '', '', 'accent'), N('Wake consumer')]
+    },
+    {
+      page: '/6.1810/lessons/12-locking.html', afterHeading: '如何实现锁？', layout: 'lanes',
+      kicker: 'Lock acquisition', title: '互斥要求“观察并占有”成为一个不可分割的动作', note: 'Atomic swap 决定唯一 owner；aq/rl memory ordering 还要保证 critical-section loads/stores 不越过锁边界。',
+      lanes: [
+        { label: 'Broken', nodes: [N('Load locked=0'), N('Another CPU loads 0'), N('Both store 1'), N('Two owners', 'mutual exclusion broken', '', 'accent')] },
+        { label: 'Atomic', nodes: [N('AMOSWAP'), N('Read old + write 1', 'one memory transaction'), N('One CPU sees 0'), N('Single owner', '', '', 'accent')] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/13-threads.html', match: '用户态 → 内核态', layout: 'flow',
+      kicker: 'Context-switch state', title: 'Trapframe 与 context 保存的是两次不同边界的状态', note: 'Trapframe 保存完整 user register state；context 只保存 kernel thread 切换所需的 callee-saved registers。',
+      nodes: [N('User thread'), N('Trapframe', 'user → kernel'), N('Kernel thread'), N('Context', 'process → scheduler', '', 'accent'), N('Scheduler'), N('Next context'), N('Next user thread')]
+    },
+    {
+      page: '/6.1810/lessons/14-coordination.html', afterHeading: 'Lost Wakeup 问题', layout: 'flow',
+      kicker: 'Lost-wakeup race', title: '检查条件与进入 sleep 之间的空隙会吞掉一次 wakeup', note: '正确接口用同一把 condition lock 把“检查条件 → 登记睡眠”与 producer update 串行化。',
+      nodes: [N('Consumer checks', 'condition=false'), N('About to sleep'), N('Producer updates', 'condition=true'), N('Producer wakeup', 'nobody sleeping yet'), N('Consumer sleeps', '', '', 'accent'), N('Stuck forever')]
+    },
+    {
+      page: '/6.1810/lessons/15-networking.html', match: 'NIC 硬件 → NIC DMA RX Ring', layout: 'lanes',
+      kicker: 'Kernel network datapath', title: '收包与发包沿相反方向穿过 DMA ring、driver 与协议栈',
+      lanes: [
+        { label: 'Receive', nodes: [N('NIC'), N('RX DMA ring'), N('Interrupt / poll'), N('IP + socket queue'), N('Application', '', '', 'accent')] },
+        { label: 'Transmit', nodes: [N('Application'), N('Socket + IP output'), N('Driver'), N('TX DMA ring'), N('NIC', '', '', 'accent')] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/16-shenango.html', match: 'NIC 将收到的包 DMA 到 RX Ring', layout: 'lanes',
+      kicker: 'Conventional Linux path', title: '传统网络路径包含中断、kernel protocol stack 与 socket queue',
+      lanes: [
+        { label: 'Receive', nodes: [N('NIC'), N('RX ring'), N('Kernel interrupt'), N('TCP / UDP'), N('Socket queue'), N('Application')] },
+        { label: 'Transmit', nodes: [N('Application'), N('Kernel stack'), N('TX ring'), N('NIC')] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/16-shenango.html', afterHeading: '解决方案：内核旁路', layout: 'lanes',
+      kicker: 'Kernel bypass', title: '旁路缩短 datapath，但资源隔离与调度责任不会消失', note: 'Shenango 的 I/O kernel 负责跨应用分配 cores 与 network resources；应用 runtime 负责自己的 fast path。',
+      lanes: [
+        { label: 'Traditional', nodes: [N('NIC'), N('Kernel network stack'), N('Socket API'), N('Application')] },
+        { label: 'Bypass', nodes: [N('NIC queues'), N('I/O kernel', 'resource policy', '', 'accent'), N('Application runtime'), N('User threads')] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/17-fs.html', match: '系统调用层', layout: 'stack',
+      kicker: 'xv6 file-system layers', title: '每一层把更低层的 block operations 提升成更稳定的抽象',
+      levels: [
+        { title: 'System calls', meta: 'open · read · write · link', tag: 'API', width: 100 },
+        { title: 'FD + pathname', meta: 'per-process references', tag: 'names', width: 94 },
+        { title: 'Inodes', meta: 'metadata + block mapping', tag: 'files', width: 88 },
+        { title: 'Inode cache', meta: 'identity · references · locks', tag: 'in-memory state', width: 82 },
+        { title: 'Logging', meta: 'atomic update groups', tag: 'crash safety', width: 76 },
+        { title: 'Buffer cache', meta: 'cached disk blocks', tag: 'synchronization', width: 70 },
+        { title: 'virtio_disk', meta: 'device commands', tag: 'hardware', width: 64 }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/18-crash.html', match: '缓冲缓存', layout: 'cards',
+      kicker: 'Three storage states', title: 'Crash recovery 必须区分内存缓存、home locations 与磁盘日志',
+      cards: [
+        { title: 'Buffer cache', rows: [['位置', 'RAM'], ['内容', 'dirty updates'], ['掉电', '会丢失']] },
+        { title: 'Disk FS tree', rows: [['位置', 'home blocks'], ['内容', '已安装状态'], ['风险', 'partial update']] },
+        { title: 'Disk log', rows: [['位置', 'reserved region'], ['内容', 'transaction copy'], ['作用', 'commit + replay']] }
+      ]
+    },
+    {
+      page: '/6.1810/lessons/18-crash.html', match: 'commit()                        // log.c', layout: 'flow',
+      kicker: 'Write-ahead logging', title: '只有 commit record 持久化后，事务才允许安装到 home locations', note: 'WAL 的关键次序是 log data → commit point → install；反过来会在 crash 后留下不可判定的半更新。',
+      nodes: [N('begin_op'), N('log_write', 'pin dirty buffers'), N('Write log blocks'), N('Write commit point', 'transaction durable', '', 'accent'), N('Install to FS'), N('Clear log')]
+    },
+    {
+      page: '/6.1810/lessons/19-journal.html', match: '|SB: offset+seq#|', layout: 'flow',
+      kicker: 'ext3 journal record', title: 'Descriptor、data blocks 与 commit record 共同定义一个事务',
+      nodes: [N('Journal superblock', 'offset + sequence'), N('Descriptor', 'target block numbers'), N('Journal data blocks'), N('Commit record', 'same sequence', '', 'accent'), N('Next transaction')]
+    },
+    {
+      page: '/6.1810/lessons/19-journal.html', match: '在日志超级块中查找开始位置', layout: 'flow',
+      kicker: 'Journal recovery', title: '恢复只重放具有完整 commit evidence 的事务',
+      nodes: [N('Read journal SB'), N('Locate oldest sequence'), N('Scan descriptors + commits'), N('Reject incomplete txn'), N('Replay committed blocks', '', '', 'accent'), N('Resume FS')]
+    },
+    {
+      page: '/6.1810/lessons/20-rcu.html', afterHeading: 'Read-Copy Update (RCU)', layout: 'flow',
+      kicker: 'RCU update lifecycle', title: '写者发布新版本后，必须等待旧读者离开才能回收旧对象', note: 'Publish 让新读者看见 new copy；grace period 只保证旧 readers 已结束，不自动解决多个 writers 的冲突。',
+      nodes: [N('Read old pointer', 'reader: no lock'), N('Writer copies object'), N('Publish new pointer', 'atomic visibility', '', 'accent'), N('Grace period'), N('Old readers finish'), N('Reclaim old copy')]
+    },
+    {
+      page: '/6.1810/lessons/21-isolation.html', match: 'Guest VA ──(Guest PT)', layout: 'flow',
+      kicker: 'Two-dimensional translation', title: 'Guest page table 与 EPT 分别控制两层地址解释', note: 'Guest 可以管理 Guest VA→Guest PA，但 VMM 独占 EPT，因此 guest 不能映射任意 host memory。',
+      nodes: [N('Guest VA'), N('Guest page table'), N('Guest PA'), N('EPT / nested PT', 'controlled by VMM', '', 'accent'), N('Host PA')]
+    },
+    {
+      page: '/6.1810/lessons/22-bpf.html', afterHeading: '论文思想：将过滤器指定为字节码程序', layout: 'flow',
+      kicker: 'Safe in-kernel extension', title: '用户提供逻辑，verifier 把它约束成内核可安全执行的程序',
+      nodes: [N('Filter intent'), N('BPF bytecode'), N('Verifier', 'termination + memory safety', '', 'accent'), N('Interpreter / JIT'), N('Kernel hook', 'packet / syscall / tracepoint'), N('Action', 'accept · drop · observe')]
+    },
+    {
+      page: '/6.1810/lessons/23-meltdown.html', afterHeading: '攻击核心', afterSelector: 'pre', layout: 'flow',
+      kicker: 'Transient-execution side channel', title: '异常会撤销架构状态，却不会自动抹去 cache footprint', note: 'Meltdown 泄露的是 speculative execution 留下的微架构状态，而不是让 forbidden load 正常提交。',
+      nodes: [N('Forbidden kernel load'), N('Transient secret value'), N('Index probe array'), N('Cache line becomes hot', '', '', 'accent'), N('Fault handled'), N('Timing recovers bit')]
+    },
+    {
       page: '/cs267/lessons/01-introduction.html', match: 'Serial:   O(n)', layout: 'lanes',
       kicker: 'Reduction', title: '相同总 work，可以有完全不同的 dependency depth',
       lanes: [
@@ -291,9 +476,14 @@
 
   const candidates = [...page.querySelectorAll('pre')];
   definitions.filter((definition) => path.endsWith(definition.page)).forEach((definition) => {
-    const pre = candidates.find((candidate) => !candidate.dataset.frameworkConsumed && candidate.textContent.includes(definition.match));
-    if (!pre) return;
-    pre.dataset.frameworkConsumed = 'true';
+    const pre = definition.match
+      ? candidates.find((candidate) => !candidate.dataset.frameworkConsumed && candidate.textContent.includes(definition.match))
+      : null;
+    const heading = definition.afterHeading
+      ? [...page.querySelectorAll('h2, h3')].find((candidate) => candidate.textContent.includes(definition.afterHeading))
+      : null;
+    if (!pre && !heading) return;
+    if (pre) pre.dataset.frameworkConsumed = 'true';
     const figure = make('figure', `framework-diagram framework-diagram--${definition.layout}`);
     figure.dataset.frameworkDiagram = definition.layout;
     figure.setAttribute('aria-label', definition.title);
@@ -304,10 +494,22 @@
     }
     figure.append(caption, renderBody(definition));
     if (definition.note && definition.layout !== 'roofline') figure.appendChild(make('p', 'fd-callout', definition.note));
-    const source = make('details', 'fd-source');
-    source.appendChild(make('summary', '', '查看文本版 / 精确符号'));
-    pre.replaceWith(figure);
-    source.appendChild(pre);
-    figure.appendChild(source);
+    if (pre) {
+      const source = make('details', 'fd-source');
+      source.appendChild(make('summary', '', '查看文本版 / 精确符号'));
+      pre.replaceWith(figure);
+      source.appendChild(pre);
+      figure.appendChild(source);
+      return;
+    }
+    let anchor = heading;
+    if (definition.afterSelector) {
+      let cursor = heading.nextElementSibling;
+      while (cursor && !cursor.matches(definition.afterSelector)) cursor = cursor.nextElementSibling;
+      if (cursor) anchor = cursor;
+    } else if (heading.nextElementSibling?.matches('p')) {
+      anchor = heading.nextElementSibling;
+    }
+    anchor.insertAdjacentElement('afterend', figure);
   });
 })();

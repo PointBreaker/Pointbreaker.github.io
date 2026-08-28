@@ -7,11 +7,12 @@ const failures = [];
 const requireCondition = (condition, message) => { if (!condition) failures.push(message); };
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 
-const assetCss = 'framework-diagrams.css?v=20260827c';
-const assetJs = 'framework-diagrams.js?v=20260827c';
+const assetCss = 'framework-diagrams.css?v=';
+const assetJs = 'framework-diagrams.js?v=';
 const lessonGroups = [
   ['courses/cs336/lessons', 19],
-  ['courses/cs267/lessons', 27]
+  ['courses/cs267/lessons', 27],
+  ['courses/6.1810/lessons', 23]
 ];
 
 for (const [directory, expectedCount] of lessonGroups) {
@@ -55,7 +56,35 @@ const expectedDefinitions = [
   ['cs267', '16-dense-la.html', 'TSQR reduction tree'],
   ['cs267', '16-dense-la.html', 'Task dependency DAG'],
   ['cs267', '20-fft.html', 'Distributed 3D FFT'],
-  ['cs267', '25-graph-partitioning.html', 'Graph vs hypergraph model']
+  ['cs267', '25-graph-partitioning.html', 'Graph vs hypergraph model'],
+  ['6.1810', '01-introduction.html', 'Operating-system stack'],
+  ['6.1810', '02-c-in-xv6.html', 'Process address space'],
+  ['6.1810', '03-os-design.html', 'Protected kernel path'],
+  ['6.1810', '04-organization.html', 'Microkernel service path'],
+  ['6.1810', '05-page-tables.html', 'Address translation'],
+  ['6.1810', '05-page-tables.html', 'Sv39 page-table walk'],
+  ['6.1810', '06-syscall-entry.html', 'System-call round trip'],
+  ['6.1810', '07-interposition.html', 'Interposition boundary'],
+  ['6.1810', '08-page-faults.html', 'Lazy allocation'],
+  ['6.1810', '08-page-faults.html', 'Copy-on-write fork'],
+  ['6.1810', '09-superpages.html', 'TLB reach'],
+  ['6.1810', '10-uservm.html', 'User-level VM control'],
+  ['6.1810', '11-interrupts.html', 'Device interrupt path'],
+  ['6.1810', '12-locking.html', 'Lock acquisition'],
+  ['6.1810', '13-threads.html', 'Context-switch state'],
+  ['6.1810', '14-coordination.html', 'Lost-wakeup race'],
+  ['6.1810', '15-networking.html', 'Kernel network datapath'],
+  ['6.1810', '16-shenango.html', 'Conventional Linux path'],
+  ['6.1810', '16-shenango.html', 'Kernel bypass'],
+  ['6.1810', '17-fs.html', 'xv6 file-system layers'],
+  ['6.1810', '18-crash.html', 'Three storage states'],
+  ['6.1810', '18-crash.html', 'Write-ahead logging'],
+  ['6.1810', '19-journal.html', 'ext3 journal record'],
+  ['6.1810', '19-journal.html', 'Journal recovery'],
+  ['6.1810', '20-rcu.html', 'RCU update lifecycle'],
+  ['6.1810', '21-isolation.html', 'Two-dimensional translation'],
+  ['6.1810', '22-bpf.html', 'Safe in-kernel extension'],
+  ['6.1810', '23-meltdown.html', 'Transient-execution side channel']
 ];
 
 for (const [course, file, label] of expectedDefinitions) {
@@ -75,4 +104,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Course framework diagram lint passed: ${expectedDefinitions.length} semantic diagrams across 46 lesson pages.`);
+console.log(`Course framework diagram lint passed: ${expectedDefinitions.length} semantic diagrams across ${lessonGroups.reduce((sum, [, count]) => sum + count, 0)} lesson pages.`);

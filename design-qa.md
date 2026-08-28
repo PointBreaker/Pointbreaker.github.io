@@ -105,6 +105,47 @@ final result: passed
 
 ---
 
+# MIT 6.1810 semantic OS diagrams design QA
+
+- Date: `2026-08-28`
+- Browser: headless Firefox through WebDriver
+- Desktop viewport request: `1600 × 900`
+- Mobile viewport request: `500 × 900`
+- Pages smoke-tested: 23 / 23 Lessons
+
+## Scope and visual result
+
+- All 23 lessons now expose at least one semantic HTML/CSS mental-model diagram; core lessons add a second mechanism diagram, for 28 diagrams total.
+- Coverage includes the protected-kernel stack, process address space, microkernel IPC, Sv39 translation, syscall entry/return, lazy allocation and COW, TLB reach, interrupts, atomic locks, context switches, lost wakeups, networking, filesystem layers, WAL/journal recovery, RCU, nested page tables, BPF verification and Meltdown.
+- Existing code, GDB transcripts, calculations and exact text layouts remain code blocks. Replaced ASCII frameworks retain a collapsed `查看文本版 / 精确符号` fallback.
+- The existing generic lesson TOC was verified as the only navigation rail; 6.1810 did not have the duplicate-TOC bug found in CS267.
+
+## Browser evidence
+
+- Desktop captures: `/tmp/mit1810-page-table-desktop.png`, `/tmp/mit1810-syscall-desktop.png`, `/tmp/mit1810-wal-desktop.png`, `/tmp/mit1810-meltdown-desktop.png`.
+- Mobile captures: `/tmp/mit1810-syscall-mobile.png`, `/tmp/mit1810-context-mobile.png`, `/tmp/mit1810-fs-stack-mobile.png`.
+- Desktop diagrams stay inside the reading column beside the single shared TOC.
+- Mobile flows collapse vertically, lanes remain clearly separated, and stack diagrams keep readable labels without page-level horizontal scrolling.
+- All 23 pages rendered their expected diagram count with zero page-level horizontal overflow at both tested viewports.
+
+## Technical QA
+
+- TLB hit and miss are rendered as separate paths so a page-table walk is not implied on every access.
+- COW separates shared read-only mappings from the allocating writer path.
+- Atomic ownership and aq/rl memory ordering are distinguished in the lock diagram.
+- WAL ordering explicitly remains `log data → commit point → install`.
+- RCU separates pointer publication, grace period and reclamation.
+- Meltdown distinguishes rolled-back architectural state from persistent cache state.
+- Shared diagram lint now covers 57 diagrams across 69 CS336, CS267 and MIT 6.1810 lesson pages.
+
+## Result
+
+No actionable P0, P1 or P2 visual, interaction or responsive findings remain.
+
+final result: passed
+
+---
+
 # CS267 Interactive Textbook + Engineering Workbook design QA
 
 - Date: `2026-08-27`
