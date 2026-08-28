@@ -1,41 +1,74 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer III · Encoder Decoder — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Transformer III · 11</p><h1>Encoder, Decoder, and Cross Attention</h1><p class="lede">Self-attention 让一组 representations 内部交流；cross-attention 让 decoder 带着“我现在需要什么”的 query，去 encoder 的整组输出里检索。</p><div class="meta"><span>70–90 分钟</span><span>WI22 A5</span><span>Self · Cross · Causal</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 EncoderBlock、DecoderBlock、LayerNormalization、FeedForwardBlock 和 subsequent mask。</p><ol><li>Self 与 Cross 的 Q/K/V 分别来自哪里？</li><li>residual/MLP 在 attention 之外做什么？</li><li>causal mask 为什么不是可选优化？</li></ol></section>
-<div class="transformer-thread"><strong>当前样本：</strong>encoder 读完整问题 <code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code>；decoder 逐步产生 <code>BOS POSITIVE 0 4 EOS</code>。</div>
-<h2 id="why">Why Did We Need This?</h2><p>问题与答案是两组不同角色的 sequence。Encoder 可以双向理解完整 expression；decoder 的每一步既要读已生成的 answer prefix，又要查询 expression 中与当前输出相关的位置。</p>
-<h2 id="self-cross">One View, Two Sources</h2><div class="compare-grid"><article><h3>Self-attention · 我内部交流</h3><pre><code class="language-plaintext">Q = same sequence
-K = same sequence
-V = same sequence</code></pre><p>expression 内各 token 互相 contextualize；或 answer prefix 内部交流。</p></article><article><h3>Cross-attention · 我向另一组查询</h3><pre><code class="language-plaintext">Q = decoder states
-K = encoder states
-V = encoder states</code></pre><p>answer position 根据当前需求读取问题 representations。</p></article></div>
-<div class="mental-model"><small>Mental model</small><p>Encoder 把输入改写成可被检索的 contextual memory；decoder 一边维护答案上下文，一边用 cross-attention 动态查询这份 memory。</p></div>
-<h2 id="block">Block Data Flow</h2><pre><code class="language-plaintext">Encoder block
-x [N,Kq,M] → self-attention → residual+norm → MLP → residual+norm → [N,Kq,M]
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer III · Encoder, Decoder, Cross Attention — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
+<p class="eyebrow">EECS498 · Transformer III · 11</p><h1>Encoder, Decoder, and Cross-Attention</h1><p class="lede">Encoder 把题目变成可查询的 memory；decoder 先理解 answer-so-far，再用当前 answer state 去读取那份 memory。三次 attention 的 Q/K/V 来源决定三种信息流。</p><div class="meta"><span>100–120 分钟</span><span>WI22 A5</span><span>Self · Masked Self · Cross</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 <code>EncoderBlock</code>、<code>DecoderBlock</code>、<code>get_subsequent_mask</code> 与完整 encoder–decoder。</p><ol><li>decoder 为什么需要两次不同 attention？</li><li>cross-attention 的 row/column 分别是哪组 sequence？</li><li>mask 为什么必须在 softmax 之前施加？</li></ol></section>
+<section class="before-start"><h2 id="before">Before We Start</h2><div class="before-grid"><div class="depth-check" data-answer="C"><p>Cross-attention 中谁提供 Q？</p><button data-choice="A" data-diagnosis="encoder 是 memory source。">encoder input IDs</button><button data-choice="B" data-diagnosis="encoder states 提供 K/V。">encoder contextual states</button><button data-choice="C">decoder current states</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="B"><p>A shape=<code>[N,5,9]</code>，row 4 是？</p><button data-choice="A" data-diagnosis="row 是 query/answer axis。">question position 4</button><button data-choice="B">answer position 4</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="A"><p>未来 score 应在什么时候屏蔽？</p><button data-choice="A">softmax 前设为极小值</button><button data-choice="B" data-diagnosis="softmax 后清零会使 row 不再和为 1，且未来位置已参与 normalization。">softmax 后清零</button><p class="check-feedback"></p></div></div></section>
+<div class="transformer-thread"><strong>同一真实任务：</strong>Question <code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code><br>Answer <code>BOS POSITIVE 0 4 EOS</code></div>
 
-Decoder block
-answer [N,Ka,M] → masked self-attention
-                    ↓
-encoder [N,Kq,M] → cross-attention(Q=answer, K/V=encoder)
-                    ↓
-                  MLP → [N,Ka,M]</code></pre>
-<p>MLP 对每个位置独立地改写 feature channels；attention 在位置之间搬运信息。两者分别负责 token mixing 与 channel mixing。</p>
+<h2 id="problem">Problem · 一组 representations 不够</h2><p>题目和答案扮演不同角色。题目是完整可见的 source；答案是在生成中的 target。若把它们无条件拼成一组双向 self-attention，答案位置可能直接读取未来 label。若完全隔开，decoder 又无法根据题目作答。需要一条有方向的桥。</p>
+<div class="object-map"><div><strong>Encoder memory</strong><span>每个 question position 的 contextual representation</span></div><div><strong>Decoder state</strong><span>每个 answer position 对 prefix 的理解</span></div><div><strong>Cross-attention</strong><span>decoder state 作为 Q，encoder memory 作为 K/V</span></div></div>
+
+<h2 id="encoder">Stage 1 · Encoder self-attention</h2><p>question tokens shape <code>[N,Kq]</code> 经 embedding+position 变成 <code>[N,Kq,M]</code>。encoder self-attention 的 Q/K/V 都来自这组 states，所有 question positions 可互相读取。</p>
+<div class="worked-example"><p><strong>Conceptual walkthrough（不是对 checkpoint attention pattern 的事实声明）：</strong></p><pre><code class="language-plaintext">position: subtract
+query:    当前 operator 需要理解哪些 operands/signs？
+keys:     所有 question positions 提供可匹配特征
+values:   NEGATIVE, 3, 0, NEGATIVE, 3, 4 ... 的可传递内容
+
+new subtract state may combine:
+operator identity + sign 1 + operand 1 + sign 2 + operand 2</code></pre><p>encoder output 不是一个 answer，也不是一条压缩成单 vector 的 summary。它仍是 <code>Kq</code> 个 contextual states：<code>[N,Kq,M]</code>，可供 decoder 按需读取。</p></div>
+<div class="mental-model"><small>Mental model · Encoder</small><p>把 source sequence 变成一排“已经相互沟通过、仍保留位置”的 memory slots。</p></div>
+
+<h2 id="decoder-self">Stage 2 · Decoder masked self-attention</h2><p>假设当前训练/生成前缀是 <code>BOS POSITIVE 0</code>。decoder 首先要回答“我已经输出了什么？”因此 Q/K/V 都来自 answer prefix，但位置 i 不能读取 i 之后的答案。</p>
+<pre><code class="language-plaintext">reader \ source   BOS   POSITIVE   0   4   EOS
+BOS               ✓       ✕       ✕   ✕    ✕
+POSITIVE          ✓       ✓       ✕   ✕    ✕
+0                 ✓       ✓       ✓   ✕    ✕
+4                 ✓       ✓       ✓   ✓    ✕
+EOS               ✓       ✓       ✓   ✓    ✓</code></pre>
+<p>mask 把非法 score 设为近似 <code>-∞</code>，再做 softmax。于是未来位置得到 0 probability，剩余合法位置重新归一化。</p>
+<div class="counterfactual"><strong>为什么不能 softmax 后再把未来 weights 清零？</strong><p>未来 scores 已参与 denominator，合法位置的 weights 被压低；清零后 row sum 也不再是 1。mask 必须改变 normalization 的候选集合。</p></div>
+
+<h2 id="cross">Stage 3 · Cross-attention</h2><p>masked self-attention 之后，decoder state 已表示 answer-so-far。接着它问：“基于我已经生成的内容，现在该从题目哪里取信息？”</p>
+<pre><code class="language-plaintext">Q = decoder states             [N,Ka,M]
+K = encoder contextual states [N,Kq,M]
+V = encoder contextual states [N,Kq,M]
+
+scores / A                    [N,Ka,Kq]
+cross-attention output        [N,Ka,M]
+
+row i    = answer/query position i
+column j = question/memory position j</code></pre>
+<div class="worked-example"><p>对于 answer prefix <code>BOS POSITIVE 0</code>，最后一个 query 可以按当前需要读取题目中的操作符、符号或个位数字。它不必每一步读取同样位置：A 是随 decoder state 和 source 内容动态计算的。</p><p>因此 cross-attention 后的 decoder state 同时包含：</p><pre><code class="language-plaintext">answer-so-far information
++
+selected question information</code></pre></div>
+<div class="depth-check concept-check" data-answer="B"><p><strong>Inline check.</strong> 若 <code>Ka=5,Kq=9</code>，<code>A[:,3,7]</code> 是？</p><button data-choice="A" data-diagnosis="你把 source/query axes 反了。">question 3 从 answer 7 读取</button><button data-choice="B">answer 3 从 question 7 读取</button><button data-choice="C" data-diagnosis="A 的两个序列轴不是 embedding features。">feature 3 到 feature 7</button><p class="check-feedback"></p></div>
+
+<h2 id="reverse">反向思想实验 · 如果 Q 来自 encoder 呢？</h2><p>设 <code>Q=encoder</code>、<code>K,V=decoder</code>。数学上完全可算，matrix shape 变为 <code>[N,Kq,Ka]</code>，语义变成“每个 question position 去查询 answer representations”。但当前生成任务需要更新 decoder states 以预测下一个答案 token；反向连接更新的是 source-side queries，信息流方向不合目标。</p>
+
+<h2 id="code">Your Code · 来源由调用参数直接表达</h2>
 <div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · DecoderBlock.forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L838">View source →</a></div><pre><code class="language-python">out_1 = self.attention_self(dec_inp, dec_inp, dec_inp, mask)
-out_2 = self.dropout(self.norm1(dec_inp + out_1))
+out_2 = self.layer_norm_1(out_1 + dec_inp)
 out_3 = self.attention_cross(out_2, enc_inp, enc_inp)
-out_4 = self.dropout(self.norm2(out_3 + out_2))
-out_5 = self.feed_forward(out_4)
-y = self.dropout(self.norm3(out_5 + out_4))</code></pre></div>
-<h2 id="mask">Causal Mask · 为什么不能看未来</h2><pre><code class="language-plaintext">decoder input prefix     prediction target
-BOS                      POSITIVE
-BOS POSITIVE             0
-BOS POSITIVE 0           4
-BOS POSITIVE 0 4         EOS</code></pre><p>训练时整条 target 已在 tensor 中；若位置 i 能 attention 到 i 之后的 token，就直接看到了答案，产生 label leakage。你的 <code>get_subsequent_mask</code> 构造上三角 <code>True</code>，在 softmax 前把未来 scores 设为极小值。</p>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · get_subsequent_mask()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L711">View source →</a></div><pre><code class="language-python">N, K = seq.shape
-mask = torch.tril(torch.ones((N, K, K), device=seq.device))
-mask = mask != 1</code></pre></div>
-<h2 id="why-design">Why Residual + Norm?</h2><p>Attention/MLP 学的是对当前 representation 的更新，residual 保留原表示并提供直接 gradient path；normalization 控制每个 token 的 feature scale。没有 residual，深层 block 必须每次完整重建表示。</p>
-<div class="historical-note"><p><strong>Historical implementation note：</strong>Notebook 的 DecoderBlock saved checks 为 0.5016 / 0.4971，并留下 “I think the bug is with the skeleton”。本课基于源码解释实际 data flow，不把该 check 写成通过，也不替历史仓库静默修复。</p></div>
-<div class="card warning"><p><strong>Common misconceptions：</strong>Cross-attention 不是 encoder/decoder concat；encoder output 也不是一个单一向量。K/V 保留 <code>Kq</code> 个位置，decoder 的每个 query row 都可采用不同读取分布。</p></div>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>decoder length Ka=4，encoder length Kq=9，cross-attention matrix shape？</summary><p>每个 batch/head 为 <code>[4,9]</code>：4 个 decoder queries，各对 9 个 encoder keys 分配读取权重。</p></details><details class="concept-check"><summary>Self-attention 中第 3 个 answer token 能看到第 5 个吗？encoder 中呢？</summary><p>decoder causal self-attention 不能；encoder self-attention 通常可以双向看完整输入。</p></details><details class="concept-check"><summary>Cross-attention 中为什么 K=V=encoder，却仍要两份 projection？</summary><p>来源 tensor 相同，但 K projection 产出可匹配地址特征，V projection 产出被读取的内容特征。</p></details><details class="concept-check"><summary>如果 causal mask 在 softmax 后才乘 0，会有什么问题？</summary><p>剩余权重行不再归一化；更重要的是未来位置先参与了 softmax denominator。标准做法在 softmax 前屏蔽 score。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>WI22 A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L581">EncoderBlock</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L727">DecoderBlock</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">Notebook validation outputs</a></li></ul></section><footer><p>下一课：把所有 blocks 接上 loss，看看你当年到底训练了什么模型。</p></footer>
+out_4 = self.layer_norm_2(out_3 + out_2)</code></pre><p>第一行三次 <code>dec_inp</code> 表示 answer 内部交流；第三行第一个参数是 Q source，后两个是 K/V source。它不是 encoder/decoder concat，而是有方向的 memory read。</p></div>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · get_subsequent_mask()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L711">View source →</a></div><pre><code class="language-python">mask = torch.triu(
+    torch.ones((K, K), dtype=torch.bool), diagonal=1
+)
+mask = mask.expand(N, K, K)</code></pre><p>上三角 <code>j&gt;i</code> 正是 reader i 的未来 source j。扩展后的 mask 与 self-attention score <code>[N,K,K]</code> 对齐。</p></div>
+
+<h2 id="block">为什么还需要 Residual、Norm、MLP？</h2><div class="mechanism-walkthrough"><ol class="step-ledger"><li>Attention 在 positions 间搬运 information。</li><li>Residual 把原状态与新读取结果相加，保留 identity path。</li><li>LayerNorm 稳定每个 token 的 feature scale（历史代码采用相应 block ordering）。</li><li>Position-wise MLP 对每个 token 的 features 做 nonlinear transformation。</li></ol></div>
+<div class="counterfactual"><strong>没有 residual 会怎样？</strong><p>每层必须完全用当前 attention/MLP 重写状态，缺少直接保留旧 representation 与 gradient 的路径。模型仍可能训练，但深层优化与信息保留更困难。</p></div>
+<div class="misconception"><strong>Misconception diagnosis</strong><p>“Self-attention 是自己看自己”太模糊。准确说：一组 states 同时提供 Q/K/V，因此每个位置从<strong>同一组 positions</strong>读取。Cross-attention 则是 query group 与 memory group 不同。</p></div>
+
+<details class="deep-dive"><summary>Deep Dive · Historical mismatch 与今天的 debug 顺序</summary><p>保存的 Notebook 中 DecoderBlock check 与 repository implementation 存在较大 mismatch。它应标作历史 caveat，不能据此虚构用户当年意图。</p><div class="debug-lens"><strong>What would I debug first today?</strong><ol><li>固定 N=1、短 K，打印每个 sublayer 的 expected/actual shape。</li><li>把 attention 暂时替换为 identity-like deterministic output，隔离 residual/norm。</li><li>检查调用参数顺序是否真是 Q,K,V。</li><li>检查 mask 的 True 语义与 softmax 前后位置。</li><li>逐个对齐 block ordering，而不是直接查看最终最大误差。</li></ol></div></details>
+
+<h2 id="checks">End-of-Lesson Deep Checks</h2>
+<details class="concept-check"><summary>Decoder 的两次 attention 各回答什么问题？</summary><p>Masked self：我已经生成了什么？Cross：基于当前 answer state，我该从 source memory 读取什么？</p></details>
+<details class="concept-check"><summary>为什么 encoder states 同时作为 K 和 V，但仍承担不同角色？</summary><p>进入 attention head 后分别经过 WK/WV；同一 source activation 被投影为寻址 feature 与 payload feature。</p></details>
+<details class="concept-check"><summary>若完全删除 cross-attention，模型还能条件于 question 吗？</summary><p>按当前架构不能；decoder 只见 answer prefix，问题信息没有计算路径进入 logits。</p></details>
+<details class="concept-check"><summary>causal mask 与 padding mask 是否同一目的？</summary><p>不是。causal mask 阻止未来 label leakage；padding mask 阻止读取非内容 positions。二者都作用于 score，但屏蔽理由不同。</p></details>
+
+<section class="transfer-question"><h2 id="transfer">Transfer Questions</h2><ol><li>图像 captioning 中，Q 来自 caption prefix，K/V 可来自什么？cross matrix 两个轴是什么？</li><li>如果 source length=196 个 image patches、target length=12，A shape 是什么？</li><li>如果把 encoder memory 压成一个 slot，cross-attention 还具有按 source position 选择的能力吗？</li></ol></section>
+<section class="explain-it-yourself"><h2 id="explain">闭卷解释</h2><ol><li>用“answer-so-far + question information”解释一个 decoder block。</li><li>不用“看”这个字，精确说明 self 与 cross attention 的 Q/K/V sources。</li><li>解释为什么 mask 在 softmax 前。</li><li>若 Q/K/V 来源反转，信息流语义如何改变？</li></ol></section>
+<div class="then-now-compression"><p><strong>Then I implemented:</strong> masked self-attention → residual/norm → cross-attention → residual/norm → MLP.</p><p><strong>Now I understand:</strong> decoder 先形成 prefix-aware query，再把 encoder 的 contextual states 当可寻址 memory；当前状态因此同时携带答案历史与题目信息。</p></div>
+<section class="lesson-connection"><h2 id="next">Connection · 结构有了，监督信号从哪里来？</h2><p>下一课把 answer 整体右移，让每个 position 预测下一个 token，并追踪一个错误 token 的 loss 如何穿过 decoder、cross-attention、encoder，直到 embedding rows。</p></section>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L727">EncoderBlock</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L838">DecoderBlock</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L711">mask</a></li></ul></section>
 </main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

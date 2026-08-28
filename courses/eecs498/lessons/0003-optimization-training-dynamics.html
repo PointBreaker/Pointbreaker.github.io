@@ -1,25 +1,181 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>第 3 课 · Optimization — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Deep Learning Revisited · 03</p><h1>Optimization and Training Dynamics</h1><p class="lede">Backprop 给出 gradient；“模型能不能学起来”取决于怎样使用它、信号怎样穿过深层网络，以及 representation 的尺度是否稳定。</p><div class="meta"><span>55–70 分钟</span><span>A2–A3</span><span>SGD · Adam · Norm</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你写过 SGD、momentum、RMSProp、Adam、dropout、Kaiming initialization 和 BatchNorm。</p><ol><li>learning rate 控制什么？</li><li>Adam 的 m/v 在记什么？</li><li>初始化与 normalization 为什么影响梯度？</li></ol></section>
-<h2 id="why">Why Did We Need This?</h2><p>同一个正确 gradient，步子太小会停滞，太大会越过谷底；层数增加后，activation/gradient 尺度还可能逐层放大或衰减。训练失败常不是“模型不会”，而是优化路径失去可用信号。</p>
-<div class="shape-flow"><div><strong>minibatch</strong><span>Xb [B,D]</span></div><div><strong>loss</strong><span>scalar</span></div><div><strong>gradients</strong><span>same shapes as θ</span></div><div><strong>optimizer state</strong><span>m,v per θ</span></div><div><strong>new θ</strong><span>θ − update</span></div></div>
-<h2 id="implemented">What You Actually Implemented</h2><table><tr><th>Mechanism</th><th>Repository implementation</th><th>Purpose</th></tr><tr><td>SGD / Momentum</td><td><code>A3/fully_connected_networks.py</code></td><td>step + velocity</td></tr><tr><td>RMSProp / Adam</td><td>same file</td><td>coordinate-wise scaling + moments</td></tr><tr><td>Kaiming / BatchNorm</td><td><code>A3/convolutional_networks.py</code></td><td>preserve usable scale</td></tr><tr><td>Dropout</td><td><code>A3/fully_connected_networks.py</code></td><td>stochastic regularization</td></tr></table>
-<div class="mental-model"><small>Mental model</small><p>优化器决定如何在 loss landscape 上走；初始化与 normalization 决定这张地形和梯度信号是否处在能走的尺度。</p></div>
-<h2 id="mechanism">Mechanism · 从 SGD 到 Adam</h2><pre><code class="language-plaintext">SGD:       θ ← θ − ηg
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>第 3 课 · Optimization — EECS498 Revisited</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/vendor/prism.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css">
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main class="page">
+<p class="eyebrow">EECS498 · Deep Learning Revisited · 03</p>
+<h1>Optimization and Training Dynamics</h1>
+<p class="lede">Backprop 给出 gradient；“模型能不能学起来”取决于怎样使用它、信号怎样穿过深层网络，以及 representation 的尺度是否稳定。</p>
+<div class="meta">
+<span>55–70 分钟</span>
+<span>A2–A3</span>
+<span>SGD · Adam · Norm</span>
+</div>
+<section class="recall">
+<p class="recall-kicker">30-second recall</p>
+<h2>30 秒回忆</h2>
+<p>你写过 SGD、momentum、RMSProp、Adam、dropout、Kaiming initialization 和 BatchNorm。</p>
+<ol>
+<li>learning rate 控制什么？</li>
+<li>Adam 的 m/v 在记什么？</li>
+<li>初始化与 normalization 为什么影响梯度？</li>
+</ol>
+</section>
+<h2 id="why">Why Did We Need This?</h2>
+<p>同一个正确 gradient，步子太小会停滞，太大会越过谷底；层数增加后，activation/gradient 尺度还可能逐层放大或衰减。训练失败常不是“模型不会”，而是优化路径失去可用信号。</p>
+<div class="shape-flow">
+<div>
+<strong>minibatch</strong>
+<span>Xb [B,D]</span>
+</div>
+<div>
+<strong>loss</strong>
+<span>scalar</span>
+</div>
+<div>
+<strong>gradients</strong>
+<span>same shapes as θ</span>
+</div>
+<div>
+<strong>optimizer state</strong>
+<span>m,v per θ</span>
+</div>
+<div>
+<strong>new θ</strong>
+<span>θ − update</span>
+</div>
+</div>
+<h2 id="implemented">What You Actually Implemented</h2>
+<table>
+<tr>
+<th>Mechanism</th>
+<th>Repository implementation</th>
+<th>Purpose</th>
+</tr>
+<tr>
+<td>SGD / Momentum</td>
+<td>
+<code>A3/fully_connected_networks.py</code>
+</td>
+<td>step + velocity</td>
+</tr>
+<tr>
+<td>RMSProp / Adam</td>
+<td>same file</td>
+<td>coordinate-wise scaling + moments</td>
+</tr>
+<tr>
+<td>Kaiming / BatchNorm</td>
+<td>
+<code>A3/convolutional_networks.py</code>
+</td>
+<td>preserve usable scale</td>
+</tr>
+<tr>
+<td>Dropout</td>
+<td>
+<code>A3/fully_connected_networks.py</code>
+</td>
+<td>stochastic regularization</td>
+</tr>
+</table>
+<div class="mental-model">
+<small>Mental model</small>
+<p>优化器决定如何在 loss landscape 上走；初始化与 normalization 决定这张地形和梯度信号是否处在能走的尺度。</p>
+</div>
+<h2 id="mechanism">Mechanism · 从 SGD 到 Adam</h2>
+<pre>
+<code class="language-plaintext">SGD:       θ ← θ − ηg
 Momentum:  v ← μv − ηg; θ ← θ + v
 Adam:      m ← β₁m+(1−β₁)g
            v ← β₂v+(1−β₂)g²
-           θ ← θ − η m̂/(√v̂+ε)</code></pre><p><code>m</code> 平滑方向，<code>v</code> 估计每个坐标近期的平方尺度；bias correction 处理训练初期两个状态从零开始的偏差。</p>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2022</p><p class="your-code-file">A3/fully_connected_networks.py · adam()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py#L657">View source →</a></div><pre><code class="language-python">m = beta1*m + (1-beta1)*dw
+           θ ← θ − η m̂/(√v̂+ε)</code>
+</pre>
+<p>
+<code>m</code> 平滑方向，<code>v</code> 估计每个坐标近期的平方尺度；bias correction 处理训练初期两个状态从零开始的偏差。</p>
+<div class="your-code">
+<div class="your-code-head">
+<div>
+<p class="code-kicker">Your code · 2022</p>
+<p class="your-code-file">A3/fully_connected_networks.py · adam()</p>
+</div>
+<a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py#L657">View source →</a>
+</div>
+<pre>
+<code class="language-python">m = beta1*m + (1-beta1)*dw
 mt = m / (1-beta1**t)
 v = beta2*v + (1-beta2)*(dw**2)
 vt = v / (1-beta2**t)
-next_w = w - lr * mt / (torch.sqrt(vt) + eps)</code></pre></div>
-<h2 id="normalization">Normalization is about coordinates</h2><p>BatchNorm 用 batch statistics 校准 channel；后来的 Transformer 更常用 LayerNorm，在每个 token 的 feature 维内校准。二者不是可互换 API：它们选择了不同的归一化轴，也就选择了哪些样本/位置互相影响。</p>
-<div class="historical-note"><p><strong>Historical implementation note：</strong><code>A3/convolutional_networks.py</code> 的普通 BatchNorm section 有填充，但 <code>SpatialBatchNorm.forward/backward</code> 仍保留 <code>pass</code>。本课程不会把后者写成已完成。</p></div>
-<h2 id="why-design">Why This Design?</h2><ul><li>没有合适 initialization：深层 ReLU 的 variance 会漂移。</li><li>没有 regularization：训练 accuracy 可继续升，验证集却可能停滞。</li><li>没有 optimizer state：狭长谷底中 SGD 容易来回震荡。</li></ul>
-<div class="card warning"><p><strong>Common misconception：</strong>Adam 不是“永远更好的 SGD”，BatchNorm 也不只是让数字落进固定范围。它们改变训练动力学与隐式偏好，仍需和 learning rate、batch、architecture 一起看。</p></div>
-<h2 id="now">Then vs Now</h2><p>现代 LLM 常见 AdamW、warmup、cosine decay、gradient clipping 与 LayerNorm/RMSNorm；但账本仍是：gradient → optimizer state → parameter update。你当年写的 Adam 状态就是今天大模型训练中昂贵 optimizer memory 的来源。</p>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>参数 θ=[128,64]，Adam 的 m 与 v 是什么 shape？</summary><p>都为 <code>[128,64]</code>。它们为每个参数坐标保存一阶、二阶历史，因此 optimizer state 通常是参数量的倍数。</p></details><details class="concept-check"><summary>若把 learning rate 放大 1000 倍，gradient 方向仍正确，为什么训练仍会坏？</summary><p>一阶局部近似只在小邻域可信；大步会跨过低 loss 区域并让 activation/gradient 爆炸。</p></details><details class="concept-check"><summary>BatchNorm 与 LayerNorm 最关键的 shape 区别是什么？</summary><p>BatchNorm 对同一 channel 汇总 batch/空间样本；LayerNorm 对单个样本或 token 的 feature 维汇总，不依赖其他 batch item。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>A3 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py">fully_connected_networks.py</a></li><li>A3 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/convolutional_networks.py">convolutional_networks.py</a></li></ul></section><footer><p>Repository implementation caveat 已保留。</p></footer>
-</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>
+next_w = w - lr * mt / (torch.sqrt(vt) + eps)</code>
+</pre>
+</div>
+<h2 id="normalization">Normalization is about coordinates</h2>
+<p>BatchNorm 用 batch statistics 校准 channel；后来的 Transformer 更常用 LayerNorm，在每个 token 的 feature 维内校准。二者不是可互换 API：它们选择了不同的归一化轴，也就选择了哪些样本/位置互相影响。</p>
+<div class="historical-note">
+<p>
+<strong>Historical implementation note：</strong>
+<code>A3/convolutional_networks.py</code> 的普通 BatchNorm section 有填充，但 <code>SpatialBatchNorm.forward/backward</code> 仍保留 <code>pass</code>。本课程不会把后者写成已完成。</p>
+</div>
+<h2 id="why-design">Why This Design?</h2>
+<ul>
+<li>没有合适 initialization：深层 ReLU 的 variance 会漂移。</li>
+<li>没有 regularization：训练 accuracy 可继续升，验证集却可能停滞。</li>
+<li>没有 optimizer state：狭长谷底中 SGD 容易来回震荡。</li>
+</ul>
+<div class="card warning">
+<p>
+<strong>Common misconception：</strong>Adam 不是“永远更好的 SGD”，BatchNorm 也不只是让数字落进固定范围。它们改变训练动力学与隐式偏好，仍需和 learning rate、batch、architecture 一起看。</p>
+</div>
+<h2 id="now">Then vs Now</h2>
+<p>现代 LLM 常见 AdamW、warmup、cosine decay、gradient clipping 与 LayerNorm/RMSNorm；但账本仍是：gradient → optimizer state → parameter update。你当年写的 Adam 状态就是今天大模型训练中昂贵 optimizer memory 的来源。</p>
+<h2 id="checks">Concept Checks</h2>
+<details class="concept-check">
+<summary>参数 θ=[128,64]，Adam 的 m 与 v 是什么 shape？</summary>
+<p>都为 <code>[128,64]</code>。它们为每个参数坐标保存一阶、二阶历史，因此 optimizer state 通常是参数量的倍数。</p>
+</details>
+<details class="concept-check">
+<summary>若把 learning rate 放大 1000 倍，gradient 方向仍正确，为什么训练仍会坏？</summary>
+<p>一阶局部近似只在小邻域可信；大步会跨过低 loss 区域并让 activation/gradient 爆炸。</p>
+</details>
+<details class="concept-check">
+<summary>BatchNorm 与 LayerNorm 最关键的 shape 区别是什么？</summary>
+<p>BatchNorm 对同一 channel 汇总 batch/空间样本；LayerNorm 对单个样本或 token 的 feature 维汇总，不依赖其他 batch item。</p>
+</details>
+<section class="lesson-contract"><h2 id="dynamics-lab">Depth Lab · optimizer 是 trajectory，不是菜单</h2><p>Gradient 只描述当前位置最陡上升方向；训练还必须决定步长、怎样平滑噪声、以及每个 coordinate 用多大 effective step。</p><div class="worked-example"><p>一维参数 <code>w=2</code>，gradient <code>g=4</code>：</p><pre><code class="language-plaintext">lr=.01 → w'=1.96   小步、稳定但可能慢
+lr=.5  → w'=0      大步；在弯曲 loss 上可能越过 valley
+
+SGD:      w ← w - ηg
+Momentum: v ← μv - ηg; w ← w+v
+Adam:     track first moment m and squared-gradient v;
+          scale each coordinate by 1/(√v+ε)</code></pre></div><div class="mechanism-walkthrough"><ol class="step-ledger"><li>Gradient 提供 local direction。</li><li>Learning rate 把斜率变成实际 displacement。</li><li>Momentum 累积一致方向，抑制来回震荡。</li><li>Adam 的 second moment 让长期大-gradient coordinate 步长相对缩小。</li><li>None of these guarantees generalization；validation curve 是独立证据。</li></ol></div><h3>读曲线，而不是只读最终 accuracy</h3><table><tr><th>现象</th><th>Training loss</th><th>Validation</th><th>优先怀疑</th></tr><tr><td>lr too low</td><td>缓慢下降</td><td>缓慢改善</td><td>步长太小</td></tr><tr><td>lr too high</td><td>震荡/发散</td><td>不稳定</td><td>跨过低 loss region</td></tr><tr><td>underfit</td><td>仍高</td><td>也差</td><td>capacity/optimization</td></tr><tr><td>overfit</td><td>持续下降</td><td>先好后坏</td><td>memorization / regularization</td></tr></table><div class="counterfactual"><strong>如果只有 training loss，没有 validation split？</strong><p>你能判断 optimization 是否拟合训练集，却无法区分可迁移规律与 memorization。</p></div><div class="misconception"><strong>Misconception diagnosis</strong><p>Adam 不是“自动找到正确 learning rate”。它做 per-parameter adaptive scaling，仍有 global lr、schedule 与稳定性选择。</p></div><details class="concept-check"><summary>Training loss 平滑下降、validation 先降后升，继续加 epochs 会怎样？</summary><p>更可能加剧 overfit；应考虑 early stopping、regularization 或数据，而非只换更强 optimizer。</p></details><details class="concept-check"><summary>某 coordinate 最近 gradients 交替 +10/-10，momentum 有何作用？</summary><p>相反方向贡献部分抵消，减少震荡；持续同方向则累积速度。</p></details><section class="transfer-question"><h3>Transfer Question</h3><p>Transformer training 出现 loss spike。若 gradient norm 同时突然升高，你会怎样区分 lr 问题、数据异常与 numerical instability？</p></section><section class="explain-it-yourself"><h3>闭卷解释</h3><ol><li>方向、步长、历史 gradient 各由什么控制？</li><li>从两条 loss curves 诊断 overfit。</li><li>为什么 optimizer 改善 training 不等于改善 validation？</li></ol></section><section class="lesson-connection"><h3>Connection</h3><p>接下来把“任意 vector function”换成 image-aware function：用 locality 与 weight sharing 改变 parameterization 本身。</p></section></section>
+<section class="provenance">
+<p class="provenance-kicker">Based on your implementation</p>
+<ul>
+<li>A3 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py">fully_connected_networks.py</a>
+</li>
+<li>A3 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/convolutional_networks.py">convolutional_networks.py</a>
+</li>
+</ul>
+</section>
+<footer>
+<p>Repository implementation caveat 已保留。</p>
+</footer>
+</main>
+<script src="../../../assets/vendor/prism.js">
+</script>
+<script src="../../../assets/vendor/prism-python.js">
+</script>
+<script defer src="../../../assets/course/lesson-ui.js">
+</script>
+<script defer src="../assets/eecs498.js">
+</script>
+</body>
+</html>

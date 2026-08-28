@@ -1,31 +1,117 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer II · Attention as Routing — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Transformer II · 10</p><h1>Attention as Dynamic Information Routing</h1><p class="lede">Attention 的核心不是一条公式，而是一个可计算的问题：当前位置想找什么、其他位置凭什么被找到、找到后实际读回什么。</p><div class="meta"><span>70–90 分钟</span><span>WI22 A5</span><span>Q · K · V · Shapes</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你从 two-loop 写到 batched no-loop attention，再封装 <code>SelfAttention</code> 与 <code>MultiHeadAttention</code>。</p><ol><li>Q/K/V 为什么是三份 projection？</li><li><code>[K,K]</code> 两个轴各是谁？</li><li>output 如何真的包含其他 token 的信息？</li></ol></section>
-<div class="transformer-thread"><strong>仍用同一任务：</strong>expression 的每个 digit/operator representation 需要根据其他位置判断符号、操作与位值。</div>
-<h2 id="problem">Concrete Problem First</h2><p>看一句 <em>The animal slept</em>。处理 <em>slept</em> 时，它需要知道“谁 slept”。RNN 让信息沿相邻 time steps 传过来；attention 允许 <em>slept</em> 直接对所有位置提出查询。</p>
-<div class="compare-grid"><article><h3>Q · Query</h3><p>当前 token 想找什么？例如谓词在找可能的主语特征。</p></article><article><h3>K · Key</h3><p>每个候选 token 可以用什么特征被匹配？</p></article><article><h3>V · Value</h3><p>如果候选被关注，它实际提供哪份信息？</p></article><article><h3>Weights</h3><p>当前 query 对所有 keys 的归一化读取比例。</p></article></div>
-<h2 id="flow">Data / Shape Flow</h2><div class="shape-flow"><div><strong>Q, K, V</strong><span>[N,K,D]</span></div><div><strong>QKᵀ</strong><span>[N,K,K]</span></div><div><strong>softmax weights A</strong><span>[N,K,K]</span></div><div><strong>AV</strong><span>[N,K,D]</span></div></div>
-<p>第一个 K 轴是<strong>谁在读取（query position i）</strong>；第二个 K 轴是<strong>从谁读取（key/value position j）</strong>。因此 <code>A[i,j]</code> 很大表示：新的第 i 个 representation 大量读取第 j 个 value。</p>
-<div class="mental-model"><small>Mental model</small><p>Attention 是由内容动态决定路由权重的信息读取机制；A 不是旁观的可视化，而是实际参与计算的 token-to-token routing matrix。</p></div>
-<h2 id="mechanism">Mechanism · 公式终于出现</h2><pre><code class="language-plaintext">score(i,j) = q_i · k_j / √D
-A_i = softmax(score(i,:))
-Y_i = Σ_j A_ij V_j
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer II · Attention as Routing — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head>
+<body><main class="page">
+<p class="eyebrow">EECS498 · Transformer II · 10</p><h1>Attention as Dynamic Information Routing</h1>
+<p class="lede">不要从公式背 Q/K/V。先要求 <code>slept</code> 真正取得 <code>animal</code> 的信息，再一步步推到 <code>softmax(QKᵀ)V</code>。</p><div class="meta"><span>100–120 分钟</span><span>WI22 A5</span><span>Q · K · V · token routing</span></div>
 
-QKᵀ: matching scores
-softmax: reading weights (each query row sums to 1)
-×V: information aggregation</code></pre><p><code>Y_i</code> 数学上就是其他位置 values 的加权和。“token 交换信息”不是比喻。</p>
-<h2 id="implemented">What You Actually Implemented</h2><p>同一机制有三种版本：<code>scaled_dot_product_two_loop_single</code>、<code>scaled_dot_product_two_loop_batch</code>、<code>scaled_dot_product_no_loop_batch</code>。Notebook 保存的 relative errors 约为 4–5×10⁻⁶，随后 <code>SelfAttention</code> 学习 Q/K/V projections。</p>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你写过 two-loop、batched two-loop、no-loop attention，再封装 <code>SelfAttention</code> 与 <code>MultiHeadAttention</code>。</p><ol><li><code>A[i,j]</code> 到底是谁从谁读？</li><li>Q/K 与 V 为什么不是同一职责？</li><li>哪些数在训练后固定，哪些权重随输入动态产生？</li></ol></section>
+
+<section class="before-start"><h2 id="before">Before We Start</h2><div class="before-grid">
+<div class="depth-check" data-answer="B"><p><strong>1.</strong> <code>A[2,1]</code> 很大，正确解释是？</p><button data-choice="A" data-diagnosis="你把 row/column 的信息流方向反了。">位置 1 从位置 2 读很多</button><button data-choice="B">位置 2 从位置 1 读很多</button><button data-choice="C" data-diagnosis="weight 不是 embedding equality。">两个 embedding 相同</button><p class="check-feedback"></p></div>
+<div class="depth-check" data-answer="C"><p><strong>2.</strong> 真正把位置 j 的内容带进输出 i 的运算是？</p><button data-choice="A" data-diagnosis="Q projection 只构造查询。">Q=XWQ</button><button data-choice="B" data-diagnosis="score 决定地址，但还没搬运 payload。">QKᵀ</button><button data-choice="C">Y=AV</button><p class="check-feedback"></p></div>
+<div class="depth-check" data-answer="A"><p><strong>3.</strong> 模型训练完成后，面对两句不同输入，什么会变？</p><button data-choice="A">Q/K/V activations 与 attention matrix</button><button data-choice="B" data-diagnosis="WQ/WK/WV 是训练后的 parameters，推理时固定。">WQ/WK/WV 参数值</button><p class="check-feedback"></p></div>
+</div></section>
+
+<div class="transformer-thread"><strong>Arithmetic thread：</strong>同样的 routing 随后会让 <code>subtract</code>、两组符号与 digits 相互读取；本课先用 <code>The animal slept</code> 隔离机制，下一课再回到完整 arithmetic flow。</div>
+<h2 id="problem">Step 1 · 先定义问题，不写公式</h2>
+<p>句子 <code>The animal slept</code> 查表并加入位置后，得到三个 vectors：</p>
+<pre><code class="language-plaintext">The      → x₀
+animal   → x₁
+slept    → x₂</code></pre>
+<p>若三个位置各自只通过 per-position MLP，<code>x₂</code> 仍只来自 <code>embedding(slept)+position(2)</code>；同一套 MLP 不会读取 <code>x₁</code>。它可以把“slept”这个特征变复杂，却没有一条 edge 把本句主语搬过来。</p>
+<div class="counterfactual"><strong>如果 token 之间完全不能交流？</strong><p><code>slept</code> 在 “The animal slept” 和 “The machine slept” 中经过同一 per-position function 会得到同样结果（忽略位置外其他输入），无法成为真正的 contextual representation。</p></div>
+
+<h2 id="desired">Step 2 · 先接受“加权读取”</h2>
+<p>我们希望新的 <code>slept</code> 状态可以是其他位置所提供信息的组合：</p>
+<div class="worked-example"><pre><code class="language-plaintext">new_slept
+= 0.05 · information(The)
+  + 0.80 · information(animal)
+  + 0.15 · information(slept)</code></pre><p>这一步尚未回答权重从哪里来。它先明确目标：位置 2 的输出数值应该真的含有位置 1 的信息。</p></div>
+
+<h2 id="derive-qkv">Step 3 · 从需求推出 Q、K、V</h2>
+<div class="mechanism-walkthrough"><ol class="step-ledger">
+<li><strong>当前位置想找什么？</strong>谓词位置可能需要“一个能充当主语的实体特征”——把这份寻址需求写成 <strong>Query</strong>。</li>
+<li><strong>候选凭什么被找到？</strong>每个位置暴露一份可匹配特征——写成 <strong>Key</strong>。</li>
+<li><strong>匹配后真正提供什么？</strong>被选中位置发送的 payload——写成 <strong>Value</strong>。</li>
+<li><strong>如何匹配所有候选？</strong><code>qᵢ·kⱼ</code> 给 query i 与 key j 一个可微分的 compatibility score。</li>
+<li><strong>如何成为可读权重？</strong>对 row i 做 softmax，得到非负、和为 1 的读取比例。</li>
+<li><strong>如何搬运信息？</strong>用这些比例加权 values：<code>yᵢ=ΣⱼAᵢⱼvⱼ</code>。</li>
+</ol></div>
+<pre><code class="language-plaintext">Q = XWQ       [N,K,D]
+K = XWK       [N,K,D]
+V = XWV       [N,K,Dv]
+
+S = QKᵀ/√D    [N,K,K]     matching scores
+A = softmax(S) [N,K,K]     dynamic read addresses
+Y = AV         [N,K,Dv]    retrieved information</code></pre>
+<div class="mental-model"><small>Mental model</small><p>Q/K 决定本次输入中“去哪里读”；V 决定“读到后搬什么”。Attention 是输入相关、每次 forward 重新构造的 token-to-token 路由。</p></div>
+
+<h2 id="why-separate">为什么同一个 X 要投影成三份？</h2>
+<h3>Case A · Q=K=V=X 可以吗？</h3><p>可以。这会形成一种合法 attention：原始 feature 同时承担匹配与传递。但它强迫“容易被找到的 feature”和“值得发送的 feature”完全相同。</p>
+<h3>Case B · Q=XWQ, K=XWK, V=XWV</h3><p>独立 projections 让模型分别学习：如何提出查询、如何被匹配、实际发送什么。例如一个 token 可用“像名词”这一 feature 被匹配，却把数值、语义或位置信息的另一组合发出去。</p>
+<h3>Case C · 为什么 dot product，不是 Q+K？</h3><p>加法本身只得到一条合成 vector，还需要另一个 function 才变成 scalar score。dot product 直接提供高维 feature matching，能以矩阵乘法并行计算所有 pairs，且可微分。它是高效 parameterization，不是数学宇宙中唯一可能的 attention；additive attention 也存在。</p>
+<div class="counterfactual"><strong>如果没有 V，直接把 A 当输出？</strong><p>你只保留“从哪里读”的地址矩阵，却没有把源位置的 feature 内容搬到当前位置。A 可以用于分析路由，但不能替代新的 token representation。</p></div>
+
+<h2 id="matrix">Attention matrix · 每个元素都说清楚</h2>
+<p>对 K=3 的句子，一张可能的 attention matrix 是：</p>
+<div class="mini-matrix"><pre><code class="language-plaintext">reader ↓ / source →   The   animal  slept
+The                    .70    .20     .10
+animal                 .10    .80     .10
+slept                  .05    .80     .15</code></pre></div>
+<p><strong>row i = 谁在读；column j = 从谁读。</strong>所以 <code>A[2,1]=0.80</code> 表示输出位置 slept 从 value 位置 animal 读取 80%。它不表示 animal 从 slept 读，也不证明两者 embedding 相同。</p>
+<div class="depth-check concept-check" data-answer="A"><p><strong>Inline check.</strong> 若 cross-attention A shape 是 <code>[N,4,9]</code>，<code>A[n,3,7]</code> 是？</p><button data-choice="A">batch n 的 query 位置 3 从 source 位置 7 读取的比例</button><button data-choice="B" data-diagnosis="最后一个轴是 source/key，不是 reader。">source 7 从 query 3 读取的比例</button><button data-choice="C" data-diagnosis="4 与 9 是序列轴，不是 feature 轴。">feature 3 与 feature 7 的相关性</button><p class="check-feedback"></p></div>
+
+<h2 id="information">为什么“信息交换”不是比喻？</h2>
+<p>设 values 是二维 vectors：</p>
+<pre><code class="language-plaintext">V₀ = [1,0]   V₁ = [0,2]   V₂ = [1,1]
+A₂ = [.05, .80, .15]
+
+Y₂ = .05V₀ + .80V₁ + .15V₂
+   = [.05,0] + [0,1.60] + [.15,.15]
+   = [.20,1.75]</code></pre>
+<p><code>V₁</code> 的第二个分量以 <code>0.80×2</code> 真实进入 <code>Y₂</code>。这不是“模型仿佛知道 animal”；它是可在 tensor 中逐项核对的 value mixing。</p>
+<div class="misconception"><strong>重要 caveat · routing weight 不等于最终 reasoning explanation</strong><p><code>Aᵢⱼ</code> 确实控制<strong>这一 head、这一层</strong>的 value mixing；但大权重不等于该 token 是最终决策的唯一原因。residual 保留旧状态，多个 heads/layers 继续组合，MLP 改变 features，下游 logits 还依赖完整计算图。</p></div>
+
+<h2 id="code">Your Code · 从两层循环到 batched matrix multiply</h2>
 <div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · scaled_dot_product_no_loop_batch()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L235">View source →</a></div><pre><code class="language-python">scores = torch.bmm(query, key.transpose(1, 2))
 scores /= math.sqrt(M)
 scores = torch.masked_fill(scores, mask, -1e9)
 weights_softmax = F.softmax(scores, dim=-1)
 y = torch.bmm(weights_softmax, value)</code></pre></div>
-<h2 id="qkv">Why Separate Q, K, V?</h2><p>若匹配特征与被传递内容必须相同，模型受限。独立 projections 允许一个 token 用语法特征被找到，却把语义/数值特征送出去。Q 与 K 决定地址，V 决定 payload。</p>
-<h2 id="mha">Multi-head: several routing spaces</h2><p>你为每个 head 创建独立 <code>SelfAttention</code>，拼接各 head 输出，再投影回 <code>dim_in</code>。每个 head 都能学习不同的 matching subspace；不是把同一 attention matrix 复制多次。</p>
-<div class="shape-flow"><div><strong>input</strong><span>[N,K,M]</span></div><div><strong>H heads</strong><span>H × [N,K,Dh]</span></div><div><strong>concat</strong><span>[N,K,H·Dh]</span></div><div><strong>project</strong><span>[N,K,M]</span></div></div>
-<h2 id="why-design">Why Scale by √D?</h2><p>若 q/k 分量方差相近，dot product 的 variance 随 D 增长；不缩放会让 softmax 过早饱和，只有极少数位置拿到权重，gradient 变弱。</p>
-<div class="card warning"><p><strong>Common misconceptions：</strong>Attention 不等于单纯 similarity visualization；self-attention 不等于每个 token 广播自己；<code>[K,K]</code> 也不是 feature covariance，而是 query-position × key-position。</p></div>
-<h2 id="now">Then vs Now</h2><p>FlashAttention 改变的是精确 attention 的计算与内存调度，不改变 <code>softmax(QKᵀ)V</code> 的结果语义。MQA/GQA 共享部分 K/V 以降低 cache；“query 找地址，value 提供内容”的 mental model 仍成立。</p>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>A[i,j] 很大，究竟是谁从谁读取？</summary><p>输出位置 i（query i）从输入/value 位置 j 大量读取。读者是行，来源是列。</p></details><details class="concept-check"><summary>Q=[32,9,16]，K=[32,9,16]，QKᵀ 与 attention output shape？</summary><p>scores/weights <code>[32,9,9]</code>；若 V=<code>[32,9,16]</code>，output 是 <code>[32,9,16]</code>。</p></details><details class="concept-check"><summary>如果所有 keys 对某个 query 得分完全相同，softmax 后怎样？</summary><p>该行是均匀的 <code>1/K</code>，输出是所有 values 的平均；没有内容选择性。</p></details><details class="concept-check"><summary>为什么 Y_i 不只是“知道 j 很相关”，而是真的含有 j 的信息？</summary><p>因为计算直接执行 <code>Σ_j A_ij V_j</code>；只要 A_ij 非零，V_j 的分量就在 Y_i 中。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L91">three scaled dot-product implementations</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L256">SelfAttention</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L340">MultiHeadAttention</a></li></ul></section><footer><p>下一课：同一套读取机制，在 encoder、decoder 与两组 representations 之间如何分工。</p></footer>
+<div class="tensor-ledger"><div><code>query</code><span>[N,Kq,D]</span></div><div><code>key.transpose(1,2)</code><span>[N,D,Kv]</span></div><div><code>scores</code><span>[N,Kq,Kv]</span></div><div><code>softmax(dim=-1)</code><span>每个 reader 对所有 sources 归一化</span></div><div><code>value</code><span>[N,Kv,Dv]</span></div><div><code>y</code><span>[N,Kq,Dv]</span></div></div>
+<p>这段代码不仅是“vectorization trick”。它把 two-loop 中每一个 <code>(i,j)</code> dot product 汇总成 batch matrix multiply。Notebook 中 loop 与 no-loop 的小 relative error，是在验证两种执行方式表达同一机制。</p>
+
+<details class="deep-dive"><summary>Deep Dive · 为什么除以 √D？</summary><p>若 q/k 各分量近似零均值、单位方差，D 项乘积相加使 dot product variance 约随 D 增长。D 大时 logits 绝对值变大，softmax 迅速接近 one-hot，非最大位置 gradient 变小。除 √D 把 score 的典型尺度拉回较稳定范围。它不是为了让 row sum=1——那是 softmax 的工作。</p></details>
+
+<h2 id="attention-vs-mlp">Attention 与 MLP 各做哪种变化？</h2>
+<div class="compare-grid"><article><h3>Attention · token mixing</h3><p>让 position j 的 value 进入 position i。连接权重 A 随输入变化。</p><pre><code class="language-plaintext">[N,K,M] → across K → [N,K,M]</code></pre></article><article><h3>MLP · feature transformation</h3><p>对每个 position 独立应用同一 nonlinear function；主要在 M/hidden feature 轴上变换。</p><pre><code class="language-plaintext">M → M_hidden → M, repeated over K</code></pre></article></div>
+<p>“token mixing vs channel transformation”是好用视角，不是说模块绝对只做一种语义工作。关键结构事实是：标准 position-wise MLP 没有跨 K 轴读取；attention 有。</p>
+<div class="parameter-ledger"><table><tr><th>对象</th><th>训练后推理时</th><th>是否随输入改变</th></tr><tr><td>WQ/WK/WV/WO</td><td>固定 parameters</td><td>否</td></tr><tr><td>Q/K/V activations</td><td>本次 forward 产生</td><td>是</td></tr><tr><td>scores / A</td><td>本次 forward 产生</td><td>是</td></tr><tr><td>MLP weights</td><td>固定 parameters</td><td>否</td></tr></table></div>
+
+<h2 id="mha">Multi-Head · 不只是“多个关系空间”</h2>
+<p>句子 <code>The animal didn't cross the street because it was tired.</code> 中，不同 heads <em>可能</em>形成不同匹配：代词↔实体、动词↔主语、局部邻接、结构标记。这里是 conceptual intuition，不代表人为指定每个 head 的功能，也不保证训练后出现整洁的可解释分工。</p>
+<pre><code class="language-plaintext">M = H × Dh
+
+per head Q,K,V      [N,K,Dh]
+per head output     [N,K,Dh]
+concat H heads      [N,K,H·Dh] = [N,K,M]
+output projection   [N,K,M]</code></pre>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · MultiHeadAttention</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L340">View source →</a></div><pre><code class="language-python">heads = [head(query, key, value, mask)
+         for head in self.heads]
+heads = torch.cat(heads, dim=-1)
+output = self.linear_mult(heads)</code></pre><p>每个 <code>head</code> 有独立 projections，concat 汇总 payload，最后 projection 让不同 heads 的 feature 重新混合。</p></div>
+
+<h2 id="deep-checks">End-of-Lesson Deep Checks</h2>
+<details class="concept-check"><summary>Q=[32,9,16]、K=[32,9,16]、V=[32,9,24]，scores 与 output shape？</summary><p><code>[32,9,9]</code> 与 <code>[32,9,24]</code>。output feature width 来自 V，不来自 Q/K。</p></details>
+<details class="concept-check"><summary>某个 query row 的 scores 全相同，输出是什么？</summary><p>softmax 是均匀 <code>1/K</code>，输出是 values 的平均；本 row 没有内容选择性。</p></details>
+<details class="concept-check"><summary>若固定同一 WQ/WK/WV，换一条输入，A 为什么会变？</summary><p>X 变导致 Q/K 变，dot products 随之改变。dynamic 指 routing activations 动态，不是 parameters 每次改写。</p></details>
+<details class="concept-check"><summary>Q/K 已经找到 animal，为什么不能输出 K？</summary><p>K 是寻址 feature，不必包含希望传输的 payload；V 允许匹配空间与内容空间解耦。</p></details>
+
+<section class="transfer-question"><h2 id="transfer">Transfer Questions</h2><ol><li>Q length=4，K/V length=9，attention matrix 与 output shape 各是什么？这更像 self 还是 cross attention？</li><li>若所有 heads 都产生完全相同的 A 和 V，增加 heads 还能带来独立 routing 吗？</li><li>若 A 接近 identity matrix，这一层跨 token 混合了多少信息？residual 又会造成什么差别？</li></ol><details><summary>核对第一题</summary><p>A 是 <code>[N,4,9]</code>，若 V width Dv，output 为 <code>[N,4,Dv]</code>；不同长度通常更像 cross-attention。</p></details></section>
+
+<section class="explain-it-yourself"><h2 id="explain">闭卷解释</h2><ol><li>不看公式，解释为什么 Value 必须存在。</li><li>用一句不含“相关性”这个模糊词的话解释 <code>A[i,j]</code>。</li><li>为什么 <code>Y=AV</code> 证明了信息交换？</li><li>什么是 dynamic：参数还是 routing weights？</li><li>Attention 与 position-wise MLP 在连接模式上有什么区别？</li></ol></section>
+
+<div class="then-now-compression"><p><strong>Then I implemented:</strong> <code>QKᵀ → scale → mask → softmax → ×V</code>.</p><p><strong>Now I understand:</strong> 当前 position 用 Q 寻址所有 K，得到本次输入特有的读取分布 A，再用 A 搬运 V；Q/K 决定怎么找，V 决定真正拿走什么。</p></div>
+<section class="lesson-connection"><h2 id="next">Connection · 同一机制为什么会出现三次？</h2><p>Self-attention 规定 Q/K/V 来自同一组；cross-attention 允许 decoder queries 去读 encoder memory；causal mask 再限制哪些 sources 合法。下一课沿 arithmetic example 走完三条信息流。</p></section>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L91">three scaled dot-product implementations</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L256">SelfAttention</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L340">MultiHeadAttention</a></li></ul></section>
 </main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

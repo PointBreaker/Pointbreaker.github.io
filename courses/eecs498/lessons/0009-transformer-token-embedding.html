@@ -1,40 +1,111 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer I · Token to Embedding — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Transformer I · 09</p><h1>From Raw Sequence to Embedding</h1><p class="lede">Transformer 看不到字符串。你当年的 arithmetic pipeline 先把符号变成 16-token vocabulary 的 IDs，再把每个 ID 查成一个可学习向量，最后加入位置信息。</p><div class="meta"><span>60–75 分钟</span><span>WI22 A5</span><span>Token → ID → vector</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 <code>generate_token_dict</code>、<code>prepocess_input_sequence</code>、position encoding 与 <code>nn.Embedding</code>，并在 5,000 条算术 pairs 上训练。</p><ol><li>token、token ID、embedding 各是什么？</li><li>为什么数字按 digit 切分？</li><li>position 解决 embedding 的什么缺口？</li></ol></section>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Transformer I · Token to Embedding — EECS498 Revisited</title>
+  <link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css">
+</head>
+<body><main class="page">
+<p class="eyebrow">EECS498 · Transformer I · 09</p>
+<h1>From Raw Sequence to Embedding</h1>
+<p class="lede">Transformer 真正开始计算时没有字符串，只有一批整数，以及一张会被 gradient 更新的向量表。这一课把两者之间每一步都走完。</p>
+<div class="meta"><span>80–100 分钟</span><span>WI22 A5</span><span>Token → ID → vector → position</span></div>
+
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 <code>generate_token_dict</code>、<code>prepocess_input_sequence</code> 和 positional encoding，并用 <code>nn.Embedding</code> 接收 arithmetic data。</p><ol><li>token ID 为什么不是语义数字？</li><li>embedding table 的一行代表什么？</li><li>为什么没有 position 的 attention 无法可靠区分顺序？</li></ol></section>
+
+<section class="lesson-contract before-start"><h2 id="before">Before We Start · 先诊断记忆</h2><div class="before-grid">
+  <div class="depth-check" data-answer="B"><p><strong>1.</strong> 输入 ID shape 为 <code>[32,9]</code>，embedding dim 为 64，输出 shape 是？</p><button data-choice="A" data-diagnosis="16 是 vocab 轴，只存在于参数表中。">[32,9,16]</button><button data-choice="B">[32,9,64]</button><button data-choice="C" data-diagnosis="lookup 不会保留额外的 vocab 轴。">[32,9,16,64]</button><p class="check-feedback"></p></div>
+  <div class="depth-check" data-answer="A"><p><strong>2.</strong> 两句话中的 <code>bank</code> 有同一 token ID。进入第一层前的 token embedding 呢？</p><button data-choice="A">相同；position/context 随后使状态分化</button><button data-choice="B" data-diagnosis="普通 lookup 不读取句子上下文。">已因上下文而不同</button><p class="check-feedback"></p></div>
+  <div class="depth-check" data-answer="C"><p><strong>3.</strong> 哪个对象通常不接收 gradient？</p><button data-choice="A" data-diagnosis="embedding 是参数。">embedding table</button><button data-choice="B" data-diagnosis="Q projection 是参数。">WQ</button><button data-choice="C">固定 tokenizer 规则</button><p class="check-feedback"></p></div>
+</div></section>
+
 <div class="transformer-thread"><strong>贯穿五课的真实样本：</strong><code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code> → <code>BOS POSITIVE 04 EOS</code></div>
-<h2 id="why">Why Did We Need This?</h2><p>神经网络接收 tensor，离散字符串既没有固定 shape，也不能直接求梯度。Tokenizer 负责确定离散单元与 ID；embedding table 负责把 ID 映射到可学习连续空间。两步不能混为一谈。</p>
-<h2 id="implemented">What You Actually Implemented</h2><table><tr><th>Repository object</th><th>Role</th><th>Ownership</th></tr><tr><td><code>two_digit_op.json</code></td><td>5,000 input/output arithmetic pairs</td><td>Assignment data</td></tr><tr><td><code>generate_token_dict</code></td><td>16 symbols → IDs 0…15</td><td>Implemented in repository</td></tr><tr><td><code>prepocess_input_sequence</code></td><td>special tokens stay whole; numbers split to digits</td><td>Implemented in repository</td></tr><tr><td><code>Transformer.emb_layer</code></td><td>ID lookup → M-dimensional vector</td><td>Implemented in repository</td></tr></table>
-<h2 id="flow">Data Flow · 一条字符串怎样进入模型</h2>
-<pre><code class="language-plaintext">"BOS NEGATIVE 30 subtract NEGATIVE 34 EOS"
-  ↓ whitespace + special-token rule
+
+<h2 id="problem">Problem · 模型到底接收什么？</h2>
+<p>原始字符串是人类界面；矩阵乘法需要有固定 shape 的数值 tensor。一个看似简单的“把文字变成数字”，实际包含几个不同对象：</p>
+<div class="object-map"><div><strong>character</strong><span>抽象字符，如 <code>负</code> 或 <code>3</code></span></div><div><strong>Unicode code point</strong><span>字符在标准中的编号</span></div><div><strong>UTF-8 bytes</strong><span>字符被编码后的 1–4 个 bytes</span></div><div><strong>token</strong><span>模型词表所采用的离散单元</span></div><div><strong>token ID</strong><span>该单元在词表中的 row index</span></div><div><strong>embedding</strong><span>从参数表查出的连续向量</span></div><div><strong>contextual representation</strong><span>经过 attention/MLP 后、已经吸收上下文的状态</span></div></div>
+<p>WI22 toy tokenizer 没有经过 UTF-8/BPE 管线：空格切词后，特殊单词保持整体，数字字符串按 digit 拆开。列出 Unicode 层次只是为了精确区分对象，不是说你当年的代码实现了现代 tokenizer。</p>
+
+<h2 id="naive">Naive solution · 直接把字符串或数字喂进去？</h2>
+<p>把 <code>30</code> 当作浮点数 30，会暗中规定“30 比 3 大十倍”这一几何关系，也无法表示 <code>BOS</code>。把每个完整表达式分配一个 ID，则新表达式没有可复用结构。你的 digit vocabulary 采用了更小的离散积木：10 个数字和少量操作符可以组合出未见的两位数。</p>
+<div class="counterfactual"><strong>如果每个两位数都是独立 token？</strong><p>模型不必重新组合十位/个位，但词表会扩大，而且对未列入词表的数字没有自然分解。tokenization 是建模选择，不是无害的预处理细节。</p></div>
+
+<h2 id="walkthrough">Worked Example · 从原始文本走到 tensor</h2>
+<div class="worked-example"><pre><code class="language-plaintext">raw string
+"BOS NEGATIVE 30 subtract NEGATIVE 34 EOS"
+
+↓ split + special-token / digit rule
+
 [BOS, NEGATIVE, 3, 0, subtract, NEGATIVE, 3, 4, EOS]
-  ↓ vocab lookup
-[14, 11, 3, 0, 13, 11, 3, 4, 15]          [K=9]
-  ↓ batch
-token IDs                                    [N,K]
-  ↓ nn.Embedding(V=16, M)
-token embeddings                             [N,K,M]
-  + positional encoding                      [1 or N,K,M]
-Transformer input representation             [N,K,M]</code></pre>
-<div class="mental-model"><small>Mental model</small><p>Tokenizer 选择离散字典与切分规则；token ID 只是表格索引；embedding 才是模型会学习的连续表示，而且此时还没有上下文。</p></div>
-<h2 id="code">Code Lens</h2>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · preprocess</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L75">View source →</a></div><pre><code class="language-python">for letter in input_str.split(" "):
+
+↓ vocabulary lookup
+
+[14, 11, 3, 0, 13, 11, 3, 4, 15]              [K=9]
+
+↓ stack N examples into a batch
+
+token_ids                                         [N,9]
+
+↓ row lookup in E ∈ ℝ^(16×M)
+
+token_embeddings                                  [N,9,M]
+
+↓ add position-dependent vectors P
+
+Transformer input X                               [N,9,M]</code></pre></div>
+<p>注意 vocabulary size <code>V=16</code> 没有成为 activation 的最后一维。ID <code>11</code> 直接选择参数表 <code>E</code> 的第 11 行；lookup 的结果是长度 <code>M</code> 的向量。</p>
+
+<h2 id="embedding">Mechanism · Embedding table 到底是什么？</h2>
+<div class="mechanism-walkthrough"><ol class="step-ledger"><li><strong>参数：</strong><code>E ∈ ℝ^(V×M)</code>。若 V=16、M=64，就有 16×64 个可训练数。</li><li><strong>查表：</strong><code>X[n,i] = E[token_ids[n,i]]</code>。</li><li><strong>重复 token：</strong>同一 ID 初次查到同一行；此处尚未读取上下文。</li><li><strong>反向传播：</strong>loss 对被访问行产生 gradient；optimizer 更新这些行。</li></ol></div>
+<div class="tensor-ledger"><div><code>token_ids</code><span>[N,K] · integer indices · 非 parameter</span></div><div><code>E</code><span>[V,M] · float parameter</span></div><div><code>E[token_ids]</code><span>[N,K,M] · activation</span></div><div><code>∂L/∂E</code><span>[V,M] · gradient</span></div></div>
+<p>embedding 起初不必“有意义”。它只是可学习坐标；训练任务持续推动某些 rows，使它们成为对预测有用的起点。语义是训练结果和后续网络共同形成的，不是 ID 自带属性。</p>
+
+<div class="depth-check concept-check" data-answer="B"><p><strong>Inline check.</strong> 若交换 vocab 中 ID 11 与 3，同时交换 embedding table 的第 11、3 行，其他所有输入 ID 也按新字典编码，模型行为怎样？</p><button data-choice="A" data-diagnosis="ID 的数值大小没有语义。">一定改变，因为 11 比 3 大</button><button data-choice="B">不变；只是对离散符号和 rows 做一致重命名</button><button data-choice="C" data-diagnosis="这里不需要重新训练。">必须重新训练才可能不变</button><p class="check-feedback"></p></div>
+
+<div class="mental-model"><small>Mental model</small><p>Token ID 是地址；embedding table 是会学习的记忆表；lookup 得到的是无上下文起点，不是词在这句话中的最终含义。</p></div>
+
+<h2 id="code">Your Code · 两个阶段，两种职责</h2>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · prepocess_input_sequence()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L75">View source →</a></div><pre><code class="language-python">for letter in input_str.split(" "):
     if letter in token_dict:
         out.append(token_dict[letter])
     else:
         for digit in letter:
-            out.append(token_dict[digit])</code></pre></div>
+            out.append(token_dict[digit])</code></pre><p><code>token_dict</code> 决定离散映射；这段代码不含可训练 tensor，也不会收到 gradient。</p></div>
 <div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · Transformer</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L1069">View source →</a></div><pre><code class="language-python">self.emb_layer = nn.Embedding(
     num_embeddings=vocab_len,
     embedding_dim=emb_dim,
 )
 q_emb = self.emb_layer(ques_b)
-q_emb_inp = q_emb + ques_pos</code></pre></div>
-<h2 id="position">Why Position?</h2><p>同一个 token ID 每次从 table 取出的初始向量相同；attention 若没有 position，本身只看到一个无序集合。把 position vector 加进去，让“第一个 3”与“第二个 3”在进入 block 前已经可区分。</p>
-<div class="historical-note"><p><strong>Historical implementation note：</strong>保存的 sinusoidal implementation 使用 <code>floor(a / M)</code> 生成 denominator，导致测试维度中的频率没有按标准公式展开。它通过了 Notebook 给定的 saved check，但现代严格实现应使用不被 floor 抹平的 <code>2i/M</code> 频率指数。</p></div>
-<h2 id="why-design">Why This Design?</h2><ul><li>把数字拆成 digits，可用 10 个数字 token 组合未见过的两位数；代价是模型必须学习位值和进位。</li><li>共享 embedding table，让同一符号在 encoder/decoder 都从同一基础向量出发。</li><li>position 与 token vector 同 shape，相加后不改变后续 block 的接口。</li></ul>
-<div class="card warning"><p><strong>Common misconceptions：</strong>Token ID 11 不比 ID 3 “更大”；embedding 不是 contextual representation；两个相同 digit 的初始 embedding 可相同，但 position 与 attention 之后 representation 会不同。</p></div>
-<h2 id="now">Then vs Now · 连接 CS336</h2><div class="compare-grid"><article><h3>EECS498 toy tokenizer</h3><p>人工定义 16-token vocab；special words 保持整体；数字按 digit 切分。</p></article><article><h3>Modern LLM tokenizer</h3><p>Unicode → UTF-8 bytes → BPE/subword merges → token IDs；vocab 从数据学习。</p></article></div><p>概念链没变：string → discrete tokens → IDs → embedding。变化的是 token boundary 如何确定，以及 vocabulary 的规模与训练方式。</p>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>V=16, M=64，输入 IDs shape=[32,9]，embedding 后 shape？embedding 参数 shape？</summary><p>输出 <code>[32,9,64]</code>；table 参数 <code>[16,64]</code>。每个 ID 选择一行，不增加 one-hot 维。</p></details><details class="concept-check"><summary>为什么 token ID 14 不能理解成“语义数值 14”？</summary><p>它只是 <code>BOS</code> 所在的 row index；任意重排 IDs 并同步重排 embedding rows，模型语义不变。</p></details><details class="concept-check"><summary>两个 token ID 都是 3，进入 embedding 时相同，经过 Transformer 后为什么可不同？</summary><p>位置向量不同；并且每个位置根据周围 tokens 读取不同信息，逐层形成不同 contextual representation。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">Transformers.ipynb</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py">transformers.py</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/two_digit_op.json">two_digit_op.json</a></li></ul></section><footer><p>下一课：这些 [N,K,M] vectors 如何直接读取彼此的信息？</p></footer>
+q_emb_inp = q_emb + ques_pos</code></pre><p><code>ques_b [N,K]</code> 查表后成为 <code>q_emb [N,K,M]</code>。相加要求 <code>ques_pos</code> 可 broadcast 到同一 shape；最后一维 M 没变，后续 block 因而仍使用统一接口。</p></div>
+
+<h2 id="position">Why Position? · Attention 本身没有“第几个”</h2>
+<p>考虑 <code>cat eats fish</code> 与 <code>fish eats cat</code>。若输入只包含三张 token cards，自注意力会随 cards 的排列同步重排输出——它是 permutation-equivariant，但没有独立顺序来源。模型知道集合里有 cat/eats/fish，却不能把“第一个名词”和“第三个名词”的角色固定到位置上。</p>
+<p>位置注入做的是：</p>
+<pre><code class="language-plaintext">X_i = E[token_i] + P_i
+
+E[token_i] : 这个离散符号是什么
+P_i        : 它处在序列的哪个位置
+X_i        : 后续 Q/K/V projections 可以同时利用两类信号</code></pre>
+<p><code>P_i</code> 不是噪声。它是系统性的、随位置变化的 signal。attention 可以学习“读取前一个位置”“区分十位与个位”，因为 WQ/WK 能从混合 representation 中利用位置方向。</p>
+<div class="counterfactual"><strong>如果所有 P<sub>i</sub> 完全相同？</strong><p>每个 token 都得到同一个偏移，位置之间仍不可区分；相当于给所有 cards 贴同一张“位置”标签。</p></div>
+<div class="misconception"><strong>Misconception diagnosis</strong><p>“相同 token 加 position 后就有了上下文”仍不准确。position 让位置可辨；真正依赖其他 tokens 的 contextual representation，要等 attention 把别处的 values 混进来。</p></div>
+
+<details class="deep-dive"><summary>Deep Dive · sinusoidal、learned position、RoPE 改变了什么？</summary><p>Sinusoidal absolute encoding 用确定函数生成 P；learned absolute embedding 把 P 也当参数；RoPE 不直接把一张 P 加到 X，而是在 Q/K feature pairs 上按位置旋转，使 dot product 显式包含相对位置信息。它们都在解决“内容匹配如何感知顺序/距离”，接口不同，问题相同。</p><div class="historical-note"><p><strong>Historical implementation note：</strong>repository 的 sinusoidal denominator 使用了会把指数取整的表达式；saved Notebook check 与该历史实现一致。今天调试时应先打印多个 dimension 的频率，确认它们没有意外相同，而不是默默把历史代码改写成标准版本。</p></div></details>
+
+<h2 id="training">谁被训练？什么时候改变？</h2>
+<div class="parameter-ledger"><table><tr><th>对象</th><th>是否 parameter</th><th>何时改变</th></tr><tr><td>toy split / vocabulary mapping</td><td>否</td><td>人工固定</td></tr><tr><td>token IDs</td><td>否</td><td>随输入变化</td></tr><tr><td>embedding table E</td><td>是</td><td>optimizer step</td></tr><tr><td>lookup activation X</td><td>否（中间值）</td><td>随输入与 E 变化</td></tr><tr><td>contextual hidden state</td><td>否（中间值）</td><td>随整句与模型参数变化</td></tr></table></div>
+
+<h2 id="checks">Deep Checks · 不只认名词</h2>
+<details class="concept-check"><summary>V=16、M=64、batch=[32,9]。参数与 activation 各是什么 shape？</summary><p><code>E=[16,64]</code>，lookup activation <code>[32,9,64]</code>。V 属于表的行数，不留在每个 token vector 中。</p></details>
+<details class="concept-check"><summary>同一 digit <code>3</code> 出现两次：哪一步相同，哪一步可能不同？</summary><p>基础 row lookup 相同；位置相加后不同；经过 attention 后还会因读取的邻居不同而进一步分化。</p></details>
+<details class="concept-check"><summary>为什么不能对 token IDs 直接做普通大小关系运算？</summary><p>ID 是可任意置换的类别地址。把 11 减 3 没有稳定语义；可学习几何位于 embedding rows 中。</p></details>
+<details class="concept-check"><summary>若把 sequence 整体重排且不提供 position，self-attention 输出会怎样？</summary><p>输出按同样 permutation 重排；网络没有一个外部信号判断哪个排列是原句顺序。</p></details>
+
+<section class="transfer-question"><h2 id="transfer">Transfer Question</h2><p>一个模型用 byte-level tokenizer。字符 <code>é</code> 可能成为两个 UTF-8 bytes，对应两个 token IDs。它进入 Transformer 时是一条“字符”还是两个 positions？embedding table 的行数由什么决定？</p><details><summary>核对思路</summary><p>若 tokenizer 保留为两个 byte tokens，就是两个 positions；表的行数由 tokenizer vocabulary 决定，而不是 Unicode 字符总数或句子长度。</p></details></section>
+
+<section class="explain-it-yourself"><h2 id="explain">闭卷解释</h2><ol><li>不使用“向量化”这个模糊词，解释 token ID 如何变成 embedding。</li><li>为什么 embedding 是 parameter，而 tokenizer rule 通常不是？</li><li>用 <code>cat eats fish</code> 解释 position signal 的必要性。</li><li>为什么 embedding 不等于 contextual representation？</li></ol></section>
+
+<div class="then-now-compression"><p><strong>Then I implemented:</strong> token dictionary → digit split → <code>nn.Embedding</code> → position add.</p><p><strong>Now I understand:</strong> tokenizer 固定离散地址，embedding 学习每个地址的连续起点，position 提供顺序坐标；上下文要到下一课的信息路由后才出现。</p></div>
+<section class="lesson-connection"><h2 id="next">Connection · 下一课为什么必然出现？</h2><p>现在每个位置已有 <code>[M]</code> 向量，但 <code>slept</code> 的向量仍没有数值上包含 <code>animal</code> 的信息。下一课要构造一个输入相关的矩阵，让位置 i 真的读取位置 j。</p></section>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">Transformers.ipynb</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py">transformers.py</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/two_digit_op.json">two_digit_op.json</a></li></ul></section>
 </main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

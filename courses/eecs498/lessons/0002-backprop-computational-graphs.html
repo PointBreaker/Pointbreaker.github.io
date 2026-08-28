@@ -1,19 +1,135 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>第 2 课 · Backpropagation — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Deep Learning Revisited · 02</p><h1>Backpropagation and Computational Graphs</h1><p class="lede">一个 scalar loss 为什么能更新几百万个参数？你在 A2/A3 里已经把答案逐层写过：每个 operation 保存局部信息，反向时把 upstream gradient 乘进来。</p><div class="meta"><span>50–65 分钟</span><span>A2–A3</span><span>Manual backward</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现过 <code>Linear.backward</code>、<code>ReLU.backward</code>、整网 backward，并用 numerical gradient 检查。</p><ol><li><code>dout</code> 表示什么？</li><li>cache 为什么来自 forward？</li><li>梯度在分支处如何组合？</li></ol></section>
-<h2 id="why">Why Did We Need This?</h2><p>Forward 只能告诉我们当前预测有多差；训练还需要回答：每个参数轻微变化时，loss 会怎样变化。直接对每个参数试探一次代价巨大。Backprop 复用计算图，按反向拓扑顺序一次求完。</p>
-<div class="shape-flow"><div><strong>scores</strong><span>[N,C]</span></div><div><strong>dScores</strong><span>[N,C]</span></div><div><strong>dW₂ / dH</strong><span>[H,C] / [N,H]</span></div><div><strong>dW₁</strong><span>[D,H]</span></div></div>
-<h2 id="implemented">What You Actually Implemented</h2><p><code>A2/two_layer_net.py</code> 手写整条 gradient；<code>A3/fully_connected_networks.py</code> 把它拆成可组合的 <code>Linear</code>、<code>ReLU</code> 以及 cache；<code>eecs598/grad.py</code> 提供数值梯度基线。后者是 assignment helper，不归因为用户实现。</p>
-<div class="mental-model"><small>Mental model</small><p>反向传播不是“loss 把答案广播给所有参数”，而是每个局部 operation 收到 ∂L/∂output，再用自己的局部导数产出 ∂L/∂inputs。</p></div>
-<h2 id="mechanism">Mechanism · vector-Jacobian product</h2><p>无需显式构造巨大 Jacobian。若 <code>Y=XW+b</code>，upstream 是 <code>dY</code>，局部反向只需矩阵乘法：</p><pre><code class="language-plaintext">dX = dY Wᵀ      [N,H]·[H,D] → [N,D]
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>第 2 课 · Backpropagation — EECS498 Revisited</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/vendor/prism.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css">
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main class="page">
+<p class="eyebrow">EECS498 · Deep Learning Revisited · 02</p>
+<h1>Backpropagation and Computational Graphs</h1>
+<p class="lede">一个 scalar loss 为什么能更新几百万个参数？你在 A2/A3 里已经把答案逐层写过：每个 operation 保存局部信息，反向时把 upstream gradient 乘进来。</p>
+<div class="meta">
+<span>50–65 分钟</span>
+<span>A2–A3</span>
+<span>Manual backward</span>
+</div>
+<section class="recall">
+<p class="recall-kicker">30-second recall</p>
+<h2>30 秒回忆</h2>
+<p>你实现过 <code>Linear.backward</code>、<code>ReLU.backward</code>、整网 backward，并用 numerical gradient 检查。</p>
+<ol>
+<li>
+<code>dout</code> 表示什么？</li>
+<li>cache 为什么来自 forward？</li>
+<li>梯度在分支处如何组合？</li>
+</ol>
+</section>
+<h2 id="why">Why Did We Need This?</h2>
+<p>Forward 只能告诉我们当前预测有多差；训练还需要回答：每个参数轻微变化时，loss 会怎样变化。直接对每个参数试探一次代价巨大。Backprop 复用计算图，按反向拓扑顺序一次求完。</p>
+<div class="shape-flow">
+<div>
+<strong>scores</strong>
+<span>[N,C]</span>
+</div>
+<div>
+<strong>dScores</strong>
+<span>[N,C]</span>
+</div>
+<div>
+<strong>dW₂ / dH</strong>
+<span>[H,C] / [N,H]</span>
+</div>
+<div>
+<strong>dW₁</strong>
+<span>[D,H]</span>
+</div>
+</div>
+<h2 id="implemented">What You Actually Implemented</h2>
+<p>
+<code>A2/two_layer_net.py</code> 手写整条 gradient；<code>A3/fully_connected_networks.py</code> 把它拆成可组合的 <code>Linear</code>、<code>ReLU</code> 以及 cache；<code>eecs598/grad.py</code> 提供数值梯度基线。后者是 assignment helper，不归因为用户实现。</p>
+<div class="mental-model">
+<small>Mental model</small>
+<p>反向传播不是“loss 把答案广播给所有参数”，而是每个局部 operation 收到 ∂L/∂output，再用自己的局部导数产出 ∂L/∂inputs。</p>
+</div>
+<h2 id="mechanism">Mechanism · vector-Jacobian product</h2>
+<p>无需显式构造巨大 Jacobian。若 <code>Y=XW+b</code>，upstream 是 <code>dY</code>，局部反向只需矩阵乘法：</p>
+<pre>
+<code class="language-plaintext">dX = dY Wᵀ      [N,H]·[H,D] → [N,D]
 dW = Xᵀ dY      [D,N]·[N,H] → [D,H]
-db = Σₙ dY[n]   [H]</code></pre>
+db = Σₙ dY[n]   [H]</code>
+</pre>
 <p>ReLU 更局部：forward 时哪些位置 <code>x&gt;0</code>，backward 才允许对应 gradient 穿过。</p>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2022</p><p class="your-code-file">A3/fully_connected_networks.py · Linear.backward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py#L67">View source →</a></div><pre><code class="language-python">dx = dout.mm(w.t()).view(x.shape)
+<div class="your-code">
+<div class="your-code-head">
+<div>
+<p class="code-kicker">Your code · 2022</p>
+<p class="your-code-file">A3/fully_connected_networks.py · Linear.backward()</p>
+</div>
+<a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py#L67">View source →</a>
+</div>
+<pre>
+<code class="language-python">dx = dout.mm(w.t()).view(x.shape)
 dw = x.view(x.shape[0], -1).t().mm(dout)
-db = dout.sum(axis=0)</code></pre></div>
-<h2 id="why-design">Why This Design?</h2><p>Cache 用内存换计算：forward 保存 <code>x,w</code>，backward 不必重新构造它们。模块化 backward 又让任意深度网络都能由同样的 local contract 组合。</p><div class="card warning"><p><strong>Common misconception：</strong><code>gradient</code> 不是“参数应该变成什么”，而是当前点最陡的上升方向。优化器还要决定符号、步长、动量和尺度。</p></div>
-<h2 id="autograd">From manual backward to autograd</h2><p>A4 开始用 PyTorch autograd；这不是换了训练原理，只是 framework 在 forward 时动态记录 operation，并调用相同类别的局部 backward。现代 Transformer 的 attention、MLP、LayerNorm 最终仍沿这张图回传。</p>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>若 Y=XW，X=[32,128]，W=[128,64]，dY 的 shape 是什么？dW 呢？</summary><p><code>dY=[32,64]</code>，<code>dW=XᵀdY=[128,64]</code>。每个 gradient 与它所描述的变量 shape 相同。</p></details><details class="concept-check"><summary>同一个 tensor 同时流入两个后续分支，backward 时怎么办？</summary><p>来自两条路径的梯度相加，因为总 loss 对该 tensor 的变化是各路径影响之和。</p></details><details class="concept-check"><summary>为什么 numerical gradient 适合检查，却不适合训练？</summary><p>每个参数至少需要额外 forward 扰动；参数量为 P 时成本约放大 O(P)，而 backprop 一次图遍历即可。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 · A2 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A2/two_layer_net.py">two_layer_net.py</a></li><li>EECS498 · A3 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py">fully_connected_networks.py</a></li></ul></section><footer><p>CourseStack Explanation：计算图与 VJP 的现代统一表述。</p></footer>
-</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>
+db = dout.sum(axis=0)</code>
+</pre>
+</div>
+<h2 id="why-design">Why This Design?</h2>
+<p>Cache 用内存换计算：forward 保存 <code>x,w</code>，backward 不必重新构造它们。模块化 backward 又让任意深度网络都能由同样的 local contract 组合。</p>
+<div class="card warning">
+<p>
+<strong>Common misconception：</strong>
+<code>gradient</code> 不是“参数应该变成什么”，而是当前点最陡的上升方向。优化器还要决定符号、步长、动量和尺度。</p>
+</div>
+<h2 id="autograd">From manual backward to autograd</h2>
+<p>A4 开始用 PyTorch autograd；这不是换了训练原理，只是 framework 在 forward 时动态记录 operation，并调用相同类别的局部 backward。现代 Transformer 的 attention、MLP、LayerNorm 最终仍沿这张图回传。</p>
+<h2 id="checks">Concept Checks</h2>
+<details class="concept-check">
+<summary>若 Y=XW，X=[32,128]，W=[128,64]，dY 的 shape 是什么？dW 呢？</summary>
+<p>
+<code>dY=[32,64]</code>，<code>dW=XᵀdY=[128,64]</code>。每个 gradient 与它所描述的变量 shape 相同。</p>
+</details>
+<details class="concept-check">
+<summary>同一个 tensor 同时流入两个后续分支，backward 时怎么办？</summary>
+<p>来自两条路径的梯度相加，因为总 loss 对该 tensor 的变化是各路径影响之和。</p>
+</details>
+<details class="concept-check">
+<summary>为什么 numerical gradient 适合检查，却不适合训练？</summary>
+<p>每个参数至少需要额外 forward 扰动；参数量为 P 时成本约放大 O(P)，而 backprop 一次图遍历即可。</p>
+</details>
+<section class="lesson-contract"><h2 id="walkthrough">Mechanism Walkthrough · 一条真实 two-layer graph</h2><div class="worked-example"><pre><code class="language-plaintext">X [N,D] → z1=XW1+b1 [N,H] → h=ReLU(z1) [N,H]
+→ scores=hW2+b2 [N,C] → L scalar
+
+dL/dscores [N,C]
+→ dW2=hᵀ·dscores [H,C]
+→ dh=dscores·W2ᵀ [N,H]
+→ dz1=dh⊙1[z1&gt;0] [N,H]
+→ dW1=Xᵀ·dz1 [D,H]</code></pre></div><p>Scalar loss 不只产生一个 gradient。对 graph 上每个 tensor，backward 计算“若它微小变化，L 如何变化”；parameter 有多少元素，就有多少偏导。</p><div class="mechanism-walkthrough"><ol class="step-ledger"><li>从 <code>dL/dL=1</code> 开始。</li><li>每个 operation 用 local derivative 变换 upstream gradient。</li><li>activation 流向多个 branches 时，gradient contributions 相加。</li><li>matrix multiply backward 产生对两侧 operands 的 gradients。</li><li>optimizer 只更新 parameters，不更新中间 activations。</li></ol></div><div class="counterfactual"><strong>如果 forward 不保存 z1 或 ReLU mask？</strong><p>Backward 无法判断哪些 units 当时为正；可以重算，但必须恢复完全相同的 activation。cache 是计算便利，不是模型 memory。</p></div><div class="worked-example"><p>若 <code>z1=[-2,0.5,3]</code>、upstream <code>dh=[4,4,4]</code>，ReLU backward 得 <code>dz1=[0,4,4]</code>。负 unit 不是 parameter 被删除，而是本次 example 的局部 path 被 gate 掉。</p></div><div class="misconception"><strong>Misconception diagnosis</strong><p>Gradient 不是 parameter 应变成的值，而是 loss 的局部斜率；SGD 还需乘 learning rate 并沿负方向走。</p></div><details class="concept-check"><summary>为什么 dW2 shape 与 W2 相同？</summary><p>每个 W2 元素需要自己的斜率；<code>hᵀ@dscores</code> 消去 batch axis，留下 <code>[H,C]</code>。</p></details><details class="concept-check"><summary>Residual 分成两条 paths，backward 汇合时怎么办？</summary><p>两条 path 对共同 tensor 的 gradients 相加。</p></details><section class="transfer-question"><h3>Transfer Question</h3><p>Transformer loss 经 residual 流向 identity 与 attention branch。哪条 chain-rule 规则解释汇合处 gradient？</p></section><section class="explain-it-yourself"><h3>闭卷解释</h3><ol><li>从 scalar L 解释 dW1 为什么是矩阵。</li><li>按顺序说出 W2、hidden、ReLU、W1 的 backward。</li><li>区分 cache 与 parameter。</li></ol></section><section class="lesson-connection"><h3>Connection</h3><p>Backprop 给斜率；下一课决定沿方向走多远、怎样利用历史 gradients，并诊断训练失败。</p></section></section>
+<section class="provenance">
+<p class="provenance-kicker">Based on your implementation</p>
+<ul>
+<li>EECS498 · A2 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A2/two_layer_net.py">two_layer_net.py</a>
+</li>
+<li>EECS498 · A3 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3/fully_connected_networks.py">fully_connected_networks.py</a>
+</li>
+</ul>
+</section>
+<footer>
+<p>CourseStack Explanation：计算图与 VJP 的现代统一表述。</p>
+</footer>
+</main>
+<script src="../../../assets/vendor/prism.js">
+</script>
+<script src="../../../assets/vendor/prism-python.js">
+</script>
+<script defer src="../../../assets/course/lesson-ui.js">
+</script>
+<script defer src="../assets/eecs498.js">
+</script>
+</body>
+</html>

@@ -1,19 +1,153 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>第 5 课 · Vision Representations — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Deep Learning Revisited · 05</p><h1>Vision Models as Representation Builders</h1><p class="lede">分类 accuracy 只告诉你答案对不对；A4 的 saliency、adversarial attack、class visualization 与 style transfer 在追问：内部 representation 到底保留了什么？</p><div class="meta"><span>45–60 分钟</span><span>A4</span><span>Interpretation · synthesis</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你对输入像素求 gradient、定向改变分类结果，并用深层 features 重建 content/style。</p><ol><li>对输入求梯度与对参数求梯度有何不同？</li><li>Gram matrix 丢掉什么、保留什么？</li><li>对抗样本揭示了哪种脆弱性？</li></ol></section>
-<h2 id="why">Why Did We Need This?</h2><p>一个 CNN 输出 “cat” 不代表我们知道它依赖了耳朵、纹理还是背景。把参数冻结、把输入当优化变量，就能用同一套 backprop 询问 representation。</p>
-<div class="shape-flow"><div><strong>image</strong><span>X [N,3,H,W]</span></div><div><strong>features</strong><span>Fℓ [N,Cℓ,Hℓ,Wℓ]</span></div><div><strong>score / feature loss</strong><span>scalar</span></div><div><strong>input gradient</strong><span>∂L/∂X same as X</span></div></div>
-<h2 id="implemented">What You Actually Implemented</h2><table><tr><th>File</th><th>Implemented</th><th>Saved artifact</th></tr><tr><td><code>network_visualization.py</code></td><td>saliency, targeted attack, class visualization step</td><td>saliency / adversarial / class-viz JPG</td></tr><tr><td><code>style_transfer.py</code></td><td>content loss, Gram matrix, style loss, TV loss</td><td>style transfer result JPG</td></tr></table>
-<div class="mental-model"><small>Mental model</small><p>Representation 是模型为任务保留的坐标系；可视化方法通过固定模型、反向优化输入，探测这个坐标系对什么变化敏感。</p></div>
-<h2 id="mechanism">Mechanism · 同一个 gradient，不同的提问</h2><ul><li><strong>Saliency：</strong><code>|∂L/∂X|</code> 大的位置，局部改变会强烈影响当前 loss。</li><li><strong>Adversarial：</strong>沿目标类 loss 的下降方向小步改图，让 decision boundary 被越过。</li><li><strong>Feature inversion：</strong>找一张图，使某层 activation 接近参考图。</li><li><strong>Style：</strong>匹配 channel-channel Gram statistics，而不固定每个 feature 的空间位置。</li></ul>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2022</p><p class="your-code-file">A4/style_transfer.py · gram_matrix()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/style_transfer.py#L59">View source →</a></div><pre><code class="language-python">features = features.view(-1, C, H * W)
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>第 5 课 · Vision Representations — EECS498 Revisited</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/vendor/prism.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css">
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main class="page">
+<p class="eyebrow">EECS498 · Deep Learning Revisited · 05</p>
+<h1>Vision Models as Representation Builders</h1>
+<p class="lede">分类 accuracy 只告诉你答案对不对；A4 的 saliency、adversarial attack、class visualization 与 style transfer 在追问：内部 representation 到底保留了什么？</p>
+<div class="meta">
+<span>45–60 分钟</span>
+<span>A4</span>
+<span>Interpretation · synthesis</span>
+</div>
+<section class="recall">
+<p class="recall-kicker">30-second recall</p>
+<h2>30 秒回忆</h2>
+<p>你对输入像素求 gradient、定向改变分类结果，并用深层 features 重建 content/style。</p>
+<ol>
+<li>对输入求梯度与对参数求梯度有何不同？</li>
+<li>Gram matrix 丢掉什么、保留什么？</li>
+<li>对抗样本揭示了哪种脆弱性？</li>
+</ol>
+</section>
+<h2 id="why">Why Did We Need This?</h2>
+<p>一个 CNN 输出 “cat” 不代表我们知道它依赖了耳朵、纹理还是背景。把参数冻结、把输入当优化变量，就能用同一套 backprop 询问 representation。</p>
+<div class="shape-flow">
+<div>
+<strong>image</strong>
+<span>X [N,3,H,W]</span>
+</div>
+<div>
+<strong>features</strong>
+<span>Fℓ [N,Cℓ,Hℓ,Wℓ]</span>
+</div>
+<div>
+<strong>score / feature loss</strong>
+<span>scalar</span>
+</div>
+<div>
+<strong>input gradient</strong>
+<span>∂L/∂X same as X</span>
+</div>
+</div>
+<h2 id="implemented">What You Actually Implemented</h2>
+<table>
+<tr>
+<th>File</th>
+<th>Implemented</th>
+<th>Saved artifact</th>
+</tr>
+<tr>
+<td>
+<code>network_visualization.py</code>
+</td>
+<td>saliency, targeted attack, class visualization step</td>
+<td>saliency / adversarial / class-viz JPG</td>
+</tr>
+<tr>
+<td>
+<code>style_transfer.py</code>
+</td>
+<td>content loss, Gram matrix, style loss, TV loss</td>
+<td>style transfer result JPG</td>
+</tr>
+</table>
+<div class="mental-model">
+<small>Mental model</small>
+<p>Representation 是模型为任务保留的坐标系；可视化方法通过固定模型、反向优化输入，探测这个坐标系对什么变化敏感。</p>
+</div>
+<h2 id="mechanism">Mechanism · 同一个 gradient，不同的提问</h2>
+<ul>
+<li>
+<strong>Saliency：</strong>
+<code>|∂L/∂X|</code> 大的位置，局部改变会强烈影响当前 loss。</li>
+<li>
+<strong>Adversarial：</strong>沿目标类 loss 的下降方向小步改图，让 decision boundary 被越过。</li>
+<li>
+<strong>Feature inversion：</strong>找一张图，使某层 activation 接近参考图。</li>
+<li>
+<strong>Style：</strong>匹配 channel-channel Gram statistics，而不固定每个 feature 的空间位置。</li>
+</ul>
+<div class="your-code">
+<div class="your-code-head">
+<div>
+<p class="code-kicker">Your code · 2022</p>
+<p class="your-code-file">A4/style_transfer.py · gram_matrix()</p>
+</div>
+<a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/style_transfer.py#L59">View source →</a>
+</div>
+<pre>
+<code class="language-python">features = features.view(-1, C, H * W)
 gram = torch.matmul(features, features.transpose(1, 2))
 if normalize:
-    gram = gram / (H * W * C)</code></pre></div>
-<h2 id="why-design">Why This Design?</h2><p>直接匹配 pixels 会要求两图逐像素相同；匹配深层 feature 允许低层细节变化但保留内容。Gram 对空间维求和，保留“哪些 channels 经常一起激活”，因此更像纹理统计而非布局。</p>
-<div class="historical-note"><p><strong>Historical implementation note：</strong>class visualization 的更新项把 <code>l2_reg * img.data ** 2</code> 直接加入梯度方向；严格的 L2 penalty 对 image 的梯度应与 <code>img</code> 成正比，而不是 <code>img²</code>。课程保留原实现并指出差异。</p></div>
-<div class="card warning"><p><strong>Common misconception：</strong>saliency 不是因果证明，attention heatmap 也不自动等于解释。它们显示某种局部敏感度或路由权重，取决于定义的目标与模型状态。</p></div>
-<h2 id="now">Then vs Now</h2><p>今天对 LLM 做 activation patching、logit attribution、feature visualization，仍在追问同一个问题：某个 prediction 由哪些内部 representations 支撑？对象从 pixels 变成 tokens，方法论仍是干预与读出。</p>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>F=[N,C,H,W]，Gram matrix 的 shape？</summary><p><code>[N,C,C]</code>。空间维被展平并求内积，得到每对 channels 的相关统计。</p></details><details class="concept-check"><summary>为什么 adversarial update 能很小却改变类别？</summary><p>高维输入中，模型 score 对许多像素的微小、同向变化可以累积，跨过离当前样本很近的 decision boundary。</p></details><details class="concept-check"><summary>若 Gram matrix 相同，两张图片布局必须相同吗？</summary><p>不必。Gram 汇总空间位置，因而丢掉了 feature 出现在哪里的详细信息。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/network_visualization.py">network_visualization.py</a></li><li>A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/style_transfer.py">style_transfer.py</a> · generated results in repository</li></ul></section><footer><p>Representation 不只是中间数组，而是任务塑造的可操作坐标系。</p></footer>
-</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>
+    gram = gram / (H * W * C)</code>
+</pre>
+</div>
+<h2 id="why-design">Why This Design?</h2>
+<p>直接匹配 pixels 会要求两图逐像素相同；匹配深层 feature 允许低层细节变化但保留内容。Gram 对空间维求和，保留“哪些 channels 经常一起激活”，因此更像纹理统计而非布局。</p>
+<div class="historical-note">
+<p>
+<strong>Historical implementation note：</strong>class visualization 的更新项把 <code>l2_reg * img.data ** 2</code> 直接加入梯度方向；严格的 L2 penalty 对 image 的梯度应与 <code>img</code> 成正比，而不是 <code>img²</code>。课程保留原实现并指出差异。</p>
+</div>
+<div class="card warning">
+<p>
+<strong>Common misconception：</strong>saliency 不是因果证明，attention heatmap 也不自动等于解释。它们显示某种局部敏感度或路由权重，取决于定义的目标与模型状态。</p>
+</div>
+<h2 id="now">Then vs Now</h2>
+<p>今天对 LLM 做 activation patching、logit attribution、feature visualization，仍在追问同一个问题：某个 prediction 由哪些内部 representations 支撑？对象从 pixels 变成 tokens，方法论仍是干预与读出。</p>
+<h2 id="checks">Concept Checks</h2>
+<details class="concept-check">
+<summary>F=[N,C,H,W]，Gram matrix 的 shape？</summary>
+<p>
+<code>[N,C,C]</code>。空间维被展平并求内积，得到每对 channels 的相关统计。</p>
+</details>
+<details class="concept-check">
+<summary>为什么 adversarial update 能很小却改变类别？</summary>
+<p>高维输入中，模型 score 对许多像素的微小、同向变化可以累积，跨过离当前样本很近的 decision boundary。</p>
+</details>
+<details class="concept-check">
+<summary>若 Gram matrix 相同，两张图片布局必须相同吗？</summary>
+<p>不必。Gram 汇总空间位置，因而丢掉了 feature 出现在哪里的详细信息。</p>
+</details>
+<section class="lesson-contract"><h2 id="representation-lab">Depth Lab · 从 prediction 反问 representation</h2><p>Classifier 给 class score，但 score 本身不解释 input 哪些 pixels 驱动它、hidden features 保留了什么。A4 中 saliency、adversarial examples、feature inversion 与 style transfer 是四种不同 probe。</p><div class="worked-example"><p>若正确 class score <code>s_y</code> 对 image <code>X[3,224,224]</code> 求 gradient，得到同 shape <code>∂s_y/∂X</code>。在 channel 轴取 absolute max 后得到 <code>[224,224]</code> saliency：每个 pixel 的<strong>局部敏感度</strong>，不是 segmentation probability。</p></div><div class="mechanism-walkthrough"><ol class="step-ledger"><li>Saliency：固定 model，问微小 pixel change 怎样改变 score。</li><li>Adversarial update：沿能提升目标 score 的 input gradient 移动。</li><li>Feature inversion：优化 pixels，使某层 activation 接近 target activation。</li><li>Style transfer：content loss 保留高层 arrangement；Gram statistics 匹配跨位置 feature correlations。</li></ol></div><div class="worked-example"><p>Feature matrix <code>F[C,HW]</code> 的 Gram matrix <code>G=FFᵀ [C,C]</code> 汇总 channel pairs 在所有 positions 的共激活，丢掉精确 spatial ordering。这正适合 texture/style，未必适合 content geometry。</p></div><div class="counterfactual"><strong>若 style loss 直接逐位置匹配 F？</strong><p>会强迫生成图在相同位置复现 target features，更接近 content reconstruction，不再只保留位置无关的 texture statistics。</p></div><div class="misconception"><strong>Misconception diagnosis</strong><p>高 saliency 不等于“模型的完整解释”；它是当前点的一阶局部 derivative，可能受 saturation、scale 与 downstream composition 影响。</p></div><details class="concept-check"><summary>Gram matrix 为什么是 [C,C] 而不是 [HW,HW]？</summary><p>它比较 feature channels，并在 spatial positions 上求和。</p></details><section class="transfer-question"><h3>Transfer Question</h3><p>把同样的 input-gradient probe 用在 token embeddings 上，得到的是对 token ID 的 gradient 还是 embedding activation 的 gradient？为什么离散 ID 本身不能直接微调？</p></section><section class="explain-it-yourself"><h3>闭卷解释</h3><ol><li>区分 saliency 与 segmentation。</li><li>解释 feature inversion 在优化 input 还是 model。</li><li>为什么 Gram statistics 更像 style than layout？</li></ol></section><section class="lesson-connection"><h3>Connection</h3><p>分类与解释仍是一图一标签；下一课把 output 扩成许多 spatial candidates、boxes 与 classes。</p></section></section>
+<section class="provenance">
+<p class="provenance-kicker">Based on your implementation</p>
+<ul>
+<li>A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/network_visualization.py">network_visualization.py</a>
+</li>
+<li>A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/style_transfer.py">style_transfer.py</a> · generated results in repository</li>
+</ul>
+</section>
+<footer>
+<p>Representation 不只是中间数组，而是任务塑造的可操作坐标系。</p>
+</footer>
+</main>
+<script src="../../../assets/vendor/prism.js">
+</script>
+<script src="../../../assets/vendor/prism-python.js">
+</script>
+<script defer src="../../../assets/course/lesson-ui.js">
+</script>
+<script defer src="../assets/eecs498.js">
+</script>
+</body>
+</html>

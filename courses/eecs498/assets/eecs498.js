@@ -1,4 +1,20 @@
 (function () {
+  document.querySelectorAll('.depth-check[data-answer]').forEach((check) => {
+    const answer = check.dataset.answer;
+    const feedback = check.querySelector('.depth-feedback, .check-feedback');
+    check.querySelectorAll('button[data-choice]').forEach((button) => {
+      button.addEventListener('click', () => {
+        check.querySelectorAll('button[data-choice]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+        const correct = button.dataset.choice === answer;
+        if (!feedback) return;
+        feedback.textContent = correct
+          ? `正确。${check.dataset.correct || ''}`
+          : (button.dataset.diagnosis || check.dataset.incorrect || '再沿着对象与 shape 重新推一次。');
+        feedback.dataset.state = correct ? 'correct' : 'incorrect';
+      });
+    });
+  });
+
   const storageKey = 'coursestack:progress:eecs498:v1';
   const readProgress = () => {
     try { return JSON.parse(localStorage.getItem(storageKey) || '{}'); }

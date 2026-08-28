@@ -1,20 +1,60 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>第 7 课 · RNN — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Deep Learning Revisited · 07</p><h1>RNN: Carrying Information Through Time</h1><p class="lede">从这里开始，核心问题由“输入是什么”转成“输入之间有什么顺序和依赖”。你在 captioning 代码里用一个不断更新的 hidden state 压缩过去。</p><div class="meta"><span>55–70 分钟</span><span>A4 captioning</span><span>Sequence turn</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了单步 RNN、整段 forward/backward、word embedding、temporal loss 与逐 token sampling。</p><ol><li><code>h_t</code> 同时连接哪两个方向？</li><li>训练时为何能拿到整段 caption？</li><li>生成时为何只能一步一步？</li></ol></section>
-<h2 id="why">Why Did We Need This?</h2><p>CNN 擅长局部空间结构，但 caption 是有序符号：<em>dog bites man</em> 与 <em>man bites dog</em> token 相同、关系不同。RNN 让第 t 步 representation 显式依赖第 t−1 步。</p>
-<div class="shape-flow"><div><strong>token IDs</strong><span>[N,T]</span></div><div><strong>word vectors</strong><span>x [N,T,D]</span></div><div><strong>hidden states</strong><span>h [N,T,H]</span></div><div><strong>vocab scores</strong><span>[N,T,V]</span></div></div>
-<h2 id="implemented">What You Actually Implemented</h2><p>真实完成代码来自 <code>A4/rnn_lstm_attention_captioning.py</code>，不是未改的 <code>win22/A5/rnn_lstm_captioning.py</code>。实现包括 <code>rnn_step_forward/backward</code>、<code>rnn_forward/backward</code>、<code>WordEmbedding</code>、<code>temporal_softmax_loss</code> 与 <code>CaptioningRNN</code>。</p>
-<div class="mental-model"><small>Mental model</small><p>RNN 用固定宽度的 hidden state 作为滚动摘要：每一步把当前输入与过去摘要混合，产生新的过去。</p></div>
-<h2 id="mechanism">Mechanism · recurrent data flow</h2><pre><code class="language-plaintext">a_t = x_t Wₓ + h_{t−1} Wₕ + b     [N,H]
-h_t = tanh(a_t)                     [N,H]
-scores_t = h_t W_vocab + b_vocab    [N,V]</code></pre><p><code>Wₓ</code> 与 <code>Wₕ</code> 跨所有 time steps 共享，所以模型能处理不同长度 sequence；代价是 <code>h_t</code> 必须等 <code>h_{t−1}</code>。</p>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2022</p><p class="your-code-file">A4/rnn_lstm_attention_captioning.py · rnn_step_forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py#L104">View source →</a></div><pre><code class="language-python">next_h_prime = x.mm(Wx) + prev_h.mm(Wh) + b
-next_h = torch.tanh(next_h_prime)
-cache = (x, prev_h, Wx, Wh, next_h)</code></pre></div>
-<h2 id="bptt">Backpropagation Through Time</h2><p>展开 T 步后，这是一个深度为 T、但重复使用同一参数的计算图。<code>Wₕ</code> 的 gradient 是所有 time steps 贡献之和；而早期 signal 必须反复乘局部 Jacobian，导致 vanishing/exploding gradients。</p>
-<h2 id="why-design">Why This Design?</h2><p>固定 hidden state 比保留所有过去便宜，天然支持 streaming；但它制造了两种瓶颈：信息必须挤进 H 维，计算必须沿时间串行。Attention 稍后会允许直接读取多个过去位置。</p>
-<div class="card warning"><p><strong>Common misconception：</strong>hidden state 不是“上一 token 的 embedding”。它是模型结合截至当前所有已处理信息后得到的 contextual state。</p></div>
-<h2 id="now">Then vs Now</h2><p>现代 state-space models 仍保留 recurrence/streaming 的吸引力；Transformer 则选择保存每个 token representation，并用 attention 直接访问，换来更强并行训练与更长的直接依赖路径。</p>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>x=[32,15,128]，hidden size=256，h 的 shape？</summary><p><code>[32,15,256]</code>；每个样本、每个时间步都有一个 256 维 contextual hidden state。</p></details><details class="concept-check"><summary>为什么训练可对多个 t 同时算 vocabulary loss，但 h 仍须顺序产生？</summary><p>得到全部 h 后 projection/loss 可批量计算；但 h_t 的值依赖 h_{t−1}，主 recurrence 仍有 sequential dependency。</p></details><details class="concept-check"><summary>从 t=50 的 loss 回到 t=1，梯度为何容易消失？</summary><p>需要穿过约 49 次 recurrent Jacobian；若其有效 singular values 多数小于 1，连乘会指数衰减。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py">rnn_lstm_attention_captioning.py</a></li><li>A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.ipynb">captioning Notebook</a></li></ul></section><footer><p>Static input → ordered sequence；fixed representation → rolling state。</p></footer>
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>RNN · Carrying Information Through Time — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
+<p class="eyebrow">EECS498 · Sequence Models · 07</p><h1>RNN: Carrying Information Through Time</h1><p class="lede">进入 sequence 后，问题从“这张输入里有什么”变成“当前输出怎样依赖此前发生的事”。RNN 的答案是一份每一步都被重写的 hidden state。</p><div class="meta"><span>80–100 分钟</span><span>A4 Captioning</span><span>Recurrence · BPTT · bottleneck</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你手写了 single-step RNN、whole-sequence forward/backward，并把 image features 变成初始 hidden state 生成 captions。</p><ol><li><code>h_t</code> 同时依赖哪两类信息？</li><li>token 1 的信息怎样到 token 10？</li><li>为什么 recurrence 难以沿 time 并行？</li></ol></section>
+<section class="before-start"><h2 id="before">Before We Start</h2><div class="before-grid"><div class="depth-check" data-answer="B"><p>若 <code>x_t=[N,D]</code>、<code>h_{t-1}=[N,H]</code>，<code>Wx</code> shape？</p><button data-choice="A" data-diagnosis="D 是 input feature axis。">[H,D]</button><button data-choice="B">[D,H]</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="A"><p>没有 hidden state 的 per-token classifier 能否区分同一词在不同 prefix 中的状态？</p><button data-choice="A">不能，除非另有跨时信息路径</button><button data-choice="B" data-diagnosis="共享 per-token function 不读取 prefix。">天然可以</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="C"><p>计算 h₁ 与 h₂ 可以完全并行吗？</p><button data-choice="A" data-diagnosis="h₂ 需要 h₁。">可以</button><button data-choice="B" data-diagnosis="batch 可并行，time dependency 不可。">只要 batch 大就可以</button><button data-choice="C">不可以，h₂ 依赖 h₁</button><p class="check-feedback"></p></div></div></section>
+
+<h2 id="problem">Problem · 静态输入不再够用</h2><p>图像分类一次接收完整 image；captioning 在 time t 生成词时，必须知道 image 以及先前生成了什么。最朴素的做法是对每个 word embedding 独立分类，但同一个 <code>bank</code> 或 <code>it</code> 在不同 prefix 中会得到同样处理。</p>
+<div class="counterfactual"><strong>如果没有 hidden state？</strong><p>每一步只见 <code>x_t</code>，模型没有计算路径携带 <code>x_1…x_{t-1}</code>。输出可以随当前 token 变，却不能随历史改变。</p></div>
+
+<h2 id="mechanism">从需求推出 recurrence</h2><p>我们需要一份固定宽度的 state，读入当前 <code>x_t</code>，同时继承上一份 state：</p>
+<pre><code class="language-plaintext">a_t = x_t W_x + h_{t-1} W_h + b
+h_t = tanh(a_t)
+
+x_t       [N,D]
+W_x       [D,H]
+h_{t-1}   [N,H]
+W_h       [H,H]
+h_t       [N,H]</code></pre>
+<div class="mechanism-walkthrough"><ol class="step-ledger"><li><code>x_tW_x</code> 把当前 input 映射到 hidden feature space。</li><li><code>h_{t-1}W_h</code> 把历史摘要变换到同一 space。</li><li>相加让“现在”和“过去”共同决定 preactivation。</li><li><code>tanh</code> 提供非线性并限制 state 范围。</li><li>同一 W_x/W_h 在所有 time steps 共享，因此规则不随 t 改变。</li></ol></div>
+<div class="mental-model"><small>Mental model</small><p>RNN 用一份不断更新的 H-dimensional hidden state 压缩过去；每个新 token 都在读取并重写这份摘要。</p></div>
+
+<h2 id="worked">Worked Example · shape 与依赖一起走</h2>
+<div class="worked-example"><p>取 <code>N=2,T=3,D=4,H=5</code>：</p><pre><code class="language-plaintext">x[:,0,:] [2,4] + h0 [2,5] → h1 [2,5]
+x[:,1,:] [2,4] + h1 [2,5] → h2 [2,5]
+x[:,2,:] [2,4] + h2 [2,5] → h3 [2,5]
+
+stack all hidden states → h [2,3,5]</code></pre><p>Batch N=2 可同时处理；但 <code>h2</code> 的数值未出现前，<code>h3</code> 无法计算。T 轴上的依赖链没有因 tensor batching 消失。</p></div>
+<pre><code class="language-plaintext">x₁ → h₁
+      ↓
+x₂ → h₂
+      ↓
+x₃ → h₃
+      ↓
+... → h₁₀</code></pre>
+<p>token 1 到 token 10 的信息必须连续经历 9 次 state transition。路径长度随距离增长，这既影响信息保真，也影响 backward gradient。</p>
+
+<h2 id="backward">Backpropagation Through Time</h2><p>展开 recurrence 后，它就是共享参数的深计算图。若 loss 在 t=10，<code>∂L/∂h₁</code> 包含许多 recurrent Jacobians 的乘积。典型 singular values 小于 1 时梯度反复缩小（vanishing）；大于 1 时可能放大（exploding）。</p>
+<pre><code class="language-plaintext">∂L/∂h₁ = ∂L/∂h₁₀ · ∂h₁₀/∂h₉ · ... · ∂h₂/∂h₁</code></pre>
+<p><code>tanh</code> 饱和区 derivative 接近 0，会进一步削弱长期 gradient。gradient clipping 可限制 explosion，却不创造一条短的 long-range path。</p>
+
+<h2 id="code">Your Code · 单步函数就是整条序列的原子</h2>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · A4</p><p class="your-code-file">A4/rnn_lstm_attention_captioning.py · rnn_step_forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py#L104">View source →</a></div><pre><code class="language-python">affine = x.mm(Wx) + prev_h.mm(Wh) + b
+next_h = torch.tanh(affine)
+cache = (x, prev_h, Wx, Wh, next_h)</code></pre><p><code>x.mm(Wx)</code>: <code>[N,D]@[D,H]→[N,H]</code>；<code>prev_h.mm(Wh)</code>: <code>[N,H]@[H,H]→[N,H]</code>。cache 保存 backward 局部导数所需的 activations/parameters，不是模型记忆本身。</p></div>
+<div class="depth-check concept-check" data-answer="B"><p><strong>Inline check.</strong> <code>Wh</code> 在 T=20 的 sequence 中有多少份 parameter copies？</p><button data-choice="A" data-diagnosis="计算图有 20 次使用，但共享同一 Parameter。">20 份</button><button data-choice="B">1 份，被使用 20 次，gradients 累加</button><p class="check-feedback"></p></div>
+
+<h2 id="captioning">Image captioning 中第一份记忆从哪里来？</h2><p>你把 CNN image features 投影成 <code>h₀</code>，然后 word embeddings 逐步更新 state；vocab projection 从各 <code>h_t</code> 预测词。图像信息若要影响很晚的 word，也必须一路保存在 recurrent state 中。</p>
+<div class="tensor-ledger"><div><strong>image features</strong><span>[N,Dimg]</span></div><div><strong>project to h₀</strong><span>[N,H]</span></div><div><strong>word embeddings</strong><span>[N,T,W]</span></div><div><strong>RNN hidden sequence</strong><span>[N,T,H]</span></div><div><strong>vocab scores</strong><span>[N,T,V]</span></div></div>
+
+<h2 id="attention-contrast">为什么这条路最终指向 Attention？</h2>
+<div class="compare-grid"><article><h3>Recurrence</h3><pre><code class="language-plaintext">token 1 → h1 → h2 → ... → h10</code></pre><p>长距离信息路径随距离增长；time steps sequential。</p></article><article><h3>Attention</h3><pre><code class="language-plaintext">token 10 query ─────────→ token 1 value</code></pre><p>内容匹配建立直接读取 edge；所有 query rows 可用 matrix multiply 同时计算。</p></article></div>
+<div class="misconception"><strong>Misconception diagnosis</strong><p>RNN 不是“天然理解顺序”。它的结构令 h_t 只能从 h_{t-1} 到达，因此顺序被计算依赖编码；能否保留有用历史仍须训练。</p></div>
+
+<h2 id="checks">End-of-Lesson Deep Checks</h2>
+<details class="concept-check"><summary>为什么 hidden state 既是 representation 又是 bottleneck？</summary><p>它携带历史，但无论 sequence 多长都压入固定 H dimensions；早期细节必须在反复更新中保留。</p></details><details class="concept-check"><summary>为什么 batch 维可并行而 time 维不行？</summary><p>不同 examples 无依赖；同一 example 的 h_t 需要刚算出的 h_{t-1}。</p></details><details class="concept-check"><summary>若 Wh=0，模型退化成什么？</summary><p><code>h_t=tanh(x_tWx+b)</code>，各 time step 独立，不再携带 history。</p></details><details class="concept-check"><summary>Gradient clipping 解决 vanishing gradient 吗？</summary><p>不直接解决；它限制过大 norm，主要处理 exploding gradient。</p></details>
+<section class="transfer-question"><h2 id="transfer">Transfer Questions</h2><ol><li>若每个 time step 都额外读取原始 image feature，image→late word 的路径如何改变？</li><li>双向 RNN 为什么不适合直接做严格 causal generation，但适合某些 sequence encoding？</li><li>T=100 与 T=10 时，从第一个 token 到最后 loss 的 recurrent path length 各是多少？</li></ol></section>
+<section class="explain-it-yourself"><h2 id="explain">闭卷解释</h2><ol><li>用 shape 解释一轮 <code>rnn_step_forward</code>。</li><li>为什么 scalar loss 能对共享 Wh 累积多个 time step 的 gradient？</li><li>RNN 为什么有顺序 inductive bias，又为什么难并行？</li></ol></section>
+<div class="then-now-compression"><p><strong>Then I implemented:</strong> <code>x_tWx + h_{t-1}Wh → tanh → h_t</code>.</p><p><strong>Now I understand:</strong> recurrence 用固定宽度 state 串起 sequence，但 long-range information 与 gradient 都必须穿过逐步链。</p></div>
+<section class="lesson-connection"><h2 id="next">Connection · LSTM 要修哪一段？</h2><p>普通 RNN 每一步通过 nonlinear transformation 完整重写 state。下一课增加更直接的 cell path 与 gates，改善长期记忆；随后检查它为何仍保留 sequential bottleneck。</p></section>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py">rnn_lstm_attention_captioning.py</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.ipynb">captioning notebook</a></li></ul></section>
 </main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

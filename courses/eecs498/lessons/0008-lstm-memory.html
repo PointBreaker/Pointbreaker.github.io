@@ -1,22 +1,66 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>第 8 课 · LSTM — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Deep Learning Revisited · 08</p><h1>LSTM: Better Memory, Same Sequential Bottleneck</h1><p class="lede">LSTM 没有抛弃 recurrence；它为“该忘什么、该写什么、该读出什么”增加可学习闸门，让长期信息有一条更平滑的 cell-state 路径。</p><div class="meta"><span>50–65 分钟</span><span>A4 captioning</span><span>Gated memory</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你把一个 <code>[N,4H]</code> activation 切成 i/f/o/g 四块，并实现 attention-augmented LSTM captioner。</p><ol><li>cell state 与 hidden state 分工是什么？</li><li>forget/input gate 修复什么？</li><li>为什么 LSTM 仍难并行？</li></ol></section>
-<h2 id="why">Why Did We Need This?</h2><p>Vanilla RNN 每一步都把旧状态整体通过 tanh 重写；长期 signal 必须反复穿过同一种非线性。LSTM 让 cell state 可以通过近似加法路径保留，并用 gates 控制更新。</p>
-<div class="shape-flow"><div><strong>xₜ</strong><span>[N,D]</span></div><div><strong>four gates</strong><span>[N,4H] → 4×[N,H]</span></div><div><strong>cell cₜ</strong><span>[N,H]</span></div><div><strong>hidden hₜ</strong><span>[N,H]</span></div></div>
-<h2 id="implemented">What You Actually Implemented</h2><p><code>lstm_step_forward</code>、<code>lstm_forward</code>、<code>LSTM</code>、<code>dot_product_attention</code>、<code>AttentionLSTM</code> 均在 A4 当前文件相对 skeleton 有新增实现。Notebook 的 attention run 保存到 epoch 59，loss 0.6881。</p>
-<div class="mental-model"><small>Mental model</small><p>Cell state 是可选择保留的长期通道；gates 是由当前输入和旧 hidden state 动态算出的写入、遗忘与读出开关。</p></div>
-<h2 id="mechanism">Mechanism · 不背 gate equation，读 data flow</h2><pre><code class="language-plaintext">[i,f,o,g] ← split(xₜWₓ + hₜ₋₁Wₕ + b)
-cₜ = sigmoid(f) ⊙ cₜ₋₁ + sigmoid(i) ⊙ tanh(g)
-hₜ = sigmoid(o) ⊙ tanh(cₜ)</code></pre><p>关键是 <code>cₜ</code> 的加法：旧 memory 与新 candidate 分开加权，而不是全部塞回一次 tanh。</p>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2022</p><p class="your-code-file">A4/rnn_lstm_attention_captioning.py · lstm_step_forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py#L649">View source →</a></div><pre><code class="language-python">a_i, a_f, a_o, a_g = torch.chunk(a, 4, dim=1)
-i, f, o = torch.sigmoid(a_i), torch.sigmoid(a_f), torch.sigmoid(a_o)
-g = torch.tanh(a_g)
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>LSTM · Better Memory, Same Bottleneck — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
+<p class="eyebrow">EECS498 · Sequence Models · 08</p><h1>LSTM: Better Memory, Same Sequential Bottleneck</h1><p class="lede">LSTM 的关键不是背四条 gate equation，而是为“保留、写入、读出”设计一条更直接的 memory path。它改善长期记忆，却没有让 time steps 变得并行。</p><div class="meta"><span>80–100 分钟</span><span>A4 Captioning</span><span>Cell state · gates · gradient path</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 <code>lstm_step_forward/backward</code> 和 sequence wrapper。一次 affine 同时产生四个 H-wide gate blocks。</p><ol><li>cell state 与 hidden state 分别承担什么角色？</li><li>gate 为什么用 sigmoid？candidate 为什么用 tanh？</li><li>LSTM 没解决什么？</li></ol></section>
+<section class="before-start"><h2 id="before">Before We Start</h2><div class="before-grid"><div class="depth-check" data-answer="A"><p>普通 RNN 的核心长期问题？</p><button data-choice="A">每步经 nonlinear recurrence 重写同一 state</button><button data-choice="B" data-diagnosis="parameter sharing 是优势，不是此处根因。">time steps 共享参数</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="C"><p>affine 输出 shape <code>[N,4H]</code> 的原因？</p><button data-choice="A" data-diagnosis="不是四个 time steps。">一次算四个时间</button><button data-choice="B" data-diagnosis="batch N 不乘四。">batch 扩大四倍</button><button data-choice="C">拼接 i/f/o/g 四组 H features</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="B"><p>LSTM 可完全并行所有 time steps 吗？</p><button data-choice="A" data-diagnosis="c_t/h_t 仍依赖前一步。">可以</button><button data-choice="B">不可以</button><p class="check-feedback"></p></div></div></section>
+
+<h2 id="problem">Problem · 每一步都完整重写记忆</h2><p>普通 RNN 的 <code>h_t=tanh(x_tWx+h_{t-1}Wh+b)</code> 强迫历史每一步穿过 affine+tanh。即使此刻没有新信息值得写入，也必须生成一份全新 h_t。我们想要更细的控制：</p>
+<div class="object-map"><div><strong>Keep / forget</strong><span>旧 memory 有多少直接留下？</span></div><div><strong>Write</strong><span>当前 candidate 写入多少？</span></div><div><strong>Read / expose</strong><span>memory 的哪些部分成为 visible hidden state？</span></div></div>
+
+<h2 id="derive">从三个需求推出 gates</h2>
+<pre><code class="language-plaintext">[i, f, o, g] = split(x_t W_x + h_{t-1} W_h + b)
+i = sigmoid(i)       input/write gate       [N,H]
+f = sigmoid(f)       forget/keep gate       [N,H]
+o = sigmoid(o)       output/read gate        [N,H]
+g = tanh(g)          candidate content       [N,H]
+
+c_t = f ⊙ c_{t-1} + i ⊙ g
+h_t = o ⊙ tanh(c_t)</code></pre>
+<div class="mechanism-walkthrough"><ol class="step-ledger"><li>Sigmoid 将控制量压到 0…1，适合作为逐 feature valve；它不是硬开关。</li><li><code>f⊙c_prev</code> 决定旧 memory 的直接保留比例。</li><li><code>i⊙g</code> 决定候选内容写入多少。</li><li>两条 additive paths 汇合成新 cell state。</li><li><code>o⊙tanh(c_t)</code> 决定当前对外暴露的 hidden state。</li></ol></div>
+<div class="mental-model"><small>Mental model</small><p>Cell state 是受门控的 memory highway；hidden state 是本时刻暴露给输出和下一步计算的 view。</p></div>
+
+<h2 id="worked">Worked Example · 不背 gate，算一次 memory update</h2>
+<div class="worked-example"><p>对某一个 cell feature，设：</p><pre><code class="language-plaintext">c_prev = 2.0
+f = 0.9      keep most old memory
+i = 0.2      write a little
+g = -0.5     candidate content
+o = 0.8
+
+c_t = 0.9×2.0 + 0.2×(-0.5) = 1.7
+h_t = 0.8×tanh(1.7) ≈ 0.748</code></pre><p>旧 memory 大部分沿乘法加法路径保留，新 evidence 只小幅修正它。若 f≈1、i≈0，则 c_t≈c_prev，近似复制。</p></div>
+<div class="counterfactual"><strong>如果没有 forget gate，固定 f=1？</strong><p>旧信息永远累积，模型难以主动清除已失效内容；cell 可能不断叠加 candidates。</p></div>
+<div class="counterfactual"><strong>如果没有 input gate，固定 i=1？</strong><p>每一步 candidate 都被完整写入，memory 无法在“不值得更新”时保持稳定。</p></div>
+
+<h2 id="gradient">为什么它改善 long-range gradient？</h2><p>沿 cell path 的局部导数包含 <code>∂c_t/∂c_{t-1}=f_t</code>（还需考虑 gates 的间接路径）。当模型令 relevant dimensions 的 f 接近 1，gradient 可沿 additive memory path 比反复经过 tanh recurrence 更直接地传播。</p>
+<pre><code class="language-plaintext">c₁ ─×f₂→ c₂ ─×f₃→ c₃ ...
+
+ordinary RNN: h₁ → affine+tanh → h₂ → affine+tanh → ...</code></pre>
+<p>这不是保证永不 vanishing：多个 f<1 相乘仍会缩小，其他 paths 也存在。LSTM 给模型的是可学习的保留机制，不是无限记忆证明。</p>
+
+<h2 id="code">Your Code · 一次 affine，四种角色</h2>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · A4</p><p class="your-code-file">A4/rnn_lstm_attention_captioning.py · lstm_step_forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py#L649">View source →</a></div><pre><code class="language-python">a = x.mm(Wx) + prev_h.mm(Wh) + b
+ai, af, ao, ag = torch.chunk(a, 4, dim=1)
+i, f, o = torch.sigmoid(ai), torch.sigmoid(af), torch.sigmoid(ao)
+g = torch.tanh(ag)
 next_c = f * prev_c + i * g
-next_h = o * torch.tanh(next_c)</code></pre></div>
-<h2 id="attention-bridge">你还写过一座通往 Transformer 的桥</h2><p>Caption attention 没要求单个 hidden state 永久压住整张图。每个生成步用 <code>prev_h</code> 对 4×4 spatial CNN features 打分，再加权读取。这已经包含 attention 的核心：query 根据内容从一组 values 动态取信息。</p>
-<div class="shape-flow"><div><strong>spatial features A</strong><span>[N,H,Da,Da]</span></div><div><strong>query prev_h</strong><span>[N,H]</span></div><div><strong>weights</strong><span>[N,Da,Da]</span></div><div><strong>attended feature</strong><span>[N,H]</span></div></div>
-<h2 id="not-solved">What LSTM Did Not Solve</h2><ul><li><strong>Sequential compute：</strong>cₜ/hₜ 仍等上一步。</li><li><strong>Fixed recurrent path：</strong>远处信息仍沿所有中间 steps 传递。</li><li><strong>Compression：</strong>hidden/cell 仍是固定宽度摘要。</li></ul>
-<div class="card warning"><p><strong>Common misconception：</strong>LSTM “有 memory”不代表它能无损保存任意长历史；gates 是软数值决策，容量与训练信号仍有限。</p></div>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>hidden size=256，合并 activation a 的最后一维多大？</summary><p><code>4H=1024</code>，随后切成四个 <code>[N,256]</code> gate/candidate blocks。</p></details><details class="concept-check"><summary>若 forget gate≈1 且 input gate≈0，cell state 怎么变？</summary><p><code>c_t≈c_{t−1}</code>，旧 memory 沿加法通道保留；这也是长期 gradient 更容易通过的情形。</p></details><details class="concept-check"><summary>LSTM 已改善长期记忆，为什么还会走向 attention-first 模型？</summary><p>它没消除串行 dependency，也没让当前位置一步直达任意历史位置；attention 提供动态 direct access。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py#L625">LSTM + dot-product attention implementation</a></li><li>WI22 A5 captioning alternate：与 zip skeleton 无实质差分，未作为实现来源。</li></ul></section><footer><p>Long-range memory improved — but time steps remain sequential。</p></footer>
+next_h = o * torch.tanh(next_c)</code></pre><p><code>Wx [D,4H]</code> 与 <code>Wh [H,4H]</code> 让 affine 输出 <code>[N,4H]</code>；chunk 后每个 gate <code>[N,H]</code>。四倍是 feature packing，不是额外 time 或 batch 轴。</p></div>
+<div class="depth-check concept-check" data-answer="C"><p><strong>Inline check.</strong> N=8,D=32,H=64，Wx/Wh/b shapes？</p><button data-choice="A" data-diagnosis="Wx 第一轴应匹配 D。">[64,256], [32,256], [256]</button><button data-choice="B" data-diagnosis="输出必须是 4H=256。">[32,64], [64,64], [64]</button><button data-choice="C">[32,256], [64,256], [256]</button><p class="check-feedback"></p></div>
+
+<h2 id="still-sequential">它没有解决什么？</h2><p>要计算 c_t/h_t，仍必须先得到 c_{t-1}/h_{t-1}。LSTM 改善了<strong>沿链保存什么</strong>，没有删除<strong>链本身</strong>：</p>
+<pre><code class="language-plaintext">(h₁,c₁) → (h₂,c₂) → ... → (h₁₀,c₁₀)
+
+long-range memory: improved
+time-step parallelism: still blocked
+direct token-to-token access: still absent</code></pre>
+<div class="compare-grid"><article><h3>LSTM</h3><p>token 10 若需 token 1，相关信息须保存在每一个中间 cell update 中。</p></article><article><h3>Attention</h3><p>token 10 构造 query，直接与 token 1 key 匹配并读取 value。</p></article></div>
+<div class="misconception"><strong>Misconception diagnosis</strong><p>“LSTM memory 就是完整保存过去 tokens”不准确。c_t 仍是固定 H-dimensional learned compression；gates 选择保留/覆盖哪些 features，不是无损事件日志。</p></div>
+
+<details class="deep-dive"><summary>Deep Dive · 为什么 gate bias 初始化常被讨论？</summary><p>若 forget gate 初期太小，memory 很快衰减；一些实现给 forget bias 正初始化以鼓励初期保留。但这是 optimization heuristic，不改变 equations，也不能替代任务学习。历史 repository 行为应按实际代码记录，不反向声称采用了某现代 convention。</p></details>
+
+<h2 id="checks">End-of-Lesson Deep Checks</h2>
+<details class="concept-check"><summary>f=1、i=0 时 cell 发生什么？</summary><p><code>c_t=c_{t-1}</code>，memory 直接复制；h_t 仍受 output gate 与 tanh 影响。</p></details><details class="concept-check"><summary>为什么 c_t 用加法合并 old/new path 有帮助？</summary><p>它提供相对直接的 identity-like path，gradient 不必在每一步只穿过完整 nonlinear rewrite。</p></details><details class="concept-check"><summary>output gate=0 会擦除 cell memory 吗？</summary><p>不会；它令当前 h_t 不暴露该 memory，但 c_t 可继续传到下一步。</p></details><details class="concept-check"><summary>LSTM 为什么仍难以沿 time 并行？</summary><p>每一步 gates 依赖 h_{t-1}，cell update 依赖 c_{t-1}。</p></details>
+<section class="transfer-question"><h2 id="transfer">Transfer Questions</h2><ol><li>若某 dimension 连续 20 步 f=0.95 且无写入，旧 memory 剩余比例约是多少？</li><li>GRU 合并部分 gates，改变了哪些参数化选择，是否删除 recurrence？</li><li>若任务要求随机读取 1,000 步前某个 token，固定 cell compression 与 attention memory 各有什么 tradeoff？</li></ol></section>
+<section class="explain-it-yourself"><h2 id="explain">闭卷解释</h2><ol><li>不背 gate 名称，从 keep/write/read 三个需求推出 LSTM。</li><li>解释 cell state 与 hidden state 的不同。</li><li>为什么 LSTM 改善 gradient，却没有解决 sequential bottleneck？</li></ol></section>
+<div class="then-now-compression"><p><strong>Then I implemented:</strong> four packed gates、additive cell update、hidden exposure.</p><p><strong>Now I understand:</strong> LSTM 给 recurrence 加了一条可门控的 memory highway；它修了“怎样沿链记住”，没修“为什么必须沿链走”。</p></div>
+<section class="lesson-connection"><h2 id="next">Connection · 从压缩过去到直接读取</h2><p>Transformer 不再要求一个 state 依次吞掉整段历史。它保留每个 token 的 representation，让当前位置用内容相关 query 直接读取其他 positions。下一课先回答这些 positions 如何从字符串变成 vectors。</p></section>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 A4 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4/rnn_lstm_attention_captioning.py#L625">LSTM implementation</a></li><li>Gate-to-attention bridge is <strong>CourseStack Explanation</strong>.</li></ul></section>
 </main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

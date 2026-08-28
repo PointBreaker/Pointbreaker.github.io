@@ -1,20 +1,145 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>第 6 课 · Detection — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Deep Learning Revisited · 06</p><h1>Detection: From Classification to Structured Prediction</h1><p class="lede">分类输出一个 class；检测必须同时回答“有几个、是什么、在哪里”。你完成的一阶段 detector 把一个 feature map 变成密集的 objectness、box offsets 与 class scores。</p><div class="meta"><span>55–70 分钟</span><span>A5</span><span>Dense prediction</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你实现了 anchors、proposal transform、IoU、prediction head、loss、inference 与 NMS，并保存了 YOLO checkpoint。</p><ol><li>为什么输出不再是 [N,C]？</li><li>anchor 与 proposal 有何差别？</li><li>NMS 在删除什么冗余？</li></ol></section>
-<h2 id="why">Why Did We Need This?</h2><p>Image classifier 把整图压成一个 label，无法表示多对象与位置。Detector 保留 backbone 的空间 grid，让每个位置/anchor 都能提出一个结构化假设。</p>
-<div class="shape-flow"><div><strong>image</strong><span>[B,3,H₀,W₀]</span></div><div><strong>features</strong><span>[B,1280,H,W]</span></div><div><strong>anchors</strong><span>[B,A,H,W,4]</span></div><div><strong>predictions</strong><span>conf + offsets + class</span></div><div><strong>detections</strong><span>variable count × 6</span></div></div>
-<h2 id="implemented">What You Actually Implemented</h2><p><strong>Implemented in repository：</strong><code>A5/single_stage_detector.py</code> 的 <code>GenerateAnchor</code>、<code>GenerateProposal</code>、<code>IoU</code>、<code>PredictionNetwork</code>、<code>SingleStageDetector.forward/inference</code> 与 <code>nms</code>。Notebook 保存到 epoch 49，末尾 epoch loss 0.1430，并有 <code>yolo_detector.pt</code>。</p>
-<div class="mental-model"><small>Mental model</small><p>Detection 把“一个输入对应一个答案”改成“空间中每个候选位置都提出一个带置信度的结构化答案，再去重”。</p></div>
-<h2 id="mechanism">Mechanism · anchor → offset → proposal</h2><p>Anchor 是预定义 reference box；网络不从零预测绝对坐标，而是预测相对中心/尺度的 offset。IoU 把 proposal 与 ground truth 配对，正负 anchor 决定哪些输出接受监督。</p>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2022</p><p class="your-code-file">A5/single_stage_detector.py · PredictionNetwork.forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A5/single_stage_detector.py#L327">View source →</a></div><pre><code class="language-python">preds = self.pred_layer(features)
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>第 6 课 · Detection — EECS498 Revisited</title>
+<link rel="stylesheet" href="../../../assets/course/base.css">
+<link rel="stylesheet" href="../../../assets/vendor/prism.css">
+<link rel="stylesheet" href="../../../assets/course/lesson.css">
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main class="page">
+<p class="eyebrow">EECS498 · Deep Learning Revisited · 06</p>
+<h1>Detection: From Classification to Structured Prediction</h1>
+<p class="lede">分类输出一个 class；检测必须同时回答“有几个、是什么、在哪里”。你完成的一阶段 detector 把一个 feature map 变成密集的 objectness、box offsets 与 class scores。</p>
+<div class="meta">
+<span>55–70 分钟</span>
+<span>A5</span>
+<span>Dense prediction</span>
+</div>
+<section class="recall">
+<p class="recall-kicker">30-second recall</p>
+<h2>30 秒回忆</h2>
+<p>你实现了 anchors、proposal transform、IoU、prediction head、loss、inference 与 NMS，并保存了 YOLO checkpoint。</p>
+<ol>
+<li>为什么输出不再是 [N,C]？</li>
+<li>anchor 与 proposal 有何差别？</li>
+<li>NMS 在删除什么冗余？</li>
+</ol>
+</section>
+<h2 id="why">Why Did We Need This?</h2>
+<p>Image classifier 把整图压成一个 label，无法表示多对象与位置。Detector 保留 backbone 的空间 grid，让每个位置/anchor 都能提出一个结构化假设。</p>
+<div class="shape-flow">
+<div>
+<strong>image</strong>
+<span>[B,3,H₀,W₀]</span>
+</div>
+<div>
+<strong>features</strong>
+<span>[B,1280,H,W]</span>
+</div>
+<div>
+<strong>anchors</strong>
+<span>[B,A,H,W,4]</span>
+</div>
+<div>
+<strong>predictions</strong>
+<span>conf + offsets + class</span>
+</div>
+<div>
+<strong>detections</strong>
+<span>variable count × 6</span>
+</div>
+</div>
+<h2 id="implemented">What You Actually Implemented</h2>
+<p>
+<strong>Implemented in repository：</strong>
+<code>A5/single_stage_detector.py</code> 的 <code>GenerateAnchor</code>、<code>GenerateProposal</code>、<code>IoU</code>、<code>PredictionNetwork</code>、<code>SingleStageDetector.forward/inference</code> 与 <code>nms</code>。Notebook 保存到 epoch 49，末尾 epoch loss 0.1430，并有 <code>yolo_detector.pt</code>。</p>
+<div class="mental-model">
+<small>Mental model</small>
+<p>Detection 把“一个输入对应一个答案”改成“空间中每个候选位置都提出一个带置信度的结构化答案，再去重”。</p>
+</div>
+<h2 id="mechanism">Mechanism · anchor → offset → proposal</h2>
+<p>Anchor 是预定义 reference box；网络不从零预测绝对坐标，而是预测相对中心/尺度的 offset。IoU 把 proposal 与 ground truth 配对，正负 anchor 决定哪些输出接受监督。</p>
+<div class="your-code">
+<div class="your-code-head">
+<div>
+<p class="code-kicker">Your code · 2022</p>
+<p class="your-code-file">A5/single_stage_detector.py · PredictionNetwork.forward()</p>
+</div>
+<a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A5/single_stage_detector.py#L327">View source →</a>
+</div>
+<pre>
+<code class="language-python">preds = self.pred_layer(features)
 conf_scores = torch.sigmoid(preds[:, :A*5:5])
 offsets = preds[:, :5*A].view(B, A, 5, H, W)[:, :, 1:]
-class_scores = preds[:, 5*A:]</code></pre></div>
-<h2 id="one-two">One stage vs two stage</h2><div class="compare-grid"><article><h3>One-stage</h3><p>直接在 dense grid 上同时做 objectness、box regression 与 class prediction；你完成的主线在这里。</p></article><article><h3>Two-stage</h3><p>先用 RPN 提 proposals，再对较少候选做 ROI classification/regression，分开“哪里可能有物体”与“是什么”。</p></article></div>
-<div class="historical-note"><p><strong>Repository completion boundary：</strong><code>A5/two_stage_detector.py</code> 只有 proposal layer 初始化出现差分，多个 forward/inference TODO 仍为 <code>pass</code>；<code>win22/A4</code> 两份 detector 与 zip skeleton 无实质差分。本课用它们解释两阶段结构，但不声称是已完成实现。</p></div>
-<h2 id="nms">Why NMS?</h2><p>相邻 anchors 常对同一物体产生高分重叠框。NMS 按 score 取最高框，再删除 IoU 超阈值的候选；它不是训练出的 reasoning，而是把冗余 dense hypotheses 变成最终集合的后处理规则。</p>
-<div class="card warning"><p><strong>Common misconception：</strong>class score 高不等于 box 准。Detection loss 必须分别监督 objectness、localization 与 class；最终排序还可能组合这些信号。</p></div>
-<h2 id="now">Then vs Now</h2><p>DETR 用 set prediction 与 bipartite matching 减少 anchors/NMS 依赖，但 structured output 的核心问题没变：模型必须把 dense representation 转成数量可变、带位置的对象集合。</p>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>B=2,A=9,H=W=7，每个 anchor 预测 1 conf + 4 offsets，共多少 anchor hypotheses？</summary><p><code>2×9×7×7=882</code>；每张图 441 个，之后还要结合 class scores 与 NMS。</p></details><details class="concept-check"><summary>为什么用 offsets 而非直接预测全图绝对坐标更容易？</summary><p>每个 anchor 提供局部 reference 与尺度，目标变成相对的小修正，分布更稳定且可在各 grid location 共享预测头。</p></details><details class="concept-check"><summary>两框 IoU 很大但类别不同，class-agnostic NMS 可能有什么问题？</summary><p>它可能错误删除另一个真实类别；class-aware NMS 会分开类别处理。这说明后处理规则也是模型行为的一部分。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A5/single_stage_detector.py">single_stage_detector.py</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A5/single_stage_detector_yolo.ipynb">Notebook</a></li><li>A5 / WI22 A4 two-stage files：skeleton provenance only，completion caveat 如上。</li></ul></section><footer><p>Classification → localization → dense hypotheses → structured detections。</p></footer>
-</main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>
+class_scores = preds[:, 5*A:]</code>
+</pre>
+</div>
+<h2 id="one-two">One stage vs two stage</h2>
+<div class="compare-grid">
+<article>
+<h3>One-stage</h3>
+<p>直接在 dense grid 上同时做 objectness、box regression 与 class prediction；你完成的主线在这里。</p>
+</article>
+<article>
+<h3>Two-stage</h3>
+<p>先用 RPN 提 proposals，再对较少候选做 ROI classification/regression，分开“哪里可能有物体”与“是什么”。</p>
+</article>
+</div>
+<div class="historical-note">
+<p>
+<strong>Repository completion boundary：</strong>
+<code>A5/two_stage_detector.py</code> 只有 proposal layer 初始化出现差分，多个 forward/inference TODO 仍为 <code>pass</code>；<code>win22/A4</code> 两份 detector 与 zip skeleton 无实质差分。本课用它们解释两阶段结构，但不声称是已完成实现。</p>
+</div>
+<h2 id="nms">Why NMS?</h2>
+<p>相邻 anchors 常对同一物体产生高分重叠框。NMS 按 score 取最高框，再删除 IoU 超阈值的候选；它不是训练出的 reasoning，而是把冗余 dense hypotheses 变成最终集合的后处理规则。</p>
+<div class="card warning">
+<p>
+<strong>Common misconception：</strong>class score 高不等于 box 准。Detection loss 必须分别监督 objectness、localization 与 class；最终排序还可能组合这些信号。</p>
+</div>
+<h2 id="now">Then vs Now</h2>
+<p>DETR 用 set prediction 与 bipartite matching 减少 anchors/NMS 依赖，但 structured output 的核心问题没变：模型必须把 dense representation 转成数量可变、带位置的对象集合。</p>
+<h2 id="checks">Concept Checks</h2>
+<details class="concept-check">
+<summary>B=2,A=9,H=W=7，每个 anchor 预测 1 conf + 4 offsets，共多少 anchor hypotheses？</summary>
+<p>
+<code>2×9×7×7=882</code>；每张图 441 个，之后还要结合 class scores 与 NMS。</p>
+</details>
+<details class="concept-check">
+<summary>为什么用 offsets 而非直接预测全图绝对坐标更容易？</summary>
+<p>每个 anchor 提供局部 reference 与尺度，目标变成相对的小修正，分布更稳定且可在各 grid location 共享预测头。</p>
+</details>
+<details class="concept-check">
+<summary>两框 IoU 很大但类别不同，class-agnostic NMS 可能有什么问题？</summary>
+<p>它可能错误删除另一个真实类别；class-aware NMS 会分开类别处理。这说明后处理规则也是模型行为的一部分。</p>
+</details>
+<section class="lesson-contract"><h2 id="detection-lab">Depth Lab · 一个 grid cell 为什么输出不止一个 class？</h2><p>Classification 回答“图中是什么”；detection 还要回答“有几个、各在哪里”。因此每个 anchor/candidate 同时需要 objectness、class logits 与 box geometry。</p><div class="worked-example"><pre><code class="language-plaintext">feature map                 [N,C,H,W]
+A anchors per location
+objectness logits           [N,H,W,A]
+class logits                [N,H,W,A,K]
+box offsets (tx,ty,tw,th)   [N,H,W,A,4]</code></pre><p>若 H=W=7、A=3，就有 147 个 dense candidates；这不是 147 个 objects，而是 147 个待筛选 hypotheses。</p></div><div class="mechanism-walkthrough"><ol class="step-ledger"><li>Anchor 提供参考 center/size。</li><li>Network 预测相对 offsets，而非从零输出绝对 box。</li><li>IoU 将 predicted/target overlap 变成 matching/evaluation signal。</li><li>Objectness 排除大多数 background candidates。</li><li>NMS 在高重叠 predictions 中保留高分代表，减少重复 boxes。</li></ol></div><div class="counterfactual"><strong>如果没有 NMS？</strong><p>同一 object 附近多个 anchors 往往都给高分，输出会包含大量重叠重复 detections；分类正确也不等于结构化输出可用。</p></div><div class="misconception"><strong>Historical completion boundary</strong><p>Repository 的 one-stage detector 路径有完成实现；two-stage/Faster R-CNN 部分保留未完成区域。课程用它解释 proposal 思想，但不把 skeleton 误标为用户完成代码。</p></div><details class="concept-check"><summary>为什么 output 不再只是 [N,K]？</summary><p>每张图有可变数量 objects，需要在 spatial candidates 上同时预测存在性、类别与位置。</p></details><details class="concept-check"><summary>两个 box 类别相同但 IoU 很低，NMS 应互相抑制吗？</summary><p>通常不应；低 overlap 暗示可能是两个不同 objects。</p></details><section class="transfer-question"><h3>Transfer Question</h3><p>若 feature grid 加倍到 14×14、A 不变，candidate 数量和小物体 localization granularity 如何变化？</p></section><section class="explain-it-yourself"><h3>闭卷解释</h3><ol><li>从 classification 推出 detection 的三个 output heads。</li><li>解释 anchor 是 reference，不是最终 box。</li><li>为什么 proposal/two-stage 是不同计算分配策略？</li></ol></section><section class="lesson-connection"><h3>Connection</h3><p>Detection 将静态 image output 结构化；下一转折把输入本身改成有时间依赖的 sequence。</p></section></section>
+<section class="provenance">
+<p class="provenance-kicker">Based on your implementation</p>
+<ul>
+<li>A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A5/single_stage_detector.py">single_stage_detector.py</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/A5/single_stage_detector_yolo.ipynb">Notebook</a>
+</li>
+<li>A5 / WI22 A4 two-stage files：skeleton provenance only，completion caveat 如上。</li>
+</ul>
+</section>
+<footer>
+<p>Classification → localization → dense hypotheses → structured detections。</p>
+</footer>
+</main>
+<script src="../../../assets/vendor/prism.js">
+</script>
+<script src="../../../assets/vendor/prism-python.js">
+</script>
+<script defer src="../../../assets/course/lesson-ui.js">
+</script>
+<script defer src="../assets/eecs498.js">
+</script>
+</body>
+</html>

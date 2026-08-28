@@ -1,33 +1,84 @@
 <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer IV · Seq2Seq Training — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Transformer IV · 12</p><h1>Training a Sequence-to-Sequence Model</h1><p class="lede">你当年训练的不是泛泛的“Transformer”：它是一个以算术 expression 为条件、对 answer token 做 next-token prediction 的 autoregressive conditional generation model。</p><div class="meta"><span>70–90 分钟</span><span>WI22 A5</span><span>Teacher forcing · next token</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你完成了 full forward、用 4 个样本 overfit 到 1.0000，并在完整验证集得到 0.8213 accuracy，保存 <code>transformer.pt</code>。</p><ol><li>模型在每个 decoder position 预测什么？</li><li>teacher forcing 怎样 shift target？</li><li>训练与 inference 的已知上下文有何不同？</li></ol></section>
-<div class="transformer-thread"><strong>训练 pair：</strong><code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code> → <code>BOS POSITIVE 04 EOS</code></div>
-<h2 id="task">What You Actually Trained</h2><pre><code class="language-plaintext">Question / expression [N,9]
-  ↓ embedding + position + encoder
-encoder memory [N,9,M]
+<p class="eyebrow">EECS498 · Transformer IV · 12</p><h1>What You Actually Trained</h1><p class="lede">你当年训练的不是一个会“一次吐出答案”的 arithmetic oracle，而是一个条件自回归生成模型：给定题目和正确答案前缀，预测下一个答案 token。</p><div class="meta"><span>95–115 分钟</span><span>WI22 A5</span><span>Shift · Mask · Loss · Gradient</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>Notebook 在 5,000 条 arithmetic pairs 上训练 encoder–decoder；保存记录包括 tiny-set overfit 1.0 和 validation accuracy 约 0.8213。</p><ol><li>target shift 与 causal mask 为什么两者都需要？</li><li>training 为什么能并行所有 target positions？</li><li>一个 token 的 loss 如何更新 encoder embedding？</li></ol></section>
+<section class="before-start"><h2 id="before">Before We Start</h2><div class="before-grid"><div class="depth-check" data-answer="B"><p>target=<code>BOS POSITIVE 0 4 EOS</code>，decoder input 是？</p><button data-choice="A" data-diagnosis="完整 target 会让每个位置拿到自己要预测的 token。">完整 target</button><button data-choice="B"><code>BOS POSITIVE 0 4</code></button><button data-choice="C" data-diagnosis="这少了 BOS 条件。"><code>POSITIVE 0 4 EOS</code></button><p class="check-feedback"></p></div><div class="depth-check" data-answer="A"><p>谁不被 optimizer 更新？</p><button data-choice="A">人工 tokenizer mapping</button><button data-choice="B" data-diagnosis="embedding 是 Parameter。">embedding table</button><button data-choice="C" data-diagnosis="vocab projection 是 Parameter。">vocab head</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="C"><p>Inference 时能否一次并行生成所有未知未来 tokens？</p><button data-choice="A" data-diagnosis="未来前缀尚不存在。">能，与 training 完全相同</button><button data-choice="B" data-diagnosis="只有已知 prompt 可并行编码。">能，只要有 mask</button><button data-choice="C">不能；后一个 token 依赖前一个生成结果</button><p class="check-feedback"></p></div></div></section>
 
-Answer prefix [N,4]
-  ↓ embedding + position + masked decoder + cross-attention
-decoder states [N,4,M]
-  ↓ vocabulary projection
-logits [N,4,V=16]
+<div class="transformer-thread"><strong>Question:</strong> <code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code><br><strong>Target answer:</strong> <code>BOS POSITIVE 0 4 EOS</code></div>
+<h2 id="objective">Problem · 怎样把一条答案变成许多监督信号？</h2>
+<p>我们需要学习：</p><pre><code class="language-plaintext">P(answer_t | question, answer_&lt;t)</code></pre><p>答案长度 5 并不意味着只有一个训练 label。右移一位后，每个相邻 pair 都提供一个 next-token prediction：</p>
+<div class="worked-example"><pre><code class="language-plaintext">decoder input:      BOS      POSITIVE      0        4
+prediction target: POSITIVE     0          4       EOS
 
-Objective: P(next answer token | expression, previous answer tokens)</code></pre>
-<div class="mental-model"><small>Mental model</small><p>训练仍只是 prediction + loss + backprop：Transformer 的复杂性在于怎样构造每个 prediction 所依赖的 contextual representation。</p></div>
-<h2 id="teacher">Teacher Forcing · 一格错位就是目标</h2><p>完整 target 为 <code>BOS POSITIVE 0 4 EOS</code>。Decoder 输入去掉最后一个 token；监督标签去掉第一个 token：</p><table><tr><th>Decoder sees</th><th>Must predict</th></tr><tr><td><code>BOS</code></td><td><code>POSITIVE</code></td></tr><tr><td><code>BOS POSITIVE</code></td><td><code>0</code></td></tr><tr><td><code>BOS POSITIVE 0</code></td><td><code>4</code></td></tr><tr><td><code>BOS POSITIVE 0 4</code></td><td><code>EOS</code></td></tr></table>
-<p>Causal mask 保证即使四个位置在训练中并行计算，每一行也只能访问自己的 prefix。</p>
-<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · Transformer.forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L1110">View source →</a></div><pre><code class="language-python">q_emb_inp = q_emb + ques_pos
+position 0: P(POSITIVE | question, BOS)
+position 1: P(0 | question, BOS POSITIVE)
+position 2: P(4 | question, BOS POSITIVE 0)
+position 3: P(EOS | question, BOS POSITIVE 0 4)</code></pre></div>
+<div class="mental-model"><small>Mental model</small><p>Teacher forcing 把已知正确 prefix 送进 decoder；shift 定义每个位置的 label；causal mask 保证该位置无法偷看更右侧 target。</p></div>
+
+<h2 id="three-controls">Shift、mask、teacher forcing 不是同义词</h2>
+<div class="object-map"><div><strong>Shift</strong><span>把输入 position t 与 label position t+1 对齐</span></div><div><strong>Causal mask</strong><span>阻断 hidden computation 对未来 target positions 的访问</span></div><div><strong>Teacher forcing</strong><span>training 时 prefix 来自 ground truth，而不是模型自己的 samples</span></div></div>
+<div class="counterfactual"><strong>只有 shift，没有 mask？</strong><p>虽然当前位置输入是前一个 token，多层 self-attention 仍可读取右边已经放入 batch 的 ground-truth tokens，发生 label leakage。</p></div>
+<div class="counterfactual"><strong>只有 mask，没有 shift？</strong><p>如果位置 t 同时输入 token t 又以 token t 为 target，模型可以从 residual path 直接复制当前 token；任务不是 next-token prediction。</p></div>
+
+<h2 id="parallel">为什么 training 能并行，而 inference 不能？</h2>
+<p>Training 已知完整 ground-truth answer，可一次构造所有 shifted inputs。triangular mask 让第 t 行只使用合法 prefix，因此四个 positions 可在同一个 tensor forward 中计算。</p>
+<pre><code class="language-plaintext">training:  known [BOS, POSITIVE, 0, 4] → 4 position logits in one forward
+inference: known [BOS] → sample POSITIVE
+           known [BOS, POSITIVE] → sample 0
+           known [BOS, POSITIVE, 0] → sample 4
+           known [BOS, POSITIVE, 0, 4] → sample EOS</code></pre>
+<p>Inference 的未来 prefix 取决于尚未算出的 token，因此 across time 自回归；每一步内部仍能并行 heads、features 和已有 positions。teacher forcing 的训练条件与模型自身 samples 的推理条件不同，这也引出 exposure bias。</p>
+
+<h2 id="one-token">Worked Backward · 追踪 token “4” 的错误</h2>
+<p>在第三个 prediction position，正确 label 是 <code>4</code>。设模型概率：</p>
+<pre><code class="language-plaintext">P(3)=0.55
+P(4)=0.20   ← correct
+remaining vocab total=0.25
+
+token loss = -log P(4) = -log(0.20) ≈ 1.609</code></pre>
+<p>cross entropy 对 logits 的 gradient 是 <code>p - one_hot(label)</code>：class 4 的 logit 得到负方向 gradient（gradient descent 会提高它），错误 class 3 得到正方向 gradient（会降低它）。接下来 chain rule 沿整个使用路径传播：</p>
+<div class="mechanism-walkthrough"><ol class="step-ledger"><li><strong>Vocab projection：</strong>哪些 hidden features 应支持 token 4？</li><li><strong>Decoder representation：</strong>当前 answer state 应怎样改变？</li><li><strong>Decoder MLP / self-attention：</strong>prefix 应提取哪些 features？</li><li><strong>Cross-attention：</strong>query、source addresses 与 payload 如何影响该 state？</li><li><strong>Encoder blocks：</strong>question memory 怎样编码 operands/signs？</li><li><strong>Embedding rows：</strong>本例访问过的 token rows 收到 gradient。</li></ol></div>
+<pre><code class="language-plaintext">loss scalar
+↓ ∂L/∂logits                  [N,Ka-1,V]
+vocab projection
+↓ ∂L/∂decoder hidden          [N,Ka-1,M]
+decoder blocks / QKV / MLP
+↓ cross-attention paths
+encoder contextual states    [N,Kq,M]
+↓ encoder blocks
+question embeddings + answer embeddings
+↓
+selected rows of E            [V,M]</code></pre>
+<p>“End-to-end”不是说所有对象都可训练；它表示所有可微分 parameters 通过 loss 连接在同一计算图中。</p>
+
+<h2 id="ledger">谁训练，谁不训练？</h2>
+<div class="parameter-ledger"><table><tr><th>对象</th><th>gradient?</th><th>原因</th></tr><tr><td>toy tokenizer / token_dict</td><td>否</td><td>离散 Python rule，不是 tensor Parameter</td></tr><tr><td>embedding table</td><td>是</td><td>lookup 输出参与后续 loss</td></tr><tr><td>WQ/WK/WV/WO</td><td>是</td><td>决定 routing 与 payload</td></tr><tr><td>MLP / LayerNorm parameters</td><td>是</td><td>改变 hidden representations</td></tr><tr><td>vocab projection</td><td>是</td><td>hidden → logits</td></tr><tr><td>mask</td><td>否</td><td>固定约束，不是 learned weight</td></tr></table></div>
+
+<h2 id="code">Your Code · target slicing 正是 objective</h2>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · Transformer.forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L1110">View source →</a></div><pre><code class="language-python">q_emb = self.emb_layer(ques_b)
+a_emb = self.emb_layer(ans_b)
+q_emb_inp = q_emb + ques_pos
 a_emb_inp = a_emb[:, :-1] + ans_pos[:, :-1]
-enc_out = self.encoder(q_emb_inp)
-mask = get_subsequent_mask(ans_b[:, :-1])
-dec_out = self.decoder(a_emb_inp, enc_out, mask).flatten(end_dim=1)</code></pre></div>
-<h2 id="shapes">Loss Shape Ledger</h2><div class="shape-flow"><div><strong>decoder output</strong><span>[N,O−1,M]</span></div><div><strong>vocab logits</strong><span>[N,O−1,V]</span></div><div><strong>flatten logits</strong><span>[N(O−1),V]</span></div><div><strong>shifted labels</strong><span>[N(O−1)]</span></div><div><strong>cross entropy</strong><span>scalar</span></div></div>
-<p>仓库 <code>Decoder</code> 的最后 projection 产生 vocabulary logits；<code>CrossEntropyLoss</code> 将 ground truth flatten。每个 answer position 都贡献一个 classification loss。</p>
-<h2 id="evidence">Repository Experiment Evidence</h2><table><tr><th>Run</th><th>Saved configuration / result</th><th>Interpretation</th></tr><tr><td>Small overfit</td><td>4 samples, 200 epochs, accuracy 1.0000</td><td>pipeline 能记住 tiny data；基础 wiring 通</td></tr><tr><td>Full data</td><td>5,000 pairs, 90/10 split, 2 encoder + 2 decoder layers, M=64</td><td>真实 arithmetic learning run</td></tr><tr><td>Final</td><td>epoch 200 loss 0.4716, val loss 0.4062, accuracy 0.8213</td><td>不错但非完美；不要夸大成算法求解器</td></tr><tr><td>Artifact</td><td><code>win22/A5/transformer.pt</code></td><td>saved state dict</td></tr></table>
-<h2 id="train-infer">Training vs Inference</h2><div class="compare-grid"><article><h3>Training</h3><p>每一步拿到真实 previous target tokens（teacher forcing），所有 positions 并行算 loss。</p></article><article><h3>Inference</h3><p>只有自己先前生成的 tokens；预测一个、append、再 forward。错误可能滚入后续 prefix。</p></article></div>
-<h2 id="why-design">Why This Design?</h2><p>若训练也逐 token sampling，会浪费并行性并让早期随机错误污染监督；teacher forcing 提供稳定、正确 prefix。代价是 exposure mismatch：训练总见真 prefix，生成会见自己的错误。</p>
-<div class="historical-note"><p><strong>Historical implementation note：</strong>Notebook 同时记录 DecoderBlock unit-check mismatch 与完整模型训练成功。二者可以同时成立：局部 expected check、skeleton/version 或实现细节有差异；最终 metric 也不能反过来证明每个 unit 完全正确。</p></div>
-<div class="card warning"><p><strong>Common misconception：</strong>Encoder 不是先“算出数字答案”再交给 decoder。它产生可查询 representations；最终答案规律由 cross-attention、decoder states 与 vocab projection 共同学习。</p></div>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>target shape=[32,5]，为何通常得到 32×4 个 next-token predictions？</summary><p><code>BOS … EOS</code> 有 5 tokens，但 decoder input/label 各错位一格，所以有 4 个 transition targets。</p></details><details class="concept-check"><summary>若移除 causal mask但仍 shift target，模型能作弊吗？</summary><p>能。位置 i 的 self-attention 可读 decoder tensor 中后续真实 target embeddings，包括自己将预测的 token。</p></details><details class="concept-check"><summary>Validation token accuracy 0.8213 是否意味着完整答案 accuracy 也约 82%？</summary><p>不一定。完整 sequence 要多个 tokens 全对，sequence accuracy 通常更低；autoregressive inference 还有 error propagation。</p></details><details class="concept-check"><summary>Teacher forcing 与现代 next-token prediction 的直接关系？</summary><p>都用真实 prefix 预测下一 token；一个 batch 中通过 shift+causal mask 并行监督所有位置。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>WI22 A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">training Notebook with saved outputs</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L1029">Transformer class</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformer.pt">transformer.pt</a></li></ul></section><footer><p>你当年已经实现并训练过一个条件自回归生成模型。</p></footer>
+
+dec_out = self.decoder(a_emb_inp, enc_out)
+pred = self.proj_to_vocab(dec_out)</code></pre><p><code>a_emb[:, :-1]</code> 删除最后一个 target token，因为它没有后继 label；loss 则应与 <code>ans_b[:,1:]</code> 对齐。<code>pred [N,Ka-1,V]</code> 在每个 position 给整个 vocabulary 的 logits。</p></div>
+<div class="depth-check concept-check" data-answer="B"><p><strong>Inline check.</strong> answer shape <code>[32,5]</code>、V=16，shift 后 logits shape？</p><button data-choice="A" data-diagnosis="最后一个 decoder input 被移除。">[32,5,16]</button><button data-choice="B">[32,4,16]</button><button data-choice="C" data-diagnosis="V 是 logits feature 轴。">[32,16,4]</button><p class="check-feedback"></p></div>
+
+<h2 id="evidence">Historical experiment evidence</h2>
+<p>Notebook 保存了 tiny dataset overfit 到 accuracy 1.0 的检查，以及完整训练约 0.8213 validation accuracy。tiny overfit 的教学意义不是“模型泛化很好”，而是验证 pipeline 至少能让 loss 驱动参数拟合少量 examples；完整 validation 才开始反映泛化。</p>
+<div class="misconception"><strong>Misconception diagnosis</strong><p>Teacher forcing 不是把 label 直接交给同一位置。正确 token t 作为输入，目标是 t+1；causal mask 又保证 position t 的 hidden state 不能从右侧偷看 t+1。</p></div>
+
+<details class="deep-dive"><summary>Deep Dive · padding loss 与 causal mask 是两层不同约束</summary><p>Causal mask 控制 hidden state 可以读取哪些 positions；loss mask 控制哪些 logits 计入 objective。padding position 即使不该计入 loss，也最好不要作为 attention source；反之，一个合法 context token 可不计 loss，却仍作为条件被后续 positions 使用。</p></details>
+
+<h2 id="checks">End-of-Lesson Deep Checks</h2>
+<details class="concept-check"><summary>为什么 training 可以同时产生四个 answer logits，却没有泄漏？</summary><p>所有 ground-truth prefix positions 已知，matrix operations 可并行；causal mask 保证每一行只依赖它应有的 prefix。</p></details>
+<details class="concept-check"><summary>loss 能更新 question embedding，即使 label 都在 answer side 吗？</summary><p>能。answer logits 依赖 cross-attention，cross-attention 依赖 encoder states，encoder states 依赖 question embeddings。</p></details>
+<details class="concept-check"><summary>tokenizer 为什么不能自动从 cross entropy 收到 gradient？</summary><p>它执行离散切分/字典 lookup 规则，不是计算图中的连续 Parameter。现代 tokenizer 往往也先独立训练，再固定用于 LM training。</p></details>
+<details class="concept-check"><summary>若 P(correct) 从 .20 升到 .40，token CE 怎样变？</summary><p>从约 1.609 降到约 0.916；提高正确 token probability 降低 loss。</p></details>
+
+<section class="transfer-question"><h2 id="transfer">Transfer Questions</h2><ol><li>答案长度各不相同，batch 中 padding 后，causal mask、padding attention mask、loss mask 各屏蔽什么？</li><li>若 inference 第一个 token 预测错，后续条件发生什么变化？这与 teacher forcing 有何差异？</li><li>若共享 input embedding 与 vocab projection weights，token 4 的 loss 会通过哪两种角色影响同一矩阵？</li></ol></section>
+<section class="explain-it-yourself"><h2 id="explain">闭卷解释</h2><ol><li>为什么 target shift 与 causal mask 两者都要有？</li><li>为什么 training 可并行而 generation across time 不可？</li><li>从错误 token 的 loss 讲到 question embedding 的 gradient。</li><li>精确区分 tokenizer、embedding 与 vocab projection。</li></ol></section>
+<div class="then-now-compression"><p><strong>Then I implemented:</strong> answer slicing、causal decoder、vocab projection、cross entropy training.</p><p><strong>Now I understand:</strong> 每个答案位置都在做条件 next-token prediction；一个 scalar loss 通过完整 encoder–decoder 计算图更新所有参与预测的 continuous parameters。</p></div>
+<section class="lesson-connection"><h2 id="next">Connection · QA 是不是另一种 objective？</h2><p>下一课把 encoder–decoder 的 <code>P(answer|question)</code> 改写成 decoder-only chat sequence，说明 instruction/QA training 仍是同一组条件 next-token factors。</p></section>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">training notebook and saved metrics</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L1029">Transformer</a> · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformer.pt">checkpoint</a></li></ul></section>
 </main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>

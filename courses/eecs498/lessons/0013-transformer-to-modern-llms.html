@@ -1,27 +1,88 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer V · Modern LLMs — EECS498 Revisited</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
-<p class="eyebrow">EECS498 · Transformer V · 13</p><h1>From Your EECS498 Transformer to Modern LLMs</h1><p class="lede">你当年写的不是一个与今天无关的旧模型。Encoder-decoder arithmetic Transformer 与 GPT/Llama 的任务和拓扑不同，但 token representation、causal attention、MLP 与 next-token loss 是同一机制家族。</p><div class="meta"><span>50–65 分钟</span><span>EECS498 ↔ CS336</span><span>Then vs Now</span></div>
-<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>前四课已连起 tokenizer → embedding → attention → encoder/decoder → teacher forcing → logits。</p><ol><li>哪些核心组件保留下来？</li><li>decoder-only 为什么不需要 cross-attention？</li><li>规模变大后，哪些问题从概念变成系统瓶颈？</li></ol></section>
-<div class="transformer-thread"><strong>同一条链：</strong>token IDs → embedding + position → contextual blocks → hidden representation → vocabulary logits → next token。</div>
-<h2 id="comparison">Architecture Comparison</h2><table><tr><th>Dimension</th><th>EECS498 Transformer</th><th>Modern GPT / Llama family</th></tr><tr><td>Topology</td><td>Encoder + decoder</td><td>Decoder-only stack</td></tr><tr><td>Conditioning</td><td>Cross-attend to encoded expression</td><td>Prompt + answer in one causal sequence</td></tr><tr><td>Attention</td><td>Bidirectional encoder; causal decoder</td><td>Causal self-attention throughout</td></tr><tr><td>Tokenizer</td><td>16 hand-authored tokens, digits</td><td>large byte/subword BPE vocabulary</td></tr><tr><td>Data</td><td>5,000 fixed arithmetic pairs</td><td>large heterogeneous corpora + post-training data</td></tr><tr><td>Objective</td><td>conditional answer next-token loss</td><td>general next-token pretraining, then adaptation/alignment</td></tr></table>
-<div class="mental-model"><small>Mental model</small><p>现代 LLM 不是把 Transformer 原理换掉，而是把 decoder-style next-token prediction 扩展到更大的 vocabulary、context、data、parameters 与 distributed systems。</p></div>
-<h2 id="decoder-only">How Decoder-only Re-expresses the Task</h2><pre><code class="language-plaintext">EECS498 encoder-decoder:
-encode(expression) → cross-attend while generating answer
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Transformer V · From EECS498 to Modern LLMs</title><link rel="stylesheet" href="../../../assets/course/base.css"><link rel="stylesheet" href="../../../assets/vendor/prism.css"><link rel="stylesheet" href="../../../assets/course/lesson.css"><link rel="stylesheet" href="../assets/course.css"></head><body><main class="page">
+<p class="eyebrow">EECS498 · Transformer V · 13</p><h1>From Your Toy Transformer to Modern LLMs</h1><p class="lede">Question/Answer training 没有神秘的新 objective。把 question 放进 context，把 answer 放进后续 positions，仍然是在最大化每个 answer token 的 conditional next-token probability。</p><div class="meta"><span>90–110 分钟</span><span>Bridge to CS336</span><span>Encoder–Decoder ↔ Decoder-only</span></div>
+<section class="recall"><p class="recall-kicker">30-second recall</p><h2>30 秒回忆</h2><p>你当年的模型有 encoder、decoder、cross-attention 与 16-token toy vocab。GPT/Llama 通常 decoder-only，但 token→attention→MLP→logits 的核心链仍在。</p><ol><li>没有 encoder 时，question information 放在哪里？</li><li>SFT 为什么常把 question token loss 设为 0？</li><li>QA 如何分解成 next-token factors？</li></ol></section>
+<section class="before-start"><h2 id="before">Before We Start</h2><div class="before-grid"><div class="depth-check" data-answer="B"><p>Decoder-only QA 中，answer token 的条件包含什么？</p><button data-choice="A" data-diagnosis="问题 tokens 是 causal prefix。">只有先前 answer</button><button data-choice="B">question 与先前 answer</button><button data-choice="C" data-diagnosis="future answer 被 causal mask 阻断。">完整 answer</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="A"><p>SFT 常见 answer-only loss mask 的作用？</p><button data-choice="A">question 作 context，但不要求模型拟合其 tokens</button><button data-choice="B" data-diagnosis="mask loss 不会删除 context。">删除 question hidden states</button><button data-choice="C" data-diagnosis="causal attention 仍是必要结构约束。">替代 causal mask</button><p class="check-feedback"></p></div><div class="depth-check" data-answer="C"><p>EECS498 与 GPT 最大的结构差别之一？</p><button data-choice="A" data-diagnosis="两者都有 embeddings。">GPT 没 embedding</button><button data-choice="B" data-diagnosis="两者都用 attention。">GPT 不用 QKV</button><button data-choice="C">encoder+cross-attention vs decoder-only causal self-attention</button><p class="check-feedback"></p></div></div></section>
 
-Decoder-only:
-[BOS expression SEP answer-prefix]
-  causal self-attention over everything to the left
-  → predict next answer token</code></pre><p>Prompt tokens 充当条件，answer tokens 只读左侧。没有显式 cross-attention，但 answer query 仍可通过 causal self-attention 读取 earlier prompt representations。</p>
-<h2 id="same-core">What Stayed the Same?</h2><div class="shape-flow"><div><strong>IDs</strong><span>[N,K]</span></div><div><strong>embedding</strong><span>[N,K,M]</span></div><div><strong>Q/K/V routing</strong><span>scores [N,H,K,K]</span></div><div><strong>MLP + residual</strong><span>[N,K,M]</span></div><div><strong>vocab logits</strong><span>[N,K,V]</span></div></div>
-<p>每层仍在回答两件事：从哪些 positions 读信息（attention），以及怎样在 feature channels 中变换它（MLP）。</p>
-<h2 id="code">Your implementation as the ancestor mechanism</h2><div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · MultiHeadAttention.forward()</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L430">View source →</a></div><pre><code class="language-python">heads = []
-for sa in self.selfatten:
-    heads.append(sa(query, key, value, mask))
-head = torch.cat(heads, dim=-1)
-y = self.project(head)</code></pre></div>
-<p>现代实现通常用一个 fused QKV projection 和 reshape 并行所有 heads；逻辑上仍是多个 head outputs concat 后投影回 model dimension。</p>
-<h2 id="scale">What Scale Changed</h2><ul><li><strong>Tokenizer engineering：</strong>coverage、compression、multilingual behavior 直接改变有效 context 与 compute。</li><li><strong>Attention systems：</strong><code>K²</code> score matrix 推动 FlashAttention、KV cache、GQA、long-context methods。</li><li><strong>Training memory：</strong>parameters、gradients、Adam states 与 activations 需要 mixed precision、sharding、parallelism。</li><li><strong>Data/objective：</strong>从 supervised pairs 扩展到 pretraining、instruction tuning 与 preference/RL objectives。</li></ul>
-<h2 id="cs336">A Bridge to CS336, Not a Duplicate</h2><p>EECS498 负责恢复机制脉络：为什么有 Q/K/V、mask 与 representation flow。CS336 继续追问这些组件怎样被高效实现、训练和扩展。复习时可用下面映射：</p><table><tr><th>EECS498 memory</th><th>CS336 continuation</th></tr><tr><td>16-token manual vocab</td><td>byte-level BPE training / encoding</td></tr><tr><td>three attention kernels</td><td>resource accounting / FlashAttention</td></tr><tr><td>single-device Adam training</td><td>mixed precision / DDP / FSDP / tensor parallel</td></tr><tr><td>fixed 5k arithmetic data</td><td>data filtering, dedup, scaling laws</td></tr></table>
-<div class="card warning"><p><strong>Common misconception：</strong>“Decoder-only”不表示模型没有内部 encoder-like representation building。它表示拓扑没有独立 encoder/cross-attention；每层 causal block 仍持续把 prompt 与 prefix 改写成 contextual representations。</p></div>
-<h2 id="checks">Concept Checks</h2><details class="concept-check"><summary>为什么 GPT 不需要 cross-attention 也能根据 prompt 回答？</summary><p>Prompt 位于同一 causal sequence 的左侧；answer positions 用 self-attention 直接读取 prompt tokens。</p></details><details class="concept-check"><summary>把 vocab 从 16 扩到 100k，最直接变大的两个参数块？</summary><p>Input embedding table <code>[V,M]</code> 与 output vocabulary projection <code>[M,V]</code>（若 weight tying，可共享权重但 logits 计算仍依赖 V）。</p></details><details class="concept-check"><summary>KV cache 缓存什么，为什么不缓存 Q？</summary><p>缓存过去 tokens 各层的 K/V，未来 query 会重复读取它们；当前 step 的 Q 只用来发起本次读取，不被未来作为历史地址/内容。</p></details><details class="concept-check"><summary>FlashAttention 是否改变 A[i,j] 的语义？</summary><p>不改变精确算法的结果语义；它通过分块与在线 softmax 避免把完整 A 写回慢速显存。</p></details>
-<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>WI22 A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py">complete Transformer implementation</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">toy arithmetic training evidence</a></li></ul></section><footer><p>当年的 toy Transformer，是今天 LLM 核心机制的可读、小尺度版本。</p></footer>
+<div class="transformer-thread"><strong>同一 arithmetic pair：</strong><code>BOS NEGATIVE 30 subtract NEGATIVE 34 EOS</code> → <code>BOS POSITIVE 0 4 EOS</code>，现在改写成一条 user/assistant causal sequence。</div>
+<h2 id="same-objective">核心等式 · QA 仍是 conditional next-token prediction</h2>
+<p>给 question Q 与 answer tokens <code>A=(a₁,…,aT)</code>：</p>
+<pre><code class="language-plaintext">P(A | Q) = ∏ₜ P(aₜ | Q, a₁, …, aₜ₋₁)</code></pre>
+<p>右边每一项正是 next-token probability。所谓 instruction model 并不需要一个“理解整道题后一次输出答案”的特殊 loss；它通过许多局部的 next-token cross-entropies学习整个 conditional distribution。</p>
+<div class="mental-model"><small>Mental model</small><p>QA 的 Q 是 prefix condition，A 是被逐 token factorize 的 target。架构可以改变条件进入模型的路径，objective 仍是 next-token prediction。</p></div>
+
+<h2 id="two-paths">两种架构怎样表达同一个条件关系？</h2>
+<div class="compare-grid"><article><h3>EECS498 encoder–decoder</h3><pre><code class="language-plaintext">Question → Encoder memory
+Answer prefix → Decoder queries
+cross-attention connects them
+
+P(aₜ | encoder(Q), a&lt;t)</code></pre></article><article><h3>Decoder-only chat model</h3><pre><code class="language-plaintext">&lt;user&gt; Question
+&lt;assistant&gt; Answer
+
+one causal sequence
+P(aₜ | Q tokens, role tokens, a&lt;t)</code></pre></article></div>
+<p>Decoder-only 模型不需要 cross-attention，因为 question tokens 已经位于 answer tokens 左侧。causal self-attention 允许 answer position 直接读取整段 prompt；同一个 block 同时承担 prefix integration 与 answer generation。</p>
+
+<h2 id="serialization">Worked Example · 把 arithmetic QA 序列化</h2>
+<div class="worked-example"><pre><code class="language-plaintext">&lt;user&gt;
+BOS NEGATIVE 30 subtract NEGATIVE 34 EOS
+&lt;assistant&gt;
+BOS POSITIVE 0 4 EOS
+
+causal positions:
+... question ... &lt;assistant&gt; BOS → predict POSITIVE
+... question ... &lt;assistant&gt; BOS POSITIVE → predict 0
+... question ... &lt;assistant&gt; BOS POSITIVE 0 → predict 4
+... question ... &lt;assistant&gt; BOS POSITIVE 0 4 → predict EOS</code></pre></div>
+<p>role/separator tokens 不是装饰。它们让同一 sequence 中“谁说的话”“哪里开始回答”成为可学习边界。现代 chat template 更复杂，但本质仍是把结构编码进 token sequence。</p>
+
+<h2 id="loss-mask">Context mask 与 loss mask 不要混淆</h2>
+<pre><code class="language-plaintext">tokens:    &lt;user&gt; question ... &lt;assistant&gt; answer ...
+attention: causal — answer 可读左侧 question
+loss mask:    0       0 ...       0        1 1 1 ...
+
+question tokens: context, often no supervised loss
+answer tokens:   context for later answer + prediction targets</code></pre>
+<div class="mechanism-walkthrough"><ol class="step-ledger"><li>完整 sequence 进入 causal Transformer，question hidden states 正常计算。</li><li>answer positions 用 attention 读取 question 与 earlier answer states。</li><li>vocab head 对所有 positions 可产生 logits。</li><li>loss mask 只汇总 assistant target positions 的 cross entropy。</li><li>这些 answer losses 仍通过 attention path 更新承载 question 的 parameters/embeddings。</li></ol></div>
+<div class="counterfactual"><strong>如果 question positions 的 loss 也设为 1？</strong><p>仍是合法 language modeling，但 objective 还要求模型拟合 user prompt 的 token distribution。SFT 中常屏蔽 prompt loss，是为了把有限监督重点放在“如何回答”；它不是数学上唯一选择。</p></div>
+<div class="counterfactual"><strong>如果去掉 role/separator tokens？</strong><p>模型仍看到字符串，但“用户输入结束、assistant 输出开始”的边界变得含糊；相同文本在不同角色下难以区分。</p></div>
+
+<h2 id="flow">Modern decoder-only 的 representation flow</h2>
+<div class="shape-flow"><div><strong>token IDs</strong><span>[N,K]</span></div><div><strong>embedding + position</strong><span>[N,K,M]</span></div><div><strong>causal self-attention</strong><span>[N,K,M]</span></div><div><strong>MLP / residual blocks</strong><span>[N,K,M]</span></div><div><strong>vocab logits</strong><span>[N,K,V]</span></div></div>
+<p>每一层仍重复上一课的两个核心动作：attention 跨 positions 动态读取；MLP 在每个 position 内变换 features。规模、tokenizer、normalization、position method 与工程实现显著进化，但 tensor 的角色链没有断裂。</p>
+
+<h2 id="comparison">Then vs Now · 哪些相同，哪些真的不同？</h2>
+<table><tr><th>Dimension</th><th>EECS498 WI22 model</th><th>Modern GPT/Llama family</th></tr><tr><td>Architecture</td><td>Encoder + decoder + cross-attention</td><td>通常 decoder-only</td></tr><tr><td>Tokenizer</td><td>人工 16-token vocab，digits</td><td>byte/subword tokenizer，大词表</td></tr><tr><td>Position</td><td>absolute sinusoidal-style</td><td>常见 RoPE 等</td></tr><tr><td>Objective</td><td>conditional answer next-token</td><td>pretraining next-token；SFT conditional next-token</td></tr><tr><td>Scale</td><td>5k arithmetic pairs</td><td>大规模、多域语料与后训练</td></tr><tr><td>Core mechanism</td><td>embedding, QKV attention, MLP, logits</td><td>仍是这些核心模块的深层堆叠</td></tr></table>
+<div class="misconception"><strong>Misconception diagnosis</strong><p>“Decoder-only 没有 encoder，所以它不能理解 question”是错误的。Question tokens 的 causal hidden states 位于同一 sequence 前部；answer queries 可直接读取它们。它缺少的是独立 encoder/cross-attention 接口，不是条件信息。</p></div>
+
+<h2 id="code">Your Code · 现代模型仍认得这段骨架</h2>
+<div class="your-code"><div class="your-code-head"><div><p class="code-kicker">Your code · 2023</p><p class="your-code-file">win22/A5/transformers.py · SelfAttention</p></div><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py#L430">View source →</a></div><pre><code class="language-python">query = self.q(query)
+key = self.k(key)
+value = self.v(value)
+y, weights = scaled_dot_product_no_loop_batch(
+    query, key, value, mask
+)</code></pre><p>现代实现会融合 projections、使用 optimized kernels、KV cache、GQA 等，但逻辑仍是：固定 learned projections 产生本次输入的 Q/K/V，动态构造 routing，再混合 values。</p></div>
+
+<h2 id="generation">Training logits 与实际 generation</h2>
+<p>模型输出的是 vocabulary logits，不是直接输出字符串。Generation loop 重复：</p>
+<pre><code class="language-plaintext">current token IDs
+→ forward
+→ take last-position logits [V]
+→ sampling / argmax
+→ append chosen ID
+→ stop at EOS or limit</code></pre>
+<p>temperature、top-k、top-p 改变从 logits 选择 token 的策略，不改变模型所训练的 conditional probabilities。KV cache 保存过去 positions 的 K/V，避免每步重复计算；它优化推理成本，不改变 causal dependence。</p>
+
+<details class="deep-dive"><summary>Deep Dive · Pretraining、SFT、preference optimization 的位置</summary><p>Pretraining 用海量 causal sequences 学一般 next-token distribution；SFT 用高质量 instruction/response sequences塑造条件行为；preference optimization 再利用偏好信号改变回答分布。它们的数据与 loss 形式可能不同，但本课要保留的主干是：最终生成仍逐 token，hidden state 仍由 embedding、attention、MLP 建立。</p></details>
+
+<h2 id="checks">End-of-Lesson Deep Checks</h2>
+<details class="concept-check"><summary>为什么 <code>P(A|Q)</code> 的 product 表明 QA 没有新 objective？</summary><p>每个 factor 都是给定 Q 与 earlier answer 的 next-token probability；cross entropy 正是在这些 factors 上训练。</p></details>
+<details class="concept-check"><summary>Loss mask(question)=0 后，question embeddings 还会收到 gradient 吗？</summary><p>会。answer loss 依赖 answer attention 对 question states 的读取，因此有间接 gradient path。</p></details>
+<details class="concept-check"><summary>Encoder–decoder 与 decoder-only 的条件信息路径分别是什么？</summary><p>前者经 encoder memory + cross-attention；后者经同一 causal sequence 中较早的 question positions。</p></details>
+<details class="concept-check"><summary>KV cache 为什么不让所有未来 tokens 并行生成？</summary><p>它只复用已生成 prefix 的 K/V；未来 token identity 仍依赖前一步 sample，尚不可知。</p></details>
+
+<section class="transfer-question"><h2 id="transfer">Transfer Questions</h2><ol><li>若 chat sequence 包含 system、user、assistant 三段，answer position 可读哪些 tokens？哪些 positions 应计 loss 由什么训练选择决定？</li><li>一个 decoder-only translation model 把 source language 放在 prefix、target 放后面，它与 encoder–decoder translation 的主要信息路径差别是什么？</li><li>如果 vocabulary 从 16 增至 100k，哪些 tensor shape 改变，attention matrix shape 是否一定改变？</li></ol></section>
+<section class="explain-it-yourself"><h2 id="explain">闭卷解释</h2><ol><li>从 <code>P(A|Q)</code> 解释 QA 为什么仍是 next-token prediction。</li><li>为什么 loss mask 不会把 question 从 context 中删除？</li><li>当年 encoder–decoder 与 GPT decoder-only 的信息路径差异。</li><li>列出从 token IDs 到 next token 的完整 representation chain。</li></ol></section>
+<div class="then-now-compression"><p><strong>Then I implemented:</strong> toy vocab、encoder memory、decoder queries、conditional answer logits.</p><p><strong>Now I understand:</strong> 现代 chat model 改用一条 causal sequence 表达条件，但核心仍是 token IDs → contextual states → vocab logits → conditional next token。</p></div>
+<section class="lesson-connection"><h2 id="next">Connection · 这条主线结束在哪里？</h2><p>它不结束在某个 API。只要能追踪 token、position、routing、feature transformation、logits 和 loss，你就能把当年的实现映射到今天更大、更快的模型，而不把二者误说成完全相同。</p></section>
+<section class="provenance"><p class="provenance-kicker">Based on your implementation</p><ul><li>EECS498 WI22 · A5 · <a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/transformers.py">transformers.py</a></li><li><a href="https://github.com/PointBreaker/EECS498/blob/1b495ae8c4db1343a12a39ac626a0a84dcada300/win22/A5/Transformers.ipynb">training notebook</a></li><li>Modern comparison is <strong>CourseStack Explanation</strong>, not a claim about the historical assignment's stated intent.</li></ul></section>
 </main><script src="../../../assets/vendor/prism.js"></script><script src="../../../assets/vendor/prism-python.js"></script><script defer src="../../../assets/course/lesson-ui.js"></script><script defer src="../assets/eecs498.js"></script></body></html>
