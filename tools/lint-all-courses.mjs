@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 
 const checks = [
+  ['Generated catalog and content manifests', 'node', ['tools/sync-course-catalog.mjs', '--check']],
   ['Site links, anchors, accessibility, and catalog', 'node', ['tools/lint-site-integrity.mjs']],
   ['Code block markup', 'node', ['tools/check-code-block-formatting.mjs']],
   ['Semantic framework diagrams', 'node', ['tools/lint-course-framework-diagrams.mjs']],

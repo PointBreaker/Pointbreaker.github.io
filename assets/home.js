@@ -77,7 +77,6 @@
       renderCourses();
     })
     .catch(() => {
-      results.textContent = '课程目录载入失败';
-      grid.innerHTML = '<div class="load-error">课程数据暂时无法读取，请刷新页面后重试。</div>';
+      results.textContent = '动态筛选暂时不可用；以下为完整静态课程目录';
     });
 })();
