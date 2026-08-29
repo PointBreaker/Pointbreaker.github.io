@@ -51,7 +51,10 @@ let checkedReferences = 0;
 for (const page of pages) {
   const source = read(page);
   const relative = path.relative(root, page);
+  ok(/^\s*<!doctype html>/i.test(source), `${relative}: missing HTML5 doctype`);
   ok(/<html\b[^>]*\blang=["'][^"']+["']/i.test(source), `${relative}: <html> needs a language`);
+  ok(/<title>[^<]+<\/title>/i.test(source), `${relative}: missing non-empty title`);
+  ok(/<meta\b[^>]*\bname=["']viewport["'][^>]*>/i.test(source), `${relative}: missing viewport meta`);
 
   const pageIds = [...source.matchAll(/\sid=["']([^"']+)["']/gi)].map((match) => match[1]);
   const duplicates = pageIds.filter((id, index) => pageIds.indexOf(id) !== index);
