@@ -10,6 +10,7 @@ const checks = [
   ['CS267 textbook and workbooks', 'node', ['tools/lint-cs267-content.mjs']],
   ['CS152 architecture reasoning and workbooks', 'node', ['tools/lint-cs152-content.mjs']],
   ['MIT mathematics visual reasoning', 'node', ['tools/lint-math-reasoning.mjs']],
+  ['CS70/CS170 discipline reasoning workbooks', 'node', ['tools/lint-reasoning-workbooks.mjs']],
   ['MIT 6.102 authored guides', 'node', ['tools/lint-mit6102-content.mjs']],
   ['MIT 6.1810 textbook and labs', 'node', ['tools/lint-mit61810-content.mjs']],
   ['MIT 6.5840 textbook and labs', 'node', ['tools/lint-mit65840-content.mjs']],
