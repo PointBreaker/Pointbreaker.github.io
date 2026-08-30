@@ -1,5 +1,7 @@
 # CS336 Spring 2026 official-source audit
 
+> **Historical audit:** 本文件是 2026-08-14 的早期快照。完整 diff、当前 Assignment CHANGELOG 版本与最终迁移动作请以 `CS336-SPRING-2026-MIGRATION-AUDIT.md` 和 `CS336-SPRING-2026-MIGRATION-REPORT.md` 为准。
+
 Audit date: 2026-08-14
 
 Primary sources:

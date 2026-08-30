@@ -2,6 +2,8 @@
 
 日期：2026-08-27
 
+> **Historical report:** 本报告记录 2026-08-27 的翻译资产恢复状态。Spring 2026 migration 已把这些 Spring 2025 中文题面从一级资源调整为折叠 archive；当前 active curriculum 与版本边界以 `CS336-SPRING-2026-MIGRATION-REPORT.md` 为准。题面内容与 problem IDs 仍完整保留。
+
 ## 结论
 
 五份 Assignment 的中文题面没有从仓库中丢失。与提交 `34ceb15 feat: localize complete CS336 assignment handouts` 对比后，当前 HTML 中的 problem 数量、顺序和 problem ID 完全一致：

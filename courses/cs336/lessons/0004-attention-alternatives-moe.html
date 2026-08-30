@@ -21,7 +21,7 @@
   <div class="page">
     <p class="eyebrow">CS336 · 第 4 课</p>
     <h1>注意力替代方案与混合专家</h1>
-    <p class="lede">标准 attention 的 O(n²) 复杂度是 Transformer 的致命瓶颈。这一课探索两条突围路径：(1) 设计更高效但近似的注意力机制；(2) 用稀疏激活的 MoE 让模型容量随参数增长而计算量亚线性增长。</p>
+    <p class="lede">长上下文会放大标准 attention 的计算与数据移动成本。这一课分开研究两类稀疏性：减少 token 之间的 attention edges，以及让每个 token 只激活一部分专家参数；两者解决的不是同一个瓶颈。</p>
 
     <div class="meta">
       <span>授课：Tatsu Hashimoto</span>
@@ -48,6 +48,7 @@ MoE: total expert parameters 很大，每 token 只路由到 top-k → active FL
 
 total parameters ≠ active parameters per token
 router probability ≠ attention probability
+attention sparsity ≠ MoE parameter sparsity
 capacity ≠ guaranteed throughput</code></pre></div>
     <div class="worked-example"><h3>Toy routing</h3><p>4 个 experts、top-1 routing、8 个 tokens。若 7 个都选 expert 0，理论上每 token 仍只算一个 expert，但 expert 0 排队而其余空闲；若 capacity factor 只容纳 3 个 token，还会 drop 或 reroute。这个反例说明 MoE 的 FLOPs 优势不自动变成 wall-clock 优势，load balancing 与 all-to-all 是机制的一部分。</p></div>
     <div class="misconception"><h3>关键误区</h3><p>“GQA 把整个模型缩小 \(h_q/h_{kv}\) 倍”错误，它主要减少 K/V 相关对象；“local attention 让所有长程依赖消失”也不必然成立，多层传播或间歇 global layers 仍可传递信息；“MoE 参数更多所以每 token FLOPs 必更多”混淆了 total 与 active parameters。</p></div>
@@ -111,7 +112,9 @@ for i in range(n):
     <p><strong>直觉：</strong>大多数语言建模任务中，附近的 token 比远处的更重要。</p>
 
     <h3>3. Sparse Attention（全局 + 局部混合）</h3>
-    <div class="prose-outline"><p>大多数层用 sliding window<br>少数层用 full attention（"全局层"）<br>例如: 每 6 层有 1 层全局 attention</p><p>有效上下文 = window_size × num_layers<br>例如: w=4096, L=32 → 有效上下文 ~128K</p></div>
+    <div class="prose-outline"><p>大多数层用 sliding window<br>少数层用 full attention（"全局层"）<br>例如: 每 6 层有 1 层 global attention</p><p>若每层只有 causal local window，理论 receptive field 会随层数扩大，数量级可到 (Lw)；但这只是“存在一条传播路径”，不等于远端信息能被可靠检索。加入 global layer 则会改变这个传播边界。</p></div>
+
+    <div class="derivation"><h3>Spring 2026 · learned sparse retrieval</h3><p>固定窗口预先规定每个 query 能看哪些位置；DeepSeek Sparse Attention 一类方法则增加轻量 indexer，为当前 query 从历史位置中挑选少量相关 key/value。计算图仍是“query 连接一小部分 token”，不是把 FFN experts 做 top-k routing。索引器的额外成本、召回错误与稀疏 kernel 效率共同决定是否真正比 full attention 快。</p></div>
 
     <h3>4. State Space Models（Mamba）</h3>
     <p>完全抛弃 attention，用经典控制论的状态空间模型：</p>

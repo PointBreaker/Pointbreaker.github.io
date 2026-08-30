@@ -45,10 +45,11 @@
   [
     ['Official version', assignment.version],
     ['Workbook based on', assignment.basis],
-    ['中文题面版本', assignment.localization]
+    ['Checked at / source commit', `${assignment.checkedAt} · ${assignment.sourceCommit}`],
+    ['Legacy 中文题面', assignment.localization]
   ].forEach(([label, value]) => {
     const item = el('div', 'workbook-version-item');
-    if (label === '中文题面版本') item.classList.add('workbook-version-boundary');
+    if (label === 'Legacy 中文题面') item.classList.add('workbook-version-boundary');
     item.append(el('span', 'workbook-kicker', label), el('p', '', value));
     versionGrid.appendChild(item);
   });
@@ -127,9 +128,9 @@
   const primaryNav = el('nav', 'workbook-primary-nav');
   primaryNav.setAttribute('aria-label', 'Assignment primary resources');
   [
-    ['Engineering Workbook', '#workbook-overview'],
-    ['中文完整题面', '#localized-problems'],
-    ['Official Handout', '#official-sources']
+    ['2026 Engineering Workbook', '#workbook-overview'],
+    ['2026 Official Handout', '#official-sources'],
+    ['2025 Delta / Archive', '#localized-problems']
   ].forEach(([label, href]) => {
     const link = el('a', '', label);
     link.href = href;
@@ -289,7 +290,7 @@
       item.append(el('code', '', officialId || entry));
       const qualifier = String(entry).includes(' · ') ? String(entry).split(' · ').slice(1).join(' · ') : '';
       if (qualifier) item.appendChild(el('small', 'workbook-problem-qualifier', qualifier));
-      item.appendChild(el('span', 'workbook-problem-link-state', translated ? '中文题面 →' : 'Official only · 待中文覆盖'));
+      item.appendChild(el('span', 'workbook-problem-link-state', translated ? '2025 题面参考 →' : '2026 Official only'));
       officialList.appendChild(item);
     });
     official.appendChild(officialList);
@@ -338,13 +339,14 @@
   const officialOnlyIds = [...officialProblemIds.keys()].filter((id) => !findTranslatedProblem(id));
   const legacyOnlyProblems = translatedProblems.filter((problem) => problem.stages.length === 0);
 
-  const localization = el('section', 'assignment-localization');
+  const localization = el('details', 'assignment-localization assignment-legacy-archive');
   localization.id = 'localized-problems';
+  localization.appendChild(el('summary', '', 'What changed from 2025? · 中文题面与旧接口存档'));
   const localizationHeader = el('header', 'assignment-resource-header');
   localizationHeader.append(
-    el('p', 'workbook-kicker', 'Core Resource · 中文完整题面'),
-    el('h2', '', '完整中文题面'),
-    el('p', '', '按原 problem ID 保留任务、约束、交付物和验收要求。先从 Stage 进入对应题目；版本、接口与测试仍以 Spring 2026 official source 为准。')
+    el('p', 'workbook-kicker', 'Archive · Spring 2025'),
+    el('h2', '', '2025 中文题面存档'),
+    el('p', '', '这里保留旧版中文任务、约束和交付物，供版本差分与概念参考；它不是当前作业题面。2026 Workbook、PDF、repository 与 tests 是唯一 active specification。')
   );
   const versionNotice = el('aside', 'localization-version-notice');
   versionNotice.append(el('p', 'workbook-kicker', 'Version notice'), el('p', '', assignment.localization));
@@ -383,7 +385,7 @@
         target.href = `#${translated.row.id}`;
         target.dataset.problemTarget = translated.row.id;
       }
-      target.append(el('code', '', officialId), el('small', '', translated ? '中文题面 →' : 'Official only · 待中文覆盖'));
+      target.append(el('code', '', officialId), el('small', '', translated ? '2025 archive →' : '2026 Official only'));
       item.appendChild(target);
       entries.appendChild(item);
     });
@@ -437,8 +439,6 @@
     body.prepend(backlinks);
   });
   localization.appendChild(translatedOutline);
-  main.appendChild(localization);
-
   const officialSources = el('section', 'assignment-official-sources');
   officialSources.id = 'official-sources';
   const officialHeader = el('header', 'assignment-resource-header');
@@ -456,6 +456,7 @@
     officialSources.appendChild(node);
   });
   main.appendChild(officialSources);
+  main.appendChild(localization);
 
   const reference = el('details', 'workbook-reference-library');
   reference.id = 'workbook-reference';
@@ -478,8 +479,8 @@
     nav.appendChild(link);
   });
   [
-    ['中文完整题面', '#localized-problems', 'workbook-localization-link'],
     ['Official Handout', '#official-sources', 'workbook-official-link'],
+    ['2025 Delta / Archive', '#localized-problems', 'workbook-localization-link'],
     ['Deep Reference', '#workbook-reference', 'workbook-reference-link']
   ].forEach(([label, href, className]) => {
     const link = el('a', className, label);

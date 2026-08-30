@@ -32,8 +32,8 @@
     </div>
 
     <div class="source-note" data-official-source="spring-2026">
-      <p><strong>Spring 2026 官方资料（v26.0.0）：</strong><a href="https://github.com/stanford-cs336/assignment5-alignment">代码仓库</a> · <a href="https://github.com/stanford-cs336/assignment5-alignment/blob/main/cs336_spring2026_assignment5_alignment.pdf">作业说明</a> · <a href="https://github.com/stanford-cs336/assignment5-alignment/blob/main/cs336_spring2026_assignment5_supplement_safety_rlhf.pdf">可选安全对齐补充</a> · <a href="https://cs336.stanford.edu/#schedule">课程日程</a></p>
-      <p><strong>版本说明：</strong>本页先给出 Spring 2026 主作业与安全补充的权威 problem map，再保留 Spring 2025 详细本土化作为 legacy supplement。2026 已重构 GRPO 接口、算法变体与实验题；遇到冲突时以官方 2026 PDF、仓库和下方权威映射为准。</p>
+      <p><strong>Spring 2026 官方资料（v2.0.1，checked 2026-08-30，commit <code>c2734a2</code>）：</strong><a href="https://github.com/stanford-cs336/assignment5-alignment">代码仓库</a> · <a href="https://github.com/stanford-cs336/assignment5-alignment/blob/main/cs336_spring2026_assignment5_alignment.pdf">作业说明</a> · <a href="https://github.com/stanford-cs336/assignment5-alignment/blob/main/CHANGELOG.md">CHANGELOG</a> · <a href="https://github.com/stanford-cs336/assignment5-alignment/blob/main/cs336_spring2026_assignment5_supplement_safety_rlhf.pdf">可选安全对齐补充</a> · <a href="https://cs336.stanford.edu/#schedule">课程日程</a></p>
+      <p><strong>版本说明：</strong>Active 主作业是 OLMo-2-1B + GSM8K 的 reasoning RL：zero-shot、few-shot、r1-zero prompting，SFT/rollout，GRPO/Dr. GRPO/RFT/MaxRL/GSPO，on/off-policy 与四个随机种子实验。安全 SFT/DPO 是独立 optional supplement；Spring 2025 Qwen-2.5-Math + MATH 题面仅作折叠 archive。</p>
     </div>
 
     <nav class="assignment-jump-links" aria-label="作业页快速导航">
@@ -68,7 +68,7 @@
       <p class="eyebrow">Dependency-first route</p>
       <h2 id="assignment-route-title">六阶段任务路线</h2>
       <ol class="assignment-route assignment-route-6">
-        <li><strong>Prompt baselines</strong><span>比较 zero/few-shot/CoT，确认 grader、格式与基线方差。</span></li>
+        <li><strong>Prompt baselines</strong><span>在 OLMo-2-1B + GSM8K 上比较 zero-shot、few-shot 与 r1-zero，确认 grader、格式与基线方差。</span></li>
         <li><strong>Rollout primitives</strong><span>对齐 prompt/output token、mask、log-prob、entropy 与 reward。</span></li>
         <li><strong>Standard GRPO</strong><span>group-normalized advantage、per-token policy loss 与 microbatch aggregation。</span></li>
         <li><strong>On-policy variants</strong><span>比较 sequence/constant normalization、Dr. GRPO、RFT、MaxRL。</span></li>
@@ -396,13 +396,13 @@
     <section id="spring-2026-delta">
       <p class="eyebrow">Spring 2026 官方源对齐 · 权威任务映射</p>
       <h2>Assignment 5：2026 problem map 与接口迁移</h2>
-      <p class="source-outline-intro">主 handout 与安全补充合计 44 个具名问题。Spring 2026 的主线已从旧版“单一 GRPO 训练循环”重构为：标准 on-policy GRPO → Dr. GRPO/RFT/MaxRL → off-policy token/sequence reweighting → 自定义 estimator。</p>
+      <p class="source-outline-intro">v2.0.1 主 handout 与安全补充合计 44 个具名问题。Active 主线是 OLMo-2-1B + GSM8K，zero-shot / few-shot / r1-zero prompting，SFT 与 rollouts，标准 on-policy GRPO → Dr. GRPO/RFT/MaxRL → off-policy token/sequence reweighting/GSPO → 自定义 estimator；关键实验使用四个随机种子，并同时包含 math 与 word-problem 分析。</p>
       <div class="pb-table-scroll spring-audit-scroll"><table class="component-table spring-audit-table">
         <thead><tr><th>阶段</th><th>Spring 2026 官方 problem id</th><th>核心变化</th></tr></thead>
         <tbody>
-          <tr><td>Prompting / variance</td><td><code>prompting_baselines</code>, <code>baseline_calcs</code></td><td>OLMo-2-0425-1B + GSM8K；先做三类 prompt 基线，再分析 policy-gradient estimator 方差</td></tr>
+          <tr><td>Prompting / variance</td><td><code>prompting_baselines</code>, <code>baseline_calcs</code></td><td>OLMo-2-1B + GSM8K；先做 zero-shot、few-shot、r1-zero 三类 prompt 基线，再分析 policy-gradient estimator 方差</td></tr>
           <tr><td>Rollout primitives</td><td><code>tokenize_prompt_and_output</code>, <code>get_response_log_probs</code>, <code>compute_rollout_rewards</code>, <code>compute_group_normalized_rewards_grpo</code>, <code>compute_policy_gradient_loss_on_policy</code>, <code>aggregate_loss_across_microbatch_sequence</code></td><td>把 reward、advantage、per-token loss 与 microbatch aggregation 拆成可测试接口</td></tr>
-          <tr><td>Standard GRPO</td><td><code>grpo_train_step_standard_on_policy</code>, <code>grpo_experiments_standard_on_policy</code>, <code>grpo_learning_rate</code>, <code>grpo_prompt_ablation</code></td><td>要求训练/验证、多随机种子、学习率 sweep 与 prompt ablation</td></tr>
+          <tr><td>Standard GRPO</td><td><code>grpo_train_step_standard_on_policy</code>, <code>grpo_experiments_standard_on_policy</code>, <code>grpo_learning_rate</code>, <code>grpo_prompt_ablation</code></td><td>要求训练/验证、四个随机种子、学习率 sweep 与 prompt ablation</td></tr>
           <tr><td>On-policy variants</td><td><code>think_about_length_normalization</code>, <code>compute_group_normalized_rewards_drgrpo</code>, <code>aggregate_loss_across_microbatch_constant</code>, <code>think_about_rft</code>, <code>derive_difficulty_reweightings</code>, <code>think_about_advantage_normalization</code>, <code>compute_group_normalized_rewards_maxrl</code>, <code>grpo_train_step_variants_on_policy</code>, <code>grpo_experiments_variants_on_policy</code></td><td>显式比较 sequence/constant normalization、Dr. GRPO、RFT、MaxRL 与难度重加权</td></tr>
           <tr><td>Off-policy / GSPO</td><td><code>derive_surrogate_objectives</code>, <code>compute_policy_gradient_loss_off_policy</code>, <code>think_about_importance_reweighting</code>, <code>compute_policy_gradient_loss_off_policy_gspo</code>, <code>grpo_train_step_off_policy</code>, <code>grpo_experiments_off_policy</code></td><td>区分无 reweight、token-level clipped GRPO 与 sequence-level geometric-mean GSPO</td></tr>
           <tr><td>Open-ended</td><td><code>try_your_own</code></td><td>提出并实验自己的 policy-gradient estimator，说明理论动机与实证结果</td></tr>

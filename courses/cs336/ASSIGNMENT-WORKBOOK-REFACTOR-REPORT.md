@@ -2,6 +2,8 @@
 
 日期：2026-08-27
 
+> **Historical report:** 此处版本号与信息架构是 2026-08-27 的实施快照。A2/A5 的最新版本和 Spring 2025 archive 层级已由 `CS336-SPRING-2026-MIGRATION-REPORT.md` 取代。
+
 ## 本轮结论
 
 Lesson 继续承担 **Interactive Textbook**；Assignment 1–5 已统一为数据驱动的 **Engineering Workbook**。本轮没有继续大规模扩写 Lesson 正文，而是收紧技术表述、练习节奏、Lesson ↔ Assignment 路径和内容回归检查。
@@ -130,4 +132,4 @@ node tools/lint-cs336-content.mjs .
 - Scaling-law 的经验拟合区间、数据质量和远距离 extrapolation claims。
 - GRPO / off-policy estimator、reward parsing、safety / preference evaluation 的课程实现细节。
 
-本次核对基线：Assignment 1 `v26.0.3`、Assignment 2 `v26.1.3`、Assignment 3 `v26.0.5`、Assignment 4 `v26.0.1`、Assignment 5 主作业及 safety supplement `v26.0.0`。后续课程源更新时，应先更新版本信息与 official problem map，再修改 Workbook。
+当时核对基线：Assignment 1 `v26.0.3`、Assignment 2 `v26.1.3`、Assignment 3 `v26.0.5`、Assignment 4 `v26.0.1`、Assignment 5 主作业及 safety supplement `v26.0.0`。这些版本已被 2026-08-31 migration snapshot 取代；当前值由 CHANGELOG regression 检查。

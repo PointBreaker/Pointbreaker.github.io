@@ -14,6 +14,49 @@ function forbid(file, pattern, label) {
   if (pattern.test(file)) failures.push(`forbidden: ${label}`);
 }
 
+const courseInfo = JSON.parse(fs.readFileSync(path.join(root, 'courses/cs336/course-info.json'), 'utf8'));
+const courseStatus = JSON.parse(fs.readFileSync(path.join(root, 'courses/cs336/api/status.json'), 'utf8'));
+const expectedSchedule = [
+  'Overview, tokenization',
+  'PyTorch (einops), resource accounting (FLOPs, memory, arithmetic intensity)',
+  'Architectures, hyperparameters',
+  'Attention alternatives and mixture of experts',
+  'GPUs, TPUs',
+  'Kernels, Triton',
+  'Parallelism',
+  'Parallelism',
+  'Scaling laws',
+  'Inference',
+  'Scaling laws',
+  'Evaluation',
+  'Data (sources, datasets)',
+  'Data (filtering, deduplication, mixing, synthetic data)',
+  'Mid/post-training (SFT/RLHF)',
+  'Post-training - RLVR',
+  'Alignment - multimodality',
+  'Guest lecture: Daniel Selsam',
+  'Guest lecture: Dan Fu'
+];
+const expectedAssignments = {
+  '01': { version: '26.0.3', commit: 'a158843b20107949f1a8d7df1b05cd33b9166712' },
+  '02': { version: '26.1.4', commit: 'ca8bc81a59b70516f7ebb2da4808daade877c736' },
+  '03': { version: '26.0.5', commit: '03e9372992e913061b9e78b5cfcb62ad8a87de35' },
+  '04': { version: '26.0.1', commit: '0555bea66369872d912652debf10b115ca0688c8' },
+  '05': { version: '2.0.1', commit: 'c2734a26308710949fe13226960a1e8cece94b7e' }
+};
+
+if (courseInfo.term !== 'Spring 2026') failures.push(`course term must be Spring 2026, got ${courseInfo.term}`);
+if (courseInfo.homepage !== 'https://cs336.stanford.edu/') failures.push('course homepage must point to the Spring 2026 official site');
+if (courseInfo.lectures.length !== 19 || courseStatus.lectures.length !== 19) failures.push('expected 19 lectures in course-info and status');
+expectedSchedule.forEach((title, index) => {
+  if (courseInfo.lectures[index]?.title !== title) failures.push(`course-info Lecture ${index + 1}: expected official title ${title}`);
+  if (courseStatus.lectures[index]?.title !== title) failures.push(`status Lecture ${index + 1}: expected official title ${title}`);
+  if (courseInfo.lectures[index]?.lessonFile !== courseStatus.lectures[index]?.lessonFile) failures.push(`Lecture ${index + 1}: course-info/status lesson route mismatch`);
+  const target = path.join(root, 'courses/cs336', courseInfo.lectures[index]?.lessonFile || '');
+  if (!fs.existsSync(target)) failures.push(`Lecture ${index + 1}: missing lesson file ${courseInfo.lectures[index]?.lessonFile}`);
+});
+if (courseInfo.sourceSnapshot?.lecturesCommit !== '8b59b50730766695c2ffedd1a79c50cd09b9eb91') failures.push('lecture source snapshot commit drifted');
+
 const l1 = lesson('0001-intro-tokenization.html');
 requireText(l1, 'bytes/token', 'Lesson 1 uses bytes/token');
 requireText(l1, '任何 merge 都不能跨 pre-token boundary', 'Lesson 1 states the pre-token boundary invariant');
@@ -24,6 +67,8 @@ const l4 = lesson('0004-attention-alternatives-moe.html');
 requireText(l4, 'Attention intermediate memory（不含 KV cache）', 'Lesson 4 scopes quadratic intermediate memory');
 requireText(l4, '历史 K/V storage 则随已缓存 context length 线性增长', 'Lesson 4 separates decode KV cache growth');
 forbid(l4, /<th>推理内存<\/th>/, 'Lesson 4 must not label quadratic intermediates as generic inference memory');
+requireText(l4, 'attention sparsity ≠ MoE parameter sparsity', 'Lesson 4 separates attention sparsity from MoE sparsity');
+requireText(l4, 'DeepSeek Sparse Attention', 'Lesson 4 covers the Spring 2026 learned sparse retrieval delta');
 
 const l8 = lesson('0008-parallelism-2.html');
 requireText(l8, '状态分片行为与 ZeRO Stage 3 的核心思想高度类似', 'Lesson 8 states the FSDP/ZeRO relationship precisely');
@@ -37,6 +82,22 @@ requireText(l10, 'Paper-specific result', 'Lesson 10 labels the Orca result as p
 requireText(l10, 'Benchmark-specific', 'Lesson 10 labels speculative speedups as benchmark-specific');
 forbid(l10, /KV cache 不依赖序列长度/, 'Lesson 10 must not claim local KV cache is sequence-length independent');
 forbid(l10, /实际加速\s*[:：]\s*\d+(?:\s*[-–]\s*\d+)?×/, 'Lesson 10 must not state an unscoped universal speedup');
+
+const l14 = lesson('0014-data-filtering-dedup.html');
+for (const phrase of ['mixture / epoch cap', 'UniMax', 'small-scale 最优配比不一定能直接放大', '合成数据：生成什么，谁来验证', 'Contamination 是 pipeline invariant']) {
+  requireText(l14, phrase, `Lesson 14 Spring 2026 delta: ${phrase}`);
+}
+
+const l16 = lesson('0016-alignment-rlvr.html');
+for (const phrase of ['verifiable outcome ≠ verified reasoning path', 'z-score 不是“免费的无偏 baseline”', 'On-policy 与 off-policy：rollout 来自谁', 'verifier 仍是有覆盖边界、可被利用的 proxy']) {
+  requireText(l16, phrase, `Lesson 16 estimator/verifier boundary: ${phrase}`);
+}
+forbid(l16, /reward hacking[^<。\n]{0,40}几乎不存在/i, 'Lesson 16 must not claim RLVR nearly eliminates reward hacking');
+forbid(l16, /组内均值[^<。\n]{0,50}(?:V\(s\)|value)[^<。\n]{0,30}无偏/i, 'Lesson 16 must not call the group mean an unbiased value estimate');
+forbid(l16, /CoT[^<。\n]{0,30}(?:不是|无需)[^<。\n]{0,20}SFT/i, 'Lesson 16 must not claim CoT has an exclusive non-SFT origin');
+
+const l17 = lesson('0017-alignment-rl.html');
+requireText(l17, '讲次主线以 Stanford Lecture 17 trace 为准', 'Lesson 17 separates official provenance from CourseStack paper expansions');
 
 const auditPath = path.join(root, 'courses/cs336/TEACHING-EXPERIENCE-AUDIT.md');
 const audit = fs.readFileSync(auditPath, 'utf8');
@@ -73,6 +134,12 @@ for (const [id, stageCount] of Object.entries(expectedStages)) {
     failures.push(`missing assignment workbook ${id}`);
     continue;
   }
+  const expectedAssignment = expectedAssignments[id];
+  if (!assignment.version.includes(expectedAssignment.version)) failures.push(`Assignment ${id}: workbook version mismatch`);
+  if (assignment.checkedAt !== '2026-08-30') failures.push(`Assignment ${id}: missing checkedAt snapshot`);
+  if (assignment.sourceCommit !== expectedAssignment.commit) failures.push(`Assignment ${id}: workbook source commit mismatch`);
+  const metadata = courseInfo.assignments.find((item) => item.number === Number(id));
+  if (metadata?.version !== expectedAssignment.version || metadata?.sourceCommit !== expectedAssignment.commit || metadata?.checkedAt !== '2026-08-30') failures.push(`Assignment ${id}: course-info version snapshot mismatch`);
   if (assignment.stages.length !== stageCount) failures.push(`Assignment ${id}: expected ${stageCount} stages, got ${assignment.stages.length}`);
   assignment.stages.forEach((stage) => {
     for (const field of ['build', 'why', 'readiness', 'official', 'contract', 'done', 'sanity', 'failures', 'hints', 'experiment', 'lessons']) {
@@ -100,8 +167,10 @@ for (const [id, stageCount] of Object.entries(expectedStages)) {
   const html = fs.readFileSync(path.join(root, `courses/cs336/lessons/assignments/ass${id}-${['basics', 'systems', 'scaling', 'data', 'alignment'][Number(id) - 1]}.html`), 'utf8');
   requireText(html, 'assignment-bank.js', `Assignment ${id} loads the workbook bank`);
   requireText(html, 'assignment-workbook.js', `Assignment ${id} loads the workbook renderer`);
-  requireText(html, 'Handout 完整本土化', `Assignment ${id} retains localized handout markers`);
+  requireText(html, 'Handout 完整本土化', `Assignment ${id} retains archived localized handout markers`);
   requireText(html, '完整任务', `Assignment ${id} retains full-task copy`);
+  requireText(html, expectedAssignment.version, `Assignment ${id} exposes the active version`);
+  requireText(html, expectedAssignment.commit.slice(0, 7), `Assignment ${id} exposes the source commit`);
 
   const translatedIds = [...html.matchAll(/<span class="problem-number">([^<]+)<\/span>/g)].map((match) => match[1].trim());
   const uniqueTranslatedIds = new Set(translatedIds);
@@ -129,10 +198,11 @@ buildLinks.forEach(([, assignmentId, stageId]) => {
 });
 
 const workbookRenderer = fs.readFileSync(path.join(root, 'courses/cs336/assets/assignment-workbook.js'), 'utf8');
-for (const phrase of ['semanticContent', 'translatedProblems', 'officialSourceContent', 'legacyGuide', 'legacySupplement', 'miscReference', 'problemAnchor', 'data-problem-target', 'activateProblem', '完整中文题面', '2026 ID Matched · Needs Review']) {
+for (const phrase of ['semanticContent', 'translatedProblems', 'officialSourceContent', 'legacyGuide', 'legacySupplement', 'miscReference', 'problemAnchor', 'data-problem-target', 'activateProblem', '2025 中文题面存档', '2026 ID Matched · Needs Review', '2025 题面参考 →', '2026 Official only', 'What changed from 2025?']) {
   requireText(workbookRenderer, phrase, `Assignment renderer localization architecture: ${phrase}`);
 }
 forbid(workbookRenderer, /\bconst\s+oldNodes\b|oldNodes\.push/, 'Assignment renderer must not collect all old nodes indiscriminately');
+forbid(workbookRenderer, /\['中文完整题面',\s*'#localized-problems'\]/, 'Spring 2025 localized statements must not be a primary active-version tab');
 
 const recoveryReport = fs.readFileSync(path.join(root, 'courses/cs336/ASSIGNMENT-LOCALIZATION-RECOVERY-REPORT.md'), 'utf8');
 for (const phrase of [

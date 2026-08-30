@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>第 16 课：Alignment — RLVR — CS336</title>
+  <title>第 16 课：Post-training — RLVR — CS336</title>
   <link rel="stylesheet" href="../assets/course.css?v=20260827f">
   <link rel="stylesheet" href="../assets/prism.css">
   <link rel="stylesheet" href="../assets/katex.min.css">
@@ -21,7 +21,7 @@
   <div class="page">
     <p class="eyebrow">CS336 · 第 16 课</p>
     <h1>RLVR：基于可验证奖励的强化学习</h1>
-    <p class="lede">RLHF 依赖人类主观偏好，成本高且不稳定。RLVR (Reinforcement Learning from Verifiable Rewards) 用客观、可验证的奖励信号替代人类标注，开启了模型自我改进的新范式。</p>
+    <p class="lede">当数学答案、代码执行或形式证明可以被程序重复检查时，policy optimization 可以直接使用 verifier reward。RLVR 降低了逐条人工偏好标注的依赖，但 verifier 仍是有覆盖边界、可被利用的 proxy。</p>
 
     <div class="meta">
       <span>授课：Tatsu Hashimoto</span>
@@ -68,11 +68,11 @@ group-relative advantage ≠ correctness probability</code></pre></div>
       <tr><td>成本高</td><td>需要大量人类偏好数据</td><td>难以规模化</td></tr>
       <tr><td>Reward hacking</td><td>模型学会欺骗 reward model</td><td>实际质量未提高</td></tr>
       <tr><td>不可验证</td><td>无法自动检查 reward 是否正确</td><td>难以调试</td></tr>
-      <tr><td>天花板</td><td>受限于标注者的能力</td><td>无法超越人类水平</td></tr>
+      <tr><td>规模瓶颈</td><td>高质量偏好标注与 reward model 迭代</td><td>rollout inference、verifier coverage 与可验证任务供给</td></tr>
     </table>
 
     <div class="card idea">
-      <p><strong>核心洞察</strong>：如果我们能找到<strong>客观、可自动验证的奖励信号</strong>，就可以绕过人类标注的限制。数学题有标准答案，代码可以执行测试——这些都是"可验证奖励"。</p>
+      <p><strong>核心洞察</strong>：如果结果能被<strong>低成本、可重复地程序化检查</strong>，就可以把这个检查器直接放进 rollout→reward→update 闭环。数学 final answer、代码 tests 与 proof checker 是常见例子；它们只保证各自检查到的属性。</p>
     </div>
 
     <hr class="rule">
@@ -81,7 +81,7 @@ group-relative advantage ≠ correctness probability</code></pre></div>
     <h2 id="what-is-rlvr">什么是 RLVR？</h2>
 
     <h3>定义</h3>
-    <p>RLVR = Reinforcement Learning from Verifiable Rewards。使用可以<strong>程序化验证正确性</strong>的奖励函数，而非人类主观判断。</p>
+    <p>RLVR = Reinforcement Learning from Verifiable Rewards。它使用可由程序重复检查的结果属性构造奖励，而不是依赖逐条人类主观判断；“可验证”只覆盖 verifier 实际检查的属性。</p>
 
     <h3>可验证奖励的例子</h3>
     <table>
@@ -106,19 +106,21 @@ for prompt in batch:
     reward = verifier.check(answer, ground_truth)
     # reward = 1 if correct, 0 if wrong
 
-    # 4. 用 reward 做 policy gradient 更新
-    loss = -log_prob(response) * reward
+    # 4. 构造相对信号；baseline/normalization 是 estimator 的一部分
+    advantage = reward - baseline
+    loss = -log_prob(response) * advantage  # 仅为单样本 policy-gradient 示意
     loss.backward()</code></pre>
+    <p class="small">真实 GRPO 会对同一 prompt 的多条 rollout 构造 group-relative advantage，并按 handout 指定的 token/sequence aggregation、ratio、clipping 与 regularization 更新；上面只展示 verifier signal 如何进入 policy gradient，不是可提交实现。</p>
 
     <h3>RLVR vs RLHF 对比</h3>
     <table>
       <tr><th>维度</th><th>RLHF</th><th>RLVR</th></tr>
-      <tr><td>奖励来源</td><td>人类偏好</td><td>客观验证</td></tr>
-      <tr><td>奖励性质</td><td>连续、主观</td><td>离散、客观</td></tr>
+      <tr><td>奖励来源</td><td>人类偏好或由其训练的 reward model</td><td>程序、tests、答案检查器或形式 verifier</td></tr>
+      <tr><td>奖励性质</td><td>常为学习得到的连续 proxy</td><td>常为离散或规则化 proxy，不等于完整真值</td></tr>
       <tr><td>可扩展性</td><td>受限于标注人力</td><td>可自动化、规模化</td></tr>
       <tr><td>适用任务</td><td>开放式（写作、对话）</td><td>封闭式（数学、代码）</td></tr>
-      <tr><td>Reward hacking</td><td>严重</td><td>几乎不存在</td></tr>
-      <tr><td>天花板</td><td>人类水平</td><td>可以超越人类</td></tr>
+      <tr><td>Reward hacking</td><td>可能利用 reward model 偏差</td><td>可能利用 parser、公开 tests 或 verifier coverage 漏洞</td></tr>
+      <tr><td>主要边界</td><td>标注质量、偏好分布与 reward model 泛化</td><td>任务是否可验证，以及 verifier 实际覆盖什么</td></tr>
     </table>
 
     <div class="card warning">
@@ -135,7 +137,7 @@ for prompt in batch:
     <ul>
       <li><strong>去掉了 Critic（Value Function）</strong>——PPO 需要一个额外的 value model 来估计 advantage</li>
       <li><strong>利用群组结构</strong>——对同一个 prompt 生成多个 response，用组内相对奖励作为 baseline</li>
-      <li><strong>更简单、更稳定</strong>——需要维护的模型更少</li>
+      <li><strong>状态更少，不自动更稳定</strong>——少维护一个 critic，但 group variance、normalization、length weighting 与 rollout 分布仍会影响 bias/variance</li>
     </ul>
 
     <h3>核心思想</h3>
@@ -148,10 +150,21 @@ for prompt in batch:
     <table>
       <tr><th>优势</th><th>说明</th></tr>
       <tr><td>无需 Critic</td><td>减少一个模型的计算和内存</td></tr>
-      <tr><td>自然 baseline</td><td>组内均值是 V(s) 的无偏估计</td></tr>
-      <tr><td>更稳定</td><td>减少了 value model 训练的方差</td></tr>
+      <tr><td>组内相对信号</td><td>同一 prompt 的 rollouts 直接形成相对比较；标准差归一化会改变题目权重，并非保持无偏性的任意 baseline</td></tr>
+      <tr><td>工程简化</td><td>移除 critic 的训练与存储；稳定性仍要由 group diversity、loss aggregation、learning rate 与 rollout policy 实测</td></tr>
       <tr><td>易于实现</td><td>比 PPO 代码更简洁</td></tr>
     </table>
+
+    <div class="misconception"><h3>官方 2026 的关键警告：z-score 不是“免费的无偏 baseline”</h3><p>从 policy-gradient identity 看，可以减去不依赖当前 action 的 state-dependent baseline 而保持期望梯度；但 vanilla GRPO 还除以组内标准差。这个除法会按 group difficulty/variance 重新加权问题，官方 Lecture 16 明确提醒它不保持一般意义下的 unbiased gradient。Dr. GRPO、leave-one-out/RFT 与不同 length normalizer 正是在修正或研究这些隐含权重。</p></div>
+
+    <h3>On-policy 与 off-policy：rollout 来自谁</h3>
+    <table>
+      <tr><th>对象</th><th>On-policy</th><th>Off-policy / reused rollout</th></tr>
+      <tr><td>Behavior policy</td><td>产生 rollout 后立即用于当前更新，接近 current policy</td><td>rollout 来自旧 policy 或另一 behavior policy</td></tr>
+      <tr><td>主要收益</td><td>distribution mismatch 较小，目标更直接</td><td>复用昂贵的生成结果，提高 sample/compute reuse</td></tr>
+      <tr><td>新问题</td><td>生成慢、训练与 serving framework 切换、长 CoT 造成 batch 不均</td><td>需要 importance ratio / clipping 等修正，并管理 bias、variance 与 policy lag</td></tr>
+    </table>
+    <p class="small">官方 Lecture 16 的系统重点是 on-policy rollout 很昂贵；off-policy estimator 的实现细节在 Assignment 5 v2.0.1 中进一步展开。本页只建立两者的对象边界。</p>
 
     <hr class="rule">
 
@@ -213,7 +226,7 @@ def compute_reward(response, ground_truth, task_type):
     <h2 id="emergent-reasoning">涌现的推理能力</h2>
 
     <h3>Chain-of-Thought 的涌现</h3>
-    <p>最令人惊讶的发现之一是：<strong>CoT 不是 SFT 教的，而是 RL 涌现的</strong>：</p>
+    <p>R1-Zero 没有先做 cold-start reasoning SFT；论文观察到更长的推理、检查与反思行为在 RL 过程中被强化。但这不证明 base model 的预训练数据从未包含 CoT，也不意味着所有 reasoning recipe 都不需要 SFT：</p>
     <div class="prose-outline"><p><strong>训练初期:</strong><br>Q: "Solve x + 3 = 7"<br>A: "4"  (直接回答，无推理)</p><p><strong>训练中期:</strong><br>Q: "Solve x + 3 = 7"<br>A: "x + 3 = 7, so x = 7 - 3 = 4"  (开始出现推理)</p><p><strong>训练后期:</strong><br>Q: "Solve x + 3 = 7"<br>A: "Let me solve this step by step.<br>    We have x + 3 = 7.<br>    Subtract 3 from both sides: x = 7 - 3 = 4.<br>    Let me verify: 4 + 3 = 7. Yes!<br>    Answer: 4"  (完整的 CoT + 验证)</p></div>
 
     <h3>为什么 RL 能涌现出 CoT？</h3>
@@ -225,7 +238,7 @@ def compute_reward(response, ground_truth, task_type):
     </ul>
 
     <div class="card">
-      <p><strong>关键洞察</strong>：CoT 不是"让模型推理"的工具，而是"让模型学会推理"的训练结果。通过 RL，模型发现 CoT 是获得高奖励的有效策略，从而自发采用它。</p>
+      <p><strong>准确边界</strong>：可验证奖励能够选择和强化有助于得分的长程行为；行为可能来自预训练已有能力、prompt elicitation 与 RL exploration 的共同作用。观察到 CoT 变长不等价于过程更忠实或泛化更强。</p>
     </div>
 
     <hr class="rule">
@@ -292,11 +305,11 @@ def compute_reward(response, ground_truth, task_type):
     <!-- ============================================================ -->
     <h2 id="quiz">知识检查</h2>
 
-    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！RLVR 的核心优势是奖励客观、可自动验证，不需要人类标注。" data-incorrect="RLVR 的核心优势是客观可验证的奖励，无需人类标注。">
+    <div class="quiz" data-quiz="1" data-answer="b" data-correct="正确！RLVR 的核心优势是某些结果能被程序低成本、可重复检查，从而减少逐条人工偏好标注；verifier 仍有覆盖边界。" data-incorrect="RLVR 的优势来自可程序化检查，不代表 reward 是无条件客观真值。">
       <p><strong>问题 1：</strong>RLVR 相比 RLHF 的主要优势是什么？</p>
       <div class="quiz-options">
         <button data-choice="a" aria-pressed="false">更容易实现</button>
-        <button data-choice="b" aria-pressed="false">奖励客观、可自动验证、无需人类标注</button>
+        <button data-choice="b" aria-pressed="false">结果可程序化重复检查，减少逐条人工偏好标注</button>
         <button data-choice="c" aria-pressed="false">不需要 GPU</button>
         <button data-choice="d" aria-pressed="false">训练更快</button>
       </div>
@@ -349,7 +362,7 @@ def compute_reward(response, ground_truth, task_type):
     <div class="loop">
       <article>
         <h3>RLVR</h3>
-        <p>可验证奖励替代人类标注，客观可扩展</p>
+        <p>程序化 verifier 提供可扩展 proxy，但 coverage 决定可靠性上限</p>
       </article>
       <article>
         <h3>GRPO</h3>
@@ -357,7 +370,7 @@ def compute_reward(response, ground_truth, task_type):
       </article>
       <article>
         <h3>DeepSeek-R1</h3>
-        <p>纯 RL 涌现推理能力，无需 SFT CoT</p>
+        <p>R1-Zero 无 cold-start reasoning SFT；RL 强化行为不证明其来源唯一</p>
       </article>
       <article>
         <h3>局限</h3>

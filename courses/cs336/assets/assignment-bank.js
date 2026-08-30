@@ -15,8 +15,10 @@
       title: 'Basics',
       version: 'Spring 2026 · v26.0.3',
       basis: 'Spring 2026 repository and handout',
+      checkedAt: '2026-08-30',
+      sourceCommit: 'a158843b20107949f1a8d7df1b05cd33b9166712',
       legacy: '页面下方保留旧版详细中文题面；接口、题号、限制冲突时以 2026 PDF / repository 为准。',
-      localization: '完整中文题面主要基于 Spring 2025 PDF / README 本土化；Stage 与 official problem mapping 依据 Spring 2026 v26.0.3。ID 匹配只表示可导航，不代表接口、测试或约束已经逐题核验。',
+      localization: 'Spring 2025 PDF / README 的完整中文题面仅作为折叠 archive；active Stage、problem map、接口与 tests 依据 Spring 2026 v26.0.3。',
       mission: '把 raw text 变成可训练、可恢复、可生成文本的 Transformer language-model system。',
       capabilities: ['Tokenizer', 'Transformer Forward', 'Optimization', 'Training System'],
       stages: [
@@ -140,9 +142,11 @@
     },
 
     '02': {
-      title: 'Systems', version: 'Spring 2026 · v26.1.3', basis: 'Spring 2026 repository and handout',
+      title: 'Systems', version: 'Spring 2026 · v26.1.4', basis: 'Spring 2026 repository, handout and CHANGELOG · ca8bc81',
+      checkedAt: '2026-08-30',
+      sourceCommit: 'ca8bc81a59b70516f7ebb2da4808daade877c736',
       legacy: '旧版 2025 详细任务只作 Legacy Reference；2026 problem map、接口与硬件条件优先。',
-      localization: '完整中文题面来自 Spring 2025 handout 本土化；Workbook 与 2026 problem map 依据 Spring 2026 v26.1.3。2026 新增 FSDP、parallelism calculations 与 B200 条件尚无对应完整中文译文。',
+      localization: 'Spring 2025 handout 中文题面仅作为折叠 archive；active Workbook 与 problem map 依据 Spring 2026 v26.1.4。FSDP、parallelism calculations、B200/TMA 与 FA3-style backward 以官方 PDF/tests 为准。',
       mission: '把“模型能跑”推进到“性能可测、瓶颈可解释、训练可扩展”。',
       capabilities: ['Measurement', 'Memory Trade-off', 'IO-aware Kernel', 'Communication Overlap', 'State Sharding', 'Parallelism'],
       stages: [
@@ -173,7 +177,7 @@
           experiment: { hypothesis: '更激进 checkpointing 降低 peak memory、增加 step time。', prediction: '画出不同 boundary 的 memory/latency 排序。', experiment: '固定模型和 batch，改变 checkpoint policy。', observation: '记录 peak、forward/backward time。', explanation: '指出哪部分 memory 没被 checkpointing 影响。' }
         },
         {
-          id: 'kernels', title: 'Move Less Data', capability: 'IO-aware Kernel', build: '数值正确、IO-aware 的 FlashAttention-2 forward/backward kernel。',
+          id: 'kernels', title: 'Move Less Data', capability: 'IO-aware Kernel', build: '数值正确、IO-aware 的 FlashAttention-2 forward 与 v26.1.4 handout 所述 FA3-style two-pass backward。',
           why: 'attention 的关键不只是 FLOPs；避免将完整 score/probability matrix 往返 HBM 才能改变瓶颈。',
           lessons: [L('0005-gpus', 'memory-hierarchy', 'Lesson 5 · Memory hierarchy'), L('0006-kernels-triton', 'tiling', 'Lesson 6 · Tiling and fusion')],
           readiness: ['为什么不物化 T×T 可以省 HBM bytes？', 'online softmax 需要维护哪些统计量？'],
@@ -182,7 +186,7 @@
           done: { correct: ['forward/backward match reference over boundary shapes'], understand: ['能解释 HBM traffic reduction and online softmax'], evidence: ['baseline/config/method/result/explanation benchmark table'] },
           sanity: { title: 'T=2, d=2', body: ['one causal and one non-causal case'],  },
           failures: [{ signature: '短序列正确，非 tile multiple 失败', checks: ['load/store masks', 'masked score value', 'tail dimensions'] }, { signature: '正确但比 PyTorch 慢', checks: ['tile size', 'occupancy/register pressure', 'launch count', 'workload too small'] }],
-          hints: ['先保证 exact attention semantics。', 'tile 内只保留 running max、normalizer 与 output accumulator。', '先测一个 tile，再测 tail，再用 profiler 看 HBM 与 occupancy。'],
+          hints: ['先保证 exact attention semantics。', 'forward tile 内只保留 running max、normalizer 与 output accumulator；backward 按当前 handout 分开处理 dK/dV 与 dQ passes。', '先测一个 tile，再测 tail，再用 profiler 看 HBM 与 occupancy。'],
           experiment: { hypothesis: 'T 翻倍时 naive intermediate memory 约 4×，FlashAttention 不物化该矩阵。', prediction: '先写 T=2048→4096 的 memory 变化。', experiment: '固定 B,d,dtype，扫 T，测 reference/compiled/Flash。', observation: '记录 peak memory、latency 与 correctness tolerance。', explanation: '把收益归因到 IO、kernel schedule 或 compile，而非只报 1.7×。' }
         },
         {
@@ -229,8 +233,10 @@
 
     '03': {
       title: 'Scaling', version: 'Spring 2026 · v26.0.5', basis: 'Spring 2026 repository and handout',
+      checkedAt: '2026-08-30',
+      sourceCommit: '03e9372992e913061b9e78b5cfcb62ad8a87de35',
       legacy: '旧版完整中文题面作为方法参考；2026 hosted API、预算和 leaderboard 要求优先。',
-      localization: '完整中文题面主要基于 Spring 2025 handout 本土化；Stage、hosted API、预算和 problem mapping 依据 Spring 2026 v26.0.5。相同 problem 可能服务多个研究 stage。',
+      localization: 'Spring 2025 handout 中文题面仅作为折叠 archive；active Stage、hosted API、预算与 problem mapping 依据 Spring 2026 v26.0.5。',
       mission: '用受控实验和不确定性诊断，在固定 compute budget 下提出可辩护的 compute-optimal 配置。',
       capabilities: ['Experiment Design', 'Curve Fitting', 'Fit Validation', 'IsoFLOPs', 'Extrapolation'],
       stages: [
@@ -292,8 +298,10 @@
 
     '04': {
       title: 'Data', version: 'Spring 2026 · v26.0.1', basis: 'Spring 2026 repository and handout',
+      checkedAt: '2026-08-30',
+      sourceCommit: '0555bea66369872d912652debf10b115ca0688c8',
       legacy: '旧版本土化细节保留为 Deep Reference；2026 repository 的 schema、训练入口与 B200 配置优先。',
-      localization: '完整中文题面主要基于 Spring 2025 PDF / README 本土化；Stage 与 official problem mapping 依据 Spring 2026 v26.0.1。相同 ID 仍需按 2026 repository 复核 schema 与测试。',
+      localization: 'Spring 2025 PDF / README 中文题面仅作为折叠 archive；active Stage、English-only WET workflow、B200 training recipe 与 tests 依据 Spring 2026 v26.0.1。',
       mission: '把 Common Crawl 转成可审计、可复现、可训练并能用模型效果验证的数据集。',
       capabilities: ['Extraction', 'Filtering', 'Deduplication', 'Tokenization', 'Pipeline', 'Data Evaluation'],
       stages: [
@@ -348,8 +356,8 @@
         {
           id: 'evaluate', title: 'Evaluate Data Through Training', capability: 'Data Evaluation', build: '用固定训练 recipe 比较数据 pipeline 的 downstream evidence。', why: 'filter score 只是 proxy；最终仍要看模型质量、subgroup 与安全/偏差证据。',
           lessons: [L('0012-evaluation', 'validity', 'Lesson 12 · Evaluation validity'), L('0009-scaling-laws', 'methodology', 'Lesson 9 · Controlled comparisons')], readiness: ['为什么 validation loss 不是唯一 construct？', '如何避免同时改变数据量与数据质量？'], official: ['train_model'],
-          contract: { input: ['versioned datasets and fixed training config'], output: ['loss curves, benchmark/subgroup results and samples'], shape: ['token budget controlled or explicitly normalized'], invariants: ['same model/optimizer/eval protocol', 'dataset delta isolated'], forbidden: ['rewarding only one benchmark', 'changing token budget silently', 'claiming causality from uncontrolled runs'] },
-          done: { ...commonDone, evidence: ['controlled run table, uncertainty and sample-level audit'] },
+          contract: { input: ['versioned datasets and Spring 2026 fixed training config'], output: ['loss curves, benchmark/subgroup results and samples'], shape: ['8 B200, 16,384 steps, about 8.6B processed tokens for the official final run'], invariants: ['same model/optimizer/eval protocol', 'dataset delta isolated'], forbidden: ['rewarding only one benchmark', 'changing token budget silently', 'claiming causality from uncontrolled runs'] },
+          done: { ...commonDone, evidence: ['controlled run table, uncertainty, sample-level audit and final-run manifest'] },
           sanity: { title: 'tiny overfit', body: ['train on a handful of kept documents'],  },
           failures: [{ signature: 'filtered data loss 更差但 benchmark 更好', checks: ['construct difference', 'domain mixture', 'token diversity'] }, { signature: 'run 间差异大于 pipeline delta', checks: ['seed variance', 'insufficient budget', 'training instability'] }],
           hints: ['先固定 training recipe。', '把 proxy metric 与 true desired behavior 分开。', '做 tiny smoke run，再做 matched-token multi-seed comparison。'],
@@ -359,14 +367,16 @@
     },
 
     '05': {
-      title: 'Alignment & Reasoning RL', version: 'Spring 2026 · v26.0.0', basis: 'Required reasoning-RL handout + optional SFT/DPO safety supplement',
+      title: 'Alignment & Reasoning RL', version: 'Spring 2026 · v2.0.1', basis: 'Required reasoning-RL handout + optional SFT/DPO safety supplement · c2734a2',
+      checkedAt: '2026-08-30',
+      sourceCommit: 'c2734a26308710949fe13226960a1e8cece94b7e',
       legacy: '主作业是 reasoning RL；SFT、DPO 与 safety evaluation 属于 2026 optional supplement。旧版 2025 内容仅作 Legacy Reference。',
-      localization: '完整中文题面来自 Spring 2025 主作业与 safety/RLHF supplement 本土化；Spring 2026 v26.0.0 已重构 reasoning-RL / GRPO 主线。SFT、DPO 与安全评估只在 2026 optional supplement 中对应。',
+      localization: 'Spring 2025 Qwen-2.5-Math/MATH 主作业与旧 safety supplement 中文题面仅作折叠 archive；active reasoning-RL 主线依据 Spring 2026 v2.0.1，SFT/DPO safety 仍是独立 optional supplement。',
       mission: '建立 baseline，正确实现并比较 on-policy / variant / off-policy GRPO，同时区分 reward proxy 与真实 desired behavior。',
-      capabilities: ['Baseline & Grader', 'Rollout Contract', 'On-policy GRPO', 'RL Variants', 'Off-policy RL', 'Safety & Preference Evaluation'],
+      capabilities: ['Baseline & Grader', 'Rollout Contract', 'On-policy GRPO', 'RL Variants', 'Off-policy RL', 'Optional Safety Supplement'],
       stages: [
         {
-          id: 'baseline', title: 'Establish Baseline', capability: 'Baseline & Grader', build: 'OLMo-2 on GSM8K 的 prompting baseline、grader 与 variance ledger。', why: '没有稳定 baseline 与 reward contract，RL 曲线无法解释。',
+          id: 'baseline', title: 'Establish Baseline', capability: 'Baseline & Grader', build: 'OLMo-2-1B on GSM8K 的 zero-shot、few-shot、r1-zero baseline、grader 与 variance ledger。', why: '没有稳定 baseline 与 reward contract，RL 曲线无法解释。',
           lessons: [L('0012-evaluation', 'reasoning-benchmarks', 'Lesson 12 · Reasoning evaluation'), L('0016-alignment-rlvr', 'what-is-rlvr', 'Lesson 16 · Verifiable reward')], readiness: ['final-answer grader 不能观察什么？', 'zero/few-shot/CoT 改变的是 weights 还是 protocol？'], official: ['prompting_baselines', 'baseline_calcs'],
           contract: { input: ['GSM8K prompt, model output and answer parser'], output: ['graded rollouts, accuracy and variance estimate'], shape: ['prompt/response boundaries explicit'], invariants: ['same decoding/eval protocol across baselines', 'grader failures visible'], forbidden: ['treating parse failure as model reasoning failure without label', 'changing prompt and sampling together'] },
           done: commonDone, sanity: { title: '四条 grader cases', body: ['correct format, equivalent number, malformed, wrong answer'],  },
@@ -397,7 +407,7 @@
           id: 'variants', title: 'RL Variants & Ablations', capability: 'RL Variants', build: 'Dr. GRPO、RFT、MaxRL 与 normalization ablations 的受控比较。', why: 'estimator 选择会重新加权 difficulty、length 与 group signal；不能只看最终 reward。',
           lessons: [L('0016-alignment-rlvr', 'grpo', 'Lesson 16 · Estimator mental model'), L('0012-evaluation', 'validity', 'Lesson 12 · Metric validity')], readiness: ['advantage normalization 隐含怎样的 task weighting？', 'ablation 为什么要求单变量？'], official: ['think_about_length_normalization', 'compute_group_normalized_rewards_drgrpo', 'aggregate_loss_across_microbatch_constant', 'think_about_rft', 'derive_difficulty_reweightings', 'think_about_advantage_normalization', 'compute_group_normalized_rewards_maxrl', 'grpo_train_step_variants_on_policy', 'grpo_experiments_variants_on_policy'],
           contract: { input: ['same rollout/eval protocol across estimators'], output: ['comparable learning curves and estimator diagnostics'], shape: ['aggregation denominator explicit'], invariants: ['same token/rollout budget', 'variant is the only intended change'], forbidden: ['comparing different compute budgets', 'selecting best seed only', 'calling higher reward better reasoning automatically'] },
-          done: { ...commonDone, evidence: ['multi-seed curves, compute-normalized comparison, exploit audit'] },
+          done: { ...commonDone, evidence: ['四个随机种子的 curves、均值/方差、compute-normalized comparison 与 exploit audit'] },
           sanity: { title: 'easy vs hard groups', body: ['one group all succeeds, one mixed, one all fails'],  },
           failures: [{ signature: 'variant 优势只来自更长输出', checks: ['length distribution', 'aggregation', 'reward parser'] }, { signature: '单 seed 排名反复翻转', checks: ['variance', 'sample count', 'shared evaluation set'] }],
           hints: ['先推导 estimator 的 implicit weights。', '控制 rollout tokens 与 optimizer updates。', '在 synthetic groups 上算贡献，再跑 multiple seeds。'],
@@ -414,7 +424,7 @@
           experiment: { hypothesis: '更旧 rollouts 提高 reuse，但 ratio variance 与 clipping 增加。', prediction: '先预测 lag 对 ESS/clip/task gain 的方向。', experiment: '固定 rollout set，比较不同 policy lag。', observation: '记录 ratio stats、clip%、update norm、accuracy。', explanation: '说明 bias/variance/compute trade-off。' }
         },
         {
-          id: 'safety-eval', title: 'Safety & Preference Evaluation', capability: 'Safety & Preference Evaluation', build: '可选 supplement：SFT、DPO、red-team 与多 construct evaluation 证据。', why: 'reward 或 benchmark 上升不自动代表 true preference、helpfulness 或 safety 上升。',
+          id: 'safety-eval', title: 'Optional Safety Supplement', capability: 'Optional Safety Supplement', build: '在 required reasoning-RL 主线之外，单独完成可选 supplement：SFT、DPO、red-team 与多 construct evaluation 证据。', why: 'reward 或 benchmark 上升不自动代表 true preference、helpfulness 或 safety 上升。',
           lessons: [L('0015-alignment-sft-rlhf', 'sft', 'Lesson 15 · SFT'), L('0015-alignment-sft-rlhf', 'preference-data', 'Lesson 15 · Preference data'), L('0012-evaluation', 'safety', 'Lesson 12 · Safety evaluation')], readiness: ['SFT loss mask 为什么只覆盖 response？', 'preference label 与 true desired behavior 有何距离？'], official: ['mmlu_baseline', 'gsm8k_baseline', 'alpaca_eval_baseline', 'sst_baseline', 'look_at_sft', 'data_loading', 'sft_script', 'sft', 'mmlu_sft', 'gsm8k_sft', 'alpaca_eval_sft', 'sst_sft', 'red_teaming', 'look_at_hh', 'dpo_loss', 'dpo_training'],
           contract: { input: ['demonstrations / preference pairs / eval suites'], output: ['SFT/DPO model and construct-specific evidence'], shape: ['prompt/response and chosen/rejected boundaries explicit'], invariants: ['objective, proxy, desired behavior and evidence separated', 'optional supplement labeled optional'], forbidden: ['reward↑ = safety↑', 'evaluating on training preferences only', 'hiding red-team failures behind average score'] },
           done: { ...commonDone, evidence: ['Objective、Proxy metric、Desired behavior、Potential exploit、Evaluation evidence'] },
