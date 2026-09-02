@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Report structural evidence for Engineering Workbooks and historical recaps."""
+"""Report structural evidence for Engineering Workbooks and historical recaps.
+
+Guided Discussion workbooks are intentionally delegated to
+audit_discussion_coverage.py because their statuses and evidence contract differ.
+"""
 
 from __future__ import annotations
 
@@ -56,6 +60,7 @@ def main() -> int:
         scan = Scan(); scan.feed(path.read_text(encoding="utf-8", errors="replace"))
         profile = scan.body.get("data-workbook-profile", "")
         if not profile: continue
+        if profile == "guided-reasoning-workbook": continue
         status = scan.body.get("data-workbook-status", "UNDECLARED")
         recap_depth = scan.body.get("data-recap-depth", "")
         expected = RECAP_EVIDENCE if profile == "historical-implementation-recap" else WORKBOOK_EVIDENCE

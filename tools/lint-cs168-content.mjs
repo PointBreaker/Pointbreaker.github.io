@@ -6,6 +6,8 @@ const repo = process.cwd();
 const course = path.join(repo, 'courses/cs168');
 const info = JSON.parse(fs.readFileSync(path.join(course, 'course-info.json'), 'utf8'));
 const gold = new Set(info.qualityContract?.goldLessons ?? []);
+const goldDiscussions = new Set(info.qualityContract?.goldDiscussions ?? []);
+const discussionCoverage = info.qualityContract?.discussionCoverage ?? {};
 const failures = [];
 
 function assert(condition, message) {
@@ -14,6 +16,7 @@ function assert(condition, message) {
 
 assert(info.courseTypeProfiles?.[0] === 'networking-distributed-systems', 'CS168 must declare the networking/distributed-systems profile');
 assert(JSON.stringify([...gold]) === JSON.stringify([3, 6, 8, 9, 11, 12, 13, 15, 17]), 'CS168 Gold lesson declaration drifted');
+assert(JSON.stringify([...goldDiscussions]) === JSON.stringify([3, 6]), 'CS168 Gold discussion declaration drifted');
 assert(/under construction/i.test(info.sourceStatus), 'Fall 2026 under-construction source status must remain visible');
 assert(/Project 3 尚未发布/.test(info.sourceStatus), 'unpublished Fall 2026 Project 3 status must remain explicit');
 
@@ -65,6 +68,43 @@ assert(throughput.kind === 'function-plot' && throughput.parameters?.length === 
 for (const required of ['CS168-QUALITY-REFACTOR-REPORT.md']) {
   assert(fs.existsSync(path.join(course, required)), `${required} is missing`);
 }
+
+const discussionFiles = fs.readdirSync(path.join(course, 'lessons/assignments')).filter((file) => /^ass\d{2}-discussion-.*\.html$/.test(file)).sort();
+assert(discussionFiles.length === 13, `expected 13 CS168 discussions, found ${discussionFiles.length}`);
+let substantiveTotal = 0;
+let coveredTotal = 0;
+for (const file of discussionFiles) {
+  const number = Number(file.slice(3, 5));
+  const html = fs.readFileSync(path.join(course, 'lessons/assignments', file), 'utf8');
+  const expected = new Set(discussionCoverage[String(number)] ?? []);
+  const covered = new Set([...html.matchAll(/data-official-ids="([^"]+)"/g)].flatMap((match) => match[1].split(/\s+/).filter(Boolean)));
+  const status = goldDiscussions.has(number) ? 'GOLD' : 'DIGESTED';
+  const quizzes = [...html.matchAll(/data-quiz="([^"]+)"/g)].map((match) => match[1]);
+  substantiveTotal += expected.size;
+  coveredTotal += [...expected].filter((id) => covered.has(id)).length;
+  assert(html.includes(`data-discussion-status="${status}"`), `D${number}: expected ${status} status`);
+  assert([...expected].every((id) => covered.has(id)) && [...covered].every((id) => expected.has(id)), `D${number}: substantive ID coverage drifted`);
+  assert((html.match(/class="guided-problem"/g) ?? []).length >= (goldDiscussions.has(number) ? 4 : 3), `D${number}: insufficient guided activities`);
+  for (const marker of ['problem-setup', 'prediction', 'work-it-out', 'progressive-hints', 'reveal', 'why-this-works', 'wrong-turn', 'variation', 'closed-book-reconstruction']) {
+    assert(html.includes(marker), `D${number}: workbook loop marker ${marker} missing`);
+  }
+  assert(!html.includes('官方题组索引'), `D${number}: outline-only scaffold returned`);
+  assert(quizzes.length >= (goldDiscussions.has(number) ? 4 : 3), `D${number}: insufficient prediction checks (${quizzes.length})`);
+  assert(new Set(quizzes).size === quizzes.length, `D${number}: quiz IDs are not unique`);
+  assert(html.includes('disc') && html.includes('-sols.pdf'), `D${number}: worksheet/solution provenance missing`);
+  if (goldDiscussions.has(number)) {
+    for (const marker of ['interactive-trace', 'misconception-analysis']) {
+      assert(html.includes(marker), `D${number}: Gold evidence ${marker} missing`);
+    }
+  }
+}
+assert(substantiveTotal === 225 && coveredTotal === 225, `discussion coverage expected 225/225, found ${coveredTotal}/${substantiveTotal}`);
+
+const lessonBridgeCount = lessonFiles.filter((file) => fs.readFileSync(path.join(course, 'lessons', file), 'utf8').includes('data-discussion-bridge=')).length;
+assert(lessonBridgeCount === 17, `expected 17 reciprocal lesson links, found ${lessonBridgeCount}`);
+for (const required of ['DISCUSSION-COVERAGE-AUDIT.md', 'CS168-DISCUSSION-RECONSTRUCTION-REPORT.md']) {
+  assert(fs.existsSync(path.join(course, required)), `${required} is missing`);
+}
 const workbookContract = {
   'ass14-project-1a-traceroute.html': ['engineering-workbook', 'GOLD'],
   'ass15-project-1b-traceroute-errors.html': ['engineering-workbook', 'GOLD'],
@@ -91,4 +131,4 @@ if (failures.length) {
   failures.forEach((failure) => console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log(`CS168_CONTENT_OK lessons=${lessonFiles.length} gold=${gold.size} interactives=${Object.keys(coreSteppers).length + 1}`);
+console.log(`CS168_CONTENT_OK lessons=${lessonFiles.length} gold=${gold.size} discussions=${discussionFiles.length} discussionCoverage=${coveredTotal}/${substantiveTotal} interactives=${Object.keys(coreSteppers).length + 1}`);

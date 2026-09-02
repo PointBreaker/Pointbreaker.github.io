@@ -142,6 +142,8 @@ Prefer semantic HTML/CSS or static SVG framework diagrams for architecture, stat
 
 When the course has assignments, labs, projects, or exams, read [references/assignment-learning-system.md](references/assignment-learning-system.md). Organize current official work into dependency-first stages with contracts, invariants, sanity checks, failure signatures, progressive hints, prediction/experiment/evidence loops, and capability gates. Never provide submit-ready implementation or unauthorized solutions.
 
+If the course has official discussion sheets, recitations, tutorials, or worksheets, read [references/discussion-reconstruction.md](references/discussion-reconstruction.md). A Discussion is a Guided Reasoning Workbook, not an Engineering Workbook and not a PDF index. Read both worksheet and official solution; audit substantive subproblems; then reconstruct original, self-contained problems with setup, prediction, learner work, progressive hints, reveal, explanation, wrong turn, and variation. Preserve official IDs for coverage, not copied prose. Build and review two Gold Discussions before scaling every published Discussion to at least `DIGESTED`.
+
 If the learner has a prior implementation repository, also read [references/historical-implementation-recap.md](references/historical-implementation-recap.md). Treat the recap as a separate profile, not a decorative history section inside the current Workbook. Audit the repository, starter boundary, tests, handout, and commit history before attribution; then teach `Code → Mechanism → State → Invariant → Execution Trace → Failure → Mental Model`. Only evidence-backed edits may carry `YOUR CODE · Historical Implementation`; everything inherited from the starter or framework must be `Framework Context`. A historical recap may reach Gold depth while the current assignment remains `BLOCKED_BY_SOURCE`.
 
 Choose the problem-statement strategy from source rights and term status:
@@ -174,6 +176,7 @@ First run the evidence-oriented depth audit:
 ```bash
 python3 <skill-root>/scripts/audit_lesson_depth.py --repo /path/to/repo --slug <slug> --json
 python3 <skill-root>/scripts/audit_workbook_depth.py --repo /path/to/repo --slug <slug> --json
+python3 <skill-root>/scripts/audit_discussion_coverage.py --repo /path/to/repo --slug <slug> --json
 ```
 
 Treat it as a regression detector, not a quality oracle. Manually decide `GOLD / GOOD / SHALLOW / BLOCKED_BY_SOURCE` using the closed-book questions in [references/mechanism-depth-practice.md](references/mechanism-depth-practice.md). `GOLD` requires both detectable evidence and human review; matching CSS classes alone never prove quality.
