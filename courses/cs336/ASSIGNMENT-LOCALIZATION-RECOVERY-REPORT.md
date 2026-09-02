@@ -2,7 +2,7 @@
 
 日期：2026-08-27
 
-> **Historical report:** 本报告记录 2026-08-27 的翻译资产恢复状态。Spring 2026 migration 已把这些 Spring 2025 中文题面从一级资源调整为折叠 archive；当前 active curriculum 与版本边界以 `CS336-SPRING-2026-MIGRATION-REPORT.md` 为准。题面内容与 problem IDs 仍完整保留。
+> **Historical report:** 本报告记录 2026-08-27 的翻译资产恢复状态，不描述当前页面层级。2026-08-31 的 reading-flow 整理已把五份 Spring 2025 完整中文题面移到独立 archive 页面；active Assignment 只呈现 Spring 2026 Workbook、problem guide 与官方来源。题面内容与 problem IDs 仍完整保留，当前结构见 `CS336-READING-FLOW-REPORT.md`。
 
 ## 结论
 

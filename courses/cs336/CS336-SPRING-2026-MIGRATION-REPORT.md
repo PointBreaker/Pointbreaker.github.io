@@ -4,6 +4,8 @@
 
 迁移目标：让 CourseStack 的 active curriculum 明确且唯一地对应 Stanford CS336 Spring 2026，同时保留仍然正确的教材化解释，并把 Spring 2025 题面降级为可辨认的历史存档。
 
+> **Reading-flow update（2026-08-31）：** 后续信息架构整理已把 Spring 2025 完整题面从 active Assignment DOM 移到五个独立 archive 页面。下面的版本迁移表仍然有效；关于当前页面结构，以 `CS336-READING-FLOW-REPORT.md` 为准。
+
 ## Source snapshot
 
 - 官方课程主页：<https://cs336.stanford.edu/>
@@ -50,9 +52,9 @@
 
 ### Active / archive hierarchy
 
-- 页面顶部只把 `2026 Engineering Workbook` 与 `2026 Official Handout` 作为 active resources。
-- 原有完整中文翻译没有删除；它现在位于 `What changed from 2025? · 中文题面与旧接口存档` 折叠区。
-- Stage 中匹配到旧译文时标为 `2025 题面参考`，无法匹配时标为 `2026 Official only`，避免把相同 problem ID 误报为接口已验证兼容。
+- 页面顶部只把 Spring 2026 `Task path`、`Problem guide` 与 `Official sources` 作为 active resources。
+- 原有完整中文翻译没有删除，但不再进入 active DOM；五份独立 `archive-2025-*.html` 页面保留历史快照，并明确提示返回当前 Workbook。
+- Stage 直接展示 Spring 2026 official problem IDs，并链接当前官方 handout；旧 ID 的映射统计仅用于 regression，不再要求学习者在主线中判断兼容性。
 - Stanford repository、PDF、README、tests 与 CHANGELOG 始终拥有最终优先级。
 - 所有 assignment metadata 都记录 `version`、`checkedAt` 与完整 `sourceCommit`；Workbook UI 同时显示该 snapshot。
 

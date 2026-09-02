@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historical archive · Assignment 3 · Scaling · Spring 2025 — CS336</title>
+  <link rel="stylesheet" href="../../assets/course.css?v=20260827f">
+  <link rel="stylesheet" href="../../assets/guide.css?v=20260827k">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+  <script defer src="../../../../assets/course/math-render.js?v=20260814f"></script>
+  <link rel="stylesheet" href="../../assets/code-format.css?v=20260814a">
+  <link rel="stylesheet" href="../../assets/handout-format.css?v=20260814a">
+</head>
+<body>
+  <div class="page archive-page">
+    <p class="archive-page-label">Historical archive · not part of the active Spring 2026 curriculum</p>
+    <!-- Banner -->
+    <div class="guide-banner">
+      <p class="guide-eyebrow">CS336 · Assignment 3 导读</p>
+      <h1>CS336 作业 3：缩放律</h1>
+      <p class="guide-lede">这份导读帮你理解 Assignment 3 要做什么、需要哪些知识、如何开始。它<strong>不包含任何实现答案</strong>——预测是你自己推出来的。</p>
+      <div class="guide-meta">
+        <span><span class="meta-icon">📅</span> 发布：2026-04-29</span>
+        <span><span class="meta-icon">⏰</span> 截止：2026-05-06</span>
+        <span><span class="meta-icon">📖</span> 前置：第 9-11 课</span>
+      </div>
+    </div>
+
+    <div class="source-note source-note-warning"><p><strong>Historical archive · Spring 2025</strong></p><p>这是迁移前的完整中文导读与题面快照，仅用于版本历史和技术演进参考。当前作业要求请返回 <a href="ass03-scaling.html">Assignment 3 · Scaling Spring 2026 Workbook</a>，并以 Stanford 当前 repository、PDF 与 tests 为准。</p></div>
+
+    <nav class="assignment-jump-links" aria-label="作业页快速导航">
+      <a href="#assignment-route">任务路线</a>
+      <a href="#knowledge-tree">知识树</a>
+      <a href="#assignment-cheatsheet">Cheatsheet</a>
+      <a href="#complete-problems">完整题面</a>
+    </nav>
+
+    <section aria-labelledby="assignment-overview-title">
+      <div class="assignment-mission-grid">
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">Mission</span>
+          <h2 id="assignment-overview-title">用有限实验预算，推断更大训练的最优配置</h2>
+          <p>这份作业不是“把一条曲线拟合得好看”，而是建立一条可复现的推断链：选择信息量高的实验点，统一计算口径，拟合参数量与数据量对 loss 的贡献，再检查外推对采样范围和拟合假设有多敏感。</p>
+          <p><strong>阅读策略：</strong>把每个预测都拆成“数据从哪里来、预算怎么算、模型为何这样写、残差说明什么、外推有多远”五个问题。</p>
+        </div>
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">You will produce</span>
+          <h3>最终要交付的研究证据</h3>
+          <ul class="assignment-outcomes">
+            <li>覆盖多个模型规模与 token 预算的实验表</li>
+            <li>固定 compute 下的 IsoFLOPs 比较</li>
+            <li>参数量/数据量联合 scaling law</li>
+            <li>带边界说明与不确定性的外推预测</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assignment-route" aria-labelledby="assignment-route-title">
+      <p class="eyebrow">Dependency-first route</p>
+      <h2 id="assignment-route-title">五阶段研究路线</h2>
+      <ol class="assignment-route assignment-route-5">
+        <li><strong>Small experiments</strong><span>先用低成本配置验证训练 API、日志、预算核算与结果收集链路。</span></li>
+        <li><strong>IsoFLOPs</strong><span>固定 compute，改变 (N) 与 (D)，寻找每个预算下的低 loss 区域。</span></li>
+        <li><strong>Fit</strong><span>拟合联合幂律，检查参数可辨识性、残差与异常点。</span></li>
+        <li><strong>Extrapolate</strong><span>在目标 FLOPs 预算下求 compute-optimal (N,D) 与预测 loss。</span></li>
+        <li><strong>Stress-test</strong><span>改变点集、初值或拟合形式，量化预测对实验选择的敏感性。</span></li>
+      </ol>
+    </section>
+
+    <section id="knowledge-tree" aria-labelledby="knowledge-tree-title">
+      <p class="eyebrow">Recursive prerequisite map</p>
+      <h2 id="knowledge-tree-title">递归知识树：一个 scaling 结论依赖什么？</h2>
+      <div class="knowledge-tree">
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 01 · Experimental design</span>
+          <h3>采哪些点才真正有信息量？</h3>
+          <p>对应查询预算分配与 IsoFLOPs 实验。</p>
+          <ul>
+            <li>Question → controlled variables
+              <ul><li>固定训练 recipe 与评估口径</li><li>只改变 (N,D,C) 中计划改变的量</li></ul>
+            </li>
+            <li>Range → identifiability
+              <ul><li>参数量和 token 数都要有跨度</li><li>避免所有点落在同一窄区间</li></ul>
+            </li>
+            <li>Budget → sequential design
+              <ul><li>先探索，再在拐点附近加密</li><li>保留预算用于复查异常点</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 02 · Compute accounting</span>
+          <h3>一次实验到底花了多少 compute？</h3>
+          <p>对应 FLOPs 预算和模型/数据分配。</p>
+          <ul>
+            <li>Parameters (N) → per-token work
+              <ul><li>训练含 forward 与 backward</li><li>常用近似 (C\approx6ND)</li></ul>
+            </li>
+            <li>Tokens (D) → training horizon
+              <ul><li>batch size × sequence length × steps</li><li>预算按实际查询口径累计</li></ul>
+            </li>
+            <li>Nominal → effective experiment
+              <ul><li>失败运行与重复运行是否计费</li><li>保持单位与数量级一致</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 03 · Statistical model</span>
+          <h3>幂律参数在表达什么？</h3>
+          <p>对应 loss surface 拟合与 compute-optimal 推导。</p>
+          <ul>
+            <li>Irreducible term
+              <ul><li>(E) 是模型形式中的渐近项</li><li>有限数据不保证能稳定识别它</li></ul>
+            </li>
+            <li>Model-limited term
+              <ul><li>(A/N^\alpha)</li><li>(\alpha) 描述增加参数的边际收益</li></ul>
+            </li>
+            <li>Data-limited term
+              <ul><li>(B/D^\beta)</li><li>(\beta) 描述增加 token 的边际收益</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 04 · Extrapolation</span>
+          <h3>预测什么时候值得相信？</h3>
+          <p>对应最终模型大小、超参数与 loss 预测。</p>
+          <ul>
+            <li>Interpolation → extrapolation
+              <ul><li>目标点离观测凸包有多远</li><li>是否跨越训练 regime</li></ul>
+            </li>
+            <li>Fit → uncertainty
+              <ul><li>重采样或改变拟合点集</li><li>比较多个合理初值/形式</li></ul>
+            </li>
+            <li>Prediction → decision
+              <ul><li>给出范围而非伪精确小数</li><li>说明最敏感的假设</li></ul>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="assignment-cheatsheet" aria-labelledby="assignment-cheatsheet-title">
+      <p class="eyebrow">Before querying</p>
+      <h2 id="assignment-cheatsheet-title">开工 Cheatsheet</h2>
+      <div class="cheatsheet-grid">
+        <article class="cheat-card">
+          <h3>Core model</h3>
+          <p class="formula-line">\(C\approx6ND\)</p>
+          <p class="formula-line">\(L(N,D)=E+A/N^\alpha+B/D^\beta\)</p>
+          <ul>
+            <li>(N)：参数量；(D)：训练 token；(C)：训练 compute。</li>
+            <li>固定 (C) 时，增大 (N) 必然减少可用的 (D)。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>IsoFLOPs workflow</h3>
+          <ol>
+            <li>选一组 compute budgets。</li>
+            <li>每个 budget 下扫多个模型大小。</li>
+            <li>找到最低 loss 附近的配置。</li>
+            <li>拟合 optimal (N(C))、(D(C)) 或联合 loss surface。</li>
+          </ol>
+        </article>
+        <article class="cheat-card">
+          <h3>Fit diagnostics</h3>
+          <ul>
+            <li>画观测值与预测值，不只报告 objective。</li>
+            <li>检查 residual 是否随 (N,D,C) 呈系统偏差。</li>
+            <li>确认参数为合理范围，并测试不同初值。</li>
+            <li>异常点先核对训练日志，不立即删除。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Experiment ledger</h3>
+          <ul>
+            <li>每次记录 (N,D,C)、batch、steps、learning rate、seed、loss。</li>
+            <li>区分 planned、started、completed、failed 查询。</li>
+            <li>保存拟合脚本、原始数据与生成图表的版本。</li>
+            <li>最终报告必须让别人能够复现采点与拟合。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <details class="assignment-reference">
+      <summary>展开原有详细导读：任务表、实验设计建议、陷阱、记录模板与课程连接</summary>
+      <div class="assignment-reference-body">
+
+    <!-- ============================================================ -->
+    <h2 id="what">这个 Assignment 要你做什么？</h2>
+
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>使用提供的训练 API，在不同的模型大小和 token 预算组合上运行实验，收集损失数据，拟合 scaling law，然后基于定律预测最优的 compute allocation。</p>
+    </div>
+
+    <p>Assignment 3 是一个<strong>实验科学</strong>练习：你需要像一个研究员一样设计实验、收集数据、拟合模型、做出预测。重点不是写代码，而是理解 scaling law 的理论和实验方法。</p>
+
+    <h3>主要任务</h3>
+    <table class="component-table">
+      <thead>
+        <tr><th>任务</th><th>对应课程</th><th>核心概念</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="comp-name">理解训练 API</td><td class="comp-lec">第 9 课</td><td>训练接口、超参数</td></tr>
+        <tr><td class="comp-name">设计实验</td><td class="comp-lec">第 10 课</td><td>实验设计、变量控制</td></tr>
+        <tr><td class="comp-name">收集数据点</td><td class="comp-lec">第 10 课</td><td>资源预算、时间安排</td></tr>
+        <tr><td class="comp-name">拟合 Scaling Law</td><td class="comp-lec">第 11 课</td><td>幂律拟合、参数估计</td></tr>
+        <tr><td class="comp-name">提交预测</td><td class="comp-lec">第 11 课</td><td>外推、不确定性</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="prereq">前置知识清单</h2>
+
+    <h3>课程知识</h3>
+    <ul class="checklist">
+      <li><strong>第 9 课</strong>：训练循环的高效实现、资源核算</li>
+      <li><strong>第 10 课</strong>：Scaling law 理论（Kapchin 定律、loss 与 compute 的关系）</li>
+      <li><strong>第 11 课</strong>：实验方法论、拟合技术、预测评估</li>
+    </ul>
+
+    <h3>数学与实验基础</h3>
+    <ul class="checklist">
+      <li>幂律关系（power law）：y = C · x^(-α) 的形式和性质</li>
+      <li>对数坐标下的线性拟合（log-log regression）</li>
+      <li>过拟合 vs 欠拟合的识别</li>
+      <li>外推（extrapolation）的风险和局限性</li>
+      <li>基本的统计概念（置信区间、噪声）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="approach">如何开始？</h2>
+
+    <div class="step-card">
+      <div class="step-number">0</div>
+      <h3>理解 API 和约束</h3>
+      <p>仔细阅读 handout 中的训练 API 文档。理解：你可以控制哪些超参数（model size, learning rate, batch size 等）、你的总 compute 预算是多少、每次训练运行需要多长时间。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>设计实验矩阵</h3>
+      <p>你需要选择一组 (model_size, num_tokens) 组合来运行实验。考虑：</p>
+      <ul>
+        <li>覆盖足够大的范围（太小或太大的模型都要有）</li>
+        <li>在关键区域增加密度（曲线变化快的地方）</li>
+        <li>控制变量：一次只改变一个维度</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>高效利用预算</h3>
+      <p>你的 FLOPs 预算有限。策略建议：</p>
+      <ul>
+        <li>先用小模型快速验证 pipeline</li>
+        <li>优先在"信息丰富"的区域采样（中等大小模型）</li>
+        <li>保留一些预算用于验证/补充实验</li>
+        <li>记录每次实验的实际 FLOPs 消耗</li>
+      </ul>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>拟合与验证</h3>
+      <p>收集数据后：</p>
+      <ol>
+        <li>在对数坐标上可视化数据</li>
+        <li>拟合 scaling law（考虑不同的拟合方法）</li>
+        <li>检查残差，识别异常点</li>
+        <li>用拟合结果预测最优配置</li>
+      </ol>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="common-pitfalls">常见陷阱</h2>
+
+    <div class="pitfall">
+      <p><strong>数据噪声：</strong> 训练本身有随机性（初始化、数据顺序）。同一个配置跑多次可能有不同的 loss。不要过度解读单次运行的噪声。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>过拟合少量数据点：</strong> 如果你只跑了 3-4 个点，拟合结果可能非常不稳定。确保有足够的数据点来验证幂律假设。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>外推风险：</strong> Scaling law 在观测范围内可能拟合得很好，但外推到未验证的区域可能完全错误。对远距离预测保持警惕。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>忽略训练动态：</strong> 假设你的模型没有充分训练（不在 asymptotic regime），scaling law 可能不成立。注意 loss curve 是否还在明显下降。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>超参数不一致：</strong> 不同大小的最优超参数（learning rate、warmup 等）可能不同。如果混用不合适的超参数，数据点会偏离真实 scaling 趋势。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="testing">实验记录与可视化</h2>
+
+    <h3>记录模板</h3>
+    <pre><code class="language-text">| 实验 | Model Size | Tokens | FLOPs | Final Loss | Notes |
+|------|-----------|--------|-------|------------|-------|
+| 1    | 1M        | 10M    | ...   | 5.23       | baseline |
+| 2    | 10M       | 100M   | ...   | 4.12       | ... |</code></pre>
+
+    <h3>可视化建议</h3>
+    <ul>
+      <li><strong>log-log 图</strong>：幂律在对数坐标下是直线</li>
+      <li><strong>isoFLOPs 曲线</strong>：固定 FLOPs，变化 model size 和 token 数</li>
+      <li><strong>残差图</strong>：检查拟合的系统性偏差</li>
+      <li><strong>Loss curve</strong>：确认训练已收敛到稳定区域</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="connection">与课程的关系</h2>
+
+    <div class="connection-map">
+      <div class="connection-item">
+        <div class="conn-lec">第 9 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">高效训练 → 实验基础设施</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 10 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">Scaling law 理论 → 实验设计</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 11 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">拟合方法 → 预测最优配置</div>
+      </div>
+    </div>
+
+    <p>完成 Assignment 3 后，你就掌握了<strong>用科学方法指导 LLM 训练</strong>的能力。这是工业界做模型训练规划的核心技能。</p>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="mindset">学习心态</h2>
+
+    <div class="mindset-banner">
+      <p><strong>这次作业更像一个研究项目。</strong> 没有唯一的"正确"答案——你的预测质量取决于实验设计的合理性和数据分析的严谨性。</p>
+      <p style="margin-top:10px">关键心态：<strong>数据 > 直觉</strong>。不要因为"感觉某个配置更好"就不做实验验证。让数据说话。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+      </div>
+    </details>
+<!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 编程作业</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 3 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>cs336_spring2025_assignment3_scaling.pdf</code>、<code>assignment3-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>环境准备与作业全局说明</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>仓库与代码
+<p>本作业代码仓库位于 <code>github.com/stanford-cs336/assignment3-scaling</code>，请执行 <code>git clone</code> 克隆。如有更新，课程组会通知，届时可通过 <code>git pull</code> 获取最新版本。模型参考实现位于 <code>cs336_scaling/model.py</code>。</p>
+环境配置
+<p>使用 <code>uv</code> 管理 Python 环境与依赖：</p>
+<ol>
+<li>安装 <code>uv</code>（如尚未安装）。</li>
+<li>使用 <code>uv add &lt;package&gt;</code> 添加所需依赖。</li>
+<li>使用 <code>uv run &lt;command&gt;</code> 在环境中运行命令。</li>
+<li>如需获取 Python 解释器路径（例如为 VSCode 配置解释器），运行：</li>
+</ol>
+<pre><code class="language-sh">uv run which python
+</code></pre>
+提交方式
+<p>向 Gradescope 提交以下文件：</p>
+<ul>
+<li>
+<p><code>writeup.pdf</code>：完整描述你拟合缩放律以及使用它预测给定 FLOPs 预算下最优模型大小的方法。报告应足够详细以复现你的结果。</p>
+</li>
+<li>
+<p><code>code.zip</code>：包含你为拟合缩放律和计算估计值所编写的所有代码。</p>
+</li>
+</ul>
+<p>此外，通过以下 Google 表单提交：(1) 预测的最优模型大小，(2) 要使用的训练超参数，(3) 模型预测的训练损失：</p>
+<pre><code class="language-text">https://forms.gle/sAUSLwCUETew2hYN6
+</code></pre>
+<p>作业的部分成绩将由你预测的最优模型的性能决定。</p>
+训练 API 接入
+<p>你将使用训练 API 查询缩放律实验的训练结果。你的 API key 与开学时提交给课程组的 SSH 公钥相同（不含换行符）。注意：必须在斯坦福网络内才能查询 API，因此可能需要使用 VPN。</p>
+<p>作为 sanity check，你应该能够在以下地址看到 API 文档页面：</p>
+<pre><code class="language-text">http://hyperturing.stanford.edu:8000/docs
+</code></pre>
+<p>并通过 <code>/total_flops_used</code> 端点验证你的 API key 是否有效。</p>
+<p>缩放律拟合的 FLOPs 预算为额外的 \(2 \times 10^{18}\) FLOPs（主运行 FLOPs 预算的 20%）。一旦超过该预算，训练 API 将拒绝进一步请求。</p>
+训练运行详情
+<p>训练运行使用 Transformer 语言模型，架构与作业 1 基本一致，但有以下关键差异：</p>
+<ol>
+<li>使用绝对位置编码（Absolute Position Embeddings），而非旋转位置编码（RoPE）。</li>
+<li>使用 Layer Normalization（层归一化），而非 RMSNorm。</li>
+<li>前馈网络由线性层 + GeLU 非线性 + 线性层组成，而非 SwiGLU（涉及 3 个线性层）；隐藏维度 \(d_{ff} = 4d_{model}\)。</li>
+<li>使用 attention 与 residual dropout（详见 <code>cs336_scaling/model.py</code>）。</li>
+</ol>
+<p>此外：输入与输出 embedding 不绑定（untied）。模型在 SlimPajama 数据集上训练，使用字节级 BPE 分词器，词表大小 32K（同样在 SlimPajama 上训练）。上下文长度为 512。Attention 和 residual dropout 的概率均为 0.1。使用 AdamW 优化器，权重衰减 0.01，梯度裁剪阈值 1.0。学习率采用 cosine 衰减策略，初始学习率衰减 10 倍，cosine 周期长度与总训练步数一致。不使用学习率预热（warm-up）。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修概念：Python 环境管理（uv）、HTTP API 调用（requests）、曲线拟合与科学计算（scipy/numpy/matplotlib）。</p>
+</li>
+<li>
+<p>实施顺序：先完成环境配置并验证 <code>uv run</code> 可用；再克隆仓库并浏览 <code>cs336_scaling/model.py</code> 了解模型结构；然后阅读训练 API 文档并验证 API key 可用性；最后仔细阅读评分政策与提交要求。</p>
+</li>
+<li>
+<p>调试策略：在正式实验前，先用简单配置调用 <code>/loss</code> 端点确认返回格式符合预期；使用 <code>/total_flops_used</code> 端点监控已消耗的 FLOPs 预算；使用 <code>/previous_runs</code> 端点核对历史查询记录。</p>
+</li>
+<li>
+<p>自检方法：确认能够成功调用 API 并解析返回的 JSON，确认包含 <code>loss</code> 和 <code>total_flops_used</code> 字段；确认 <code>writeup.pdf</code> 和 <code>code.zip</code> 的提交流程已了解；确认 Google 表单的三项提交内容。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>assignment3-README.md</code> · 1 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">chinchilla_isoflops</span><strong>Chinchilla IsoFLOPs 方法复现</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>（本题 5 分。）</p>
+<p>复现上述使用一组训练运行的最终训练损失来拟合缩放律的 IsoFLOPs 方法。对于本题，使用文件 <code>data/isoflops_curves.json</code> 中给出的（合成）训练运行数据。该文件包含一个 JSON 数组，其中每个元素是一个描述训练运行的对象，包含 <code>parameters</code>、<code>compute_budget</code>、<code>final_loss</code> 字段。以下是前两次运行的格式示例：</p>
+<pre><code class="language-json">[
+  {
+    "parameters": 49999999,
+    "compute_budget": 6e+18,
+    "final_loss": 7.192784500319437
+  },
+  {
+    "parameters": 78730505,
+    "compute_budget": 6e+18,
+    "final_loss": 6.750171320661809
+  },
+  ...
+]
+</code></pre>
+<p>对于拟合缩放律，<code>scipy</code> 包（特别是 <code>scipy.optimize.curve_fit</code>）可能会有用，但你可以使用任何你喜欢的曲线拟合方法。虽然 Hoffmann et al. [2022] 对每个 IsoFLOP 剖面拟合二次函数来寻找最小值，但我们建议直接取每个计算预算下训练损失最低的运行作为最小值。</p>
+<p><strong>背景：</strong> 训练一个含 \(N\) 个参数的 Transformer 在含 \(D\) 个 token 的数据集上的计算预算近似为 \(C = 6ND\)。对每个计算预算 \(C_i\)，在不同模型大小 \(N_{ij}\) 下（数据大小 \(D = C/(6N)\)）训练语言模型，得到最终训练损失 \(L_{ij}\)。在每个预算内找到使训练损失最小的模型大小 \(N_{opt}(C_i)\)，得到数据点序列 \(\langle C_i, N_{opt}(C_i) \rangle\)（以及对应的 \(D_{opt}\)）。用这些数据点拟合幂律 \(N_{opt} \propto C^a\) 和 \(D_{opt} \propto C^b\)，并外推到目标计算预算。</p>
+<ol>
+<li>展示你外推出的计算最优模型大小，以及你获得的 \(\langle C_i, N_{opt}(C_i) \rangle\) 点。对于 \(10^{23}\) FLOPs 的预算，你预测的最优模型大小是多少？对于 \(10^{24}\) FLOPs 呢？</li>
+</ol>
+<p><strong>交付物：</strong> 一张展示模型大小随计算预算变化的缩放律图，显示用于拟合的数据点并外推到至少 \(10^{24}\) FLOPs。然后，用一句话回答你预测的最优模型大小。</p>
+<ol>
+<li>展示你外推出的计算最优数据集大小，以及来自训练运行的 \(\langle C_i, D_{opt}(C_i) \rangle\) 数据点。对于 \(10^{23}\) 和 \(10^{24}\) FLOPs 的预算，你预测的最优数据集大小是多少？</li>
+</ol>
+<p><strong>交付物：</strong> 一张展示数据集大小随计算预算变化的缩放律图，显示用于拟合的数据点并外推到至少 \(10^{24}\) FLOPs。然后，用一句话回答你预测的最优数据集大小。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修概念：理解 IsoFLOPs 剖面的含义——固定 FLOPs 预算下，模型大小与数据大小的权衡；理解幂律拟合 \(y = ax^b\) 通常通过对数变换后线性回归实现。</p>
+</li>
+<li>
+<p>实施顺序：先加载 <code>data/isoflops_curves.json</code> 并探索数据结构（计算预算的分布、模型大小的范围）；对每个计算预算分组并找到 <code>final_loss</code> 最小的运行；分别提取 \(N_{opt}\) 和 \(D_{opt}\)（通过 \(D_{opt} = C_i / (6 N_{opt})\) 计算）；在对数空间拟合幂律；绘制数据点与拟合曲线并外推。</p>
+</li>
+<li>
+<p>调试策略：检查每个计算预算下是否确实找到了唯一的最低损失运行；验证 \(D_{opt}\) 的计算是否正确；检查拟合曲线是否合理穿过数据点；外推时注意幂律在远离数据范围时的可靠性。</p>
+</li>
+<li>
+<p>自检方法：确认拟合的指数 \(a\) 和 \(b\) 为正数且合理；确认外推曲线在数据点附近与观测值吻合；用一句话清晰陈述 \(10^{23}\) 和 \(10^{24}\) FLOPs 下的预测值。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment3_scaling.pdf</code> · 2 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">scaling_laws</span><strong>构建缩放律</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>（本题 50 分。）</p>
+<p>构建一个缩放律，以准确预测 FLOPs 预算为 \(10^{19}\) 时的最优模型大小、其超参数以及相关的训练损失。为了构建缩放律，你将使用我们的训练 API 查询各种实验配置的最终训练损失（§3.1）；你不得查询超过 \(2 \times 10^{18}\) FLOPs 的实验来拟合你的缩放律。这是一个由 API 强制执行的上限（hard cap）。</p>
+<p><strong>交付物：</strong> 一份排版的报告（write-up），包含你拟合缩放律的方法和完整描述。此外，还应描述你如何使用缩放律来预测给定 FLOPs 预算下的最优模型大小，以及你的预测值。报告应包含关于为何做出特定设计决策的评论，描述应足够详细以复现你的方法和结果。</p>
+<p><strong>关于 batch size 的说明：</strong> 对于 \(10^{19}\) FLOPs 预算下你报告的超参数，我们基本没有限制，只要求你的 batch size 必须是 128 或 256。这是为了确保运行具有合理的模型 FLOPs 利用率。如果我们在运行你报告的超参数配置时遇到内存不足（OOM）错误，我们将使用梯度累积或扩展数据并行 GPU 的数量来维持你期望的 batch size。</p>
+<p>为了帮助你入门，我们建议至少思考以下问题。你的报告应包含关于以下每个因素如何做出决策的额外评论：</p>
+<ul>
+<li>
+<p>给定固定的缩放律预算 \(2 \times 10^{18}\)，你决定查询哪些运行？</p>
+</li>
+<li>
+<p>你如何拟合你的缩放律？描述你使用的具体方法。熟悉 Kaplan et al. [2020] 和 Hoffmann et al. [2022] 使用的方法可能会很有用。</p>
+</li>
+<li>
+<p>你的缩放律对实验数据的拟合程度如何？</p>
+</li>
+<li>
+<p>对于我们给定的 \(10^{19}\) FLOPs 预算，你的缩放律预测的最优模型大小是多少？预测的损失是多少？</p>
+</li>
+<li>
+<p>如果你要训练一个具有预测最优参数数量的模型，你会使用什么超参数？要估计给定模型超参数配置的非嵌入参数数量，使用 \(12 n_{layer} d_{model}^2\)。</p>
+</li>
+</ul>
+<p>除了报告外，还需通过 Google 表单 <code>https://forms.gle/sAUSLwCUETew2hYN6</code> 提交：(1) 预测的最优模型大小，(2) 要使用的训练超参数（包括 batch size 128 或 256），以及 (3) 模型的训练损失。作业的部分成绩将由你预测的最优模型的性能决定。</p>
+<h3>训练 API（§3.1）</h3>
+<p>你将使用训练 API 查询你想要运行的缩放律实验的最终训练损失。你的 API key 与开学时提交给课程组的 SSH 公钥相同（不含换行符）。注意：必须在斯坦福网络内才能查询 API，因此可能需要使用 VPN。作为 sanity check，你应该能够在 <code>http://hyperturing.stanford.edu:8000/docs</code> 看到 API 文档页面。训练 API 具有以下端点：</p>
+<p><strong>GET /loss</strong>：给定训练运行的规格，返回最终训练损失。参数如下：</p>
+<ul>
+<li>
+<p><code>d_model</code>：整数，范围 [64, 1024]</p>
+</li>
+<li>
+<p><code>num_layers</code>：整数，范围 [2, 24]</p>
+</li>
+<li>
+<p><code>num_heads</code>：整数，范围 [2, 16]</p>
+</li>
+<li>
+<p><code>batch_size</code>：整数，取值 {128, 256}</p>
+</li>
+<li>
+<p><code>learning_rate</code>：浮点数，范围 [1e-3, 1e-4]</p>
+</li>
+<li>
+<p><code>train_flops</code>：整数，取值 {1e13, 3e13, 6e13, 1e14, 3e14, 6e14, 1e15, 3e15, 6e15, 1e16, 3e16, 6e16, 1e17, 3e17, 6e17, 1e18}</p>
+</li>
+<li>
+<p><code>api_key</code>：字符串 API key</p>
+</li>
+</ul>
+<p>注意：使用之前查询过的实验配置查询此端点不会消耗额外的 FLOPs 预算。此端点返回一个 JSON 对象，包含 <code>loss</code>（浮点训练损失）和 <code>total_flops_used</code>（该 API key 已使用的总 FLOPs）。如果超参数值不在可接受范围内，返回 404 响应及附带消息。</p>
+<p><strong>GET /total_flops_used</strong>：给定 API key，返回该 key 在所有先前查询的运行中使用的总 FLOPs。参数：<code>api_key</code>。如果 API key 没有查询记录，返回 422 响应及附带消息。</p>
+<p><strong>GET /previous_runs</strong>：给定 API key，返回使用该 API key 查询的所有先前运行的列表。参数：<code>api_key</code>。返回 JSON 对象包含 <code>previous_runs</code> 键，值为所有先前运行配置及其结果的数组。</p>
+<h3>训练运行详情（§3.2）</h3>
+<p>训练运行使用 Transformer 语言模型，架构与作业 1 基本一致，但有以下关键差异：</p>
+<ol>
+<li>使用绝对位置编码（Absolute Position Embeddings），而非旋转位置编码（RoPE）。</li>
+<li>使用 Layer Normalization（层归一化），而非 RMSNorm。</li>
+<li>前馈网络由线性层 + GeLU 非线性 + 线性层组成，而非 SwiGLU（涉及 3 个线性层）；隐藏维度 \(d_{ff} = 4d_{model}\)。</li>
+<li>使用 attention 与 residual dropout（详见 <code>cs336_scaling/model.py</code>）。</li>
+</ol>
+<p>此外：输入与输出 embedding 不绑定（untied）。模型在 SlimPajama 数据集上训练，使用字节级 BPE 分词器，词表大小 32K（同样在 SlimPajama 上训练）。上下文长度为 512。Attention 和 residual dropout 的概率均为 0.1。使用 AdamW 优化器，权重衰减 0.01，梯度裁剪阈值 1.0。学习率采用 cosine 衰减策略，初始学习率衰减 10 倍，cosine 周期长度与总训练步数一致。不使用学习率预热（warm-up）。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修概念：深入理解 Kaplan et al. [2020] 和 Hoffmann et al. [2022] 的缩放律拟合方法；掌握实验设计（DoE）的基本原则——在有限的 FLOPs 预算下高效探索超参数空间；理解过拟合与外推的风险。</p>
+</li>
+<li>
+<p>实施顺序：先仔细阅读 API 文档并验证 API key；理解 API 参数的有效范围；规划如何在 \(2 \times 10^{18}\) FLOPs 预算内分配实验（例如在不同计算预算、不同模型大小之间分配）；实施查询脚本并记录结果；拟合缩放律并评估拟合质量；使用缩放律预测 \(10^{19}\) FLOPs 下的最优配置；撰写报告。</p>
+</li>
+<li>
+<p>调试策略：使用 <code>/total_flops_used</code> 端点持续监控 FLOPs 消耗，避免意外超限；从小规模实验开始验证流程；对同一配置重复查询确认结果一致性（不额外消耗 FLOPs）；使用 <code>/previous_runs</code> 端点核对历史记录。</p>
+</li>
+<li>
+<p>自检方法：确认总查询 FLOPs 不超过 \(2 \times 10^{18}\)；确认报告中的方法描述足够详细以便他人复现；确认预测的最优模型大小和超参数在 API 的有效范围内；确认 batch size 为 128 或 256；确认已通过 Google 表单提交全部三项预测值。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment3_scaling.pdf</code> · 3 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="quiz">自测：你准备好了吗？</h2>
+
+    <div class="quiz" data-answer="b" data-quiz="1" data-correct="正确！Kapchin 定律描述 loss 与 compute 的幂律关系，在对数坐标下呈线性。" data-incorrect="Kapchin 定律的核心是 loss 与 model size/token count 的幂律关系，在对数坐标下表现为直线。">
+      <p><strong>问题 1：</strong>Scaling law 中 loss 与 compute 的关系通常是什么形式？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">线性关系</button>
+        <button data-choice="b" aria-pressed="false">幂律关系</button>
+        <button data-choice="c" aria-pressed="false">指数衰减</button>
+        <button data-choice="d" aria-pressed="false">对数关系</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-answer="b" data-quiz="2" data-correct="正确！在观测范围之外做预测是危险的，因为 scaling law 可能在新的 regime 下不成立。" data-incorrect="外推的风险在于：scaling law 只在验证过的范围内可靠，新 regime 可能有不同的行为。">
+      <p><strong>问题 2：</strong>为什么外推（extrapolation）scaling law 有风险？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为计算太贵</button>
+        <button data-choice="b" aria-pressed="false">因为新 regime 下定律可能不成立</button>
+        <button data-choice="c" aria-pressed="false">因为数据太嘈杂</button>
+        <button data-choice="d" aria-pressed="false">因为 GPU 会出错</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-answer="b" data-quiz="3" data-correct="正确！isoFLOPs 曲线展示在固定 compute 下，不同 model size 和 token 数的组合能达到的 loss。" data-incorrect="isoFLOPs 曲线展示固定 compute 预算下，不同配置组合的 loss，用于找到最优分配。">
+      <p><strong>问题 3：</strong>isoFLOPs 曲线（等 compute 曲线）的作用是什么？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">比较不同 GPU 的性能</button>
+        <button data-choice="b" aria-pressed="false">找到固定 compute 下的最优配置</button>
+        <button data-choice="c" aria-pressed="false">验证代码正确性</button>
+        <button data-choice="d" aria-pressed="false">测量训练速度</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-answer="b" data-quiz="4" data-correct="正确！Asymptotic regime 指模型充分训练后，loss 与 compute 呈现稳定幂律关系的区域。" data-incorrect="Asymptotic regime 是训练充分后的稳定区域，此时 scaling law 的关系最可靠。">
+      <p><strong>问题 4：</strong>为什么要关注训练是否进入 asymptotic regime？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">因为此时训练最快</button>
+        <button data-choice="b" aria-pressed="false">因为 scaling law 只在稳定区域可靠</button>
+        <button data-choice="c" aria-pressed="false">因为此时模型最小</button>
+        <button data-choice="d" aria-pressed="false">因为此时不需要验证集</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">导读要点</h2>
+    <div class="loop">
+      <article>
+        <h3>目标</h3>
+        <p>拟合 scaling law，预测最优配置</p>
+      </article>
+      <article>
+        <h3>前置</h3>
+        <p>第 9-11 课 + 实验设计</p>
+      </article>
+      <article>
+        <h3>策略</h3>
+        <p>数据驱动，高效采样</p>
+      </article>
+      <article>
+        <h3>原则</h3>
+        <p>让数据说话，警惕外推</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="../0011-scaling-laws-details.html">← 回到课程 #11</a>
+      <a href="ass04-data.html">Assignment 4 导读 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Assignment 3 导读 · 不含任何实现答案</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
+  <script defer src="../../assets/code-format.js?v=20260814a"></script>
+  <script defer src="../../assets/handout-format.js?v=20260814a"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+</body>
+</html>

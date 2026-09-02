@@ -167,12 +167,21 @@ for (const [id, stageCount] of Object.entries(expectedStages)) {
   const html = fs.readFileSync(path.join(root, `courses/cs336/lessons/assignments/ass${id}-${['basics', 'systems', 'scaling', 'data', 'alignment'][Number(id) - 1]}.html`), 'utf8');
   requireText(html, 'assignment-bank.js', `Assignment ${id} loads the workbook bank`);
   requireText(html, 'assignment-workbook.js', `Assignment ${id} loads the workbook renderer`);
-  requireText(html, 'Handout 完整本土化', `Assignment ${id} retains archived localized handout markers`);
-  requireText(html, '完整任务', `Assignment ${id} retains full-task copy`);
   requireText(html, expectedAssignment.version, `Assignment ${id} exposes the active version`);
   requireText(html, expectedAssignment.commit.slice(0, 7), `Assignment ${id} exposes the source commit`);
+  forbid(html, /problem-row|Handout 完整本土化|legacy supplement|Legacy Reference|Spring 2025 Qwen|下方旧版/, `Assignment ${id} active page must not carry Spring 2025 problem DOM`);
+  if (!assignment.archiveHref) failures.push(`Assignment ${id}: missing archiveHref`);
+  const archivePath = path.join(root, 'courses/cs336/lessons/assignments', assignment.archiveHref || 'missing');
+  if (!fs.existsSync(archivePath)) {
+    failures.push(`Assignment ${id}: missing historical archive ${assignment.archiveHref}`);
+    continue;
+  }
+  const archive = fs.readFileSync(archivePath, 'utf8');
+  requireText(archive, 'Historical archive · not part of the active Spring 2026 curriculum', `Assignment ${id} archive boundary`);
+  requireText(archive, 'Handout 完整本土化', `Assignment ${id} archive retains localized handout markers`);
+  requireText(archive, '完整任务', `Assignment ${id} archive retains full-task copy`);
 
-  const translatedIds = [...html.matchAll(/<span class="problem-number">([^<]+)<\/span>/g)].map((match) => match[1].trim());
+  const translatedIds = [...archive.matchAll(/<span class="problem-number">([^<]+)<\/span>/g)].map((match) => match[1].trim());
   const uniqueTranslatedIds = new Set(translatedIds);
   if (translatedIds.length !== uniqueTranslatedIds.size) failures.push(`Assignment ${id}: duplicate localized problem IDs`);
   const officialIds = new Set(assignment.stages.flatMap((stage) => stage.official.map(officialProblemId)).filter(Boolean));
@@ -190,6 +199,10 @@ for (const [id, stageCount] of Object.entries(expectedStages)) {
 if (assignmentLessonLinkCount !== 52) failures.push(`expected 52 Assignment → Lesson links, got ${assignmentLessonLinkCount}`);
 
 const lessonLayout = fs.readFileSync(path.join(root, 'courses/cs336/assets/lesson-layout.js'), 'utf8');
+for (const phrase of ['lesson-opening', '30-second mental model', 'Source · Stanford CS336 Spring 2026', 'firstMechanismHeading', "heading.textContent = 'Next'"]) {
+  requireText(lessonLayout, phrase, `Lesson reading-flow renderer: ${phrase}`);
+}
+forbid(lessonLayout, /className = 'lesson-outcomes'/, 'Lesson opening must not add a second outcomes card');
 const buildLinks = [...lessonLayout.matchAll(/'assignments\/ass(0[1-5])-[^']+\.html#workbook-stage-([\w-]+)'/g)];
 if (buildLinks.length !== 16) failures.push(`expected 16 Lesson → Assignment build links, got ${buildLinks.length}`);
 buildLinks.forEach(([, assignmentId, stageId]) => {
@@ -198,11 +211,10 @@ buildLinks.forEach(([, assignmentId, stageId]) => {
 });
 
 const workbookRenderer = fs.readFileSync(path.join(root, 'courses/cs336/assets/assignment-workbook.js'), 'utf8');
-for (const phrase of ['semanticContent', 'translatedProblems', 'officialSourceContent', 'legacyGuide', 'legacySupplement', 'miscReference', 'problemAnchor', 'data-problem-target', 'activateProblem', '2025 中文题面存档', '2026 ID Matched · Needs Review', '2025 题面参考 →', '2026 Official only', 'What changed from 2025?']) {
-  requireText(workbookRenderer, phrase, `Assignment renderer localization architecture: ${phrase}`);
+for (const phrase of ['workbook-source-line', 'Version & provenance', 'Problem guide · Official IDs', 'Official sources', 'Historical note · 2025 → 2026', 'assignment.archiveHref']) {
+  requireText(workbookRenderer, phrase, `Assignment renderer reading-flow architecture: ${phrase}`);
 }
-forbid(workbookRenderer, /\bconst\s+oldNodes\b|oldNodes\.push/, 'Assignment renderer must not collect all old nodes indiscriminately');
-forbid(workbookRenderer, /\['中文完整题面',\s*'#localized-problems'\]/, 'Spring 2025 localized statements must not be a primary active-version tab');
+forbid(workbookRenderer, /translatedProblems|localized-problems|data-problem-target|activateProblem|2025 题面参考|2026 ID Matched/, 'Active Workbook renderer must not rebuild the Spring 2025 problem archive');
 
 const recoveryReport = fs.readFileSync(path.join(root, 'courses/cs336/ASSIGNMENT-LOCALIZATION-RECOVERY-REPORT.md'), 'utf8');
 for (const phrase of [
@@ -221,6 +233,6 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log('Assignment localization audit:');
-localizationAudit.forEach((row) => console.log(`- A${row.assignment}: translated=${row.translated}, matched=${row.matched}, official-only=${row.officialOnly}, legacy-only=${row.legacyOnly}`));
-console.log('CS336 content lint passed (Lesson accuracy + Workbook structure + localization regression).');
+console.log('Assignment archive regression:');
+localizationAudit.forEach((row) => console.log(`- A${row.assignment}: archived=${row.translated}, matched=${row.matched}, official-only=${row.officialOnly}, archive-only=${row.legacyOnly}`));
+console.log('CS336 content lint passed (Lesson accuracy + active Workbook flow + archive regression).');

@@ -7,6 +7,7 @@
   document.body.classList.add('cs336-lesson');
 
   const map = page.querySelector(':scope > .learning-map');
+  const contract = page.querySelector(':scope > .lesson-contract');
   const checklist = page.querySelector('.explain-checklist');
   const bottomNav = page.querySelector('.nav');
   if (!map || !checklist) return;
@@ -31,37 +32,63 @@
 
   const lede = hero.querySelector('.lede');
   if (lede) lede.classList.add('lesson-secondary-summary');
-  const sourceNote = hero.querySelector('.source-note');
+  const sourceNotes = [...hero.querySelectorAll(':scope > .source-note')];
+  const sourceNote = sourceNotes.shift();
   if (sourceNote) {
+    sourceNotes.forEach((extraNote) => {
+      [...extraNote.children].forEach((child) => sourceNote.appendChild(child));
+      extraNote.remove();
+    });
     const sourceDetails = document.createElement('details');
     sourceDetails.className = 'lesson-source-details';
     const sourceSummary = document.createElement('summary');
-    sourceSummary.textContent = '官方材料与版本说明';
+    sourceSummary.textContent = `Source · Stanford CS336 Spring 2026 · Lecture ${Number(match[1])}`;
     sourceNote.insertAdjacentElement('beforebegin', sourceDetails);
     sourceDetails.append(sourceSummary, sourceNote);
   }
 
-  const heroGrid = document.createElement('div');
-  heroGrid.className = 'lesson-hero-grid';
+  const opening = document.createElement('section');
+  opening.className = 'lesson-opening';
+  opening.setAttribute('aria-label', '本课核心问题与先修知识');
+  const question = hero.querySelector(':scope > .bridge');
+  const duplicatedQuestionHeading = question?.previousElementSibling;
+  if (duplicatedQuestionHeading?.tagName === 'H2' && /这一讲到底解决什么问题/.test(duplicatedQuestionHeading.textContent)) {
+    duplicatedQuestionHeading.remove();
+  }
+  if (question) {
+    question.classList.add('lesson-question');
+    opening.appendChild(question);
+  }
   map.remove();
-  heroGrid.appendChild(map);
-
-  const outcomes = document.createElement('section');
-  outcomes.className = 'lesson-outcomes';
-  outcomes.innerHTML = '<strong>学完你应该能解释</strong>';
-  const outcomesList = document.createElement('ul');
-  [...checklist.querySelectorAll('li')].slice(0, 4).forEach((item) => {
-    const clone = document.createElement('li');
-    clone.innerHTML = item.innerHTML;
-    outcomesList.appendChild(clone);
-  });
-  outcomes.appendChild(outcomesList);
-  heroGrid.appendChild(outcomes);
-  hero.appendChild(heroGrid);
+  const mapLabel = map.querySelector('strong');
+  if (mapLabel) mapLabel.textContent = '30-second mental model';
+  opening.appendChild(map);
+  if (contract) {
+    contract.remove();
+    contract.classList.add('lesson-prerequisite');
+    const contractHeading = contract.querySelector('h3');
+    if (contractHeading) contractHeading.textContent = 'Before you start';
+    opening.appendChild(contract);
+  }
+  hero.appendChild(opening);
 
   const main = document.createElement('main');
   main.className = 'lesson-main';
   while (page.firstChild) main.appendChild(page.firstChild);
+
+  const openingExample = main.querySelector(':scope > .worked-example');
+  const openingMisconception = main.querySelector(':scope > .misconception');
+  const firstMechanismHeading = [...main.querySelectorAll(':scope > h2')].find((heading) =>
+    !['objectives', 'learning-objectives', 'learning-goals', 'quiz', 'takeaways', 'reading'].includes(heading.id)
+  );
+  if (firstMechanismHeading && (openingExample || openingMisconception)) {
+    let boundary = firstMechanismHeading.nextElementSibling;
+    while (boundary && !boundary.matches('hr.rule')) boundary = boundary.nextElementSibling;
+    if (boundary) {
+      if (openingExample) boundary.insertAdjacentElement('beforebegin', openingExample);
+      if (openingMisconception) boundary.insertAdjacentElement('beforebegin', openingMisconception);
+    }
+  }
 
   const lesson = window.CS336PracticeBank?.[match[1]];
   const tocIds = [
@@ -129,6 +156,10 @@
   main.querySelectorAll('details.deep-dive').forEach((details) => {
     details.classList.add('teaching-deep-dive');
     details.removeAttribute('open');
+  });
+
+  main.querySelectorAll('.lesson-connection h3').forEach((heading) => {
+    heading.textContent = 'Next';
   });
 
   checklist.classList.add('closed-book');

@@ -1,0 +1,2476 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historical archive · Assignment 1 · Basics · Spring 2025 — CS336</title>
+  <link rel="stylesheet" href="../../assets/course.css?v=20260827f">
+  <link rel="stylesheet" href="../../assets/guide.css?v=20260827k">
+  <link rel="stylesheet" href="../../assets/katex.min.css">
+  <link rel="stylesheet" href="../../assets/prism.css">
+  <script defer src="../../assets/katex.min.js"></script>
+  <script defer src="../../assets/katex-auto-render.min.js"></script>
+  <script defer src="../../assets/math-render.js"></script>
+  <link rel="stylesheet" href="../../../../assets/course/lesson.css?v=20260814f">
+  <link rel="stylesheet" href="../../../../assets/course/interactive.css?v=20260814f">
+  <script defer src="../../../../assets/course/math-render.js?v=20260814f"></script>
+  <link rel="stylesheet" href="../../assets/code-format.css?v=20260814a">
+  <link rel="stylesheet" href="../../assets/handout-format.css?v=20260814a">
+</head>
+<body>
+  <div class="page archive-page">
+    <p class="archive-page-label">Historical archive · not part of the active Spring 2026 curriculum</p>
+    <!-- Banner -->
+    <div class="guide-banner">
+      <p class="guide-eyebrow">CS336 · Assignment 1 导读</p>
+      <h1>CS336 作业 1：基础 —— 从零搭建 Transformer 语言模型</h1>
+      <p class="guide-lede">这份导读帮你理解 Assignment 1 要做什么、需要哪些知识、如何开始。它<strong>不包含任何实现答案</strong>——答案是你自己写出来的。</p>
+      <div class="guide-meta">
+        <span><span class="meta-icon">📅</span> 发布：2026-03-30</span>
+        <span><span class="meta-icon">⏰</span> 截止：2026-04-15</span>
+        <span><span class="meta-icon">📖</span> 前置：第 1-4 课</span>
+      </div>
+    </div>
+
+    <div class="source-note source-note-warning"><p><strong>Historical archive · Spring 2025</strong></p><p>这是迁移前的完整中文导读与题面快照，仅用于版本历史和技术演进参考。当前作业要求请返回 <a href="ass01-basics.html">Assignment 1 · Basics Spring 2026 Workbook</a>，并以 Stanford 当前 repository、PDF 与 tests 为准。</p></div>
+
+    <nav class="assignment-jump-links" aria-label="作业页快速导航">
+      <a href="#assignment-route">任务路线</a>
+      <a href="#knowledge-tree">知识树</a>
+      <a href="#assignment-cheatsheet">Cheatsheet</a>
+      <a href="#complete-problems">完整题面</a>
+    </nav>
+
+    <section aria-labelledby="assignment-overview-title">
+      <div class="assignment-mission-grid">
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">Mission</span>
+          <h2 id="assignment-overview-title">把语言模型拆开，再亲手装回去</h2>
+          <p>这份作业不是 39 个互不相关的小函数。它实际在构建一条完整链路：文本先变成 token，token 经过 Transformer 产生 next-token logits，loss 驱动优化器更新参数，训练系统再负责数据、checkpoint、生成与评估。</p>
+          <p><strong>阅读策略：</strong>先沿四阶段主线建立依赖图，再进入具体 problem。当前任务卡住时，向上回溯它依赖的知识节点，而不是直接搜索实现。</p>
+        </div>
+        <div class="assignment-panel">
+          <span class="assignment-panel-kicker">You will build</span>
+          <h3>完成后的四个可运行产物</h3>
+          <ul class="assignment-outcomes">
+            <li>可训练、可序列化的 byte-level BPE tokenizer</li>
+            <li>只用基础 Tensor 运算组合出的 Transformer LM</li>
+            <li>Cross-entropy、AdamW、schedule 与 gradient clipping</li>
+            <li>支持 checkpoint、生成、评估和消融的训练脚本</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="assignment-route" aria-labelledby="assignment-route-title">
+      <p class="eyebrow">Dependency-first route</p>
+      <h2 id="assignment-route-title">四阶段任务路线</h2>
+      <ol class="assignment-route">
+        <li><strong>Text → token IDs</strong><span>Unicode、UTF-8 bytes、BPE merge、encode/decode 与数据序列化。</span></li>
+        <li><strong>token IDs → logits</strong><span>Embedding、RMSNorm、RoPE、attention、SwiGLU、Transformer block 与 LM head。</span></li>
+        <li><strong>logits → parameter update</strong><span>稳定 cross-entropy、AdamW、warmup/cosine schedule 与 gradient clipping。</span></li>
+        <li><strong>components → training system</strong><span>Data loader、训练循环、checkpoint、generation、perplexity、消融与 leaderboard。</span></li>
+      </ol>
+    </section>
+
+    <figure class="assignment-figure">
+      <img src="../../figures/assignment-01-transformer-stack.svg" alt="Assignment 1 中 tokenizer、Transformer block、loss、AdamW 与训练系统的完整数据流">
+      <figcaption>先看箭头，而不是先背 API：每个 problem 都在补齐这条链路中的一个节点。图是依据 Assignment 1 任务关系重绘的概念图，不是 Stanford 官方原图。</figcaption>
+    </figure>
+
+    <section id="knowledge-tree" aria-labelledby="knowledge-tree-title">
+      <p class="eyebrow">Recursive prerequisite map</p>
+      <h2 id="knowledge-tree-title">递归知识树：卡住时应该往哪里回溯？</h2>
+      <div class="knowledge-tree">
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 01 · Representation</span>
+          <h3>文本为什么能进入神经网络？</h3>
+          <p>对应 tokenizer、数据编码与压缩率实验。</p>
+          <ul>
+            <li>Unicode 字符串 → UTF-8 bytes
+              <ul><li>字符与字节不是一一对应</li><li>无效字节需要 replacement character</li></ul>
+            </li>
+            <li>Bytes → BPE token
+              <ul><li>预分词边界</li><li>pair frequency、tie-breaking、merge order</li></ul>
+            </li>
+            <li>Token → integer ID
+              <ul><li>special token 原子性</li><li>encode/decode 可逆边界</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 02 · Model</span>
+          <h3>一个 token 如何变成 next-token distribution？</h3>
+          <p>对应所有 neural-network primitive 与 Transformer 组合任务。</p>
+          <ul>
+            <li>Shape algebra
+              <ul><li>[B,T] → [B,T,D]</li><li>[B,T,D] → [B,H,T,D<sub>h</sub>]</li></ul>
+            </li>
+            <li>Representation transforms
+              <ul><li>Linear / Embedding</li><li>RMSNorm / RoPE</li></ul>
+            </li>
+            <li>Context mixing
+              <ul><li>causal mask</li><li>scaled dot-product attention</li><li>multi-head reshape</li></ul>
+            </li>
+            <li>Block composition
+              <ul><li>pre-norm residual</li><li>SwiGLU</li><li>stack + final norm + LM head</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 03 · Optimization</span>
+          <h3>为什么模型参数会朝正确方向移动？</h3>
+          <p>对应 loss、optimizer、schedule 与稳定性任务。</p>
+          <ul>
+            <li>Logits → probability
+              <ul><li>stable softmax / log-sum-exp</li><li>cross-entropy 与 target shift</li></ul>
+            </li>
+            <li>Gradient → update
+              <ul><li>Adam 一阶/二阶矩</li><li>decoupled weight decay</li></ul>
+            </li>
+            <li>Update stability
+              <ul><li>warmup + cosine decay</li><li>global gradient norm clipping</li></ul>
+            </li>
+          </ul>
+        </article>
+        <article class="knowledge-branch">
+          <span class="knowledge-depth">Root 04 · Training system</span>
+          <h3>正确组件怎样变成可复现实验？</h3>
+          <p>对应训练整合、checkpoint、生成、评估与消融。</p>
+          <ul>
+            <li>Token stream → batches
+              <ul><li>context window</li><li>input/target offset</li></ul>
+            </li>
+            <li>Train step → experiment
+              <ul><li>zero grad / forward / backward / step</li><li>logging 与 validation</li></ul>
+            </li>
+            <li>State → reproducibility
+              <ul><li>model + optimizer + iteration checkpoint</li><li>resume 后结果连续</li></ul>
+            </li>
+            <li>Model → evidence
+              <ul><li>generation / perplexity</li><li>controlled ablation / leaderboard</li></ul>
+            </li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="assignment-cheatsheet" aria-labelledby="assignment-cheatsheet-title">
+      <p class="eyebrow">Before coding</p>
+      <h2 id="assignment-cheatsheet-title">开工 Cheatsheet</h2>
+      <div class="cheatsheet-grid">
+        <article class="cheat-card">
+          <h3>Shape invariants</h3>
+          <ul>
+            <li>Token IDs：<code>[B, T]</code></li>
+            <li>Residual stream：<code>[B, T, D]</code></li>
+            <li>Per-head Q/K/V：<code>[B, H, T, D_h]</code>，且 <code>D = H × D_h</code></li>
+            <li>Attention scores：<code>[B, H, T, T]</code></li>
+            <li>LM logits：<code>[B, T, V]</code></li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Core equations</h3>
+          <p class="formula-line">\(\operatorname{Attention}(Q,K,V)=\operatorname{softmax}(QK^\top/\sqrt{d_h}+M)V\)</p>
+          <p class="formula-line">\(\operatorname{RMSNorm}(x)=g\odot x/\sqrt{\operatorname{mean}(x^2)+\epsilon}\)</p>
+          <p class="formula-line">\(\operatorname{CE}(z,y)=-z_y+\log\sum_j e^{z_j}\)</p>
+          <p>实现 softmax / cross-entropy 时先减去最大 logit，避免指数溢出。</p>
+        </article>
+        <article class="cheat-card">
+          <h3>Repository contract</h3>
+          <ul>
+            <li><code>tests/adapters.py</code> 只做 glue，不放实质算法。</li>
+            <li>不要修改测试；先把一个 primitive 接到一个最小测试。</li>
+            <li>遵守 handout 对 <code>torch.nn</code>、<code>torch.nn.functional</code>、<code>torch.optim</code> 的限制。</li>
+            <li>Weight orientation 以题面和测试 shape 为准，不凭 PyTorch 默认习惯猜。</li>
+          </ul>
+        </article>
+        <article class="cheat-card">
+          <h3>Debug ladder</h3>
+          <ol>
+            <li>先验证 shape 与 dtype。</li>
+            <li>用 <code>B=1,T=1,D=2</code> 的手算例子验证数值。</li>
+            <li>与允许使用的参考 Tensor 运算比较。</li>
+            <li>单测通过后再组合 block，最后才跑训练。</li>
+            <li>训练异常先查 loss、gradient norm、learning rate 和 checkpoint continuity。</li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <details class="assignment-reference">
+      <summary>展开原有详细导读：组件表、前置清单、实现顺序、陷阱、测试与课程连接</summary>
+      <div class="assignment-reference-body">
+
+    <!-- ============================================================ -->
+    <h2 id="what">这个 Assignment 要你做什么？</h2>
+
+    <div class="card idea">
+      <p><strong>一句话总结：</strong>从零实现一个完整的 Transformer 语言模型——包括 tokenizer、模型架构、优化器和训练循环。不得直接使用 <code>torch.nn</code>、<code>torch.nn.functional</code> 或 <code>torch.optim</code> 中的现成实现；允许的例外是 <code>torch.nn.Parameter</code>、容器类以及 <code>torch.optim.Optimizer</code> 基类。</p>
+    </div>
+
+    <p>Assignment 提供了一个测试框架，所有待实现函数最初都是 <code>raise NotImplementedError</code>。你的目标是让所有测试通过。</p>
+
+    <h3>主要组件</h3>
+    <table class="component-table">
+      <thead>
+        <tr><th>组件</th><th>对应课程</th><th>核心概念</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="comp-name">run_train_bpe</td><td class="comp-lec">第 1 课</td><td>从训练数据学习 token 词表</td></tr>
+        <tr><td class="comp-name">get_tokenizer</td><td class="comp-lec">第 1 课</td><td>encode/decode 接口</td></tr>
+        <tr><td class="comp-name">run_linear</td><td class="comp-lec">第 2 课</td><td>矩阵乘法</td></tr>
+        <tr><td class="comp-name">run_embedding</td><td class="comp-lec">第 2 课</td><td>查表操作</td></tr>
+        <tr><td class="comp-name">run_swiglu</td><td class="comp-lec">第 3 课</td><td>门控激活函数</td></tr>
+        <tr><td class="comp-name">run_scaled_dot_product_attention</td><td class="comp-lec">第 3 课</td><td>注意力机制</td></tr>
+        <tr><td class="comp-name">run_multihead_self_attention</td><td class="comp-lec">第 3 课</td><td>并行注意力</td></tr>
+        <tr><td class="comp-name">run_rope</td><td class="comp-lec">第 3 课</td><td>旋转位置编码</td></tr>
+        <tr><td class="comp-name">run_rmsnorm</td><td class="comp-lec">第 3 课</td><td>归一化</td></tr>
+        <tr><td class="comp-name">run_transformer_block</td><td class="comp-lec">第 3 课</td><td>组合以上组件</td></tr>
+        <tr><td class="comp-name">run_transformer_lm</td><td class="comp-lec">第 3 课</td><td>多层 + embedding + head</td></tr>
+        <tr><td class="comp-name">run_cross_entropy</td><td class="comp-lec">第 2 课</td><td>分类损失</td></tr>
+        <tr><td class="comp-name">get_adamw_cls</td><td class="comp-lec">第 2 课</td><td>自适应学习率</td></tr>
+        <tr><td class="comp-name">run_get_lr_cosine_schedule</td><td class="comp-lec">第 2 课</td><td>学习率调度</td></tr>
+        <tr><td class="comp-name">run_gradient_clipping</td><td class="comp-lec">第 2 课</td><td>训练稳定性</td></tr>
+        <tr><td class="comp-name">run_save_checkpoint</td><td class="comp-lec">第 2 课</td><td>序列化</td></tr>
+        <tr><td class="comp-name">run_load_checkpoint</td><td class="comp-lec">第 2 课</td><td>反序列化</td></tr>
+      </tbody>
+    </table>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="prereq">前置知识清单</h2>
+
+    <p>在开始之前，确保你掌握了以下内容：</p>
+
+    <h3>课程知识</h3>
+    <ul class="checklist">
+      <li><strong>第 1 课</strong>：BPE 算法原理、character/byte/word tokenization 的权衡</li>
+      <li><strong>第 2 课</strong>：PyTorch 基础、资源核算（FLOPs、内存）</li>
+      <li><strong>第 3 课</strong>：Transformer 架构、Attention 机制、RMSNorm、RoPE、SwiGLU</li>
+      <li><strong>第 4 课</strong>：训练流程、优化器、学习率调度</li>
+    </ul>
+
+    <h3>数学与编程基础</h3>
+    <ul class="checklist">
+      <li>矩阵乘法的维度和广播规则</li>
+      <li>Softmax 函数的定义和数值稳定性</li>
+      <li>交叉熵损失的推导</li>
+      <li>梯度下降和 Adam 更新规则</li>
+      <li>PyTorch Tensor 操作（reshape, transpose, einsum, bmm）</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="approach">如何开始？</h2>
+
+    <div class="step-card">
+      <div class="step-number">0</div>
+      <h3>读 handout</h3>
+      <p>Handout（PDF）是 assignment 的权威描述。先通读一遍，了解每个函数的输入输出格式和约束条件。Handout 中通常包含重要的实现提示和边界情况说明。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">1</div>
+      <h3>理解测试</h3>
+      <p>在写任何代码之前，先读测试文件。测试告诉你函数<strong>应该做什么</strong>：</p>
+      <pre><code class="language-text"># 例：tests/test_nn_utils.py 会测试 run_linear
+# 它构造特定的 weights 和 in_features，检查你的输出是否正确</code></pre>
+      <p>重点关注：输入 tensor 的 shape、输出的 shape 和数值、边界情况（空输入、单元素、大 batch）。</p>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">2</div>
+      <h3>从最简单开始</h3>
+      <p>建议的实现顺序：</p>
+      <ol>
+        <li><code>run_silu</code> — 一个元素级函数，最简单</li>
+        <li><code>run_linear</code> — 一次矩阵乘法</li>
+        <li><code>run_embedding</code> — 一次查表</li>
+        <li><code>run_swiglu</code> — 组合以上</li>
+        <li><code>run_softmax</code>、<code>run_cross_entropy</code> — 数学函数</li>
+        <li><code>run_rmsnorm</code> — 归一化</li>
+        <li><code>run_scaled_dot_product_attention</code> — 注意力的核心</li>
+        <li>...逐步推进到完整的 Transformer</li>
+      </ol>
+    </div>
+
+    <div class="step-card">
+      <div class="step-number">3</div>
+      <h3>小数据调试</h3>
+      <p>用最小的输入测试你的实现：batch_size=1, sequence_length=1, d_model=2, num_heads=2。手工计算预期结果，对比你的输出。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="common-pitfalls">常见陷阱</h2>
+
+    <div class="pitfall">
+      <p><strong>Weight matrix 的方向：</strong> Assignment 中很多 weight 的 shape 是 <code>(d_out, d_in)</code>，计算时需要转置。这是最常见的 bug 来源。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>Numerical stability：</strong> Softmax 和 cross-entropy 要注意数值溢出。直接计算 <code>exp(x)</code> 在大数值时会溢出。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>Attention mask：</strong> 因果 mask（causal mask）确保位置 i 只能 attend 到 ≤i 的位置。注意 mask 的应用方式（加到 softmax 前的 logits 上）。</p>
+    </div>
+
+    <div class="pitfall">
+      <p><strong>RoPE 的维度：</strong> RoPE 应用在 head 维度上（d_model // num_heads），不是整个 d_model。</p>
+    </div>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="testing">测试与调试策略</h2>
+
+    <h3>运行测试</h3>
+    <pre><code class="language-bash"># 运行单个测试文件
+uv run pytest tests/test_nn_utils.py -v
+
+# 运行单个测试函数
+uv run pytest tests/test_nn_utils.py::test_linear -v
+
+# 运行全部测试
+uv run pytest -v</code></pre>
+
+    <h3>调试技巧</h3>
+    <ul>
+      <li><strong>从最小例子开始</strong>：用 2-3 个 token 测试 BPE，而不是整个文件</li>
+      <li><strong>打印中间结果</strong>：每轮合并后打印 splits 和 pair_counts</li>
+      <li><strong>对比参考实现</strong>：用 tiktoken 对同一文本做 tokenize，对比结果</li>
+      <li><strong>注意边界情况</strong>：空文本、单个字符、特殊 token 在开头/结尾</li>
+      <li><strong>用 assert 验证 shape</strong>：在每个函数开头断言输入 shape 符合预期</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="connection">与课程的关系</h2>
+
+    <div class="connection-map">
+      <div class="connection-item">
+        <div class="conn-lec">第 1 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">BPE → 实现 tokenizer</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 2 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">PyTorch/优化 → 训练循环</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 3 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">Transformer 架构 → 模型</div>
+      </div>
+      <div class="connection-item">
+        <div class="conn-lec">第 4 课</div>
+        <div class="conn-arrow">↓</div>
+        <div class="conn-apply">GPU/效率 → 优化速度</div>
+      </div>
+    </div>
+
+    <p>完成 Assignment 1 后，你就拥有了一个<strong>完整的、从零实现的语言模型</strong>。后续 assignment 会在它的基础上构建：</p>
+    <ul>
+      <li>Ass2：让它更快（并行、kernel 优化）</li>
+      <li>Ass3：用 scaling law 决定怎么训练</li>
+      <li>Ass4：用更好的数据训练</li>
+      <li>Ass5：用 GRPO 及其变体提升数学推理</li>
+    </ul>
+
+    <hr class="rule">
+
+    <!-- ============================================================ -->
+    <h2 id="mindset">学习心态</h2>
+
+    <div class="mindset-banner">
+      <p><strong>这个 assignment 很难。</strong> 去年的学生评价说："第一次作业的工作量约等于 CS224n 所有 5 次作业加期末项目的总和。"</p>
+      <p style="margin-top:10px">这是正常的。不要因为一开始卡住而沮丧。每个函数都对应课程中的一个概念——回头复习课程，理解原理后再写代码。</p>
+    </div>
+
+    <p><strong>卡住时的正确顺序：</strong> 复习课程 → 读 handout → 读测试 → 从最小例子开始 → 如果仍然卡住，带着具体问题去问。</p>
+
+    <hr class="rule">
+
+      </div>
+    </details>
+<!-- ============================================================ -->
+    <!-- COMPLETE_SOURCE_OUTLINE_START -->
+<section class="source-outline" id="complete-source-outline"><p class="eyebrow">本地一手资料完整提取 · 编程作业</p><h2 id="complete-problems">完整 Handout：任务、约束与验收</h2><p class="source-outline-intro">本节按本地一手资料完整整理，共 39 个任务。本地 Handout 未提供参考实现；页面完整保留任务、约束、交付物与验收要求。</p><div class="source-outline-notes"><h3>使用说明</h3><ul><li>Handout 已完整本土化，并补足网页独立实施所需的接口、约束、交付物与验收标准。</li><li>任务与非答案式提示分层展示，不包含可直接提交的参考实现。</li><li>本地来源：<code>cs336_spring2025_assignment1_basics.pdf</code>、<code>assignment1-README.md</code></li></ul></div><div class="problem-outline"><details class="problem-row"><summary><span class="problem-number">setup</span><strong>作业准备与环境搭建</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>目标
+<p>在本作业中，你将从零搭建并训练一个标准的 Transformer 语言模型（Language Model, LM），包括以下组件：</p>
+<ol>
+<li>Byte-pair encoding (BPE) tokenizer（§2）</li>
+<li>Transformer 语言模型（§3）</li>
+<li>交叉熵损失函数与 AdamW 优化器（§4）</li>
+<li>训练循环（支持模型与优化器状态的序列化与加载）（§5）</li>
+</ol>
+你将运行的内容
+<ol>
+<li>在 TinyStories 数据集上训练 BPE tokenizer。</li>
+<li>将训练好的 tokenizer 应用于数据集，转换为整数 ID 序列。</li>
+<li>在 TinyStories 数据集上训练 Transformer LM。</li>
+<li>使用训练好的 Transformer LM 生成样本并评估困惑度（perplexity）。</li>
+<li>在 OpenWebText 上训练模型，并将困惑度提交到排行榜。</li>
+</ol>
+环境搭建
+<p>本项目使用 <code>uv</code> 管理环境，以保证可复现性、可移植性和易用性。</p>
+<ol>
+<li>安装 <code>uv</code>（推荐）：https://github.com/astral-sh/uv ，或执行 <code>pip install uv</code> / <code>brew install uv</code>。</li>
+<li>运行代码：
+   <pre><code class="language-bash">uv run &lt;python_file_path&gt;</code></pre>
+   环境会在需要时自动解析并激活。</li>
+<li>运行单元测试：
+   <pre><code class="language-bash">uv run pytest</code></pre>
+   初始状态下所有测试应以 <code>NotImplementedError</code> 失败。要将你的实现连接到测试，请在 <code>tests/adapters.py</code> 中完成对应函数。注意：不要编辑测试文件。</li>
+</ol>
+仓库结构
+<p>从 GitHub 克隆仓库：https://github.com/stanford-cs336/assignment1-basics 。如有更新，会通过通知让你 <code>git pull</code> 获取最新版本。</p>
+<p>仓库结构：</p>
+<ol>
+<li><code>cs336_basics/*</code>：编写代码的目录。初始为空，可完全从零实现。</li>
+<li><code>adapters.py</code>：定义你的代码必须提供的功能接口。对每项功能（如 scaled dot product attention），通过调用你的代码完成其实现（如 <code>run_scaled_dot_product_attention</code>）。注意：对 <code>adapters.py</code> 的修改不应包含任何实质性逻辑，它只是粘合代码（glue code）。</li>
+<li><code>test_*.py</code>：包含所有必须通过的测试（如 <code>test_scaled_dot_product_attention</code>），这些测试会调用 <code>adapters.py</code> 中定义的钩子。不要编辑测试文件。</li>
+</ol>
+数据下载
+<p>本作业使用两个预处理数据集：TinyStories 和 OpenWebText。二者均为单个大纯文本文件。</p>
+<p>在课程机器上，这些文件位于 <code>/data</code>。在家可执行以下命令下载：</p>
+<pre><code class="language-sh">mkdir -p data
+cd data
+
+wget https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStoriesV2-GPT4-train.txt
+wget https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStoriesV2-GPT4-valid.txt
+
+wget https://huggingface.co/datasets/stanford-cs336/owt-sample/resolve/main/owt_train.txt.gz
+gunzip owt_train.txt.gz
+wget https://huggingface.co/datasets/stanford-cs336/owt-sample/resolve/main/owt_valid.txt.gz
+gunzip owt_valid.txt.gz
+
+cd ..
+</code></pre>
+提交方式
+<ul>
+<li>
+<p><strong>书面作业与代码</strong>：将以下文件提交到 Gradescope：</p>
+</li>
+<li>
+<p><code>writeup.pdf</code>：回答所有书面问题，请排版（typeset）你的回答。</p>
+</li>
+<li>
+<p><code>code.zip</code>：包含你编写的所有代码。</p>
+</li>
+<li>
+<p><strong>排行榜</strong>：向 https://github.com/stanford-cs336/assignment1-basics-leaderboard 提交 PR。详见排行榜仓库中的 <code>README.md</code>。</p>
+</li>
+</ul>
+可用资源与约束
+<p>我们要求你从零搭建这些组件。特别地，<strong>不得</strong>使用 <code>torch.nn</code>、<code>torch.nn.functional</code> 或 <code>torch.optim</code> 中的任何定义，以下例外：</p>
+<ul>
+<li>
+<p><code>torch.nn.Parameter</code></p>
+</li>
+<li>
+<p><code>torch.nn</code> 中的容器类（如 <code>Module</code>、<code>ModuleList</code>、<code>Sequential</code> 等）</p>
+</li>
+<li>
+<p><code>torch.optim.Optimizer</code> 基类</p>
+</li>
+</ul>
+<p>可以使用其他任意 PyTorch 定义。若不确定某函数或类是否允许，可在 Slack 上询问。拿不准时，考虑使用该定义是否会破坏作业的「从零开始」精神。</p>
+AI 工具声明
+<p>允许将 ChatGPT 等 LLM 用于低级编程问题或关于语言模型的高层次概念性问题，但<strong>禁止</strong>直接用它来解题。强烈建议在完成作业时禁用 IDE 中的 AI 自动补全（如 Cursor Tab、GitHub CoPilot），不过非 AI 的自动补全（如补全函数名）完全可以使用。</p>
+低资源/降规模提示
+<p>即使你拥有课程机器的访问权限，以下提示也有助于更快迭代、节省时间：</p>
+<ul>
+<li><strong>Apple Silicon 或 CPU 上运行作业 1</strong>：使用解答代码，可在 Apple M3 Max（36 GB RAM）上于 5 分钟（Metal GPU / MPS）或约 30 分钟（CPU）内训练出能生成相当流畅文本的 LM。只要你的笔记本较新、实现正确且高效，就能训练出可生成简单儿童故事的小型 LM。作业后续会说明在 CPU 或 MPS 上需要做的改动。</li>
+</ul>
+调试入口
+<ul>
+<li>
+<p>使用 <code>cProfile</code> 或 <code>scalene</code> 等性能分析工具定位瓶颈。</p>
+</li>
+<li>
+<p>先用小规模「调试数据集」（如 TinyStories 验证集）训练，以加速开发。</p>
+</li>
+<li>
+<p>使用 IDE 内置调试器（如 VSCode / PyCharm）或 <code>pdb</code> 进行调试。</p>
+</li>
+<li>
+<p>常见调试策略：对小批量过拟合以验证实现；在模型各组件设置断点并检查中间 tensor 的 shape；监控激活、权重和梯度的范数，确保不发生爆炸或消失。</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先完成 <code>uv</code> 安装并克隆仓库，再尝试运行 <code>uv run pytest</code> 确认初始状态（应全部以 <code>NotImplementedError</code> 失败）。</p>
+</li>
+<li>
+<p>先下载数据并浏览 TinyStories 数据集，了解数据样貌后再开始实现。</p>
+</li>
+<li>
+<p>从 <code>adapters.py</code> 入手理解需要提供的接口，再在 <code>cs336_basics/</code> 下编写实现。</p>
+</li>
+<li>
+<p>遇到环境问题时，优先阅读 <code>uv</code> 项目管理文档：https://docs.astral.sh/uv/guides/projects/#managing-dependencies 。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>assignment1-README.md</code> · 1-10 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">unicode1</span><strong>理解 Unicode</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>Unicode 是一种将字符映射到整数码点（code point）的文本编码标准。在 Python 中，<code>ord()</code> 可将单个 Unicode 字符转换为其整数表示，<code>chr()</code> 则将整数 Unicode 码点转换回对应字符。例如 <code>ord('୤')</code> 返回 29275，<code>chr(29275)</code> 返回 <code>'୤'</code>。</p>
+问题
+<p>本题共 1 分，包含以下三个小问：</p>
+<p><strong>(a)</strong> <code>chr(0)</code> 返回哪个 Unicode 字符？</p>
+<p>交付物：用一句话回答。</p>
+<p><strong>(b)</strong> 该字符的字符串表示（<code>__repr__()</code>）与其打印表示有何不同？</p>
+<p>交付物：用一句话回答。</p>
+<p><strong>(c)</strong> 当该字符出现在文本中时会发生什么？建议在 Python 解释器中尝试以下命令，观察是否符合预期：</p>
+<pre><code class="language-python">&gt;&gt;&gt; chr(0)
+&gt;&gt;&gt; print(chr(0))
+&gt;&gt;&gt; "this is a test" + chr(0) + "string"
+&gt;&gt;&gt; print("this is a test" + chr(0) + "string")
+</code></pre>
+<p>交付物：用一句话回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>回顾 Python 中 <code>chr()</code>、<code>ord()</code>、<code>repr()</code> 与 <code>print()</code> 的行为差异。</p>
+</li>
+<li>
+<p>在 Python 解释器中实际运行题目给出的命令，观察 <code>chr(0)</code> 的 repr 形式、打印行为以及它嵌入字符串后的效果。</p>
+</li>
+<li>
+<p>思考空字符（null character, U+0000）在字符串处理中的特殊性：它不会像可见字符那样被渲染，但在字符串中占据位置。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 4 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">unicode2</span><strong>Unicode 编码</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>虽然 Unicode 标准定义了字符到码点（整数）的映射，但直接在 Unicode 码点上训练 tokenizer 并不现实：词表过大（约 15 万项）且稀疏。因此我们使用 Unicode 编码将字符转换为字节序列。Unicode 标准定义了三种编码：UTF-8、UTF-16、UTF-32，其中 UTF-8 是互联网主流编码（超过 98% 的网页使用）。</p>
+<p>在 Python 中，可用 <code>.encode("utf-8")</code> 将 Unicode 字符串编码为 UTF-8，用 <code>list()</code> 查看字节值，用 <code>.decode("utf-8")</code> 将字节串解码回 Unicode 字符串。注意：一个字节不一定对应一个 Unicode 字符。</p>
+<pre><code class="language-python">&gt;&gt;&gt; test_string = "hello! こんにちは!"
+&gt;&gt;&gt; utf8_encoded = test_string.encode("utf-8")
+&gt;&gt;&gt; list(utf8_encoded)
+[104, 101, 108, 108, 111, 33, 32, 227, 129, 147, 227, 130, 147, 227, 129, 171, 227, 129, 161, 227, 129, 175, 33]
+&gt;&gt;&gt; len(test_string)
+13
+&gt;&gt;&gt; len(utf8_encoded)
+23
+</code></pre>
+<p>将 Unicode 码点转换为字节序列（如通过 UTF-8），相当于把范围在 0 到 154,997 的整数序列映射为范围在 0 到 255 的字节值序列。长度为 256 的字节词表更易于处理，且使用字节级分词时不存在 out-of-vocabulary 问题——任何输入文本都可表示为 0 到 255 的整数序列。</p>
+问题
+<p>本题共 3 分，包含以下三个小问：</p>
+<p><strong>(a)</strong> 相较于 UTF-16 或 UTF-32，我们更倾向于在 UTF-8 编码的字节上训练 tokenizer，原因有哪些？建议比较不同编码在各种输入串下的输出。</p>
+<p>交付物：用一到两句话回答。</p>
+<p><strong>(b)</strong> 以下函数本意是将 UTF-8 字节串解码为 Unicode 字符串，但它存在错误。请说明为何不正确，并给出一个会产生错误结果的输入字节串示例。</p>
+<pre><code class="language-python">def decode_utf8_bytes_to_str_wrong(bytestring: bytes):
+    return "".join([bytes([b]).decode("utf-8") for b in bytestring])
+</code></pre>
+<pre><code class="language-python">&gt;&gt;&gt; decode_utf8_bytes_to_str_wrong("hello".encode("utf-8"))
+'hello'
+</code></pre>
+<p>交付物：给出一个使 <code>decode_utf8_bytes_to_str_wrong</code> 产生错误输出的输入字节串示例，并用一句话解释该函数为何错误。</p>
+<p><strong>(c)</strong> 给出一个无法解码为任何 Unicode 字符的两字节序列。</p>
+<p>交付物：给出示例，并用一句话解释。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>回顾 UTF-8 的变长编码规则：ASCII 字符占 1 字节，非 ASCII 字符占多字节。</p>
+</li>
+<li>
+<p>对于 (b)：思考逐字节单独解码为何会破坏多字节字符——每个多字节字符的后续字节（continuation byte）单独来看并非有效的 UTF-8 起始字节。</p>
+</li>
+<li>
+<p>对于 (c)：找一个在 UTF-8 规则下既不能作为起始字节、也无法构成合法双字节序列的字节组合。</p>
+</li>
+<li>
+<p>在 Python 中用 <code>.decode("utf-8")</code> 实测候选字节串，观察抛出的 <code>UnicodeDecodeError</code>。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 5 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">train_bpe</span><strong>BPE 分词器训练</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现一个函数，给定输入文本文件的路径，训练一个（字节级）BPE 分词器。你的 BPE 训练函数应至少处理以下输入参数：</p>
+<ul>
+<li>
+<p><code>input_path: str</code>：包含 BPE 分词器训练数据的文本文件路径。</p>
+</li>
+<li>
+<p><code>vocab_size: int</code>：一个正整数，定义最终词汇表的最大大小（包括初始字节词汇表、合并产生的词汇项以及任何特殊 token）。</p>
+</li>
+<li>
+<p><code>special_tokens: list[str]</code>：要添加到词汇表中的字符串列表。这些特殊 token 不影响 BPE 训练。</p>
+</li>
+</ul>
+<p>你的 BPE 训练函数应返回所得的词汇表与合并列表：</p>
+<ul>
+<li>
+<p><code>vocab: dict[int, bytes]</code>：分词器词汇表，从 <code>int</code>（词汇表中的 token ID）到 <code>bytes</code>（token 字节）的映射。</p>
+</li>
+<li>
+<p><code>merges: list[tuple[bytes, bytes]]</code>：训练产生的 BPE 合并列表。列表中的每一项是一个字节元组 <code>(&lt;token1&gt;, &lt;token2&gt;)</code>，表示 <code>&lt;token1&gt;</code> 与 <code>&lt;token2&gt;</code> 被合并。合并应按创建顺序排列。</p>
+</li>
+</ul>
+<p>为了用提供的测试验证你的 BPE 训练函数，你需要先实现测试适配器 <code>adapters.run_train_bpe</code>，然后运行 <code>uv run pytest tests/test_train_bpe.py</code>。你的实现应能通过全部测试。</p>
+<p>（可选，可能耗时较大）你可以使用某种系统语言（例如 C++，可考虑 cppyy；或 Rust，可使用 PyO3）实现训练方法的关键部分。如果这样做，请注意哪些操作需要复制数据、哪些可以直接从 Python 内存读取，并留下构建说明，或确保仅用 <code>pyproject.toml</code> 即可构建。另外请注意，GPT-2 regex 在大多数 regex 引擎中支持不佳，并且在大多数支持它的引擎中速度太慢。我们已验证 Oniguruma 相当快且支持负向先行断言，但 Python 中的 <code>regex</code> 包甚至更快。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先理解 BPE 训练的三步流程：词汇表初始化（256 个字节）、预分词（使用 GPT-2 regex 模式，注意用 <code>re.finditer</code> 而非 <code>re.findall</code> 以避免存储中间结果）、计算 BPE 合并（迭代统计字节对频率，按频率选最高频对，频率相同时取字典序更大的对）。</p>
+<p>实施顺序：先实现串行版本并通过测试，再考虑并行化优化。预分词是主要瓶颈，可用 <code>multiprocessing</code> 并行化，并确保分块边界落在特殊 token 起始处（可复用 <code>cs336_basics/pretokenization_example.py</code> 中的 starter code）。在运行预分词前，应先从语料中剥离所有特殊 token，并按特殊 token 分割以避免跨文档边界合并（使用 <code>re.split</code> 与 <code>"|".join(special_tokens)</code>，注意 <code>re.escape</code>）。</p>
+<p>合并步骤的优化：不要每轮遍历所有字节对重新计数，而是为所有对建立索引并增量更新重叠的对。使用 <code>cProfile</code> 或 <code>scalene</code> 进行性能分析，定位瓶颈后再针对性优化。</p>
+<p>自检方法：先用小规模调试数据集（如 TinyStories 验证集）训练，检查词汇表大小是否为 <code>256 + num_merges + len(special_tokens)</code>，合并列表长度是否等于 <code>vocab_size - 256 - len(special_tokens)</code>。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 9 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">train_bpe_tinystories</span><strong>在 TinyStories 上训练 BPE</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>(a) 在 TinyStories 数据集上训练一个字节级 BPE 分词器，使用最大词汇表大小 10,000。确保将 TinyStories 的特殊 token <code>&lt;filename&gt;</code> 添加到词汇表中。将所得的词汇表和合并列表序列化到磁盘以便进一步检查。训练花费了多少时间和内存？词汇表中最长的 token 是什么？它是否合理？</p>
+<p>资源需求：≤ 30 分钟（无需 GPU），≤ 30GB RAM。</p>
+<p>交付物：一到两句话的回答。</p>
+<p>(b) 对你的代码进行性能分析。分词器训练过程中哪部分耗时最多？</p>
+<p>交付物：一到两句话的回答。</p>
+<p>提示：你应该能够在以下两个事实的帮助下，利用 <code>multiprocessing</code> 在预分词阶段将 BPE 训练时间控制在 2 分钟以内：</p>
+<ul>
+<li>
+<p>(a) <code>&lt;filename&gt;</code> token 在数据文件中用于分隔文档。</p>
+</li>
+<li>
+<p>(b) <code>&lt;filename&gt;</code> token 在应用 BPE 合并之前作为特殊情况被处理。</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>在训练前先浏览 TinyStories 数据集以了解数据内容。利用提示中的两个事实：<code>&lt;filename&gt;</code> 分隔文档，且在预分词前作为特殊 token 被剥离，因此可以安全地按文档边界分块并行处理。</p>
+<p>使用 <code>multiprocessing</code> 并行化预分词，并复用 <code>cs336_basics/pretokenization_example.py</code> 中的分块边界代码。对合并步骤使用增量计数缓存而非每轮重新遍历所有字节对。</p>
+<p>性能分析时使用 <code>cProfile</code> 或 <code>scalene</code> 定位最耗时的函数调用。预期预分词是主要瓶颈，但通过并行化可显著加速。</p>
+<p>自检：确认训练时间在 2 分钟以内，检查序列化的词汇表和合并文件可被正确加载，验证最长 token 是否与 TinyStories 数据中的常见子串对应。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 10 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">train_bpe_expts_owt</span><strong>在 OpenWebText 上训练 BPE</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>(a) 在 OpenWebText 数据集上训练一个字节级 BPE 分词器，使用最大词汇表大小 32,000。将所得的词汇表和合并列表序列化到磁盘以便进一步检查。词汇表中最长的 token 是什么？它是否合理？</p>
+<p>资源需求：≤ 12 小时（无需 GPU），≤ 100GB RAM。</p>
+<p>交付物：一到两句话的回答。</p>
+<p>(b) 对比你在 TinyStories 与 OpenWebText 上训练得到的分词器。</p>
+<p>交付物：一到两句话的回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>在训练前先浏览 OpenWebText 数据集以了解其内容。OpenWebText 比 TinyStories 大得多，因此训练时间更长（最多 12 小时），需要更多内存（最多 100GB）。</p>
+<p>同样使用 <code>multiprocessing</code> 并行化预分词，并复用分块边界代码。由于数据规模更大，确保分块策略有效，且合并步骤的增量缓存优化已启用。</p>
+<p>对比两个分词器时，关注：最长 token 的差异、词汇表构成的差异（儿童故事 vs 真实网络文本）、以及压缩率的差异。</p>
+<p>自检：确认两个分词器的词汇表大小分别符合预期（10,000 和 32,000），序列化文件可被正确加载。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 10 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">tokenizer</span><strong>实现分词器</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现一个 <code>Tokenizer</code> 类，给定一个词汇表和合并列表，将文本编码为整数 ID 并将整数 ID 解码为文本。你的分词器还应支持用户提供的特殊 token（如果它们尚不存在，则追加到词汇表中）。推荐接口如下：</p>
+<pre><code class="language-python">def __init__(self, vocab, merges, special_tokens=None)
+</code></pre>
+<p>从给定的词汇表、合并列表以及（可选的）特殊 token 列表构造一个分词器。参数：</p>
+<ul>
+<li>
+<p><code>vocab: dict[int, bytes]</code></p>
+</li>
+<li>
+<p><code>merges: list[tuple[bytes, bytes]]</code></p>
+</li>
+<li>
+<p><code>special_tokens: list[str] | None = None</code></p>
+</li>
+</ul>
+<pre><code class="language-python">@classmethod
+def from_files(cls, vocab_filepath, merges_filepath, special_tokens=None)
+</code></pre>
+<p>类方法，从序列化的词汇表和合并列表（格式与你的 BPE 训练代码输出相同）以及（可选的）特殊 token 列表构造并返回一个 <code>Tokenizer</code>。额外参数：</p>
+<ul>
+<li>
+<p><code>vocab_filepath: str</code></p>
+</li>
+<li>
+<p><code>merges_filepath: str</code></p>
+</li>
+<li>
+<p><code>special_tokens: list[str] | None = None</code></p>
+</li>
+</ul>
+<pre><code class="language-python">def encode(self, text: str) -&gt; list[int]
+</code></pre>
+<p>将输入文本编码为 token ID 序列。</p>
+<pre><code class="language-python">def encode_iterable(self, iterable: Iterable[str]) -&gt; Iterator[int]
+</code></pre>
+<p>给定一个字符串可迭代对象（例如 Python 文件句柄），返回一个惰性生成 token ID 的生成器。这是对无法直接载入内存的大文件进行内存高效分词所必需的。</p>
+<pre><code class="language-python">def decode(self, ids: list[int]) -&gt; str
+</code></pre>
+<p>将 token ID 序列解码为文本。</p>
+<p>为了用提供的测试验证你的 <code>Tokenizer</code>，你需要先实现测试适配器 <code>adapters.get_tokenizer</code>，然后运行 <code>uv run pytest tests/test_tokenizer.py</code>。你的实现应能通过全部测试。</p>
+<p>编码过程：首先对输入序列进行预分词，并将每个预 token 表示为 UTF-8 字节序列（与 BPE 训练时相同），在每个预 token 内独立合并字节（不跨预 token 边界合并）。然后按照 BPE 训练时产生的相同创建顺序，将合并列表应用于预 token。</p>
+<p>特殊 token：分词器应能正确处理用户定义的特殊 token。</p>
+<p>内存考虑：对于无法放入内存的大文本文件，需要将其分成可管理的块逐块处理，使内存复杂度为常数而非文本大小的线性函数，同时确保 token 不会跨越块边界，否则会得到与在内存中完整分词不同的结果。</p>
+<p>解码过程：查找每个 ID 对应的词汇表条目（字节序列），拼接后解码为 Unicode 字符串。注意输入 ID 不一定映射到有效的 Unicode 字符串（因为用户可能输入任意整数 ID 序列）。如果输入 token ID 不产生有效的 Unicode 字符串，应使用官方 Unicode 替换字符 U+FFFD 替换畸形字节。<code>bytes.decode</code> 的 <code>errors</code> 参数控制 Unicode 解码错误的处理方式，使用 <code>errors='replace'</code> 会自动将畸形数据替换为替换标记。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先理解编码的两个步骤：预分词（使用与训练相同的 GPT-2 regex 模式，将文本拆分为预 token 并表示为 UTF-8 字节）和应用合并（按创建顺序遍历合并列表，在每个预 token 内独立应用）。</p>
+<p>实施顺序：先实现 <code>__init__</code> 和 <code>decode</code>（较简单），再实现 <code>encode</code>，最后实现 <code>from_files</code> 和 <code>encode_iterable</code>。</p>
+<p><code>encode</code> 的实现：对每个预 token，将其表示为字节列表，然后遍历合并列表，找到第一个可应用的合并（即该合并对应的字节对在预 token 中相邻出现），应用该合并，然后从头重新扫描合并列表，直到没有更多合并可应用。</p>
+<p><code>encode_iterable</code> 的实现：逐块读取可迭代对象，确保不跨块边界分割 token。可以将缓冲区中不完整的预 token 保留到下一次迭代。</p>
+<p><code>decode</code> 的实现：将每个 ID 对应的字节拼接，然后用 <code>errors='replace'</code> 解码为 Unicode。</p>
+<p>自检：用 BPE 训练部分的编码示例（<code>the cat ate</code> → <code>[9, 7, 1, 5, 10, 3]</code>）验证 <code>encode</code> 的正确性。测试特殊 token 是否被正确保留为单个 token。测试无效 ID 序列的解码是否产生 U+FFFD。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 11-12 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">tokenizer_experiments</span><strong>分词器实验</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>在本作业的前面部分，你已经分别在 TinyStories 数据集（词表大小 10,000）和 OpenWebText 数据集（词表大小 32,000）上训练了字节级 BPE 分词器。现在我们将通过这些分词器来探究文本的压缩特性，并准备用于训练语言模型的整数 token ID 序列。</p>
+任务（共 4 分）
+<h3>(a) 计算压缩率</h3>
+<p>从 TinyStories 和 OpenWebText 中各采样 10 篇文档。分别使用你之前训练好的 TinyStories 分词器（词表大小 10K）和 OpenWebText 分词器（词表大小 32K），将采样的文档编码为整数 ID 序列。计算每个分词器的<strong>压缩率</strong>（bytes/token，即原始 UTF-8 字节数 / 生成的 token 数）。</p>
+<p><strong>交付物</strong>：一到两句话的回答，给出两个分词器的压缩率。</p>
+<h3>(b) 跨分词器实验</h3>
+<p>如果使用 TinyStories 分词器对 OpenWebText 样本进行分词，会发生什么？比较压缩率的变化，或定性描述所观察到的现象。</p>
+<p><strong>交付物</strong>：一到两句话的回答。</p>
+<h3>(c) 估算吞吐量</h3>
+<p>估算你自己实现的 token 器的吞吐量（例如 bytes/second）。如果要 tokenize Pile 数据集（825GB 文本），大约需要多长时间？</p>
+<p><strong>交付物</strong>：一到两句话的回答。</p>
+<h3>(d) 数据集编码与序列化</h3>
+<p>使用你的 TinyStories 和 OpenWebText 分词器，分别对相应的训练集和开发集进行编码，得到整数 token ID 序列。这些序列稍后将用于训练我们的语言模型。我们建议将 token ID 序列化为 NumPy 数组，数据类型使用 <code>uint16</code>。为什么 <code>uint16</code> 是一个合适的选择？</p>
+<p><strong>交付物</strong>：一到两句话的回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body">先修概念
+<ul>
+<li>
+<p>BPE 分词原理：压缩率定义为原始 UTF-8 字节数与生成 token 数的比值</p>
+</li>
+<li>
+<p>UTF-8 编码：Python 中 <code>text.encode("utf-8")</code> 可得字节序列</p>
+</li>
+<li>
+<p>NumPy 序列化：<code>np.array(ids, dtype=np.uint16).save(path)</code></p>
+</li>
+<li>
+<p>uint16 范围：0 到 65535，需大于词表最大 ID</p>
+</li>
+</ul>
+实施顺序
+<ol>
+<li>从两个数据集中各随机采样 10 篇文档</li>
+<li>分别用两个分词器编码，统计字节数与 token 数，计算压缩率</li>
+<li>用 TinyStories 分词器编码 OpenWebText 样本，对比压缩率</li>
+<li>对一小段文本计时，推算吞吐量，并外推到 825GB</li>
+<li>对完整训练集/开发集编码，序列化为 uint16 数组</li>
+</ol>
+调试策略
+<ul>
+<li>
+<p>检查 <code>len(text.encode("utf-8"))</code> 与 <code>len(tokenizer.encode(text))</code> 的统计是否正确</p>
+</li>
+<li>
+<p>验证特殊 token 在采样文档中是否被正确处理</p>
+</li>
+<li>
+<p>确认 uint16 能容纳词表最大 ID（10K 和 32K 均小于 65535）</p>
+</li>
+</ul>
+自检方法
+<ul>
+<li>
+<p>压缩率应大于 1（分词器应提供有效压缩）</p>
+</li>
+<li>
+<p>吞吐量计算：用小段文本的编码时间推算，检查数量级是否合理</p>
+</li>
+<li>
+<p>跨分词器实验：TinyStories 分词器在 OpenWebText 上压缩率应更低（词表不匹配）</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 12 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">linear</span><strong>实现线性层模块</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>线性层是 Transformer 和神经网络的基本构建块。你将实现自己的 <code>Linear</code> 类，继承自 <code>torch.nn.Module</code>，执行线性变换：</p>
+<p>\[ y = Wx \]</p>
+<p>注意：按照大多数现代 LLM 的做法，<strong>不包含偏置项（bias）</strong>。</p>
+任务（共 1 分）
+<p>实现一个 <code>Linear</code> 类，继承自 <code>torch.nn.Module</code>，执行线性变换。你的实现应遵循 PyTorch 内置 <code>nn.Linear</code> 模块的接口，但不包含 <code>bias</code> 参数。推荐接口：</p>
+<pre><code class="language-python">def __init__(self, in_features, out_features, device=None, dtype=None)
+</code></pre>
+<p>参数：</p>
+<ul>
+<li>
+<p><code>in_features: int</code> — 输入的最终维度</p>
+</li>
+<li>
+<p><code>out_features: int</code> — 输出的最终维度</p>
+</li>
+<li>
+<p><code>device: torch.device | None = None</code> — 存储参数的设备</p>
+</li>
+<li>
+<p><code>dtype: torch.dtype | None = None</code> — 参数的数据类型</p>
+</li>
+</ul>
+<pre><code class="language-python">def forward(self, x: torch.Tensor) -&gt; torch.Tensor
+</code></pre>
+<p>对输入执行线性变换。</p>
+必须做到
+<ul>
+<li>
+<p>继承 <code>nn.Module</code></p>
+</li>
+<li>
+<p>调用父类构造函数</p>
+</li>
+<li>
+<p>将参数构造并存储为 <code>W</code>（不是 <code>W^T</code>），放入 <code>nn.Parameter</code> 中（出于内存排序原因）</p>
+</li>
+<li>
+<p>当然，不要使用 <code>nn.Linear</code> 或 <code>nn.functional.linear</code></p>
+</li>
+</ul>
+初始化设置
+<p>使用以下初始化设置，配合 <code>torch.nn.init.trunc_normal_</code> 初始化权重：</p>
+<p>\[ W \sim \mathcal{N}\left(\mu = 0, \sigma^2 = \frac{2}{d_{in} + d_{out}}\right) \text{ truncated at } [-3\sigma, 3\sigma] \]</p>
+测试方法
+<p>实现测试适配器 <code>[adapters.run_linear]</code>。适配器应将给定权重加载到你的 <code>Linear</code> 模块中（可使用 <code>Module.load_state_dict</code>）。然后运行：</p>
+<pre><code class="language-bash">uv run pytest -k test_linear
+</code></pre>
+<p><strong>交付物</strong>：通过上述测试的 <code>Linear</code> 模块实现。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body">先修概念
+<ul>
+<li>
+<p>PyTorch <code>nn.Module</code> 继承与 <code>nn.Parameter</code></p>
+</li>
+<li>
+<p>截断正态初始化（truncated normal initialization）</p>
+</li>
+<li>
+<p>线性变换 \( y = Wx \)，其中 \( W \) 的形状为 <code>(out_features, in_features)</code></p>
+</li>
+<li>
+<p>内存排序：行优先存储，因此直接存储 \( W \) 而非 \( W^T \)</p>
+</li>
+</ul>
+实施顺序
+<ol>
+<li>创建继承 <code>nn.Module</code> 的 <code>Linear</code> 类</li>
+<li>调用 <code>super().__init__()</code></li>
+<li>创建形状为 <code>(out_features, in_features)</code> 的 <code>nn.Parameter</code>，命名为 <code>W</code></li>
+<li>使用 <code>torch.nn.init.trunc_normal_</code> 按指定方差和截断范围初始化</li>
+<li>在 <code>forward</code> 中执行矩阵乘法 <code>x @ W.T</code></li>
+</ol>
+调试策略
+<ul>
+<li>
+<p>检查 <code>W</code> 的形状是否为 <code>(out_features, in_features)</code></p>
+</li>
+<li>
+<p>验证没有 bias 参数</p>
+</li>
+<li>
+<p>用已知权重通过 <code>load_state_dict</code> 加载后检查输出</p>
+</li>
+</ul>
+自检方法
+<ul>
+<li>
+<p>与 <code>torch.nn.Linear(in_features, out_features, bias=False)</code> 的输出对比</p>
+</li>
+<li>
+<p>验证初始化标准差符合 \( \sigma = \sqrt{2/(d_{in} + d_{out})} \)</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 18-19 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">embedding</span><strong>实现嵌入层模块</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>如前所述，Transformer 的第一层是嵌入层，将整数 token ID 映射为 \( d_{model} \) 维的向量空间。你将实现自定义的 <code>Embedding</code> 类，继承自 <code>torch.nn.Module</code>（因此不应使用 <code>nn.Embedding</code>）。<code>forward</code> 方法应通过索引从形状为 <code>(vocab_size, d_model)</code> 的嵌入矩阵中选取每个 token ID 对应的嵌入向量，输入为形状 <code>(batch_size, sequence_length)</code> 的 <code>torch.LongTensor</code>。</p>
+任务（共 1 分）
+<p>实现 <code>Embedding</code> 类，继承自 <code>torch.nn.Module</code>，执行嵌入查找。你的实现应遵循 PyTorch 内置 <code>nn.Embedding</code> 模块的接口。推荐接口：</p>
+<pre><code class="language-python">def __init__(self, num_embeddings, embedding_dim, device=None, dtype=None)
+</code></pre>
+<p>参数：</p>
+<ul>
+<li>
+<p><code>num_embeddings: int</code> — 词表大小</p>
+</li>
+<li>
+<p><code>embedding_dim: int</code> — 嵌入向量的维度，即 \( d_{model} \)</p>
+</li>
+<li>
+<p><code>device: torch.device | None = None</code> — 存储参数的设备</p>
+</li>
+<li>
+<p><code>dtype: torch.dtype | None = None</code> — 参数的数据类型</p>
+</li>
+</ul>
+<pre><code class="language-python">def forward(self, token_ids: torch.Tensor) -&gt; torch.Tensor
+</code></pre>
+<p>查找给定 token ID 对应的嵌入向量。</p>
+必须做到
+<ul>
+<li>
+<p>继承 <code>nn.Module</code></p>
+</li>
+<li>
+<p>调用父类构造函数</p>
+</li>
+<li>
+<p>将嵌入矩阵初始化为 <code>nn.Parameter</code></p>
+</li>
+<li>
+<p>存储嵌入矩阵时让 \( d_{model} \) 作为最后一个维度</p>
+</li>
+<li>
+<p>当然，不要使用 <code>nn.Embedding</code> 或 <code>nn.functional.embedding</code></p>
+</li>
+</ul>
+初始化设置
+<p>使用以下初始化设置，配合 <code>torch.nn.init.trunc_normal_</code> 初始化权重：</p>
+<p>\[ W \sim \mathcal{N}(\mu = 0, \sigma^2 = 1) \text{ truncated at } [-3, 3] \]</p>
+测试方法
+<p>实现测试适配器 <code>[adapters.run_embedding]</code>。然后运行：</p>
+<pre><code class="language-bash">uv run pytest -k test_embedding
+</code></pre>
+<p><strong>交付物</strong>：通过上述测试的 <code>Embedding</code> 模块实现。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body">先修概念
+<ul>
+<li>
+<p>PyTorch <code>nn.Module</code> 继承与 <code>nn.Parameter</code></p>
+</li>
+<li>
+<p>嵌入查找（embedding lookup）：通过整数索引从矩阵中选取行</p>
+</li>
+<li>
+<p>截断正态初始化</p>
+</li>
+<li>
+<p>输入 <code>token_ids</code> 形状为 <code>(batch_size, sequence_length)</code>，输出形状为 <code>(batch_size, sequence_length, d_model)</code></p>
+</li>
+</ul>
+实施顺序
+<ol>
+<li>创建继承 <code>nn.Module</code> 的 <code>Embedding</code> 类</li>
+<li>调用 <code>super().__init__()</code></li>
+<li>创建形状为 <code>(num_embeddings, embedding_dim)</code> 的 <code>nn.Parameter</code></li>
+<li>使用 <code>torch.nn.init.trunc_normal_</code> 按 \( \sigma^2 = 1 \) 和截断范围 \( [-3, 3] \) 初始化</li>
+<li>在 <code>forward</code> 中使用 <code>token_ids</code> 索引查找嵌入向量（如 <code>W[token_ids]</code>）</li>
+</ol>
+调试策略
+<ul>
+<li>
+<p>检查 <code>W</code> 的形状是否为 <code>(num_embeddings, embedding_dim)</code></p>
+</li>
+<li>
+<p>验证输出形状为 <code>(batch_size, sequence_length, embedding_dim)</code></p>
+</li>
+<li>
+<p>用已知权重通过 <code>load_state_dict</code> 加载后检查输出</p>
+</li>
+</ul>
+自检方法
+<ul>
+<li>
+<p>与 <code>torch.nn.Embedding(num_embeddings, embedding_dim)</code> 的输出对比</p>
+</li>
+<li>
+<p>验证 \( d_{model} \) 维度在最后</p>
+</li>
+<li>
+<p>验证初始化标准差为 1，截断范围为 \( [-3, 3] \)</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 19-20 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">rmsnorm</span><strong>均方根层归一化（RMSNorm）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>在 pre-norm Transformer 中，层归一化对训练稳定性至关重要。原 Transformer 使用 LayerNorm（Ba et al., 2016），而本题采用 <strong>Root Mean Square Layer Normalization（RMSNorm）</strong>（Zhang and Sennrich, 2019, 公式 4）。给定激活向量 \(a \in \mathbb{R}^{d_{\text{model}}}\)，RMSNorm 对每个激活 \(a_i\) 做如下缩放：</p>
+<p>\[
+\text{RMSNorm}(a_i) = \frac{a_i}{\text{RMS}(\mathbf{a})}\, g_i
+\]</p>
+<p>其中</p>
+<p>\[
+\text{RMS}(\mathbf{a}) = \sqrt{\frac{1}{d_{\text{model}}}\sum_{i=1}^{d_{\text{model}}} a_i^2 + \varepsilon}
+\]</p>
+<p>\(g_i\) 为可学习的增益（gain）参数（共 \(d_{\text{model}}\) 个），\(\varepsilon\) 为数值稳定项，通常固定为 \(10^{-5}\)。</p>
+<p>由于输入在平方时容易溢出，你需要在归一化前将输入 <strong>upcast</strong> 为 <code>torch.float32</code>，完成计算后再 <strong>downcast</strong> 回原 dtype。forward 的推荐流程为：</p>
+<pre><code class="language-python">in_dtype = x.dtype
+x = x.to(torch.float32)
+# 在此实现 RMSNorm
+...
+result = ...
+# 返回原 dtype 的结果
+return result.to(in_dtype)
+</code></pre>
+任务
+<p>将 RMSNorm 实现为 <code>torch.nn.Module</code>，推荐接口如下：</p>
+<pre><code class="language-python">def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None)
+</code></pre>
+<ul>
+<li>
+<p><code>d_model: int</code> — 模型的隐藏维度。</p>
+</li>
+<li>
+<p><code>eps: float = 1e-5</code> — 数值稳定用的 epsilon。</p>
+</li>
+<li>
+<p><code>device: torch.device | None = None</code> — 参数所在设备。</p>
+</li>
+<li>
+<p><code>dtype: torch.dtype | None = None</code> — 参数的数据类型。</p>
+</li>
+</ul>
+<pre><code class="language-python">def forward(self, x: torch.Tensor) -&gt; torch.Tensor
+</code></pre>
+<p>处理形状为 <code>(batch_size, sequence_length, d_model)</code> 的输入张量，返回同形状的张量。</p>
+<p><strong>注意</strong>：务必在归一化前将输入 upcast 为 <code>torch.float32</code>（随后再 downcast 回原 dtype），如上所述。</p>
+允许依赖
+<p>遵循作业整体的「从零实现」约束：仅可使用 <code>torch.nn.Parameter</code>、<code>torch.nn</code> 容器类（<code>Module</code>、<code>ModuleList</code>、<code>Sequential</code> 等）以及基础 PyTorch 运算。不得使用 <code>torch.nn</code> 或 <code>torch.nn.functional</code> 中已有的归一化层实现。</p>
+交付物与测试
+<p>在测试适配器 [adapters.run_rmsnorm] 中连接你的实现，然后运行：</p>
+<pre><code class="language-bash">uv run pytest -k test_rmsnorm
+</code></pre>
+分值
+<p>1 分。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>层归一化（LayerNorm）与 RMSNorm 的区别：RMSNorm 不做去中心（不减均值），仅用均方根缩放。</p>
+</li>
+<li>
+<p>PyTorch 中 <code>nn.Module</code> 的写法，以及 <code>nn.Parameter</code> 的使用。</p>
+</li>
+<li>
+<p>混合精度下的数值溢出问题：为何 float16/bfloat16 下平方操作需要 upcast 到 float32。</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>在 <code>__init__</code> 中创建形状为 <code>(d_model,)</code> 的增益参数 <code>g</code>，用 <code>nn.Parameter</code> 包装。</li>
+<li>在 <code>forward</code> 中先保存 <code>in_dtype</code>，将 <code>x</code> 转为 <code>float32</code>。</li>
+<li>沿最后一个维度计算 RMS：先平方、求均值、加 <code>eps</code>、开方。</li>
+<li>用 RMS 缩放后乘增益 <code>g</code>，再转回 <code>in_dtype</code>。</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>用较小的随机张量（如 shape <code>(2, 3, 4)</code>）手算 RMS 与输出，与实现逐元素比对。</p>
+</li>
+<li>
+<p>验证输出 shape 与输入一致，且 dtype 恢复为原始 dtype。</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>运行 <code>uv run pytest -k test_rmsnorm</code>，确认全部通过。</p>
+</li>
+<li>
+<p>检查 <code>eps</code> 是否只在 RMS 分母内部加入，而非外部。</p>
+</li>
+<li>
+<p>确认增益 <code>g</code> 参与乘法而非加法。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 20-21 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">positionwise_feedforward</span><strong>Position-wise Feed-Forward Network（SwiGLU 前馈网络）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>在原始 Transformer（Vaswani et al., 2017, §3.3）中，前馈网络由两层线性变换夹一个 ReLU 激活组成，内层维度通常为输入的 4 倍。现代 LLM（如 LLaMA 3、Qwen 2.5）在此基础上做了两项改动：将激活函数替换为 <strong>SiLU（又称 Swish）</strong>，并引入 <strong>门控线性单元（Gated Linear Unit, GLU）</strong> 构成 <strong>SwiGLU</strong>。自 PaLM 与 LLaMA 起，现代 LLM 通常省略线性层的 bias。</p>
+<p><strong>SiLU / Swish 激活</strong>（Hendrycks and Gimpel, 2016; Elfwing et al., 2017）定义为：</p>
+<p>\[
+\text{SiLU}(x) = x \cdot \sigma(x) = \frac{x}{1 + e^{-x}}
+\]</p>
+<p>其形状与 ReLU 相似，但在零点处光滑（参见 Figure 3）。</p>
+<p><strong>GLU</strong>（Dauphin et al., 2017）定义为经 sigmoid 的线性变换与另一线性变换的逐元素乘积：</p>
+<p>\[
+\text{GLU}(x, W_1, W_2) = \sigma(W_1 x) \odot W_2 x
+\]</p>
+<p>将 SiLU 与 GLU 结合得到 <strong>SwiGLU</strong>，即本题要求实现的前馈网络：</p>
+<p>\[
+\text{FFN}(x) = \text{SwiGLU}(x, W_1, W_2, W_3) = W_2\bigl(\text{SiLU}(W_1 x) \odot W_3 x\bigr)
+\]</p>
+<p>其中 \(x \in \mathbb{R}^{d_{\text{model}}}\)，\(W_1, W_3 \in \mathbb{R}^{d_{\text{ff}} \times d_{\text{model}}}\)，\(W_2 \in \mathbb{R}^{d_{\text{model}} \times d_{\text{ff}}}\)，且通常 \(d_{\text{ff}} = \frac{8}{3}\,d_{\text{model}}\)。</p>
+任务
+<p>实现 SwiGLU 前馈网络（由 SiLU 激活与 GLU 组成）。</p>
+<p><strong>注意</strong>：出于数值稳定性考虑，你可以直接使用 <code>torch.sigmoid</code> 计算 sigmoid。</p>
+<p>在你的实现中，应将 \(d_{\text{ff}}\) 设为约 \(\frac{8}{3} \times d_{\text{model}}\)，同时确保内层维度是 <strong>64 的整数倍</strong>，以充分利用硬件。</p>
+允许依赖
+<p>遵循作业整体的「从零实现」约束：仅可使用 <code>torch.nn.Parameter</code>、<code>torch.nn</code> 容器类以及基础 PyTorch 运算。本题明确允许使用 <code>torch.sigmoid</code>，但不得直接调用现成的前馈网络层。</p>
+交付物与测试
+<p>在测试适配器 [adapters.run_swiglu] 中连接你的实现，然后运行：</p>
+<pre><code class="language-bash">uv run pytest -k test_swiglu
+</code></pre>
+分值
+<p>2 分。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · Figure 3：SiLU（又称 Swish）、Identity 与 ReLU 激活函数的曲线对比。</h4><table>
+<thead>
+<tr>
+<th>函数</th>
+<th>表达式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SiLU</td>
+<td>f(x) = x·σ(x)</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>f(x) = x</td>
+</tr>
+<tr>
+<td>ReLU</td>
+<td>f(x) = max(0, x)</td>
+</tr>
+</tbody>
+</table><p class="problem-source">来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 22</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>原始 Transformer 的两层前馈结构 vs. SwiGLU 的三矩阵门控结构。</p>
+</li>
+<li>
+<p>逐元素乘法（<code>⊙</code> / <code>*</code>）与矩阵乘法的区别。</p>
+</li>
+<li>
+<p>为何 GLU 能为梯度提供线性路径，缓解梯度消失。</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>在 <code>__init__</code> 中定义三个权重矩阵 <code>W1</code>、<code>W2</code>、<code>W3</code>（注意不含 bias），按截断正态分布初始化。</li>
+<li>计算 <code>W1 @ x</code> 与 <code>W3 @ x</code>（注意矩阵乘法的方向与形状）。</li>
+<li>对 <code>W1 @ x</code> 施加 SiLU（即 <code>torch.silu</code> 或手动用 <code>torch.sigmoid</code>），再与 <code>W3 @ x</code> 逐元素相乘。</li>
+<li>将门控结果乘 <code>W2</code> 得到输出。</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>构造 shape 已知的输入（如 <code>(2, 3, 8)</code>），逐步打印 <code>W1x</code>、<code>SiLU(W1x)</code>、<code>W3x</code>、门控结果及最终输出的形状，确认与预期一致。</p>
+</li>
+<li>
+<p>验证 <code>d_ff</code> 是否满足「约 8/3 d_model 且为 64 的倍数」。</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>运行 <code>uv run pytest -k test_swiglu</code>，确认全部通过。</p>
+</li>
+<li>
+<p>确认输出 shape 与输入 <code>(batch, seq, d_model)</code> 一致。</p>
+</li>
+<li>
+<p>检查没有使用 bias 项。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 22-23 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">rope</span><strong>旋转位置编码（RoPE）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>为了让模型感知位置信息，本题实现 <strong>旋转位置编码（Rotary Position Embeddings, RoPE）</strong>（Su et al., 2021）。对于位置 \(i\) 上的查询 token \(q^{(i)} = W_q x^{(i)} \in \mathbb{R}^d\)，施加一个分块旋转矩阵 \(R_i\)，得到 \(q'^{(i)} = R_i q^{(i)} = R_i W_q x^{(i)}\)。</p>
+<p>\(R_i\) 将嵌入的成对元素 \(q^{(i)}_{2k-1:2k}\) 视为二维向量，按角度 \(\theta_{i,k} = i / \Theta^{2k/d}\) 旋转，其中 \(k \in \{1, \dots, d/2\}\)，\(\Theta\) 为常数。于是 \(R_i\) 是一个 \(d \times d\) 的分块对角矩阵，每个分块 \(R_i^k\)（\(k \in \{1, \dots, d/2\}\)）为：</p>
+<p>\[
+R_i^k =
+\begin{bmatrix}
+\cos(\theta_{i,k}) &amp; -\sin(\theta_{i,k}) \\
+\sin(\theta_{i,k}) &amp; \cos(\theta_{i,k})
+\end{bmatrix}
+\]</p>
+<p>完整的旋转矩阵为：</p>
+<p>\[
+R_i =
+\begin{bmatrix}
+R_i^1 &amp; 0 &amp; 0 &amp; \dots &amp; 0 \\
+0 &amp; R_i^2 &amp; 0 &amp; \dots &amp; 0 \\
+0 &amp; 0 &amp; R_i^3 &amp; \dots &amp; 0 \\
+\vdots &amp; \vdots &amp; \vdots &amp; \ddots &amp; \vdots \\
+0 &amp; 0 &amp; 0 &amp; \dots &amp; R_i^{d/2}
+\end{bmatrix}
+\]</p>
+<p>其中 \(0\) 为 \(2 \times 2\) 零矩阵。实际实现中应利用该矩阵的结构特性高效地完成变换，而<strong>不需要</strong>构造完整的 \(d \times d\) 矩阵。</p>
+<p>由于我们只关心序列内 token 的相对旋转，\(\cos(\theta_{i,k})\) 与 \(\sin(\theta_{i,k})\) 可在不同层和不同 batch 间复用。你可以让所有层共享同一个 RoPE 模块，并在 <code>__init__</code> 中用 <code>self.register_buffer(persistent=False)</code> 创建 sin/cos 的预计算缓冲区（它们不是 <code>nn.Parameter</code>，因为不需要学习）。对查询 \(q^{(i)}\) 和键 \(k^{(j)}\) 施加相同的旋转过程。该层<strong>没有可学习参数</strong>。</p>
+任务
+<p>实现一个类 <code>RotaryPositionalEmbedding</code>，对输入张量施加 RoPE。推荐接口如下：</p>
+<pre><code class="language-python">def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None)
+</code></pre>
+<ul>
+<li>
+<p><code>theta: float</code> — RoPE 的 \(\Theta\) 值。</p>
+</li>
+<li>
+<p><code>d_k: int</code> — 查询与键向量的维度。</p>
+</li>
+<li>
+<p><code>max_seq_len: int</code> — 将输入的最大序列长度。</p>
+</li>
+<li>
+<p><code>device: torch.device | None = None</code> — 缓冲区所在设备。</p>
+</li>
+</ul>
+<pre><code class="language-python">def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -&gt; torch.Tensor
+</code></pre>
+<p>处理形状为 <code>(..., seq_len, d_k)</code> 的输入张量，返回同形状的张量。注意：<code>x</code> 可包含任意数量的 batch 维度。<code>token_positions</code> 为形状 <code>(..., seq_len)</code> 的张量，表示 <code>x</code> 沿序列维度的位置。</p>
+<p>你应使用 <code>token_positions</code> 沿序列维度切片（可能已预计算的）cos 与 sin 张量。</p>
+允许依赖
+<p>遵循作业整体的「从零实现」约束：仅可使用 <code>torch.nn.Module</code>、<code>torch.nn.Parameter</code>（如有需要）以及基础 PyTorch 运算。可使用 <code>self.register_buffer</code> 注册预计算的 sin/cos 缓冲区。该层本身没有可学习参数。</p>
+交付物与测试
+<p>在测试适配器 [adapters.run_rope] 中连接你的实现，然后运行：</p>
+<pre><code class="language-bash">uv run pytest -k test_rope
+</code></pre>
+分值
+<p>2 分。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · RoPE 的分块对角旋转矩阵 \(R_i\) 结构示意图，每个分块 \(R_i^k\) 为 2×2 旋转子矩阵。</h4><p>R_i = block_diag(R_i^1, R_i^2, ..., R_i^{d/2})，其中 R_i^k = [[cos(θ_{i,k}), -sin(θ_{i,k})], [sin(θ_{i,k}), cos(θ_{i,k})]]</p><p class="problem-source">来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 23</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>位置编码的必要性：self-attention 本身对排列不变，需要显式注入位置信息。</p>
+</li>
+<li>
+<p>旋转矩阵的几何含义：二维平面上的角度旋转，保持向量模长不变。</p>
+</li>
+<li>
+<p>相对位置的性质：RoPE 使内积 \(q_i^\top k_j\) 仅依赖相对距离 \(i-j\)。</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>在 <code>__init__</code> 中预计算各位置 \(i \in [0, \text{max\_seq\_len})\) 与各维度对 \(k\) 对应的 \(\theta_{i,k}\)，并由此得到 cos/sin 缓冲区，用 <code>register_buffer(persistent=False)</code> 注册。</li>
+<li>在 <code>forward</code> 中根据 <code>token_positions</code> 取出对应位置的 cos/sin。</li>
+<li>将输入按相邻维度配对（如 \((x_{2k-1}, x_{2k})\)），应用二维旋转公式。</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>用短序列（如 <code>seq_len=2, d_k=4</code>）手算旋转结果，与实现比对。</p>
+</li>
+<li>
+<p>验证对同一输入施加相同位置后再施加其逆位置，结果应回到原值（旋转的可逆性）。</p>
+</li>
+<li>
+<p>检查 batch 维度是否正确广播。</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>运行 <code>uv run pytest -k test_rope</code>，确认全部通过。</p>
+</li>
+<li>
+<p>确认 forward 输出 shape 与输入完全一致。</p>
+</li>
+<li>
+<p>确认模块无可学习参数（<code>list(module.parameters())</code> 为空）。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 23-24 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">softmax</span><strong>softmax：实现 softmax</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现 softmax 操作。</p>
+<p>编写一个函数，对张量应用 softmax 操作。你的函数应接受两个参数：一个张量和一个维度 <code>i</code>，并对输入张量的第 <code>i</code> 维应用 softmax。输出张量的形状应与输入张量相同，但其第 <code>i</code> 维将是一个归一化的概率分布。</p>
+<p>softmax 的定义为：</p>
+<p>\(\text{softmax}(\mathbf{v})_i = \frac{\exp(v_i)}{\sum_{j=1}^{n} \exp(v_j)}\)</p>
+<p>数值稳定性：当 <code>\exp(v_i)</code> 取值很大时可能溢出为 <code>inf</code>（进而 <code>inf/inf = NaN</code>）。利用 softmax 对输入加上任意常数 <code>c</code> 的不变性，在计算前减去第 <code>i</code> 维中的最大值，以避免数值稳定性问题。</p>
+<p>测试方法：完成 [<code>adapters.run_softmax</code>]，并确保通过 <code>uv run pytest -k test_softmax_matches_pytorch</code>。</p>
+<p>本题 1 分。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：softmax 的定义与平移不变性；数值稳定性中的 max-subtraction 技巧；PyTorch 张量沿指定维度的归约操作（<code>torch.max</code>、<code>torch.exp</code>、<code>torch.sum</code> 的 <code>dim</code> 参数与 <code>keepdim=True</code> 广播）。</p>
+<p>实施顺序：
+1. 沿指定维度 <code>i</code> 取最大值并减去（使用 <code>keepdim=True</code> 以便广播）；
+2. 对移位后的张量取指数；
+3. 沿维度 <code>i</code> 求和得到归一化常数；
+4. 除以归一化常数得到概率分布。</p>
+<p>调试策略：</p>
+<ul>
+<li>
+<p>用全零输入或常数输入验证输出是否为均匀分布；</p>
+</li>
+<li>
+<p>用极大值/极小值输入验证是否出现 <code>NaN</code> 或 <code>inf</code>；</p>
+</li>
+<li>
+<p>检查输出沿指定维度求和是否恒为 1。</p>
+</li>
+</ul>
+<p>自检方法：与 <code>torch.nn.functional.softmax</code> 的输出进行数值比较（<code>torch.allclose</code>），覆盖不同形状、不同维度、含极端值的输入。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 24 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">scaled_dot_product_attention</span><strong>scaled_dot_product_attention：实现缩放点积注意力</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现缩放点积注意力（scaled dot-product attention）。</p>
+<p>数学定义：</p>
+<p>\[\text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{softmax}\!\left(\frac{\mathbf{Q}^\top \mathbf{K}}{\sqrt{d_k}}\right) \mathbf{V}\]</p>
+<p>其中 \(\mathbf{Q} \in \mathbb{R}^{n \times d_k}\)、\(\mathbf{K} \in \mathbb{R}^{m \times d_k}\)、\(\mathbf{V} \in \mathbb{R}^{m \times d_v}\)。注意这些是操作的输入，而非可学习参数（关于为何使用 \(\mathbf{Q}^\top \mathbf{K}\) 而非 \(\mathbf{Q}\mathbf{K}^\top\)，参见正文 3.3.1 节）。</p>
+<p>你的实现应满足以下要求：</p>
+<ul>
+<li>
+<p>输入的 queries 和 keys 形状为 <code>(batch_size, ..., seq_len, d_k)</code>，values 形状为 <code>(batch_size, ..., seq_len, d_v)</code>，其中 <code>...</code> 表示任意数量的额外 batch 维度（如有）。输出形状为 <code>(batch_size, ..., d_v)</code>。参见正文第 3.3 节关于 batch 型维度的讨论。</p>
+</li>
+<li>
+<p>支持可选的用户提供的 boolean mask，形状为 <code>(seq_len, seq_len)</code>。mask 值为 <code>True</code> 的位置，其注意力概率之和应为 1；mask 值为 <code>False</code> 的位置，其注意力概率应为 0。实现上，可将 pre-softmax 值 \(\mathbf{Q}^\top \mathbf{K} / \sqrt{d_k}\) 中 mask 为 <code>False</code> 的位置加上 \(-\infty\)。</p>
+</li>
+</ul>
+<p>关于 mask 的语义：mask 矩阵 \(\mathbf{M} \in \{\text{True}, \text{False}\}^{n \times m}\) 的每一行 <code>i</code> 表示 query <code>i</code> 应关注哪些 keys。位置 <code>(i, j)</code> 为 <code>True</code> 表示 query <code>i</code> 关注 key <code>j</code>（信息流通）；<code>False</code> 表示不关注。</p>
+<p>测试方法：完成 [<code>adapters.run_scaled_dot_product_attention</code>]。</p>
+<ul>
+<li>
+<p><code>uv run pytest -k test_scaled_dot_product_attention</code> 在三阶输入张量上测试你的实现；</p>
+</li>
+<li>
+<p><code>uv run pytest -k test_4d_scaled_dot_product_attention</code> 在四阶输入张量上测试你的实现。</p>
+</li>
+</ul>
+<p>本题 5 分。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：矩阵乘法的批量语义（batch 型维度在前）、softmax 的数值稳定性实现、boolean mask 与 \(-\infty\) 填充在 softmax 前的作用机制、PyTorch 广播。</p>
+<p>实施顺序：
+1. 计算注意力分数矩阵 <code>scores = Q @ K.transpose(-2,-1) / sqrt(d_k)</code>（注意遵循正文约定的 \(\mathbf{Q}^\top \mathbf{K}\) 形式与转置方式）；
+2. 若提供 mask，将 <code>scores</code> 在 mask 为 <code>False</code> 的位置填充 <code>torch.finfo(scores.dtype).min</code> 或一个足够大的负数；
+3. 对 <code>scores</code> 的最后一维应用 softmax 得到注意力权重；
+4. 用注意力权重对 <code>V</code> 加权求和得到输出。</p>
+<p>调试策略：</p>
+<ul>
+<li>
+<p>关闭 mask，用小规模手工构造的 Q/K/V 验证输出与手算结果一致；</p>
+</li>
+<li>
+<p>开启 mask，检查被 mask 位置的概率是否精确为 0、未被 mask 行是否归一化；</p>
+</li>
+<li>
+<p>验证输出形状为 <code>(batch_size, ..., d_v)</code>。</p>
+</li>
+</ul>
+<p>自检方法：分别构造三阶与四阶输入张量，对比与 PyTorch 参考实现（或手算结果）的数值一致性；覆盖 <code>d_k != d_v</code> 的情形。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 24-25 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">multihead_self_attention</span><strong>multihead_self_attention：实现因果多头自注意力</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>实现因果多头自注意力（causal multi-head self-attention）作为 <code>torch.nn.Module</code>。</p>
+<p>多头注意力的数学定义：</p>
+<p>\[\text{MultiHead}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{Concat}(\text{head}_1, \ldots, \text{head}_h)\]</p>
+<p>其中 \(\text{head}_i = \text{Attention}(\mathbf{Q}_i, \mathbf{K}_i, \mathbf{V}_i)\)，\(\mathbf{Q}_i, \mathbf{K}_i, \mathbf{V}_i\) 分别是 \(\mathbf{Q}, \mathbf{K}, \mathbf{V}\) 在嵌入维度上切出的第 \(i \in \{1, \ldots, h\}\) 个切片，大小为 \(d_k\) 或 \(d_v\)。Attention 为第 3.5.4 节定义的缩放点积注意力。</p>
+<p>由此构成多头自注意力操作：</p>
+<p>\[\text{MultiHeadSelfAttention}(\mathbf{x}) = \mathbf{W}^O \,\text{MultiHead}(\mathbf{W}^Q \mathbf{x}, \mathbf{W}^K \mathbf{x}, \mathbf{W}^V \mathbf{x})\]</p>
+<p>可学习参数为 \(\mathbf{W}^Q \in \mathbb{R}^{h d_k \times d_{\text{model}}}\)、\(\mathbf{W}^K \in \mathbb{R}^{h d_k \times d_{\text{model}}}\)、\(\mathbf{W}^V \in \mathbb{R}^{h d_v \times d_{\text{model}}}\)、\(\mathbf{W}^O \in \mathbb{R}^{d_{\text{model}} \times h d_v}\)。</p>
+<p>你的实现应满足以下要求：</p>
+<ul>
+<li>
+<p>构造参数至少包括 <code>d_model</code>（int，Transformer 块输入维度）与 <code>num_heads</code>（int，注意力头数）。</p>
+</li>
+<li>
+<p>遵循 Vaswani et al. (2017)，设 \(d_k = d_v = d_{\text{model}} / h\)。</p>
+</li>
+<li>
+<p>使用三个矩阵乘法分别计算 query、key、value 投影（作为可选延伸目标，可尝试将 Q/K/V 投影合并为单个权重矩阵与单次矩阵乘法）。</p>
+</li>
+<li>
+<p><strong>因果掩码（causal masking）</strong>：防止模型关注序列中的未来 token。给定 token 序列 \(t_1, \ldots, t_n\)，在计算前缀 \(t_1, \ldots, t_i\)（其中 \(i &lt; n\)）的下一个词预测时，模型不应能访问位置 \(t_{i+1}, \ldots, t_n\) 的表示。使用因果注意力掩码，使 token \(i\) 仅关注序列中位置 \(j \leq i\)。可利用 <code>torch.triu</code> 或广播索引比较来构造掩码，并利用第 3.5.4 节实现中已支持的 masking 机制。</p>
+</li>
+<li>
+<p><strong>应用 RoPE</strong>：RoPE 应作用于 query 和 key 向量，但不作用于 value 向量。head 维度应作为 batch 维度处理（因为多头注意力对每个 head 独立施加注意力），即对每个 head 的 query 和 key 施加完全相同的 RoPE 旋转。</p>
+</li>
+</ul>
+<p>测试方法：完成 [<code>adapters.run_multihead_self_attention</code>]，然后运行 <code>uv run pytest -k test_multihead_self_attention</code> 进行测试。</p>
+<p>本题 5 分。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p>先修概念：缩放点积注意力的实现、张量 reshape/view/transpose 对多头切片的处理（<code>d_model</code> 拆为 <code>num_heads</code> × <code>d_k</code>）、因果掩码的构造（<code>torch.triu(..., diagonal=1)</code>）、RoPE 在 head 维度上的广播方式。</p>
+<p>实施顺序：
+1. 在 <code>__init__</code> 中定义 <code>W_q</code>、<code>W_k</code>、<code>W_v</code>、<code>W_o</code> 四个 <code>nn.Parameter</code>；
+2. 在 <code>forward</code> 中将 <code>W_q x</code>、<code>W_k x</code>、<code>W_v x</code> 的末维 reshape 为 <code>(..., num_heads, d_k/d_v)</code>，并将 head 维度提前作为 batch 维度；
+3. 对 query 与 key 调用 RoPE（传入 <code>token_positions</code>），注意 head 维度参与广播；
+4. 构造因果掩码并调用 <code>scaled_dot_product_attention</code>；
+5. 将多头输出合并末维后通过 <code>W_o</code> 投影回 <code>d_model</code>。</p>
+<p>调试策略：</p>
+<ul>
+<li>
+<p>先关闭 RoPE 与因果掩码，验证多头注意力在随机输入下形状正确、输出有限；</p>
+</li>
+<li>
+<p>单独打印一个 head 的注意力矩阵，检查因果掩码是否使上三角为 0；</p>
+</li>
+<li>
+<p>检查 RoPE 对每个 head 的同一位置是否施加相同旋转。</p>
+</li>
+</ul>
+<p>自检方法：用 <code>uv run pytest -k test_multihead_self_attention</code> 回归测试；检查参数形状与梯度是否回传到四个权重矩阵；验证输出形状为 <code>(batch_size, seq_len, d_model)</code>。</p></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 25-26 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">transformer_block</span><strong>实现 Transformer 块（3 分）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>按照 §3.5 的描述和 Figure 2 的示意，实现 pre-norm Transformer 块。</p>
+<p>Transformer 块包含两个子层（sublayer）：多头自注意力（multi-head self-attention）和逐位置前馈网络（position-wise feed-forward network）。每个子层先执行 RMSNorm，再执行主操作（MHA 或 FF），最后与输入通过残差连接（residual connection）相加。</p>
+<p>具体而言，给定输入张量 \(x\)（shape 为 <code>(batch_size, sequence_length, d_model)</code>），第一个子层计算：</p>
+<p>\[z = x + \text{MultiHeadSelfAttention}(\text{RMSNorm}(x))\]</p>
+<p>第二个子层计算：</p>
+<p>\[y = z + \text{FFN}(\text{RMSNorm}(z))\]</p>
+<p>块的输出张量 shape 与输入相同，均为 <code>(batch_size, sequence_length, d_model)</code>。</p>
+<p><strong>接口参数</strong>（至少接受以下参数）：</p>
+<ul>
+<li>
+<p><code>d_model: int</code> — Transformer 块输入的维度。</p>
+</li>
+<li>
+<p><code>num_heads: int</code> — 多头自注意力的头数。</p>
+</li>
+<li>
+<p><code>d_ff: int</code> — 逐位置前馈网络内层的维度。</p>
+</li>
+</ul>
+<p><strong>测试方法</strong>：实现测试适配器 <code>adapters.run_transformer_block</code>，然后运行：</p>
+<pre><code class="language-sh">uv run pytest -k test_transformer_block
+</code></pre>
+<p><strong>交付物</strong>：通过所提供测试的 Transformer block 代码。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · Figure 2：pre-norm Transformer 块结构示意图，展示输入张量经过 Norm→Causal Multi-Head Self-Attention w/ RoPE→Add，以及 Norm→Position-Wise Feed-Forward→Add 的两条路径。</h4><p>Input tensor (batch_size, seq_len, d_model) → Norm → Causal Multi-Head Self-Attention w/ RoPE → Add → Norm → Position-Wise Feed-Forward → Add → Output tensor (batch_size, seq_len, d_model)</p><p class="problem-source">来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 14</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p><strong>先修概念</strong>：RMSNorm（§3.5.1）、带 RoPE 和因果掩码的多头自注意力（§3.5.3–§3.5.5）、SwiGLU 逐位置前馈网络（§3.5.2）、残差连接。</p>
+<p><strong>实施顺序</strong>：
+1. 确保 MultiHeadSelfAttention 和 PositionWiseFeedForward 已单独通过各自的测试。
+2. 在 Transformer block 的 <code>forward</code> 中，先对输入执行 RMSNorm，再送入 MHA，最后将 MHA 输出与原始输入相加（第一个残差连接）。
+3. 将第一层的输出作为第二层输入，先执行 RMSNorm，再送入 FFN，最后与第二层输入相加（第二个残差连接）。</p>
+<p><strong>调试策略</strong>：</p>
+<ul>
+<li>
+<p>用极小模型（如 1 层、d_model=64）验证前向传播是否正常运行。</p>
+</li>
+<li>
+<p>打印或断点检查每个子层输出的 tensor shape，确认始终为 <code>(batch_size, seq_len, d_model)</code>。</p>
+</li>
+<li>
+<p>监控残差流：如果去掉某个子层后输出等于输入，说明该子层未被正确接入。</p>
+</li>
+</ul>
+<p><strong>自检方法</strong>：</p>
+<ul>
+<li>
+<p>运行 <code>uv run pytest -k test_transformer_block</code>，确保全部通过。</p>
+</li>
+<li>
+<p>手动构造一个小 batch 输入，验证输出 shape 与输入一致。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 26 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">transformer_lm</span><strong>实现 Transformer LM（3 分）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>现在按照 §3.1 的描述和 Figure 1 的示意，将所有组件组装为一个完整的 Transformer 语言模型。</p>
+<p>该模型的处理流程如下：
+1. <strong>Token Embedding</strong>：通过 embedding 层将整数 token ID 序列（shape <code>(batch_size, sequence_length)</code>）映射为稠密向量序列（shape <code>(batch_size, sequence_length, d_model)</code>）。
+2. <strong>Transformer Blocks</strong>：将 embedding 输出送入 <code>num_layers</code> 个结构相同的 Transformer 块，每个块的输入输出 shape 均为 <code>(batch_size, sequence_length, d_model)</code>。
+3. <strong>Output Normalization</strong>：在最后一个 Transformer 块之后，执行一次 RMSNorm 以确保输出尺度合适。
+4. <strong>Output Embedding (LM Head)</strong>：通过一个学到的线性投影将最终的激活转换为预测的下一个 token 的 logits（shape <code>(batch_size, sequence_length, vocab_size)</code>）。</p>
+<p>给定一个批量化的整数 token ID 序列（shape <code>(batch_size, sequence_length)</code>），模型返回一个（批量化的）归一化概率分布（shape <code>(batch_size, sequence_length, vocab_size)</code>），其中每个位置的分布是对输入序列中该位置下一个词的预测。</p>
+<p><strong>接口参数</strong>（除 Transformer block 的构造参数 <code>d_model</code>、<code>num_heads</code>、<code>d_ff</code> 外，还需接受）：</p>
+<ul>
+<li>
+<p><code>vocab_size: int</code> — 词表大小，决定 token embedding 矩阵的维度。</p>
+</li>
+<li>
+<p><code>context_length: int</code> — 最大上下文长度，决定位置编码矩阵的维度。</p>
+</li>
+<li>
+<p><code>num_layers: int</code> — 使用的 Transformer 块数量。</p>
+</li>
+</ul>
+<p><strong>测试方法</strong>：实现测试适配器 <code>adapters.run_transformer_lm</code>，然后运行：</p>
+<pre><code class="language-sh">uv run pytest -k test_transformer_lm
+</code></pre>
+<p><strong>交付物</strong>：通过上述测试的 Transformer LM 模块。</p></section><section class="problem-subsection problem-visual-note"><h4>图表条件 · Figure 1：Transformer 语言模型总览，展示 Token Embedding → [Transformer Block × num_layers] → Linear (Output Embedding) → Softmax → Output Probabilities 的数据流。</h4><p>Token Embedding → [Transformer Block × num_layers] → Linear (Output Embedding) → Softmax → Output Probabilities</p><p class="problem-source">来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 14</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p><strong>先修概念</strong>：Token Embedding（§3.1.1）、Pre-norm Transformer Block（§3.5）、Output Normalization 与 Embedding（§3.2）、RoPE（§3.5.3）。</p>
+<p><strong>实施顺序</strong>：
+1. 确保 Transformer block 已通过测试。
+2. 在 Transformer LM 的 <code>__init__</code> 中构造：Embedding 层、<code>num_layers</code> 个 Transformer 块、最终的 RMSNorm、输出线性投影。
+3. 在 <code>forward</code> 中按顺序：embedding → 逐层 Transformer block → RMSNorm → 线性投影 → 返回 logits。
+4. 注意 RoPE 的位置编码需要 token position 信息，确保正确传递。</p>
+<p><strong>调试策略</strong>：</p>
+<ul>
+<li>
+<p>先用 1 层、小 d_model 测试端到端前向传播。</p>
+</li>
+<li>
+<p>检查每一层输出的 shape 是否符合预期。</p>
+</li>
+<li>
+<p>确认 logits 的 shape 为 <code>(batch_size, sequence_length, vocab_size)</code>。</p>
+</li>
+</ul>
+<p><strong>自检方法</strong>：</p>
+<ul>
+<li>
+<p>运行 <code>uv run pytest -k test_transformer_lm</code>。</p>
+</li>
+<li>
+<p>手动构造输入验证输出 shape。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 27 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">transformer_accounting</span><strong>Transformer LM 资源核算（5 分）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4><p>本问题要求对 Transformer LM 的计算资源（参数与 FLOPs）进行分析。</p>
+<p><strong>前置知识</strong>：Transformer 中绝大多数计算为矩阵乘法。给定 \(A \in \mathbb{R}^{m \times n}\) 和 \(B \in \mathbb{R}^{n \times p}\)，矩阵乘积 \(AB\) 需要 \(2mnp\) FLOPs。原因：\((AB)[i,j] = A[i,:] \cdot B[:,j]\)，该点积需要 \(n\) 次加法和 \(n\) 次乘法（共 \(2n\) FLOPs）；而 \(AB\) 有 \(m \times p\) 个元素，总计 \((2n)(mp) = 2mnp\) FLOPs。</p>
+<p>考虑 GPT-2 XL，其配置如下：</p>
+<ul>
+<li>
+<p>vocab_size: 50,257</p>
+</li>
+<li>
+<p>context_length: 1,024</p>
+</li>
+<li>
+<p>num_layers: 48</p>
+</li>
+<li>
+<p>d_model: 1,600</p>
+</li>
+<li>
+<p>num_heads: 25</p>
+</li>
+<li>
+<p>d_ff: 6,400</p>
+</li>
+</ul>
+<p><strong>(a)</strong> 若按此配置构造模型，模型有多少个可训练参数？假设每个参数使用单精度浮点数（float32）表示，仅加载该模型需要多少内存？</p>
+<p><strong>交付物</strong>：一到两句话的回答。</p>
+<p><strong>(b)</strong> 列出完成一次 GPT-2 XL 模型前向传播所需的所有矩阵乘法。这些矩阵乘法共需多少 FLOPs？假设输入序列长度为 context_length。</p>
+<p><strong>交付物</strong>：列出所有矩阵乘法（附描述），并给出所需 FLOPs 总量。</p>
+<p><strong>(c)</strong> 根据上述分析，模型的哪些部分消耗的 FLOPs 最多？</p>
+<p><strong>交付物</strong>：一到两句话的回答。</p>
+<p><strong>(d)</strong> 对 GPT-2 small（12 层，d_model=768，12 头）、GPT-2 medium（24 层，d_model=1024，16 头）和 GPT-2 large（36 层，d_model=1280，20 头）重复上述分析。随着模型规模增大，Transformer LM 各部分占总 FLOPs 的比例如何变化？</p>
+<p><strong>交付物</strong>：对每个模型，给出其各组件及对应 FLOPs（占前向传播总 FLOPs 的比例）。此外，用一到两句话描述模型规模变化对各组件 FLOPs 占比的影响。</p>
+<p><strong>(e)</strong> 将 GPT-2 XL 的 context_length 增加到 16,384。一次前向传播的总 FLOPs 如何变化？各组件的 FLOPs 相对贡献如何变化？</p>
+<p><strong>交付物</strong>：一到两句话的回答。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><p><strong>先修概念</strong>：FLOPs 计数规则（§3.6）、Transformer LM 各组件的矩阵乘法（embedding、QKV 投影、输出投影、FFN 的 W1/W2）、参数量计算。</p>
+<p><strong>分析步骤</strong>：
+1. 首先列出 Transformer 中所有涉及矩阵乘法的操作：token embedding 查找（不计 FLOPs）、Q/K/V 线性投影、注意力输出投影、FFN 的 W1 和 W2 乘法、LM head 投影。
+2. 对每个矩阵乘法，确定其维度（注意多头注意力中每个头的维度为 d_model/num_heads）。
+3. 使用 \(2mnp\) 规则计算每个乘法的 FLOPs，再乘以 num_layers 得到总 FLOPs。
+4. 参数量方面：统计所有可学习参数（embedding、QKV 投影权重、输出投影权重、FFN 权重、RMSNorm 的 gain 参数等）。</p>
+<p><strong>调试策略</strong>：</p>
+<ul>
+<li>
+<p>先手动计算单层 FLOPs，再乘以层数验证。</p>
+</li>
+<li>
+<p>检查参数量时，注意区分有权重矩阵的层（Linear、Embedding）和仅有 gain 参数的层（RMSNorm）。</p>
+</li>
+</ul>
+<p><strong>自检方法</strong>：</p>
+<ul>
+<li>
+<p>验证参数量的数量级是否合理（GPT-2 XL 约为 1.5B 参数）。</p>
+</li>
+<li>
+<p>检查 FLOPs 中 FFN 和注意力部分的比例是否符合直觉（通常 FFN 占主导）。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 27-28 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">cross_entropy</span><strong>实现交叉熵损失（cross_entropy）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>目标
+<p>实现 cross-entropy 损失函数。给定预测 logits 与目标 next token，计算每个位置的交叉熵，并在 batch 维度上取平均。</p>
+背景
+<p>Transformer 在每个位置 \(i\) 输出 logits \(o_i \in \mathbb{R}^{\text{vocab\_size}}\)，下一 token 的预测分布为：
+\[p(x_{i+1}\mid x_{1:i}) = \text{softmax}(o_i)[x_{i+1}] = \frac{\exp(o_i[x_{i+1}])}{\sum_{a=1}^{\text{vocab\_size}} \exp(o_i[a])}\]
+对单个位置定义损失：
+\[\ell_i = -\log \text{softmax}(o_i)[x_{i+1}]\]
+数据集上的损失为：
+\[\ell(\theta; D) = \frac{1}{|D|m}\sum_{x\in D}\sum_{i=1}^{m} -\log p_\theta(x_{i+1}\mid x_{1:i})\]</p>
+实现要求
+<p>编写函数计算 cross-entropy 损失，需满足：</p>
+<ul>
+<li>
+<p>对数值稳定性，减去 logits 中的最大元素。</p>
+</li>
+<li>
+<p>尽可能约去 <code>log</code> 与 <code>exp</code>。</p>
+</li>
+<li>
+<p>处理任意 batch 维度（按 section 3.3 约定，batch-like 维度在前，vocab size 维度在后）并返回 batch 上的平均值。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>
+<p>实现 <code>adapters.run_cross_entropy</code>。</p>
+</li>
+<li>
+<p>运行 <code>uv run pytest -k test_cross_entropy</code> 并通过。</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ol>
+<li>利用 \(\ell_i = -\log \frac{\exp(o_i[x_{i+1}])}{\sum_j \exp(o_i[j])} = -o_i[x_{i+1}] + \log\sum_j \exp(o_i[j])\) 直接计算，避免先 softmax 再取 log 带来的数值问题。</li>
+<li>在求 \(\log\sum_j \exp(o_i[j])\) 时，先减去 \(\max_j o_i[j]\)（log-sum-exp 技巧）。</li>
+<li>用 <code>gather</code>/<code>indexing</code> 取出每个样本对应 target 的 logit；注意保持 batch 维度。</li>
+<li>自检：构造小随机 logits 与 targets，与 PyTorch <code>F.cross_entropy</code> 逐元素对比。</li>
+</ol></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 29 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">learning_rate_tuning</span><strong>学习率调参实验（learning_rate_tuning）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>目标
+<p>在 toy 示例上观察学习率对 SGD 训练损失的影响。</p>
+背景
+<p>SGD 更新规则（带 \(\alpha/\sqrt{t+1}\) 衰减）：
+\[\theta_{t+1} = \theta_t - \frac{\alpha}{\sqrt{t+1}} \nabla L(\theta_t; B_t)\]
+示例训练循环：</p>
+<pre><code class="language-python">weights = torch.nn.Parameter(5 * torch.randn((10, 10)))
+opt = SGD([weights], lr=1)
+for t in range(100):
+    opt.zero_grad()
+    loss = (weights**2).mean()
+    print(loss.cpu().item())
+    loss.backward()
+    opt.step()
+</code></pre>
+实验要求
+<p>将上述 SGD 示例在<strong>仅 10 次训练迭代</strong>下分别用学习率 <code>1e1</code>、<code>1e2</code>、<code>1e3</code> 运行。观察并报告：</p>
+<ul>
+<li>每种学习率下损失的行为（衰减更快、更慢，还是发散/上升）？</li>
+</ul>
+交付物
+<ul>
+<li>一段 1-2 句话的回答，描述你观察到的行为。</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ol>
+<li>保持训练循环结构不变，只替换 <code>lr</code>。</li>
+<li>打印每次迭代的 <code>loss</code>，画图或列表对比三种学习率。</li>
+<li>思考：学习率过大会导致 loss 上升（发散），过小则下降极慢。</li>
+<li>自检：确认迭代次数为 10，且每次迭代都调用了 <code>zero_grad</code> / <code>backward</code> / <code>step</code>。</li>
+</ol></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 31 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">adamw</span><strong>实现 AdamW 优化器（adamw）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>目标
+<p>从零实现 AdamW 优化器，作为 <code>torch.optim.Optimizer</code> 的子类。</p>
+背景
+<p>AdamW 对 Adam 进行解耦权重衰减（decoupled weight decay）。对每个参数维护一阶矩 \(m\) 与二阶矩 \(v\) 的滑动估计。算法（\(t\) 从 1 开始）：</p>
+<pre><code class="language-text">m ← 0 ; v ← 0
+for t = 1, ..., T do
+    g ← ∇_θ ℓ(θ; B_t)
+    m ← β₁ m + (1 − β₁) g
+    v ← β₂ v + (1 − β₂) g²
+    α_t ← α · sqrt(1 − β₂^t) / (1 − β₁^t)
+    θ ← θ − α_t m / (sqrt(v) + ε)
+    θ ← θ − α λ θ
+end for
+</code></pre>
+实现要求
+<ul>
+<li>
+<p>子类化 <code>torch.optim.Optimizer</code>。</p>
+</li>
+<li>
+<p><code>__init__</code> 接收学习率 \(\alpha\)，以及超参数 \(\beta\)（即 <code>(β₁, β₂)</code>）、\(\varepsilon\)、权重衰减率 \(\lambda\)。</p>
+</li>
+<li>
+<p>使用基类提供的 <code>self.state</code>（<code>nn.Parameter</code> → 字典）存储每参数的矩估计。</p>
+</li>
+<li>
+<p>实现 <code>adapters.get_adamw_cls</code>，使测试能获取你的 AdamW 类。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>运行 <code>uv run pytest -k test_adamw</code> 并通过。</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ol>
+<li><code>__init__</code> 中把 <code>lr</code> 等超参数放入 <code>defaults</code> 字典，再 <code>super().__init__(params, defaults)</code>。</li>
+<li><code>step()</code> 中遍历 <code>self.param_groups</code> 与每个 <code>p</code>；若 <code>p.grad is None</code> 则跳过。</li>
+<li>用 <code>self.state[p].get('t', 0)</code> 取当前迭代数，更新后写回。</li>
+<li>注意 \(g^2\) 是 element-wise 平方；\(\sqrt{v} + \epsilon\) 也是 element-wise。</li>
+<li>自检：对一个简单二次损失用你的 AdamW 优化几步，检查 loss 是否下降，并与 PyTorch 的 <code>torch.optim.AdamW</code> 对比。</li>
+</ol></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 32 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">adamwAccounting</span><strong>AdamW 训练的资源核算（adamwAccounting）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>目标
+<p>对 AdamW 训练做内存（peak memory）与计算（FLOPs）核算。假设所有张量使用 float32。</p>
+(a) 峰值内存
+<p>把 AdamW 训练的峰值内存分解为：参数（parameters）、激活（activations）、梯度（gradients）、优化器状态（optimizer state）。用 <code>batch_size</code> 与模型超参数（<code>vocab_size, context_length, num_layers, d_model, num_heads</code>）表示，并假设 <code>d_ff = 4 × d_model</code>。</p>
+<p>为简化激活内存，<strong>仅</strong>考虑以下组件：</p>
+<ul>
+<li>
+<p>Transformer block：</p>
+</li>
+<li>
+<p>RMSNorm(s)</p>
+</li>
+<li>
+<p>Multi-head self-attention 子层：QKV projections、\(Q^\top K\) 矩阵乘、softmax、weighted sum of values、output projection</p>
+</li>
+<li>
+<p>Position-wise feed-forward：\(W_1\) 矩阵乘、SiLU、\(W_2\) 矩阵乘</p>
+</li>
+<li>
+<p>final RMSNorm</p>
+</li>
+<li>
+<p>output embedding</p>
+</li>
+<li>
+<p>cross-entropy on logits</p>
+</li>
+</ul>
+<p>交付：参数、激活、梯度、优化器状态及总计的代数表达式。</p>
+(b) 代入 GPT-2 XL
+<p>把 (a) 中的表达式代入 GPT-2 XL 配置，使其仅依赖于 <code>batch_size</code>：</p>
+<ul>
+<li><code>vocab_size = 50257, context_length = 1024, num_layers = 48, d_model = 1600, num_heads = 25, d_ff = 6400</code></li>
+</ul>
+<p>交付：形如 <code>a·batch_size + b</code> 的数值表达式，以及在 80GB 内存下能使用的最大 batch size。</p>
+(c) 单步 FLOPs
+<p>交付：单步 AdamW 的 FLOPs 代数表达式，附简要理由。</p>
+(d) MFU 与训练时间
+<p>Model FLOPs Utilization (MFU) 定义为观测吞吐（tokens/s）与硬件理论峰值 FLOP 吞吐之比。NVIDIA A100 对 float32 的理论峰值为 19.5 teraFLOP/s。假设能达到 50% MFU，在单张 A100 上训练 GPT-2 XL：400K steps、<code>batch_size = 1024</code>，按 Kaplan et al. (2020) 与 Hoffmann et al. (2022) 假设反向传播 FLOPs 为前向的 2 倍。</p>
+<p>交付：训练所需的天数，附简要理由。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ol>
+<li>参数与梯度内存 = 参数数量 × 4 字节（float32）。AdamW 优化器状态 = 参数数量 × 2（\(m\) 与 \(v\)）× 4 字节。</li>
+<li>每个矩阵乘 \(A_{m\times n} B_{n\times p}\) 需要 \(2mnp\) FLOPs。枚举 Transformer 中所有矩阵乘（embedding、QKV、output projection、\(W_1\)、\(W_2\)、LM head），按 <code>batch_size × seq_len</code> 展开。</li>
+<li>激活内存按题目列出的组件逐项估算，注意 batch 维度与序列长度维度。</li>
+<li>单步 FLOPs = 前向 + 反向（≈ 3× 前向）。单步时间 = 单步 FLOPs / (MFU × 峰值 FLOPs)。总时间 = 单步时间 × steps / 86400。</li>
+<li>自检：检查 <code>a·batch_size + b</code> 中 <code>b</code> 是否包含参数/梯度/优化器状态等与 batch 无关的项。</li>
+</ol></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 32-33 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">learning_rate_schedule</span><strong>实现带 warmup 的 cosine 学习率调度（learning_rate_schedule）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>目标
+<p>实现 LLaMA 使用的 cosine annealing 学习率调度。</p>
+背景
+<p>学习率调度函数根据当前步 \(t\) 返回该步的学习率。本作业实现带 warmup 的 cosine annealing，参数为：</p>
+<ul>
+<li>
+<p>\(t\)：当前迭代步</p>
+</li>
+<li>
+<p>\(\alpha_{\max}\)：最大学习率</p>
+</li>
+<li>
+<p>\(\alpha_{\min}\)：最小（最终）学习率</p>
+</li>
+<li>
+<p>\(T_w\)：warm-up 迭代数</p>
+</li>
+<li>
+<p>\(T_c\)：cosine annealing 迭代数</p>
+</li>
+</ul>
+<p>学习率定义为：</p>
+<ul>
+<li>
+<p>(Warm-up) 若 \(t &lt; T_w\)：\(\alpha_t = \frac{t}{T_w} \alpha_{\max}\)</p>
+</li>
+<li>
+<p>(Cosine annealing) 若 \(T_w \le t \le T_c\)：\(\alpha_t = \alpha_{\min} + \frac{1}{2}\left(1 + \cos\left(\frac{t - T_w}{T_c - T_w}\pi\right)\right)(\alpha_{\max} - \alpha_{\min})\)</p>
+</li>
+<li>
+<p>(Post-annealing) 若 \(t &gt; T_c\)：\(\alpha_t = \alpha_{\min}\)</p>
+</li>
+</ul>
+实现要求
+<ul>
+<li>
+<p>编写函数接收 <code>t, α_max, α_min, T_w, T_c</code>，返回 \(\alpha_t\)。</p>
+</li>
+<li>
+<p>实现 <code>adapters.get_lr_cosine_schedule</code>，使测试能获取该调度函数。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>运行 <code>uv run pytest -k test_get_lr_cosine_schedule</code> 并通过。</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ol>
+<li>先画函数图像（或打印若干点）确认 warmup 段线性上升、cosine 段平滑下降、post-annealing 段保持 \(\alpha_{\min}\)。</li>
+<li>注意 Python 的 <code>math.cos</code> / <code>torch.cos</code> 输入是弧度；公式里已显式乘 \(\pi\)。</li>
+<li>若用 PyTorch 实现，注意 <code>t</code> 可能是 Python 标量或 tensor，确保类型兼容。</li>
+<li>自检：取 \(t=0\) 应得 0；\(t=T_w\) 应得 \(\alpha_{\max}\)；\(t=T_c\) 应得 \(\alpha_{\min}\)；\(t&gt;T_c\) 保持 \(\alpha_{\min}\)。</li>
+</ol></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 33-34 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">gradient_clipping</span><strong>实现梯度裁剪（gradient_clipping）</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>目标
+<p>实现梯度裁剪，用以限制反向传播后梯度的 \(\ell_2\) 范数，稳定训练。</p>
+背景
+<p>给定所有参数的梯度 \(g\)，先计算其 \(\ell_2\) 范数 \(\|g\|_2\)：</p>
+<ul>
+<li>
+<p>若 \(\|g\|_2 &lt; M\)，保持 \(g\) 不变；</p>
+</li>
+<li>
+<p>否则将 \(g\) 乘以缩放因子 \(\frac{M}{\|g\|_2 + \varepsilon}\)（\(\varepsilon\) 为小常数，如 \(10^{-6}\)，用于数值稳定）。
+裁剪后的范数将略小于 \(M\)。</p>
+</li>
+</ul>
+实现要求
+<ul>
+<li>
+<p>函数接收参数列表与最大 \(\ell_2\) 范数 \(M\)。</p>
+</li>
+<li>
+<p><strong>原地</strong>修改每个参数的梯度。</p>
+</li>
+<li>
+<p>使用 \(\varepsilon = 10^{-6}\)（PyTorch 默认值）。</p>
+</li>
+<li>
+<p>实现 <code>adapters.run_gradient_clipping</code>。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>运行 <code>uv run pytest -k test_gradient_clipping</code> 并通过。</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ol>
+<li>先遍历所有 <code>p.grad</code> 不为 <code>None</code> 的参数，计算全局 \(\ell_2\) 范数：<code>total_norm = sqrt(sum(p.grad.data.norm()**2 for p in params))</code>。</li>
+<li>计算 <code>clip_coef = M / (total_norm + eps)</code>；若 <code>clip_coef &lt; 1</code> 则把所有 <code>p.grad.data</code> 乘上它。</li>
+<li>注意不要对 <code>p.grad is None</code> 的参数做操作。</li>
+<li>自检：构造一个已知梯度的模型，裁剪后验证全局范数 ≤ M（略小）。</li>
+</ol></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 34 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">data_loading</span><strong>实现数据加载</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>Problem (data_loading): 实现数据加载（2 分）
+<p>编写一个函数，接收一个 numpy 数组 <code>x</code>（包含 token ID 的整数数组）、一个 <code>batch_size</code>、一个 <code>context_length</code> 和一个 PyTorch device 字符串（如 <code>'cpu'</code> 或 <code>'cuda:0'</code>），并返回一对 tensor：采样得到的输入序列和对应的 next-token 目标。两个 tensor 的 shape 都应为 <code>(batch_size, context_length)</code>，包含 token ID，并且都应放置在请求的 device 上。</p>
+<p>为了用提供的测试验证你的实现，你需要先在 <code>[adapters.run_get_batch]</code> 中实现测试适配器。然后运行 <code>uv run pytest -k test_get_batch</code> 来测试你的实现。</p>
+<h3>低资源/降速提示：在 CPU 或 Apple Silicon 上加载数据</h3>
+<p>如果你计划在 CPU 或 Apple Silicon 上训练 LM，需要将数据移动到相应的 device（同样，之后也应对模型使用相同的 device）。如果在 CPU 上，可以使用 <code>'cpu'</code> device 字符串；如果在 Apple Silicon（M* 芯片）上，可以使用 <code>'mps'</code> device 字符串。</p>
+<p>如果数据集太大无法加载到内存中怎么办？可以使用名为 <code>mmap</code> 的 Unix 系统调用，它将磁盘上的文件映射到虚拟内存，并在访问该内存位置时延迟加载文件内容。因此，你可以“假装”整个数据集都在内存中。Numpy 通过 <code>np.memmap</code>（或 <code>np.load</code> 的 <code>mmap_mode='r'</code> 标志，如果你最初用 <code>np.save</code> 保存了数组）实现了这一点，它将返回一个类似 numpy 数组的对象，在你访问时按需加载条目。在训练期间从数据集（即 numpy 数组）采样时，请确保以内存映射模式加载数据集（通过 <code>np.memmap</code> 或 <code>np.load</code> 的 <code>mmap_mode='r'</code> 标志，取决于你如何保存数组）。确保还指定了与正在加载的数组匹配的 <code>dtype</code>。显式验证内存映射数据看起来正确（例如，不包含超出预期词表大小的值）可能会有所帮助。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>NumPy 数组操作和索引</p>
+</li>
+<li>
+<p>PyTorch tensor 创建和 device 管理</p>
+</li>
+<li>
+<p>语言模型训练中的数据批处理概念</p>
+</li>
+<li>
+<p>内存映射文件（mmap）</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>理解数据加载的目标：从长序列中随机采样固定长度的输入-目标对</li>
+<li>实现随机起始位置采样</li>
+<li>提取输入序列（x）和目标序列（y，即 x 的下一个 token）</li>
+<li>转换为 PyTorch tensor 并移动到指定 device</li>
+<li>实现 <code>adapters.run_get_batch</code> 适配器</li>
+<li>运行测试验证</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>检查返回 tensor 的 shape 是否为 <code>(batch_size, context_length)</code></p>
+</li>
+<li>
+<p>验证目标序列是否是输入序列的“下一个 token”偏移</p>
+</li>
+<li>
+<p>确认 tensor 在正确的 device 上</p>
+</li>
+<li>
+<p>测试边界情况：数据集末尾、batch_size 为 1 等</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>运行 <code>uv run pytest -k test_get_batch</code></p>
+</li>
+<li>
+<p>手动验证几个 batch 的输入-目标对齐</p>
+</li>
+<li>
+<p>确认内存映射模式下数据加载正确</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 35 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">checkpointing</span><strong>实现模型 checkpoint 保存与加载</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>Problem (checkpointing): 实现模型 checkpoint 保存与加载（1 分）
+<p>实现以下两个函数来加载和保存 checkpoint：</p>
+<p><strong><code>save_checkpoint(model, optimizer, iteration, out)</code></strong>：将所有状态从前三参数转储到类文件对象 <code>out</code> 中。你可以使用模型和优化器的 <code>state_dict</code> 方法获取它们的相关状态，并使用 <code>torch.save(obj, out)</code> 将 <code>obj</code> 转储到 <code>out</code> 中（PyTorch 支持路径或类文件对象）。典型的选择是让 <code>obj</code> 是一个字典，但只要之后能加载 checkpoint，你可以使用任何格式。</p>
+<p>参数：</p>
+<ul>
+<li>
+<p><code>model: torch.nn.Module</code></p>
+</li>
+<li>
+<p><code>optimizer: torch.optim.Optimizer</code></p>
+</li>
+<li>
+<p><code>iteration: int</code></p>
+</li>
+<li>
+<p><code>out: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]</code></p>
+</li>
+</ul>
+<p><strong><code>load_checkpoint(src, model, optimizer)</code></strong>：从 <code>src</code>（路径或类文件对象）加载 checkpoint，然后从该 checkpoint 恢复模型和优化器状态。你的函数应返回保存到 checkpoint 中的迭代次数。你可以使用 <code>torch.load(src)</code> 恢复在 <code>save_checkpoint</code> 中保存的内容，并使用模型和优化器中的 <code>load_state_dict</code> 方法使它们回到之前的状态。</p>
+<p>参数：</p>
+<ul>
+<li>
+<p><code>src: str | os.PathLike | typing.BinaryIO | typing.IO[bytes]</code></p>
+</li>
+<li>
+<p><code>model: torch.nn.Module</code></p>
+</li>
+<li>
+<p><code>optimizer: torch.optim.Optimizer</code></p>
+</li>
+</ul>
+<p>实现 <code>[adapters.run_save_checkpoint]</code> 和 <code>[adapters.run_load_checkpoint]</code> 适配器，并确保它们通过 <code>uv run pytest -k test_checkpointing</code>。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>PyTorch <code>state_dict()</code> 和 <code>load_state_dict()</code> 机制</p>
+</li>
+<li>
+<p><code>torch.save()</code> 和 <code>torch.load()</code> 的序列化/反序列化</p>
+</li>
+<li>
+<p>有状态优化器（如 AdamW）的状态管理</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>实现 <code>save_checkpoint</code>：收集模型 state_dict、优化器 state_dict 和迭代次数，用 <code>torch.save</code> 保存</li>
+<li>实现 <code>load_checkpoint</code>：用 <code>torch.load</code> 恢复，分别加载模型和优化器的 state_dict</li>
+<li>实现两个适配器函数</li>
+<li>运行测试验证</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>检查保存的 checkpoint 文件是否能正确加载</p>
+</li>
+<li>
+<p>验证加载后模型输出是否与保存前一致</p>
+</li>
+<li>
+<p>验证优化器状态（如 AdamW 的动量）是否正确恢复</p>
+</li>
+<li>
+<p>确认返回的迭代次数正确</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>运行 <code>uv run pytest -k test_checkpointing</code></p>
+</li>
+<li>
+<p>保存 checkpoint 后加载，比较模型参数是否一致</p>
+</li>
+<li>
+<p>验证训练可以从 checkpoint 正确恢复</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 36 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">training_together</span><strong>整合训练</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>Problem (training_together): 整合训练（4 分）
+<p>编写一个运行训练循环的脚本，在用户提供的输入上训练你的模型。特别地，我们建议你的训练脚本至少支持以下功能：</p>
+<ul>
+<li>
+<p>能够配置和控制各种模型和优化器超参数</p>
+</li>
+<li>
+<p>使用 <code>np.memmap</code> 内存高效地加载训练和验证大数据集</p>
+</li>
+<li>
+<p>将 checkpoint 序列化到用户提供的路径</p>
+</li>
+<li>
+<p>定期记录训练和验证性能（例如，输出到控制台和/或外部服务如 Weights and Biases，wandb.ai）</p>
+</li>
+</ul>
+<h3>提示与技巧</h3>
+<p>让训练脚本易于用不同超参数启动训练运行（例如，通过命令行参数）是值得的，因为你之后会多次这样做来研究不同选择对训练的影响。</p>
+<p>重要提示：如果你的实现正确且高效，上述超参数应在 1 块 H100 GPU 上产生大约 30-40 分钟的运行时间。如果你的运行时间长得多的请检查并确保你的数据加载、checkpoint 或验证损失代码没有成为瓶颈，并且你的实现已正确批处理。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>所有前面的组件：数据加载、模型、损失函数、优化器、checkpoint</p>
+</li>
+<li>
+<p>命令行参数解析（如 argparse）</p>
+</li>
+<li>
+<p>日志记录基础设施</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>设计命令行接口以接收超参数</li>
+<li>加载数据集（使用 np.memmap）</li>
+<li>初始化模型和优化器</li>
+<li>实现训练循环：前向传播、反向传播、优化器步进</li>
+<li>添加 checkpoint 保存逻辑</li>
+<li>添加定期验证和日志记录</li>
+<li>测试端到端训练</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>先用极少步骤（如 10 步）测试脚本是否能运行</p>
+</li>
+<li>
+<p>监控每步的运行时间，识别瓶颈</p>
+</li>
+<li>
+<p>检查损失是否下降</p>
+</li>
+<li>
+<p>验证 checkpoint 保存和加载是否正常</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>运行完整训练流程，确认无错误</p>
+</li>
+<li>
+<p>检查日志输出是否包含训练/验证损失</p>
+</li>
+<li>
+<p>验证 checkpoint 文件已正确保存</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 37 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">decoding</span><strong>文本解码</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>Problem (decoding): 文本解码（3 分）
+<p>实现一个从你的语言模型解码（生成文本）的函数。我们建议支持以下功能：</p>
+<ul>
+<li>
+<p>为用户提供的 prompt 生成补全（即接收某个 \(x_{1...t}\) 并采样补全直到遇到 <code>&lt;filename&gt;</code> token）</p>
+</li>
+<li>
+<p>允许用户控制生成的最大 token 数</p>
+</li>
+<li>
+<p>给定期望的 temperature 值，在采样前对预测的 next-word 分布应用 softmax temperature scaling</p>
+</li>
+<li>
+<p>Top-p 采样（Holtzman et al., 2020；也称为 nucleus sampling），给定用户指定的阈值</p>
+</li>
+</ul>
+<h3>背景知识</h3>
+<p><strong>Softmax</strong>：按照标准约定，语言模型输出是最终线性层的输出（"logits"），因此我们需要通过 softmax 操作将其转换为归一化概率：</p>
+<p>\[
+\text{softmax}(v)_i = \frac{\exp(v_i)}{\sum_j \exp(vj)}
+\]</p>
+<p><strong>解码</strong>：为了从模型生成文本（解码），我们将前缀 token 序列（"prompt"）提供给模型，让它产生一个预测序列中下一个词的概率分布。然后我们从这个词汇表上的分布中采样以确定下一个输出 token。</p>
+<p>具体来说，解码过程的一个步骤应接收序列 \(x_{1...t}\) 并通过以下方程返回 token \(x_{t+1}\)：</p>
+<p>\[
+P(x_{t+1} = i \mid x_{1...t}) = \frac{\exp(v_i)}{\sum_j \exp(vj)}
+\]
+\[
+v = \text{TransformerLM}(x_{1...t})_t \in \mathbb{R}^{\text{vocab\_size}}
+\]</p>
+<p>其中 TransformerLM 是我们的模型，接收长度为 <code>sequence_length</code> 的序列并产生大小为 \((\text{sequence\_length} \times \text{vocab\_size})\) 的矩阵，我们取该矩阵的最后一个元素，因为我们要找的是第 \(t\) 个位置的 next-word 预测。</p>
+<p>通过反复采样这些单步条件分布（将先前生成的输出 token 附加到下一个解码时间步的输入中），直到生成 end-of-sequence token <code>&lt;filename&gt;</code>（或用户指定的最大生成 token 数），我们得到一个基本的解码器。</p>
+<p><strong>Temperature scaling</strong>：我们用 temperature 参数 \(\tau\) 修改 softmax：</p>
+<p>\[
+\text{softmax}(v, \tau)_i = \frac{\exp(v_i/\tau)}{\sum_{j=1}^{|\text{vocab\_size}|} \exp(v_j/\tau)}
+\]</p>
+<p>注意当 \(\tau \to 0\) 时，\(v\) 中最大元素占主导，softmax 输出变为集中在最大元素上的 one-hot 向量。</p>
+<p><strong>Top-p 采样（nucleus sampling）</strong>：设 \(q\) 是（temperature 缩放后的）softmax 产生的概率分布，大小为 <code>(vocab_size)</code>。具有超参数 \(p\) 的 nucleus sampling 根据以下方程产生下一个 token：</p>
+<p>\[
+P(x_{t+1} = i \mid q) = \begin{cases} \frac{q_i}{\sum_{j \in V(p)} q_j} &amp; \text{if } i \in V(p) \\ 0 &amp; \text{otherwise} \end{cases}
+\]</p>
+<p>其中 \(V(p)\) 是索引的最小集合，使得 \(\sum_{j \in V(p)} q_j \geq p\)。你可以通过首先按大小对概率分布 \(q\) 排序，然后选择最大的词汇表元素直到达到目标水平来轻松计算这个量。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>Softmax 操作及其数值稳定性</p>
+</li>
+<li>
+<p>采样策略（argmax、multinomial）</p>
+</li>
+<li>
+<p>Temperature scaling 和 top-p sampling 的数学原理</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>实现单步解码：给定序列，获取模型输出的 logits，取最后一个位置的 logits，应用 softmax 得到概率分布</li>
+<li>实现 temperature scaling</li>
+<li>实现 top-p sampling</li>
+<li>实现完整解码循环：反复采样下一个 token 直到遇到 <code>&lt;filename&gt;</code> 或达到最大长度</li>
+<li>测试不同 temperature 和 top-p 值的输出质量</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>先用 temperature=0（argmax）测试确定性输出</p>
+</li>
+<li>
+<p>检查生成的 token ID 是否在词表范围内</p>
+</li>
+<li>
+<p>验证 <code>&lt;filename&gt;</code> token 是否正确处理</p>
+</li>
+<li>
+<p>测试空 prompt 和最大长度限制</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>生成多个样本，检查文本是否连贯</p>
+</li>
+<li>
+<p>验证 temperature 参数是否按预期影响输出多样性</p>
+</li>
+<li>
+<p>验证 top-p 参数是否按预期截断低概率 token</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 39 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">experiment_log</span><strong>实验记录</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>Problem (experiment_log): 实验记录（3 分）
+<p>为你的训练和评估代码创建实验跟踪基础设施，使你能够跟踪你的实验以及关于梯度步数和 wallclock 时间的损失曲线。</p>
+<p>交付物：你的实验的日志基础设施代码，以及一份实验日志（一份记录你尝试过的所有事情的文档），用于本节下面的作业问题。</p>
+<h3>提示</h3>
+<p>为了能够提交损失曲线，请确保定期评估验证损失并记录步数和 wallclock 时间。你可能会发现像 Weights and Biases 这样的日志基础设施很有帮助。</p></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>实验跟踪的概念和最佳实践</p>
+</li>
+<li>
+<p>日志记录框架（如 Python logging、wandb）</p>
+</li>
+<li>
+<p>损失曲线可视化</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>选择日志基础设施（如 wandb、tensorboard、或自定义日志）</li>
+<li>在训练循环中添加日志记录点：每个 step 记录训练损失，定期记录验证损失</li>
+<li>确保记录 wallclock 时间和梯度步数</li>
+<li>创建实验日志文档模板，记录每次实验的超参数和结果</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>检查日志是否按预期写入</p>
+</li>
+<li>
+<p>验证损失值是否正确记录</p>
+</li>
+<li>
+<p>确认 wallclock 时间戳准确</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>运行短训练，检查日志输出是否完整</p>
+</li>
+<li>
+<p>验证损失曲线是否可绘制</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 40 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">learning_rate</span><strong>学习率调优</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>Problem (learning_rate): 学习率调优（3 分）（4 H100 小时）
+<p>学习率是最重要的超参数之一。取你训练的基础模型，回答以下问题：</p>
+<p><strong>(a)</strong> 对学习率进行超参数搜索并报告最终损失（如果优化器发散则记录发散）。</p>
+<p>交付物：与多个学习率相关的学习曲线。解释你的超参数搜索策略。</p>
+<p>交付物：一个在 TinyStories 上验证损失（per-token）至多为 1.45 的模型。</p>
+<h3>低资源/降速提示：在 CPU 或 Apple Silicon 上少步数训练</h3>
+<p>如果你在 cpu 或 mps 上运行，应将处理的总 token 数减少到 40,000,000，这足以产生合理流畅的文本。你也可以将目标验证损失从 1.45 提高到 2.00。</p>
+<p>使用调优后的学习率在 M3 Max 芯片和 36 GB RAM 上运行我们的解决方案代码，我们使用 batch size × 总步数 × context length = 32 × 5000 × 256 = 40,960,000 tokens，在 cpu 上需要 1 小时 22 分钟，在 mps 上需要 36 分钟。在第 5000 步，我们达到 1.80 的验证损失。</p>
+<p>一些额外提示：</p>
+<ul>
+<li>
+<p>当使用 X 个训练步时，我们建议调整 cosine 学习率衰减调度以在第 X 步精确终止其衰减（即达到最小学习率）。</p>
+</li>
+<li>
+<p>当使用 mps 时，不要使用 TF32 内核，即不要设置 <code>torch.set_float32_matmul_precision('high')</code>，就像你在 cuda 设备上可能做的那样。我们尝试在 mps 上启用 TF32 内核（torch 版本 2.6.0），发现后端会使用静默损坏的内核导致训练不稳定。</p>
+</li>
+<li>
+<p>你可以通过使用 <code>torch.compile</code> JIT 编译模型来加速训练。具体来说：</p>
+</li>
+<li>
+<p>在 cpu 上，用 <code>model = torch.compile(model)</code> 编译模型</p>
+</li>
+<li>
+<p>在 mps 上，你可以使用 <code>model = torch.compile(model, backend="aot_eager")</code> 稍微优化反向传播</p>
+</li>
+<li>
+<p>截至 torch 版本 2.6.0，Inductor 在 mps 上不受支持</p>
+</li>
+</ul>
+<p><strong>(b)</strong> 民间智慧认为最佳学习率“处于稳定性的边缘”。研究学习率发散的点与你的最佳学习率之间的关系。</p>
+<p>交付物：包含至少一次发散运行的学习曲线以及这如何与收敛率相关的分析。</p>
+<h3>基础模型超参数</h3>
+<ul>
+<li>
+<p>vocab_size: 10000</p>
+</li>
+<li>
+<p>context_length: 256</p>
+</li>
+<li>
+<p>d_model: 512</p>
+</li>
+<li>
+<p>d_ff: 1344（大约 \(\frac{8}{3} d_{\text{model}}\)，64 的倍数）</p>
+</li>
+<li>
+<p>RoPE theta \(\Theta\): 10000</p>
+</li>
+<li>
+<p>4 层，16 头（约 17M 非嵌入参数）</p>
+</li>
+<li>
+<p>处理的总 token 数：327,680,000（batch_size × 总步数 × context_length 应大致等于此值）</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><h3>先修概念</h3>
+<ul>
+<li>
+<p>学习率对训练动态的影响</p>
+</li>
+<li>
+<p>学习率调度（cosine annealing with warmup）</p>
+</li>
+<li>
+<p>超参数搜索策略（网格搜索、随机搜索、二分搜索）</p>
+</li>
+</ul>
+<h3>实施顺序</h3>
+<ol>
+<li>确定搜索范围：从非常小（如 1e-5）到非常大（如 1e-1）的学习率</li>
+<li>运行短训练（如 100-500 步）快速筛选</li>
+<li>对表现好的范围进行更长时间的训练</li>
+<li>记录每次运行的最终验证损失</li>
+<li>绘制学习曲线</li>
+<li>分析发散点与最佳学习率的关系</li>
+</ol>
+<h3>调试策略</h3>
+<ul>
+<li>
+<p>监控训练过程中的损失：如果损失变为 NaN 或急剧增加，说明学习率过大</p>
+</li>
+<li>
+<p>使用梯度裁剪防止不稳定</p>
+</li>
+<li>
+<p>记录每步的 wallclock 时间以估算总训练时间</p>
+</li>
+</ul>
+<h3>自检方法</h3>
+<ul>
+<li>
+<p>验证最佳学习率的验证损失是否 ≤ 1.45（或低资源配置下 ≤ 2.00）</p>
+</li>
+<li>
+<p>确认学习曲线展示了收敛和发散行为</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 41-42 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">batch_size_experiment</span><strong>批量大小实验</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>批量大小（batch size）是重要的训练超参数——它让我们能通过更大的矩阵乘法更高效地利用 GPU，但这是否意味着批量越大越好？本实验通过改变批量大小来观察对训练的影响。</p>
+任务
+<ul>
+<li>
+<p>将你的批量大小从 1 开始一直变化到 GPU 显存上限。</p>
+</li>
+<li>
+<p>在中间至少尝试几个不同的批量大小，包括 64 和 128 等常见大小。</p>
+</li>
+<li>
+<p>如有必要，对每个批量大小重新优化学习率。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>
+<p>不同批量大小运行的学习曲线。</p>
+</li>
+<li>
+<p>一段关于批量大小及其对训练影响的发现的简短讨论（几句话）。</p>
+</li>
+</ul>
+资源预算
+<ul>
+<li>2 H100 小时</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修：理解批量大小对梯度估计噪声和训练速度的关系；熟悉你的训练循环和数据加载逻辑。</p>
+</li>
+<li>
+<p>实施顺序：先在小批量（如 1、16、32）上验证代码正确性，再逐步增大到 64、128 以及显存允许的最大值；对每个批量大小记录训练损失和验证损失曲线。</p>
+</li>
+<li>
+<p>调试策略：如果出现 CUDA 显存不足（OOM），减小批量大小或上下文长度；观察不同批量大小下每步训练时间和总收敛步数的权衡。</p>
+</li>
+<li>
+<p>自检：确保每个运行的批量大小和学习率都有记录；比较不同批量大小达到相同验证损失所需的步数与墙钟时间。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 42 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">generate</span><strong>文本生成</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>现在你已经训练好了一个语言模型并实现了解码器（支持 temperature scaling 和 top-p 采样），接下来用它来生成文本，并观察生成质量。</p>
+任务
+<ul>
+<li>
+<p>使用你的解码器和训练好的 checkpoint，报告模型生成的文本。</p>
+</li>
+<li>
+<p>你可能需要调节解码器参数（temperature、top-p 等）以获得流畅的输出。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>
+<p>一段至少 256 token 的文本 dump（或直到第一个 <code>&lt;|endoftext|&gt;</code> token 为止）。</p>
+</li>
+<li>
+<p>对该输出流畅性的简要评论，以及至少两个影响输出好坏的因素的讨论。</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修：理解 softmax temperature scaling（τ → 0 时趋向 one-hot）和 top-p（nucleus）采样的机制；熟悉你的 <code>decode</code> 函数接口。</p>
+</li>
+<li>
+<p>实施顺序：先加载训练好的 checkpoint，给定一个 prompt（如 "Once upon a time"），分别尝试不同 temperature（如 0.5、0.8、1.0）和 top-p 值（如 0.9、0.95），观察生成文本的流畅性与多样性。</p>
+</li>
+<li>
+<p>调试策略：如果生成文本重复或无意义，尝试降低 temperature 或调整 top-p；如果文本不连贯，检查 checkpoint 是否加载正确以及验证损失是否足够低。</p>
+</li>
+<li>
+<p>自检：确认生成的文本 dump 满足至少 256 token 或到第一个 <code>﻿</code> 为止；记录你使用的 temperature 和 top-p 值。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 43 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">layer_norm_ablation</span><strong>移除 RMSNorm 消融实验</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>常说层归一化（layer normalization）对 Transformer 训练的稳定性很重要。本实验通过移除所有 RMSNorm 来验证这一点。</p>
+任务
+<ul>
+<li>
+<p>移除你 Transformer 中所有的 RMSNorm 并训练。</p>
+</li>
+<li>
+<p>观察在之前最优学习率下会发生什么。</p>
+</li>
+<li>
+<p>尝试通过使用较低的学习率是否能恢复训练稳定性。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>
+<p>移除 RMSNorm 后训练的学习曲线，以及对应最优学习率的学习曲线。</p>
+</li>
+<li>
+<p>一段关于 RMSNorm 影响的简短评论（几句话）。</p>
+</li>
+</ul>
+资源预算
+<ul>
+<li>1 H100 小时</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修：理解 RMSNorm 在 pre-norm Transformer 块中的作用（稳定激活尺度、改善梯度流）。</p>
+</li>
+<li>
+<p>实施顺序：先备份你的 pre-norm 实现；移除每个 Transformer 块中的 RMSNorm（即注意力子层和 FFN 子层都不再做归一化），保留残差连接；分别用原最优学习率和若干更低的学行率训练并记录曲线。</p>
+</li>
+<li>
+<p>调试策略：如果训练立即发散（损失急剧上升），尝试逐步降低学习率；监控梯度范数和激活范数是否爆炸。</p>
+</li>
+<li>
+<p>自检：确保移除 RMSNorm 后的模型与基线模型结构完全一致，仅少了归一化层；对比学习曲线时保证其他超参数相同。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 43 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">pre_norm_ablation</span><strong>Post-norm 消融实验</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>Pre-norm Transformer 块的定义为
+\[z = x + \text{MultiHeadedSelfAttention}(\text{RMSNorm}(x))\]
+\[y = z + \text{FFN}(\text{RMSNorm}(z))\]
+这是对原始 Transformer 架构少有的"共识性"修改之一。原始 Transformer 使用的是 post-norm 方式：
+\[z = \text{RMSNorm}(x + \text{MultiHeadedSelfAttention}(x))\]
+\[y = \text{RMSNorm}(z + \text{FFN}(z))\]
+本实验将 pre-norm 改回 post-norm 并观察效果。</p>
+任务
+<ul>
+<li>
+<p>将你的 pre-norm Transformer 实现修改为 post-norm。</p>
+</li>
+<li>
+<p>用 post-norm 模型训练并观察会发生什么。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>一条 post-norm Transformer 的学习曲线，与 pre-norm 的学习曲线进行对比。</li>
+</ul>
+资源预算
+<ul>
+<li>1 H100 小时</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修：理解 pre-norm 与 post-norm 的区别——pre-norm 将归一化放在子层输入处，保留一条干净的残差流；post-norm 将归一化放在残差相加之后。</p>
+</li>
+<li>
+<p>实施顺序：先备份 pre-norm 实现；将每个 Transformer 块中的 RMSNorm 移到残差相加之后；保持其他所有组件（注意力、FFN、最终输出归一化）不变，训练并记录曲线。</p>
+</li>
+<li>
+<p>调试策略：post-norm 通常更难训练，可能需要更慢的学习率衰减或更多 warmup 步数；监控训练早期的梯度范数。</p>
+</li>
+<li>
+<p>自检：确保 post-norm 模型与 pre-norm 模型的唯一区别是 RMSNorm 的位置；对比时使用相同的数据、超参数和训练步数。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 43-44 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">no_pos_emb</span><strong>无位置嵌入（NoPE）消融实验</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>接下来研究位置嵌入对模型性能的影响。具体地，将基线模型（使用 RoPE）与完全不包含位置嵌入（NoPE）的模型进行比较。decoder-only Transformer（带有我们已实现的自回归因果掩码）理论上可以在不显式提供位置嵌入的情况下推断相对或绝对位置信息。本实验将实证检验 NoPE 与 RoPE 的表现。</p>
+任务
+<ul>
+<li>修改你使用 RoPE 的 Transformer 实现，完全移除位置嵌入信息，观察会发生什么。</li>
+</ul>
+交付物
+<ul>
+<li>一条比较 RoPE 与 NoPE 性能的学习曲线。</li>
+</ul>
+资源预算
+<ul>
+<li>1 H100 小时</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修：理解 RoPE 如何向 query 和 key 注入位置信息；了解 decoder-only Transformer 可通过因果掩码隐式编码位置的结论。</p>
+</li>
+<li>
+<p>实施顺序：先备份带 RoPE 的基线实现；在 Transformer 中移除 RoPE（注意：RoPE 仅作用于 query 和 key，不作用于 value），保持其他所有组件不变；训练并记录曲线。</p>
+</li>
+<li>
+<p>调试策略：NoPE 模型可能收敛更慢或最终损失更高，注意比较相同步数下的验证损失；确保 token embedding 层未意外包含位置信息。</p>
+</li>
+<li>
+<p>自检：确保 NoPE 模型与 RoPE 模型的唯一区别是是否应用了位置嵌入；对比时使用相同的数据和超参数。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 44 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">swiglu_ablation</span><strong>SwiGLU 与 SiLU 消融实验</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>本实验跟随 Shazeer (2020) 测试门控（gating）在前馈网络中的重要性，比较 SwiGLU 前馈网络与使用 SiLU 激活但无门控线性单元（GLU）的前馈网络：
+\[\text{FFN}_{\text{SiLU}}(x) = W_2\,\text{SiLU}(W_1 x).\]
+在我们的 SwiGLU 实现中，内层前馈维度设为约 \(d_{ff} = \frac{8}{3} d_{model}\)（并保证 \(d_{ff} \bmod 64 = 0\) 以利用 GPU tensor core）。在 \(\text{FFN}_{\text{SiLU}}\) 实现中，设 \(d_{ff} = 4 \times d_{model}\)，以近似匹配 SwiGLU 前馈网络的参数量（后者有三个而非两个权重矩阵）。</p>
+任务
+<ul>
+<li>
+<p>实现并训练 SiLU（无 GLU 门控）的前馈网络版本。</p>
+</li>
+<li>
+<p>与 SwiGLU 前馈网络进行对比，二者参数量近似匹配。</p>
+</li>
+</ul>
+交付物
+<ul>
+<li>
+<p>一条比较 SwiGLU 与 SiLU 前馈网络性能的学习曲线（参数量近似匹配）。</p>
+</li>
+<li>
+<p>一段关于你的发现的简短讨论（几句话）。</p>
+</li>
+</ul>
+资源预算
+<ul>
+<li>1 H100 小时</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p>先修：理解 SwiGLU 的结构 \(\text{FFN}(x) = W_2(\text{SiLU}(W_1 x) \odot W_3 x)\) 与无门控 SiLU FFN 的区别；理解为何将 SiLU 版本的 \(d_{ff}\) 设为 \(4 \times d_{model}\) 可近似匹配参数量。</p>
+</li>
+<li>
+<p>实施顺序：先备份 SwiGLU 实现；实现一个仅含 \(W_1\) 和 \(W_2\) 两层线性变换 + SiLU 激活的 FFN 类，设 \(d_{ff} = 4 \times d_{model}\)；替换 Transformer 块中的 FFN，保持其他所有组件不变，训练并记录曲线。</p>
+</li>
+<li>
+<p>调试策略：确保两个版本的 FFN 参数量大致相等（可通过 <code>sum(p.numel() for p in model.parameters())</code> 验证）；对比时使用相同超参数。</p>
+</li>
+<li>
+<p>自检：确认 SiLU 版本中没有 \(W_3\) 以及任何门控操作；确认两个模型的总参数量接近，以保证比较的公平性。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 44 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">main_experiment</span><strong>在 OpenWebText 上的实验</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>本节我们将转向一个来自网络爬虫（webcrawl）的更标准预训练数据集 OpenWebText [Gokaslan et al., 2019]（文本示例见本节开头的示例）。该数据集的文本比 TinyStories 更加真实、复杂、多样。数据访问方式见 §1。</p>
+<blockquote>
+<p><strong>低资源提示</strong>：在 OpenWebText 上训练语言模型达到流畅需要很长时间。我们建议 GPU 资源有限的在线学生继续在 TinyStories 上测试架构修改（使用验证损失作为评估指标）。</p>
+</blockquote>
+<p><strong>注意</strong>：你可能需要针对本实验重新调节（re-tune）学习率或批量大小等超参数。</p>
+问题：在 OpenWebText 上的实验（2 分，约 3 H100 小时）
+<p>使用与 TinyStories 相同的模型架构和总训练迭代次数，在 OpenWebText 上训练你的语言模型。这个模型表现如何？</p>
+<p><strong>交付物</strong>：</p>
+<ul>
+<li>
+<p>你在 OpenWebText 上训练语言模型的损失曲线（learning curve）。描述与 TinyStories 相比损失（losses）的差异——我们应当如何解读这些差异？</p>
+</li>
+<li>
+<p>从 OpenWebText 语言模型生成的文本，格式与 TinyStories 的输出相同。这段文本的流畅度（fluency）如何？为什么在模型与计算预算都与 TinyStories 相同的情况下，输出质量反而更差？</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p><strong>先修概念</strong>：本实验建立在 TinyStories 训练的基础上，要求你将同一套模型架构迁移到分布更复杂、噪声更多的网页数据集 OpenWebText 上。理解数据分布差异如何影响损失与生成质量是关键。</p>
+</li>
+<li>
+<p><strong>实施顺序</strong>：复用 TinyStories 的模型架构与训练代码；先用 OpenWebText 小子集快速验证管线是否正常，确认无误后再启动完整训练。</p>
+</li>
+<li>
+<p><strong>调试策略</strong>：密切关注训练/验证损失曲线是否平滑下降；若出现剧烈震荡或不下降，优先检查学习率、批量大小是否需要重新调节（re-tune），以及数据加载是否正确。</p>
+</li>
+<li>
+<p><strong>自检方法</strong>：训练完成后，用与 TinyStories 相同的解码参数生成文本，对比两者的流畅度与语义连贯性；记录并分析在相同模型与计算预算下 OpenWebText 输出质量可能更差的原因。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 45–46 · confidence: high</p></div></details><details class="problem-row"><summary><span class="problem-number">leaderboard</span><strong>排行榜</strong><span class="problem-topics">任务 · 提示 · 验收</span></summary><div class="problem-body"><div class="problem-badges"><span>Handout 完整本土化</span><span class="offline-ready">可离线实施</span><span>不含参考实现</span></div><section class="problem-subsection"><h4>完整任务</h4>背景
+<p>恭喜你走到这里！现在你将尝试改进 Transformer 架构，并看你的超参数与架构选择能否在班级其他同学中脱颖而出。</p>
+<h3>排行榜规则</h3>
+<p>除以下限制外，没有任何其他限制：</p>
+<ul>
+<li>
+<p><strong>运行时间（Runtime）</strong>：你的提交在 H100 上最多运行 1.5 小时。你可以通过在 slurm 提交脚本中设置 <code>--time=01:30:00</code> 来强制执行此限制。</p>
+</li>
+<li>
+<p><strong>数据（Data）</strong>：你只能使用我们提供的 OpenWebText 训练数据集。</p>
+</li>
+<li>
+<p>除此之外，你可以自由地做任何你想做的事情。</p>
+</li>
+</ul>
+<h3>改进思路（可选）</h3>
+<ul>
+<li>
+<p>参考最先进的开源大模型系列，如 Llama 3 [Grattafiori et al., 2024] 或 Qwen 2.5 [Yang et al., 2024]。</p>
+</li>
+<li>
+<p>NanoGPT speedrun 仓库（https://github.com/KellerJordan/modded-nanogpt），社区成员在其中发布了许多“速通”小规模语言模型预训练的有趣修改。例如，一个可以追溯到原始 Transformer 论文的常见修改是将输入嵌入（input embedding）和输出嵌入（LM head）的权重绑定在一起（weight tying）（见 Vaswani et al. [2017] §3.4 和 Chowdhery et al. [2022] §2）。如果你尝试权重绑定，可能需要降低 embedding/LM head 初始化的标准差。</p>
+</li>
+</ul>
+<blockquote>
+<p><strong>注意</strong>：在这个排行榜中表现良好的一些修改，可能无法泛化到大规模预训练中。我们将在课程的 scaling laws 单元进一步探讨这一想法。</p>
+</blockquote>
+问题：排行榜（6 分，约 10 H100 小时）
+<p>在满足上述排行榜规则的前提下训练一个模型，目标是在 1.5 H100 小时内最小化你的语言模型的验证损失（validation loss）。</p>
+<p><strong>交付物</strong>：</p>
+<ul>
+<li>
+<p>记录到的最终验证损失（final validation loss），以及一条相关的学习曲线，该曲线需清晰显示小于 1.5 小时的挂钟时间（wallclock-time）x 轴，并描述你做了什么。我们期望排行榜提交至少能超越 naive baseline 的 5.0 损失。</p>
+</li>
+<li>
+<p>提交到排行榜：https://github.com/stanford-cs336/assignment1-basics-leaderboard</p>
+</li>
+</ul></section><details class="problem-disclosure hint-disclosure"><summary>查看解题提示</summary><div class="problem-disclosure-body"><ul>
+<li>
+<p><strong>先修概念</strong>：本问题要求你在 1.5 H100 小时的限制内，通过架构或超参数改进来最小化验证损失。熟悉你已实现的各个组件（RMSNorm、RoPE、SwiGLU 等）及其消融实验结果，有助于选择改进方向。</p>
+</li>
+<li>
+<p><strong>实施顺序</strong>：先在 TinyStories 或 OpenWebText 的小子集上快速验证候选修改是否有效，确认有效后再进行完整的 1.5 小时训练。</p>
+</li>
+<li>
+<p><strong>调试策略</strong>：利用低资源提示（Low-Resource Tips）中的方法加速迭代；通过定期评估验证损失监控训练进度，确保在时间预算内收敛。</p>
+</li>
+<li>
+<p><strong>自检方法</strong>：确认训练脚本在 slurm 中通过 <code>--time=01:30:00</code> 限制运行时间；最终提交的验证损失应低于 5.0 的 naive baseline；保存并绘制带挂钟时间 x 轴的学习曲线。</p>
+</li>
+</ul></div></details><div class="problem-method"><strong>实现边界</strong><p>本页完整保留任务、约束与验收要求，但不提供可直接提交的参考实现；请依据 Handout 独立完成。</p></div><p class="problem-source-note">题面来源：<code>cs336_spring2025_assignment1_basics.pdf</code> · 46 · confidence: high</p></div></details></div></section>
+<!-- COMPLETE_SOURCE_OUTLINE_END -->
+
+    <hr class="rule">
+
+    <h2 id="quiz">自测：你准备好了吗？</h2>
+
+    <div class="quiz" data-answer="b" data-quiz="1" data-correct="正确！BPE 从 256 个字节开始，每轮合并增加一个 token。" data-incorrect="BPE 从 256 个初始 token（字节）开始，每轮合并增加 1 个新 token。">
+      <p><strong>问题 1：</strong>BPE 训练做了 30000 次合并后，词表大小是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">30000</button>
+        <button data-choice="b" aria-pressed="false">30256</button>
+        <button data-choice="c" aria-pressed="false">256</button>
+        <button data-choice="d" aria-pressed="false">取决于文本长度</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-answer="b" data-quiz="2" data-correct="正确！因果 mask 让位置 i 只能 attend 到 ≤i 的位置，防止看到未来信息。" data-incorrect="因果 mask 的作用是防止模型在预测位置 i 时看到 i 之后的信息。">
+      <p><strong>问题 2：</strong>Transformer 训练时为什么要用 causal mask？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">为了加速计算</button>
+        <button data-choice="b" aria-pressed="false">为了防止看到未来 token</button>
+        <button data-choice="c" aria-pressed="false">为了减少内存使用</button>
+        <button data-choice="d" aria-pressed="false">为了让模型双向理解上下文</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <div class="quiz" data-answer="b" data-quiz="3" data-correct="正确！RoPE 的维度是 d_model // num_heads，即每个 head 的维度。" data-incorrect="RoPE 应用在 head 维度上（d_model // num_heads），不是整个 d_model。">
+      <p><strong>问题 3：</strong>如果 d_model=512，num_heads=8，RoPE 的维度是多少？</p>
+      <div class="quiz-options">
+        <button data-choice="a" aria-pressed="false">512</button>
+        <button data-choice="b" aria-pressed="false">64</button>
+        <button data-choice="c" aria-pressed="false">8</button>
+        <button data-choice="d" aria-pressed="false">256</button>
+      </div>
+      <div class="quiz-feedback" data-feedback></div>
+    </div>
+
+    <hr class="rule">
+
+    <h2 id="takeaways">导读要点</h2>
+    <div class="loop">
+      <article>
+        <h3>目标</h3>
+        <p>从零实现完整 Transformer LM</p>
+      </article>
+      <article>
+        <h3>前置</h3>
+        <p>第 1-4 课 + PyTorch 基础</p>
+      </article>
+      <article>
+        <h3>策略</h3>
+        <p>从简到繁，小数据调试</p>
+      </article>
+      <article>
+        <h3>原则</h3>
+        <p>不复制代码，理解后手写</p>
+      </article>
+    </div>
+
+    <hr class="rule">
+
+    <div class="nav">
+      <a href="../0004-attention-alternatives-moe.html">← 回到课程 #4</a>
+      <a href="../0005-gpus.html">继续课程 #5 →</a>
+    </div>
+
+    <footer>
+      <p>CS336: Language Modeling from Scratch · Assignment 1 导读 · 不含任何实现答案</p>
+    </footer>
+  </div>
+  <script src="../../assets/prism.js"></script>
+  <script src="../../assets/prism-python.js"></script>
+  <script src="../../assets/prism-bash.js"></script>
+  <script src="../../assets/quiz.js"></script>
+  <script defer src="../../../../assets/course/lesson-ui.js?v=20260814f"></script>
+  <script defer src="../../assets/code-format.js?v=20260814a"></script>
+  <script defer src="../../assets/handout-format.js?v=20260814a"></script>
+  <script defer src="../../../../assets/course/interactive.js?v=20260814f"></script>
+</body>
+</html>

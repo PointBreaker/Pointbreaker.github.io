@@ -25,9 +25,6 @@
     return /^[a-z0-9_]+$/.test(candidate) ? candidate : '';
   };
 
-  const normalizeProblemId = (id) => String(id).toLowerCase().replace(/[^a-z0-9]/g, '');
-  const problemAnchor = (id) => `problem-${String(id).trim().replace(/[^A-Za-z0-9_-]+/g, '-')}`;
-
   const banner = page.querySelector(':scope > .guide-banner');
   const source = page.querySelector(':scope > .source-note');
   if (!banner || !source) return;
@@ -41,74 +38,28 @@
 
   source.classList.add('workbook-version');
   source.id = 'assignment-version-notice';
-  const versionGrid = el('div', 'workbook-version-grid');
-  [
-    ['Official version', assignment.version],
-    ['Workbook based on', assignment.basis],
-    ['Checked at / source commit', `${assignment.checkedAt} · ${assignment.sourceCommit}`],
-    ['Legacy 中文题面', assignment.localization]
-  ].forEach(([label, value]) => {
-    const item = el('div', 'workbook-version-item');
-    if (label === 'Legacy 中文题面') item.classList.add('workbook-version-boundary');
-    item.append(el('span', 'workbook-kicker', label), el('p', '', value));
-    versionGrid.appendChild(item);
-  });
-  const officialLinks = el('div', 'workbook-version-item workbook-version-links');
-  officialLinks.appendChild(el('span', 'workbook-kicker', 'Official sources'));
+  const existingSourceLinks = [...source.querySelectorAll(':scope > p a')].map((link) => link.cloneNode(true));
+  source.replaceChildren();
+  const sourceLine = el('p', 'workbook-source-line');
+  sourceLine.append(el('strong', '', 'Source: '), document.createTextNode(`Stanford CS336 Spring 2026 · ${assignment.version}`));
+  const provenance = el('details', 'workbook-provenance');
+  provenance.appendChild(el('summary', '', 'Version & provenance'));
+  const provenanceBody = el('div', 'workbook-provenance-body');
+  provenanceBody.append(
+    el('p', '', `Checked ${assignment.checkedAt} · source commit ${assignment.sourceCommit}`),
+    el('p', '', assignment.basis)
+  );
   const linkRow = el('div', 'workbook-version-link-row');
-  const sourceLinks = [...source.querySelectorAll(':scope > p a')].map((link) => link.cloneNode(true));
-  const repositoryLink = sourceLinks.find((link) => /github\.com\/stanford-cs336\/assignment/.test(link.href) && !/\/blob\//.test(link.href));
-  if (repositoryLink && !sourceLinks.some((link) => /README/i.test(link.textContent))) {
+  const repositoryLink = existingSourceLinks.find((link) => /github\.com\/stanford-cs336\/assignment/.test(link.href) && !/\/blob\//.test(link.href));
+  if (repositoryLink && !existingSourceLinks.some((link) => /README/i.test(link.textContent))) {
     const readme = el('a', '', 'README');
     readme.href = repositoryLink.href.replace(/\/$/, '') + '/blob/main/README.md';
-    sourceLinks.splice(1, 0, readme);
+    existingSourceLinks.splice(1, 0, readme);
   }
-  sourceLinks.forEach((link) => linkRow.appendChild(link));
-  officialLinks.appendChild(linkRow);
-  versionGrid.appendChild(officialLinks);
-  source.prepend(versionGrid);
-
-  const translatedOutline = page.querySelector('#complete-source-outline');
-  const officialSourceContent = page.querySelector('#spring-2026-delta');
-  if (!translatedOutline) return;
-
-  const translatedProblems = [...translatedOutline.querySelectorAll('.problem-row')].map((row) => {
-    const number = row.querySelector('.problem-number')?.textContent.trim();
-    if (!number) return null;
-    row.id = problemAnchor(number);
-    row.dataset.problemId = number;
-    row.open = false;
-    return { id: number, normalized: normalizeProblemId(number), row, stages: [] };
-  }).filter(Boolean);
-  const translatedByExactId = new Map(translatedProblems.map((problem) => [problem.id, problem]));
-  const translatedByNormalizedId = new Map(translatedProblems.map((problem) => [problem.normalized, problem]));
-  const findTranslatedProblem = (officialId) => translatedByExactId.get(officialId) || translatedByNormalizedId.get(normalizeProblemId(officialId));
-
-  const officialProblemIds = new Map();
-  assignment.stages.forEach((stage, stageIndex) => {
-    stage.official.forEach((entry) => {
-      const officialId = getOfficialProblemId(entry);
-      if (!officialId) return;
-      if (!officialProblemIds.has(officialId)) officialProblemIds.set(officialId, []);
-      officialProblemIds.get(officialId).push({ stage, stageIndex, entry });
-      const translated = findTranslatedProblem(officialId);
-      if (translated && !translated.stages.some((item) => item.stage.id === stage.id)) {
-        translated.stages.push({ stage, stageIndex, officialId });
-      }
-    });
-  });
-
-  const semanticContent = {
-    translatedProblems: [translatedOutline],
-    officialSourceContent: officialSourceContent ? [officialSourceContent] : [],
-    legacyGuide: [],
-    legacySupplement: [],
-    miscReference: []
-  };
-  const translatedWrapper = translatedOutline.closest('.legacy-supplement');
-  translatedOutline.remove();
-  officialSourceContent?.remove();
-  if (translatedWrapper) translatedWrapper.remove();
+  existingSourceLinks.forEach((link) => linkRow.appendChild(link));
+  provenanceBody.appendChild(linkRow);
+  provenance.appendChild(provenanceBody);
+  source.append(sourceLine, provenance);
 
   const keepOutside = new Set(['FOOTER']);
   let cursor = source.nextElementSibling;
@@ -117,10 +68,8 @@
     const keep = keepOutside.has(cursor.tagName) || cursor.tagName === 'SCRIPT' || cursor.classList.contains('pb-pager') || cursor.id === 'pb-page-end';
     if (!keep && cursor.matches('.assignment-jump-links, .quiz, #quiz')) {
       cursor.remove();
-    } else if (!keep && cursor.classList.contains('legacy-supplement')) {
-      semanticContent.legacySupplement.push(cursor);
     } else if (!keep) {
-      semanticContent.legacyGuide.push(cursor);
+      cursor.remove();
     }
     cursor = next;
   }
@@ -128,9 +77,9 @@
   const primaryNav = el('nav', 'workbook-primary-nav');
   primaryNav.setAttribute('aria-label', 'Assignment primary resources');
   [
-    ['2026 Engineering Workbook', '#workbook-overview'],
-    ['2026 Official Handout', '#official-sources'],
-    ['2025 Delta / Archive', '#localized-problems']
+    ['Task path', '#workbook-overview'],
+    ['Problem guide', `#workbook-stage-${assignment.stages[0].id}`],
+    ['Official sources', '#official-sources']
   ].forEach(([label, href]) => {
     const link = el('a', '', label);
     link.href = href;
@@ -277,23 +226,24 @@
     section.appendChild(hints);
 
     const official = el('section', 'workbook-official');
-    official.appendChild(el('p', 'workbook-kicker', 'Official problems'));
+    official.appendChild(el('p', 'workbook-kicker', 'Problem guide · Official IDs'));
     const officialList = el('div', 'workbook-problem-ids');
     stage.official.forEach((entry) => {
       const officialId = getOfficialProblemId(entry);
-      const translated = officialId && findTranslatedProblem(officialId);
-      const item = el(translated ? 'a' : 'span', 'workbook-problem-reference' + (translated ? ' has-translation' : ' is-official-only'));
-      if (translated) {
-        item.href = `#${translated.row.id}`;
-        item.dataset.problemTarget = translated.row.id;
-      }
+      const item = el('span', 'workbook-problem-reference');
       item.append(el('code', '', officialId || entry));
       const qualifier = String(entry).includes(' · ') ? String(entry).split(' · ').slice(1).join(' · ') : '';
       if (qualifier) item.appendChild(el('small', 'workbook-problem-qualifier', qualifier));
-      item.appendChild(el('span', 'workbook-problem-link-state', translated ? '2025 题面参考 →' : '2026 Official only'));
       officialList.appendChild(item);
     });
     official.appendChild(officialList);
+    const handoutLink = existingSourceLinks.find((link) => /作业说明|PDF|handout/i.test(link.textContent));
+    if (handoutLink) {
+      const currentHandout = handoutLink.cloneNode(true);
+      currentHandout.className = 'workbook-current-handout';
+      currentHandout.textContent = '在当前官方题面中查看完整要求 →';
+      official.appendChild(currentHandout);
+    }
     section.appendChild(official);
 
     const gate = el('section', 'workbook-gate');
@@ -335,137 +285,30 @@
   ], 'workbook-retrospective-prompts'));
   main.appendChild(retrospective);
 
-  const matchedOfficialIds = [...officialProblemIds.keys()].filter((id) => findTranslatedProblem(id));
-  const officialOnlyIds = [...officialProblemIds.keys()].filter((id) => !findTranslatedProblem(id));
-  const legacyOnlyProblems = translatedProblems.filter((problem) => problem.stages.length === 0);
-
-  const localization = el('details', 'assignment-localization assignment-legacy-archive');
-  localization.id = 'localized-problems';
-  localization.appendChild(el('summary', '', 'What changed from 2025? · 中文题面与旧接口存档'));
-  const localizationHeader = el('header', 'assignment-resource-header');
-  localizationHeader.append(
-    el('p', 'workbook-kicker', 'Archive · Spring 2025'),
-    el('h2', '', '2025 中文题面存档'),
-    el('p', '', '这里保留旧版中文任务、约束和交付物，供版本差分与概念参考；它不是当前作业题面。2026 Workbook、PDF、repository 与 tests 是唯一 active specification。')
-  );
-  const versionNotice = el('aside', 'localization-version-notice');
-  versionNotice.append(el('p', 'workbook-kicker', 'Version notice'), el('p', '', assignment.localization));
-  const coverage = el('div', 'localization-coverage');
-  [
-    ['中文题面', translatedProblems.length],
-    ['2026 ID matched', matchedOfficialIds.length],
-    ['Official-only', officialOnlyIds.length],
-    ['2025-only / unmapped', legacyOnlyProblems.length]
-  ].forEach(([label, value]) => {
-    const item = el('div', 'localization-coverage-item');
-    item.append(el('strong', '', String(value)), el('span', '', label));
-    coverage.appendChild(item);
-  });
-  versionNotice.appendChild(coverage);
-  localizationHeader.appendChild(versionNotice);
-  localization.appendChild(localizationHeader);
-
-  const problemIndex = el('nav', 'localized-problem-index');
-  problemIndex.setAttribute('aria-label', '中文题面 Problem Index');
-  problemIndex.append(el('p', 'workbook-kicker', 'Problem Index'), el('h3', '', '按 Engineering Stage 查题'));
-  const problemIndexGrid = el('div', 'localized-problem-index-grid');
-  assignment.stages.forEach((stage, stageIndex) => {
-    const group = el('section', 'localized-problem-index-group');
-    group.appendChild(el('h4', '', `Stage ${String(stageIndex + 1).padStart(2, '0')} · ${stage.title}`));
-    const entries = el('ul', 'localized-problem-index-list');
-    const seen = new Set();
-    stage.official.forEach((entry) => {
-      const officialId = getOfficialProblemId(entry);
-      if (!officialId || seen.has(officialId)) return;
-      seen.add(officialId);
-      const translated = findTranslatedProblem(officialId);
-      const item = el('li', translated ? 'is-matched' : 'is-official-only');
-      const target = el(translated ? 'a' : 'span', 'localized-problem-index-link');
-      if (translated) {
-        target.href = `#${translated.row.id}`;
-        target.dataset.problemTarget = translated.row.id;
-      }
-      target.append(el('code', '', officialId), el('small', '', translated ? '2025 archive →' : '2026 Official only'));
-      item.appendChild(target);
-      entries.appendChild(item);
-    });
-    group.appendChild(entries);
-    problemIndexGrid.appendChild(group);
-  });
-  if (legacyOnlyProblems.length) {
-    const group = el('section', 'localized-problem-index-group localized-problem-index-legacy');
-    group.appendChild(el('h4', '', '2025 Legacy · 未映射到 2026 Stage'));
-    const entries = el('ul', 'localized-problem-index-list');
-    legacyOnlyProblems.forEach((problem) => {
-      const item = el('li', 'is-legacy-only');
-      const target = el('a', 'localized-problem-index-link');
-      target.href = `#${problem.row.id}`;
-      target.dataset.problemTarget = problem.row.id;
-      target.append(el('code', '', problem.id), el('small', '', '2025 Legacy →'));
-      item.appendChild(target);
-      entries.appendChild(item);
-    });
-    group.appendChild(entries);
-    problemIndexGrid.appendChild(group);
-  }
-  problemIndex.appendChild(problemIndexGrid);
-  localization.appendChild(problemIndex);
-
-  translatedOutline.classList.remove('legacy-source-outline');
-  translatedOutline.classList.add('localized-source-outline');
-  translatedOutline.querySelector('.legacy-reference-label')?.remove();
-  const localizedEyebrow = translatedOutline.querySelector(':scope > .eyebrow');
-  if (localizedEyebrow) localizedEyebrow.textContent = 'Spring 2025 本土化题面 · 逐题展开';
-  const localizedHeading = translatedOutline.querySelector(':scope > h2');
-  if (localizedHeading) localizedHeading.textContent = '逐题展开完整任务';
-  translatedProblems.forEach((problem) => {
-    const summary = problem.row.querySelector(':scope > summary');
-    const status = el('span', 'problem-version-status ' + (problem.stages.length ? 'is-id-matched' : 'is-legacy-only'), problem.stages.length ? '2026 ID Matched · Needs Review' : '2025 Legacy');
-    summary?.appendChild(status);
-    const body = problem.row.querySelector(':scope > .problem-body');
-    if (!body) return;
-    const backlinks = el('nav', 'problem-workbook-backlinks');
-    backlinks.setAttribute('aria-label', '返回 Engineering Workbook Stage');
-    if (problem.stages.length) {
-      backlinks.appendChild(el('span', 'workbook-kicker', 'Workbook Stage'));
-      problem.stages.forEach(({ stage, stageIndex }) => {
-        const link = el('a', '', `← Stage ${String(stageIndex + 1).padStart(2, '0')} · ${stage.title}`);
-        link.href = `#workbook-stage-${stage.id}`;
-        backlinks.appendChild(link);
-      });
-    } else {
-      backlinks.append(el('span', 'workbook-kicker', 'Version status'), el('span', 'problem-unmapped-copy', 'Spring 2025-only / 尚未映射到 2026 Workbook Stage'));
-    }
-    body.prepend(backlinks);
-  });
-  localization.appendChild(translatedOutline);
   const officialSources = el('section', 'assignment-official-sources');
   officialSources.id = 'official-sources';
   const officialHeader = el('header', 'assignment-resource-header');
   officialHeader.append(
-    el('p', 'workbook-kicker', 'Authority · Stanford Spring 2026'),
-    el('h2', '', 'Official Handout & Repository'),
-    el('p', '', 'Repository、PDF、README 与 tests 决定最终题号、接口、约束和 deliverables；中文题面与 Workbook 都不能覆盖官方要求。')
+    el('p', 'workbook-kicker', 'Authority'),
+    el('h2', '', 'Official sources'),
+    el('p', '', 'Repository、PDF、README 与 tests 决定最终题号、接口、约束和 deliverables；Workbook 负责工程路径，不覆盖官方要求。')
   );
   const officialResourceLinks = el('div', 'official-resource-links');
   [...linkRow.querySelectorAll('a')].forEach((link) => officialResourceLinks.appendChild(link.cloneNode(true)));
   officialHeader.appendChild(officialResourceLinks);
   officialSources.appendChild(officialHeader);
-  semanticContent.officialSourceContent.forEach((node) => {
-    node.classList.add('official-current-map');
-    officialSources.appendChild(node);
-  });
   main.appendChild(officialSources);
-  main.appendChild(localization);
 
-  const reference = el('details', 'workbook-reference-library');
-  reference.id = 'workbook-reference';
-  reference.appendChild(el('summary', '', 'Deep Reference · 旧版导读、知识树、Cheatsheet 与历史说明'));
-  const referenceNote = el('div', 'workbook-reference-note');
-  referenceNote.innerHTML = '<p><strong>这里不再包含中文完整题面。</strong>下方只保留旧版课程导读、重复知识树、Cheatsheet、历史接口说明与其他 secondary material。</p>';
-  reference.appendChild(referenceNote);
-  [...semanticContent.legacyGuide, ...semanticContent.legacySupplement, ...semanticContent.miscReference].forEach((node) => reference.appendChild(node));
-  main.appendChild(reference);
+  const history = el('details', 'assignment-history-note');
+  history.id = 'assignment-history';
+  history.appendChild(el('summary', '', 'Historical note · 2025 → 2026'));
+  const historyBody = el('div', 'assignment-history-body');
+  historyBody.appendChild(list(assignment.changes));
+  const archiveLink = el('a', 'assignment-archive-link', '查看 Spring 2025 页面存档 →');
+  archiveLink.href = assignment.archiveHref;
+  historyBody.appendChild(archiveLink);
+  history.appendChild(historyBody);
+  main.appendChild(history);
 
   const aside = el('aside', 'workbook-stage-nav');
   const navLabel = el('p', 'workbook-stage-nav-label', 'Stages');
@@ -479,9 +322,8 @@
     nav.appendChild(link);
   });
   [
-    ['Official Handout', '#official-sources', 'workbook-official-link'],
-    ['2025 Delta / Archive', '#localized-problems', 'workbook-localization-link'],
-    ['Deep Reference', '#workbook-reference', 'workbook-reference-link']
+    ['Official sources', '#official-sources', 'workbook-official-link'],
+    ['Historical note', '#assignment-history', 'workbook-reference-link']
   ].forEach(([label, href, className]) => {
     const link = el('a', className, label);
     link.href = href;
@@ -492,37 +334,6 @@
   const shell = el('div', 'workbook-shell');
   shell.append(main, aside);
   primaryNav.insertAdjacentElement('afterend', shell);
-
-  const activateProblem = (targetId, updateHash = true) => {
-    const problem = document.getElementById(targetId);
-    if (!problem?.classList.contains('problem-row')) return false;
-    problem.open = true;
-    problem.classList.remove('is-problem-target');
-    requestAnimationFrame(() => {
-      problem.classList.add('is-problem-target');
-      const summary = problem.querySelector(':scope > summary');
-      summary?.setAttribute('tabindex', '-1');
-      summary?.focus({ preventScroll: true });
-      problem.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
-    });
-    if (updateHash && location.hash !== `#${targetId}`) history.pushState(null, '', `#${targetId}`);
-    window.setTimeout(() => problem.classList.remove('is-problem-target'), 2200);
-    return true;
-  };
-
-  shell.addEventListener('click', (event) => {
-    const link = event.target.closest('a[data-problem-target]');
-    if (!link) return;
-    event.preventDefault();
-    activateProblem(link.dataset.problemTarget);
-  });
-  window.addEventListener('hashchange', () => activateProblem(location.hash.slice(1), false));
-  if (location.hash.startsWith('#problem-')) requestAnimationFrame(() => activateProblem(location.hash.slice(1), false));
-
-  page.dataset.localizedProblemCount = String(translatedProblems.length);
-  page.dataset.localizationMatchedCount = String(matchedOfficialIds.length);
-  page.dataset.localizationMissingCount = String(officialOnlyIds.length);
-  page.dataset.localizationLegacyCount = String(legacyOnlyProblems.length);
 
   const updateProgress = () => {
     let complete = 0;
