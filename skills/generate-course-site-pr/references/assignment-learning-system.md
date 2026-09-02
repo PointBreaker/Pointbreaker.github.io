@@ -56,6 +56,8 @@ Keep tests passing as Correct evidence, not the complete definition of understan
 
 The Lesson → Assignment bridge must name the exact mechanism and the implementation decision it justifies. A link that says only “see Project 2” is not a bridge. Historical implementations may support invariant and bug analysis, but must be labeled as historical evidence rather than current official solutions.
 
+When a learner-owned historical repository exists, use the distinct [Historical Implementation Recap profile](historical-implementation-recap.md). Do not force projects without personal code evidence into that profile; keep them as Engineering Workbooks.
+
 ## Problem identity and navigation
 
 Preserve displayed official IDs exactly. Do not make a second manual mapping when the stage bank can drive the Problem Index.

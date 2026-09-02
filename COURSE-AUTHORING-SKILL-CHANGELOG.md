@@ -77,3 +77,9 @@ Gold slice 未通过前不得批量扩写。无法从 source 回答机制对象�
 反向验证也暴露了新规则需要保留人工判断：语义 class 和题目数量可以回归检测，却不能证明推导正确或 reading flow 连贯。因此 `GOLD` 仍强制浏览器检查与 human-quality self-review，自动脚本不得自行授予。
 
 反向跑 CS168 时还发现 contract 与 scaffolder 之间的一处真实缝隙：最初虽然要求 plan 声明 profile/Gold lessons，scaffolder 却没有把它们写进 `course-info.json` 或页面 `<body>`。现已补上 plan 校验、metadata 透传，以及新页面默认 `SHALLOW` 的诚实状态，避免新 validator 只对手工修过的课程有效。
+
+## Historical Implementation Recap Profile
+
+第二轮 CS168 审计暴露了 Assignment contract 的新缺口：旧规范会把个人历史实现压成普通 Workbook 的一个 history section，无法稳定区分 starter 与 user code，也不会要求从真实 branch/queue 反推 invariant。新增 `references/historical-implementation-recap.md`，强制执行 Repository Audit → Attribution → State Map → Critical Path → Invariant → Trace → Failure → Code Prediction → Closed-book Reconstruction。
+
+新增 `scripts/audit_workbook_depth.py` 检查 Engineering Workbook 与 Historical Recap 的不同结构证据。Recap 只有在同时出现明确版本边界、`YOUR CODE · Historical Implementation`、`Framework Context`、attribution/state/trace/counterfactual/bug/prediction/reconstruction 时才可声明 Gold 深度；真实 bug 必须有 commit、test 或 spec 证据。当前 spec 尚未发布时允许“历史 Recap 深度 GOLD + 当前兼容性 BLOCKED_BY_SOURCE”，避免用旧代码冒充未来答案。

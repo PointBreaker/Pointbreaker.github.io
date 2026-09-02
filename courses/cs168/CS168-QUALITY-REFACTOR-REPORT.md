@@ -3,7 +3,7 @@
 审计日期：2026-09-02（Asia/Shanghai）  
 课程：UC Berkeley CS 168 · Fall 2026  
 课程类型：Networking / Distributed Systems  
-Gold lessons：L3、L6、L8、L11、L12
+Gold lessons：L3、L6、L8、L9、L11、L12、L13、L15、L17
 
 ## Source snapshot 与边界
 
@@ -55,15 +55,15 @@ Gold slice 自评通过后，剩余 lesson 按主题增加一段专属 mechanism
 | L6 Distance Vector | 是 | 是 | 是 | **强·Table Trace + failure** | **完整 4 节点** | 是 | **三段式** | 7 | 历史 routing state | Desktop + Mobile | **GOLD** |
 | L7 Link State | 是 | 是 | 是 | 短·LSDB/SPF | 短 | 是 | 基础 | 2 | topology→FIB | Desktop + Mobile | GOOD |
 | L8 Routers | 是 | 是 | 是 | **强·Packet/FIB** | **完整 pipeline** | 是 | **三段式** | 6 | per-stage invariant | Desktop + Mobile | **GOLD** |
-| L9 BGP Policy | 是 | 是 | 是 | 短·route policy | 短 | 是 | 基础 | 3 | import/select/export | Desktop + Mobile | GOOD |
+| L9 BGP Policy | 是 | 是 | 是 | **强·RIB/policy trace** | **完整撤销重选** | 是 | **三段式** | 6 | import/select/export | Desktop + Mobile | **GOLD** |
 | L10 BGP Impl | 是 | 是 | 是 | 短·RIB/FIB | 短 | 是 | 基础 | 2 | Adj-RIB/Loc-RIB | Desktop + Mobile | GOOD |
 | L11 TCP Reliability | 是 | 是 | 是 | **强·双端 state timeline** | **完整 loss recovery** | 是 | **三段式** | 7 | 历史 transport invariants | Desktop + Mobile | **GOLD** |
 | L12 TCP Design | 是 | 是 | 是 | **强·TCB/state machine** | **握手+接收队列** | 是 | **三段式** | 7 | handler/queue/timer audit | Desktop + Mobile | **GOLD** |
-| L13 CC Principles | 是 | 是 | 是 | 短·cwnd event | 短 | 是 | 基础 | 2 | cwnd/rwnd split | Desktop + Mobile | GOOD |
+| L13 CC Principles | 是 | 是 | 是 | **强·双 flow timeline** | **完整 AIMD** | 是 | **三段式** | 5 | reliability/flow/congestion split | Desktop + Mobile | **GOLD** |
 | L14 CC Models | 是 | 是 | 是 | 短·throughput | 短 | 是 | 基础 | 2 | parameter regime | Desktop + Mobile | GOOD |
-| L15 DNS | 是 | 是 | 是 | 短·message/cache | 短 | 是 | 基础 | 3 | resolver cache | Desktop + Mobile | GOOD |
+| L15 DNS | 是 | 是 | 是 | **强·message/cache trace** | **冷缓存→热缓存** | 是 | **三段式** | 6 | resolver pending/cache | Desktop + Mobile | **GOLD** |
 | L16 HTTP/CDN | 是 | 是 | 是 | 短·request/cache | 短 | 是 | 基础 | 2 | cache key/freshness | Desktop + Mobile | GOOD |
-| L17 Ethernet/STP | 是 | 是 | 是 | 短·table/tree | 短 | 是 | 基础 | 2 | learning/blocked port | Desktop + Mobile | GOOD |
+| L17 Ethernet/STP | 是 | 是 | 是 | **强·MAC/tree trace** | **首帧→回复** | 是 | **三段式** | 5 | learning/blocked port | Desktop + Mobile | **GOLD** |
 | L18 ARP/DHCP/NAT/TLS | 是 | 是 | 是 | 短·packet/table | 短 | 是 | 基础 | 3 | NAT mapping | Desktop + Mobile | GOOD |
 | L19 DC Topology | 是 | 是 | 是 | 短·topology/traffic | 短 | 是 | 基础 | 2 | ECMP load | Desktop + Mobile | GOOD |
 | L20 DC Routing | 是 | 是 | 是 | 短·inner/outer packet | 短 | 是 | 基础 | 2 | underlay/overlay | Desktop + Mobile | GOOD |
@@ -76,7 +76,7 @@ Gold slice 自评通过后，剩余 lesson 按主题增加一段专属 mechanism
 
 ## Depth self-review
 
-五个 Gold lesson 均已按闭卷标准人工复核：学习者可以定位 packet、列 header、指出设备 state/table、执行 event transition、预测 packet loss/link failure/ACK reordering，并把实现条件连接到 invariant。其余课达到 `GOOD`：已经不再只有定义与单题，但不会因新增相同 class 就宣称 `GOLD`。
+九个 Gold lesson 均按闭卷标准复核：学习者可定位 packet/message，列出 state/table，执行 event transition，预测 policy leak、congestion collapse、stale cache、二层环路、packet loss/link failure/ACK reordering，并把实现条件连接到 invariant。其余课保持 `GOOD`，不会仅因存在语义 class 就宣称 `GOLD`。
 
 ## Source-blocked 项
 
@@ -87,9 +87,10 @@ Gold slice 自评通过后，剩余 lesson 按主题增加一段专属 mechanism
 ## 自动与浏览器 QA
 
 - `validate_course.py`：44 个 HTML page、26 个 lecture、17 个 work item、10 个 interactive embed 全部通过；数学 cache version、控制字符、分隔符、链接、quiz 与 source section 检查为 0 error。
-- `audit_lesson_depth.py`：5 个 Gold lesson 均有 7/7 结构证据；quiz 数为 L3=6、L6=7、L8=6、L11=7、L12=7。其余 lesson 为 2–3 道，并明确保持 `GOOD`。
+- `audit_lesson_depth.py`：9 个 Gold lesson 均有 7/7 结构证据；新增 L9=6、L13=5、L15=6、L17=5。其余 lesson 为 2–3 道，并明确保持 `GOOD`。
+- `audit_workbook_depth.py`：P1A/P1B Engineering Workbook 为 7/7；P2 Routing Recap 与 P3 Transport Recap 为 9/9。P3 的 recap depth 为 Gold，但当前 source status 仍为 `BLOCKED_BY_SOURCE`。
 - Firefox runtime：Dashboard 与全部 43 个内容页逐页加载；无 page-level overflow、无 KaTeX error、无残留损坏公式、无未完成 interactive，且每页恰有一个 H1。
-- Mobile runtime：L3/L6/L8/L11/L12 与 Project 2 Workbook 在 390×844 逐页检查；无 page-level overflow 或数学错误。宽表由局部滚动容器承载。
+- Mobile runtime：L3/L6/L8/L9/L11/L12/L13/L15/L17 与 Project 2、Project 3 Recap 在 390×844 逐页检查；无 page-level overflow 或数学错误。宽表由局部滚动容器承载。
 - 行为检查：实际点击 L3 stepper 的下一步，内容发生状态变化；实际选择错误 quiz option，诊断反馈可见。10/10 JSON spec 与 10/10 SVG fallback 通过 validator。
 - 视觉复核：对照改动前后桌面 L3 与移动 L12。保留原 CourseStack typography/design system；将历史代码证据合并进单一 source snapshot，避免两张 metadata 卡占满移动首屏。
 
