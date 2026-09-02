@@ -1,28 +1,39 @@
 {
   "version": 1,
   "kind": "stepper",
-  "title": "一个 HTTP 字节如何被逐层封装",
-  "description": "逐层查看主机与网络分别添加什么控制信息，以及中间设备真正读取哪一层。",
+  "title": "Packet Journey：Browser 到服务器",
+  "description": "用固定地址逐步查看 before state、添加/移除的 header、设备读到的字段与输出。",
   "steps": [
     {
-      "title": "应用层：生成消息",
-      "body": "浏览器产生 HTTP 请求字节；它关心资源语义，不决定下一跳。"
+      "title": "Browser：HTTP message",
+      "body": "Before：目标 203.0.113.9:443。Event：浏览器生成 GET /。After：应用字节交给 socket；尚无链路地址。"
     },
     {
-      "title": "传输层：端到端会话",
-      "body": "TCP 添加端口、序号与确认相关字段，把字节纳入可靠传输状态。",
-      "formula": "segment = TCP header + application bytes"
+      "title": "Host TCP：segment",
+      "body": "Before：SND.NXT 指向下一字节。Event：发送请求。After：加 src port 51514、dst port 443 与 sequence；SND.NXT 推进。"
     },
     {
-      "title": "网络层：跨网络寻址",
-      "body": "IP 添加源/目的地址与 TTL；路由器主要据目的前缀选择下一跳。"
+      "title": "Host IP：datagram",
+      "body": "Before：route lookup 已选默认网关。Event：封装 segment。After：src 10.1.2.7、dst 203.0.113.9、TTL 64。"
     },
     {
-      "title": "链路层：走过一跳",
-      "body": "以太网帧携带当前链路的源/目的 MAC。每经过路由器，链路头会更换，端到端 IP 目的地通常不变。"
+      "title": "First link：frame",
+      "body": "Before：neighbor table 已有网关 MAC。Event：为当前链路封装。After：src MAC=host、dst MAC=gateway，IP payload 不变。"
+    },
+    {
+      "title": "Router：validate + forward",
+      "body": "Before：frame 到达入口。Event：去链路头、验证 IP、TTL 64→63、查 FIB。After：选下一跳，TCP/HTTP 未被解释。"
+    },
+    {
+      "title": "Next link：new frame",
+      "body": "Before：已有出口与 next-hop MAC。Event：重新封装并排队。After：两端 MAC 改变，src/dst IP 与 ports 保持。"
+    },
+    {
+      "title": "Destination：demultiplex",
+      "body": "Event：EtherType→IP Protocol→TCP dst port。After：逐层去头，原 HTTP 字节交给 443 socket。"
     }
   ],
-  "caption": "分层不是把所有状态交给所有设备：每层只暴露完成自己职责所需的接口。",
+  "caption": "观察不变量：普通路由路径中 IP 与 TCP 端点语义保持，link header 每跳替换，TTL 每跳递减。",
   "source": {
     "label": "CS 168 Fall 2026 readings and schedule",
     "url": "https://fa26.cs168.io/"

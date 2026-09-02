@@ -31,6 +31,11 @@ The shared lesson shell also mounts the repository's Giscus discussion drawer fr
   "sourceLabel": "CS101 official homepage",
   "domain": "Computer systems",
   "domainKey": "computer-systems",
+  "courseTypeProfiles": ["networking-distributed-systems"],
+  "qualityContract": {
+    "goldLessons": [3, 6, 8],
+    "statusVocabulary": ["GOLD", "GOOD", "SHALLOW", "BLOCKED_BY_SOURCE"]
+  },
   "summary": "A concise catalog description grounded in the course scope.",
   "tags": ["Systems", "C", "Concurrency"],
   "accent": "#1677a6",
@@ -73,6 +78,9 @@ The shared lesson shell also mounts the repository's Giscus discussion drawer fr
 
 Rules:
 
+- Record one primary `courseTypeProfiles` value from `course-type-profiles.md` plus any justified secondary profile. The first value controls default teaching nouns and exercise types.
+- Choose two to four `qualityContract.goldLessons` before bulk authoring. Existing-course migrations may use more only when the user explicitly names a larger Gold set. Gold declarations are promises verified by the depth audit and human review, not decorative metadata.
+
 - Use positive integer lecture and work-item numbers.
 - Use ISO dates when known and empty strings when unknown.
 - Keep every `sourceFiles` path relative to the source-resource folder.
@@ -114,6 +122,7 @@ The Dashboard reads `course-info.json` and `api/status.json`. The homepage reads
 Each lecture and work-item page must:
 
 - Declare Chinese language, UTF-8, viewport, a descriptive title, and exactly one `h1`.
+- Declare the primary profile on `<body data-course-profile="…">` and one honest `data-depth-status` value: `GOLD`, `GOOD`, `SHALLOW`, or `BLOCKED_BY_SOURCE`. Fresh scaffold placeholders start as `SHALLOW`; only human review may promote them.
 - Load shared base, lesson, interactive, KaTeX, Prism, math-render, quiz, and lesson-UI assets using correct relative paths.
 - Use semantic headings with stable IDs.
 - Use only `\(...\)` and `\[...\]` for math.

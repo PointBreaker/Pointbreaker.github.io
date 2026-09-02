@@ -1,6 +1,6 @@
 # Course reading-flow contract
 
-Apply this after the core content is accurate and deep enough. Its purpose is to make the course read like one continuous technical textbook without adding more topics.
+Apply this after the core content is accurate and deep enough, including the Gold Standard lesson review. Its purpose is to make the course read like one continuous technical textbook without adding more topics. Reading flow cannot compensate for shallow content, and depth work does not authorize a wall of cards.
 
 ## One active narrative
 

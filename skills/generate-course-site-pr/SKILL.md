@@ -80,9 +80,16 @@ python3 <skill-root>/scripts/inventory_resources.py \
 
 Inspect source figures visually when equations, diagrams, or layout carry meaning.
 
-### 2. Plan the whole learning system
+### 2. Detect the course type and plan the learning system
 
-Create `.course-build/course-plan.json` using [references/site-contract.md](references/site-contract.md). Map every official session and work item exactly once. Include inventory-relative `sourceFiles`, corresponding URLs in the source map, dependencies, term, provenance, and justified visuals.
+Read [references/course-type-profiles.md](references/course-type-profiles.md), select one primary profile plus any justified secondary profile, and record the choice and evidence in `.course-build/course-plan.json`. The profile determines the nouns, state model, worked-trace form, exercise types, and failure questions; never pour every discipline into one generic lesson template.
+
+Create `.course-build/course-plan.json` using [references/site-contract.md](references/site-contract.md). Map every official session and work item exactly once. Include inventory-relative `sourceFiles`, corresponding URLs in the source map, dependencies, term, provenance, and justified visuals. Before page composition, add:
+
+- a concept dependency graph;
+- observable learning objectives stated as derivation, prediction, diagnosis, or implementation capabilities;
+- a depth ledger for every page;
+- two to four `goldLessons` chosen for centrality, mechanism richness, assignment leverage, and misconception risk.
 
 Build a depth ledger for every page:
 
@@ -91,7 +98,7 @@ source coverage | reasoning gaps | prerequisite gaps | misconception risks
 practice gap | visual need | version status | required action
 ```
 
-Prioritize source/version correctness, then core mental models, then practice and Workbook depth, then visual/reading polish. A diagram-only pass never counts as a course-level optimization.
+Prioritize source/version correctness, then core mental models, then practice and Workbook depth, then visual/reading polish. A diagram-only pass never counts as a course-level optimization. Do not author the complete course yet.
 
 ### 3. Prepare the repository safely
 
@@ -105,20 +112,33 @@ python3 <skill-root>/scripts/scaffold_course.py \
 
 For an existing course, edit the responsible content/data/renderer layer in place. Do not scaffold over it or change historical filenames merely to match new titles.
 
-### 4. Build textbook Lessons
+### 4. Pass the Mechanism Gate before writing
+
+Read [references/mechanism-depth-practice.md](references/mechanism-depth-practice.md). For every major concept, answer the ten Mechanism Gate questions from source evidence before composing prose. If the objects, saved state, event, transition, output, invariant, and counterfactual are not known, set the item to `DO_NOT_WRITE_YET`, research further, or mark it `BLOCKED_BY_SOURCE`. Do not hide the gap with a definition or generic example.
+
+### 5. Build and approve the Gold Standard lessons
 
 Read:
 
 - [references/content-quality.md](references/content-quality.md)
 - [references/lesson-learning-system.md](references/lesson-learning-system.md)
+- [references/gold-standard-workflow.md](references/gold-standard-workflow.md)
 - [references/reading-flow.md](references/reading-flow.md)
 - [references/interactive-content.md](references/interactive-content.md) when a real visual relationship is present
 
-Close causal and derivation gaps, not just coverage gaps. Use concept-specific toy examples, object relationships, counterexamples, diagnostic practice, real systems, and cross-lesson continuity. Keep practice proportional to the concept; do not mechanically paste identical sections into every page.
+Complete only the selected two to four Gold Standard lessons first. Each must close causal and derivation gaps with a full worked trace, concrete counterfactual, misconception analysis, diagnostic practice, implementation bridge where applicable, and a calm reading flow. Compare their understanding depth, trace quality, exercise density, and reading flow with a mature CourseStack lesson; do not compare raw word count.
+
+Run the human-quality self-review in the Gold Standard workflow. If a learner could not reconstruct the mechanism, hand-simulate an example, predict a failure, name saved state, and justify an implementation condition, mark the lesson `SHALLOW` and revise it. Do not scale a failed Gold slice.
+
+### 6. Scale the approved teaching pattern
+
+Only after the Gold lessons pass, extend their reasoning standard—not their exact component count—to the remaining lessons. Match the profile and topic: topology/table evolution for routing, state/timeline for transport, end-to-end journeys for applications, topology/traffic for datacenters, channel/state/time for wireless, tensor/shape/dataflow for ML, and invariant/counterexample for algorithms or theory.
+
+Close causal and derivation gaps, not just coverage gaps. Use concept-specific toy examples, object relationships, counterexamples, diagnostic practice, real systems, and cross-lesson continuity. Keep practice proportional to the concept; do not mechanically paste identical sections into every page. A core lesson with one recall quiz is `INSUFFICIENT`, regardless of page count or visual polish.
 
 Prefer semantic HTML/CSS or static SVG framework diagrams for architecture, state, topology, tensor flow, and object relationships. ASCII is acceptable only for a compact inline sequence where a real diagram would not improve comprehension.
 
-### 5. Build Engineering Workbooks
+### 7. Build Engineering Workbooks
 
 When the course has assignments, labs, projects, or exams, read [references/assignment-learning-system.md](references/assignment-learning-system.md). Organize current official work into dependency-first stages with contracts, invariants, sanity checks, failure signatures, progressive hints, prediction/experiment/evidence loops, and capability gates. Never provide submit-ready implementation or unauthorized solutions.
 
@@ -131,7 +151,7 @@ Choose the problem-statement strategy from source rights and term status:
 
 Read [references/solution-bearing-coursework.md](references/solution-bearing-coursework.md) only when official solutions exist and publication is explicitly authorized.
 
-### 6. Run a reading-flow pass
+### 8. Run a reading-flow pass
 
 After content depth is complete, stop adding topics. Apply [references/reading-flow.md](references/reading-flow.md) across every Lecture and Assignment:
 
@@ -145,7 +165,15 @@ After content depth is complete, stop adding topics. Apply [references/reading-f
 
 Aim for equal or lower word count during this pass.
 
-### 7. Validate observable behavior
+### 9. Run Depth QA and validate observable behavior
+
+First run the evidence-oriented depth audit:
+
+```bash
+python3 <skill-root>/scripts/audit_lesson_depth.py --repo /path/to/repo --slug <slug> --json
+```
+
+Treat it as a regression detector, not a quality oracle. Manually decide `GOLD / GOOD / SHALLOW / BLOCKED_BY_SOURCE` using the closed-book questions in [references/mechanism-depth-practice.md](references/mechanism-depth-practice.md). `GOLD` requires both detectable evidence and human review; matching CSS classes alone never prove quality.
 
 Run the applicable repository and Skill validators:
 
@@ -158,11 +186,13 @@ node /path/to/repo/tools/lint-all-courses.mjs
 git diff --check
 ```
 
-Adapt commands to repository capabilities; do not pretend a skipped tool passed. Serve the site and inspect representative rendered pages at desktop and mobile widths. Verify routes, anchors, only one visible TOC, source disclosures, math, code, diagrams, quiz diagnosis/follow-up behavior, Assignment stages/gates, official links, keyboard focus, horizontal overflow, console errors, and reduced motion. Compare source and runtime DOM when JavaScript restructures the page.
+Read [references/render-qa.md](references/render-qa.md). Adapt commands to repository capabilities; do not pretend a skipped tool passed. Serve the site and inspect representative rendered pages at desktop and mobile widths. Verify routes, anchors, only one visible TOC, source disclosures, math, code, diagrams, quiz diagnosis/follow-up behavior, Assignment stages/gates, official links, keyboard focus, horizontal overflow, console errors, and reduced motion. Compare source and runtime DOM when JavaScript restructures the page. For any discovered math-render defect, scan every course page for the same defect class before closing the issue.
 
 For a long course, complete and validate one coherent phase at a time. Commit or publish each phase only when the user explicitly requested staged publication.
 
-### 8. Deliver
+### 10. Reverse-validate and deliver
+
+Before delivery, apply the refactored Skill to the changed course as if it were a fresh review. Record which gates caught real defects, which requirements could not be verified automatically, and whether any lesson status must be downgraded. If the course reveals a repeatable gap in this procedure or its validators, repair the Skill and rerun its validation before delivery.
 
 Review the complete diff and stage only task-owned files. Open a PR by default. Publish to the live branch only when explicitly requested, then verify the remote commit and public assets/pages; a successful push alone is not proof of deployment.
 

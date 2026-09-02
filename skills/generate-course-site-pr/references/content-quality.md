@@ -26,6 +26,8 @@ When the user supplies only a course URL, follow [source-discovery-and-migration
 
 ## Lecture composition
 
+Choose the course profile in [course-type-profiles.md](course-type-profiles.md) before composing a lesson. Then pass the concept through [mechanism-depth-practice.md](mechanism-depth-practice.md). If source evidence cannot establish the mechanism's objects, state, event, transition, output, invariant, and failure behavior, do not write a polished-looking summary: research further or mark the gap `BLOCKED_BY_SOURCE`.
+
 Use this dependency order when it fits the source:
 
 1. The actual problem the lesson resolves.
@@ -36,6 +38,8 @@ Use this dependency order when it fits the source:
 6. Common misconceptions, alternative designs, counterexamples, and boundary conditions.
 7. Inline checks close to the mechanism plus optional cross-section validation.
 8. Closed-book explanation prompts, course connections, and primary references.
+
+For a major concept, the toy example must become a complete worked trace rather than disappear after one step. Include at least one counterfactual that demonstrates why the mechanism exists. A misconception callout must explain why the wrong model is tempting, exhibit a concrete case where it fails, and install a replacement model.
 
 Use concise Chinese explanations while retaining important English terms in parentheses on first use. Avoid bloating pages with generic history, motivational filler, or claims unrelated to the course sources.
 
@@ -88,6 +92,8 @@ Use container answers:
 ```
 
 Make the correct choice unambiguous, ensure feedback explains why, and avoid answer choices that differ only stylistically.
+
+A core lesson with only one multiple-choice item is insufficient. Use a proportional mix of prerequisite probes, inline causal checks, lesson-end integration, and closed-book explanation prompts. Prefer direction, state, causality, invariant, shape, sequence, failure, counterfactual, and transfer over terminology recall; make distractors correspond to actual misconceptions.
 
 ## Resource redistribution
 

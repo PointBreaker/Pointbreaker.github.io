@@ -15,6 +15,8 @@
 
 Create a visual only when it materially reduces the effort required to understand a relationship, state change, geometry, or comparison. Do not add decorative charts, generic AI art, or an interactive control that merely repeats prose.
 
+For a worked trace, every step must expose the learner-relevant before state, triggering event or operation, after state, and output. Generic steps such as “process,” “update,” and “finish” do not satisfy the trace gate. Surround the control with an observation prompt, and keep a complete static fallback so the mechanism remains learnable without JavaScript.
+
 Prefer these forms:
 
 - Use semantic HTML/CSS for responsive object maps, ownership trees, paired comparisons, stage flows, and architecture diagrams that fit the site's visual language.

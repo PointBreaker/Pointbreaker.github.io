@@ -56,6 +56,15 @@ def validate_plan(plan: dict) -> None:
     if len(numbers) != len(set(numbers)):
         raise ValueError("lecture numbers must be unique")
     known = set(numbers)
+    profiles = plan.get("courseTypeProfiles")
+    if not isinstance(profiles, list) or not profiles or not all(isinstance(value, str) and value for value in profiles):
+        raise ValueError("courseTypeProfiles must declare at least one non-empty profile")
+    gold_lessons = plan.get("qualityContract", {}).get("goldLessons")
+    if not isinstance(gold_lessons, list) or len(gold_lessons) < 2:
+        raise ValueError("qualityContract.goldLessons must select at least two lessons")
+    invalid_gold = set(gold_lessons) - known
+    if invalid_gold:
+        raise ValueError(f"qualityContract.goldLessons references missing lectures: {sorted(invalid_gold)}")
     work_items = plan.get("workItems") or []
     if not work_items:
         work_items = [{
@@ -150,7 +159,7 @@ def dashboard_page(plan: dict, root_prefix: str) -> str:
 '''
 
 
-def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix: str, sources: list[str], guide: bool, shared_asset_version: str) -> str:
+def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix: str, sources: list[str], guide: bool, shared_asset_version: str, course_type_profile: str) -> str:
     safe_title = html.escape(title)
     safe_course = html.escape(course_code)
     source_items = "\n".join(f"      <li><code>{html.escape(item)}</code></li>" for item in sources)
@@ -168,9 +177,9 @@ def stub_page(course_code: str, number: int, title: str, kind: str, root_prefix:
   <link rel="stylesheet" href="{root_prefix}assets/course/interactive.css?v={shared_asset_version}">
   <script defer src="{root_prefix}assets/vendor/katex.min.js"></script>
   <script defer src="{root_prefix}assets/vendor/katex-auto-render.min.js"></script>
-  <script defer src="{root_prefix}assets/course/math-render.js"></script>
+  <script defer src="{root_prefix}assets/course/math-render.js?v={shared_asset_version}"></script>
 </head>
-<body>
+<body data-course-profile="{html.escape(course_type_profile)}" data-depth-status="SHALLOW">
   <div class="page">
     <p class="eyebrow">{safe_course} · {html.escape(kind)} {number}</p>
     <h1>{safe_title}</h1>
@@ -234,6 +243,7 @@ def main() -> int:
     shared_asset_version = str(platform["sharedAssetVersion"])
     plan = load_json(plan_path)
     validate_plan(plan)
+    course_type_profile = plan["courseTypeProfiles"][0]
 
     course_dir = repo / COURSES_ROOT / plan["slug"]
     if course_dir.exists():
@@ -247,7 +257,7 @@ def main() -> int:
         record["lessonFile"] = f"lessons/{filename}"
         lecture_records.append(record)
         page_path = course_dir / "lessons" / filename
-        page = stub_page(plan["courseCode"], lecture["number"], lecture["title"], "第", relative_asset_prefix(page_path, repo), lecture.get("sourceFiles", []), False, shared_asset_version)
+        page = stub_page(plan["courseCode"], lecture["number"], lecture["title"], "第", relative_asset_prefix(page_path, repo), lecture.get("sourceFiles", []), False, shared_asset_version, course_type_profile)
         page_path.write_text(page, encoding="utf-8")
 
     assignment_records = []
@@ -257,7 +267,7 @@ def main() -> int:
         record["assGuideFile"] = f"lessons/assignments/{filename}"
         assignment_records.append(record)
         page_path = course_dir / "lessons" / "assignments" / filename
-        page = stub_page(plan["courseCode"], item["number"], item["title"], item.get("kind", "Assignment"), relative_asset_prefix(page_path, repo), item.get("sourceFiles", []), True, shared_asset_version)
+        page = stub_page(plan["courseCode"], item["number"], item["title"], item.get("kind", "Assignment"), relative_asset_prefix(page_path, repo), item.get("sourceFiles", []), True, shared_asset_version, course_type_profile)
         page_path.write_text(page, encoding="utf-8")
 
     course_info = {
@@ -278,6 +288,8 @@ def main() -> int:
         "tags": plan.get("tags", []),
         "accent": plan.get("accent", "#63e68c"),
         "workItemLabel": plan.get("workItemLabel", "Guides"),
+        "courseTypeProfiles": plan["courseTypeProfiles"],
+        "qualityContract": plan["qualityContract"],
         "lectures": lecture_records,
         "assignments": assignment_records,
     }

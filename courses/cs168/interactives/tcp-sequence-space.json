@@ -1,28 +1,39 @@
 {
   "version": 1,
   "kind": "stepper",
-  "title": "TCP 序号空间与累计 ACK",
-  "description": "用 ISN=100、四字节数据和一次乱序抵达，追踪 SYN、数据范围与 ACK 的含义。",
+  "title": "TCP：一次丢包后的完整状态演化",
+  "description": "跟踪 SND.UNA/NXT/WND、重传队列、RCV.NXT、乱序队列、timer 与 wire output。",
   "steps": [
     {
-      "title": "SYN 消耗序号",
-      "body": "发送 SYN(seq=100) 后，下一个数据字节序号是 101。",
-      "formula": "SYN: [100,101)"
+      "title": "Initial state",
+      "body": "Sender UNA=100,NXT=100,WND=400,retx=[]；Receiver NXT=100,OOO=[]。"
     },
     {
-      "title": "发送四字节",
-      "body": "abcd 覆盖序号区间 [101,105)，因此全部按序抵达后的累计确认是 ACK=105。"
+      "title": "Send [100,200)：lost",
+      "body": "Sender NXT→200，retx 加入 [100,200)，启动 oldest-unacked timer；Receiver 无变化。"
     },
     {
-      "title": "后半段先到",
-      "body": "[103,105) 先抵达时可以缓存，但 101 仍是缺口；累计 ACK 仍为 101。"
+      "title": "Send [200,300)：arrives",
+      "body": "Sender NXT→300；Receiver 因 [100,200) 是洞，把 [200,300) 放入 OOO，输出 ACK 100。"
     },
     {
-      "title": "缺口补齐",
-      "body": "[101,103) 抵达后，连续前缀扩展到 105；一次 ACK=105 同时确认此前缓存的数据。"
+      "title": "ACK 100：no progress",
+      "body": "SND.UNA 仍是 100，retx queue 不弹出；重复 ACK 没确认新连续字节。"
+    },
+    {
+      "title": "Timeout + retransmit",
+      "body": "重发 [100,200)，SND.NXT 仍为 300，RTO 退避；重传不是新逻辑字节。"
+    },
+    {
+      "title": "Gap closes",
+      "body": "Receiver 交付 [100,200)，再连续消费 OOO 的 [200,300)，RCV.NXT→300，OOO 清空，输出 ACK 300。"
+    },
+    {
+      "title": "ACK 300：cleanup",
+      "body": "Sender UNA→300，删除两项 retx，停止 timer；发送与接收的连续前缀重新一致。"
     }
   ],
-  "caption": "ACK 值指向“下一个期望字节”，SYN/FIN 也各占一个序号；接收顺序与交付顺序不能混为一谈。",
+  "caption": "ACK 指向下一个期望字节；重传使用原序号且不推进 SND.NXT，缺口闭合后累计 ACK 可跨过缓存段。",
   "source": {
     "label": "CS 168 TCP reading",
     "url": "https://textbook.cs168.io/transport/tcp-implementation.html"

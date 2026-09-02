@@ -37,6 +37,8 @@ Never classify information only because it is an “old node,” and never move 
 
 ## Dependency-first stages
 
+Use the primary [course type profile](course-type-profiles.md) to choose the Workbook's native evidence. Networking work should require packet/state/table/timeline traces and identify the invariant protected by an implementation branch; ML work should expose tensor shapes, dataflow, parameters, gradients, and compute; algorithms work should expose iteration state and invariants; theory work should expose definitions, proof dependencies, and counterexamples.
+
 Group current official problems into a small engineering path while preserving every official number and ID. Each stage should answer:
 
 - **What You Are Building** and **Why This Exists**;
@@ -51,6 +53,8 @@ Group current official problems into a small engineering path while preserving e
 - a **Gate** that summarizes capability without hard-locking later content.
 
 Keep tests passing as Correct evidence, not the complete definition of understanding. Systems work needs profiles and measurement conditions; scaling work needs fit region/residual/uncertainty; data work needs population/filter/bias accounting; alignment work needs objective/proxy/exploit/evaluation evidence.
+
+The Lesson → Assignment bridge must name the exact mechanism and the implementation decision it justifies. A link that says only “see Project 2” is not a bridge. Historical implementations may support invariant and bug analysis, but must be labeled as historical evidence rather than current official solutions.
 
 ## Problem identity and navigation
 

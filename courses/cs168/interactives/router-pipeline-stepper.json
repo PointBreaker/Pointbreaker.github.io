@@ -1,27 +1,35 @@
 {
   "version": 1,
   "kind": "stepper",
-  "title": "路由器逐包处理流水线",
-  "description": "沿一次 IPv4 转发追踪验证、查表、改头和排队，区分控制平面与数据平面。",
+  "title": "Router pipeline：10.1.2.99 的一次转发",
+  "description": "用具体 FIB 与 TTL=2 的数据报跟踪验证、递减、LPM、邻居状态、排队和输出。",
   "steps": [
     {
-      "title": "入口验证",
-      "body": "确认帧目标、IP 版本、头长与校验和有效；失败在进入转发表前就被丢弃。"
+      "title": "Ingress validation",
+      "body": "Before：frame 到达。Event：检查 FCS、IPv4 version/IHL/length/checksum。After：非法即丢弃；合法则去 link header。"
     },
     {
-      "title": "最长前缀匹配",
-      "body": "将目的 IP 与转发表前缀匹配，选择掩码最长的条目，而不是最早插入的条目。"
+      "title": "TTL 2→1",
+      "body": "Before：TTL=2。Event：递减并更新 IPv4 checksum。After：TTL=1；若原值≤1 则丢弃并可能输出 ICMP Time Exceeded。"
     },
     {
-      "title": "逐跳头部更新",
-      "body": "TTL 减 1，并重算 IPv4 头校验和；TTL 到零时生成合适的 ICMP 错误。"
+      "title": "LPM：四项都检查",
+      "body": "10.1.2.99 匹配 /8、/16、/24 与 default。选择最长 /24，而不是第一项。"
     },
     {
-      "title": "解析下一跳并排队",
-      "body": "根据 next hop 做 ARP/邻居解析，把新链路帧放入输出队列；队列拥塞可能造成丢包。"
+      "title": "Select next hop",
+      "body": "FIB 的 /24 给出 next hop 192.0.2.3、interface eth3。目的 IP 仍为 10.1.2.99。"
+    },
+    {
+      "title": "Adjacency + new frame",
+      "body": "查 eth3 邻居表获得 next-hop MAC；若 miss，触发解析并暂存。命中后创建全新的 link header。"
+    },
+    {
+      "title": "Queue + emit",
+      "body": "frame 进入 eth3 queue，scheduler 选择后发送。队列满可丢包；输出 IP TTL=1，ports 未改变。"
     }
   ],
-  "caption": "先丢弃无效包，再做最长前缀匹配；TTL 与校验和的变更属于每一跳，而不是端到端状态。",
+  "caption": "routing plane 生产 FIB；forwarding plane 对每个 packet 消费 FIB。观察每步的失败出口。",
   "source": {
     "label": "CS 168 Fall 2026 readings and schedule",
     "url": "https://fa26.cs168.io/"

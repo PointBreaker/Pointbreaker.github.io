@@ -10,6 +10,8 @@ Depth is not word count. Prefer closing a reasoning gap over adding another topi
 
 ## Audit before writing
 
+Select a profile from [course-type-profiles.md](course-type-profiles.md) and use [mechanism-depth-practice.md](mechanism-depth-practice.md) as a pre-writing gate. For a new course or major refresh, follow [gold-standard-workflow.md](gold-standard-workflow.md): finish and review two to four central lessons before scaling.
+
 For an existing course, first apply the version audit in [source-discovery-and-migration.md](source-discovery-and-migration.md), then inspect both rendered page and source before expanding it. Do not assume that a new title, diagram, or longer page means the underlying course has been migrated. For each major concept, locate:
 
 - a prerequisite the page silently assumes;
@@ -74,6 +76,8 @@ Use two layers:
 
 Also include a small closed-book `Explain It Yourself` section. Reference answers stay collapsed.
 
+Typical deep lessons need two or three lightweight prerequisite probes, three to six inline checks, three to five lesson-end checks, and one to three explanation prompts. These are calibration ranges, not quotas. Vary them with the mechanism; nevertheless, one recall-style quiz on a core lesson is `INSUFFICIENT`.
+
 For a multiple-choice item, every distractor should correspond to a plausible misconception. Feedback explains why the correct choice works and why each alternative fails. If the learner is wrong, name the confused mental models.
 
 When a follow-up variant exists:
@@ -120,3 +124,5 @@ Before claiming a lesson complete:
 6. Compare desktop and mobile screenshots in equivalent states. Test inline answer feedback, wrong/correct follow-up behavior, direct anchors, Deep Quiz disclosures, and keyboard focus. If screenshots or browser QA are unavailable, report that limitation instead of claiming visual verification.
 
 Do not claim the course is textbook-grade merely because every lesson contains the same headings. The mechanism, examples, misconceptions, and practice must be specific to the lesson's reasoning task.
+
+Run `scripts/audit_lesson_depth.py` after authoring. It verifies declared Gold lessons have structural evidence for worked trace, counterfactual, misconception analysis, practice, explanation, and implementation mapping. It cannot judge whether the reasoning is correct, so the final status still requires a human-quality review using the closed-book Depth Gate.

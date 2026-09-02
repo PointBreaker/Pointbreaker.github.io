@@ -15,6 +15,7 @@ const checks = [
   ['MIT 6.1810 textbook and labs', 'node', ['tools/lint-mit61810-content.mjs']],
   ['MIT 6.5840 textbook and labs', 'node', ['tools/lint-mit65840-content.mjs']],
   ['EECS498 teaching-depth contract', 'node', ['tools/check-eecs498-depth.mjs']],
+  ['CS168 mechanism-depth and source-status contract', 'node', ['tools/lint-cs168-content.mjs']],
 ];
 
 let failed = 0;

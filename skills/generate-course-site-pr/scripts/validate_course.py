@@ -16,6 +16,8 @@ from validate_interactive import validate_interactives
 
 TODO_MARKER = "COURSE_CONTENT_TODO"
 DOLLAR_MATH_RE = re.compile(r"(?<!\\)\$[^$\n]{1,300}(?<!\\)\$")
+CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+RAW_LATEX_RE = re.compile(r"\\(?:frac|dfrac|tfrac|leftarrow|rightarrow|leq?|geq?|mathrm|operatorname|beta|alpha|sum|prod|infty)\b")
 PRIMARY_KINDS = {"syllabus", "lecture", "assignment", "lab", "project"}
 PLATFORM_VERSION = 3
 COURSES_ROOT = "courses"
@@ -125,6 +127,8 @@ def page_errors(page: Path, repo: Path, course: Path, shared_asset_version: str)
             errors.append(f"{label}: shared interactive stylesheet is missing cache version {shared_asset_version}")
         if f"assets/course/interactive.js?v={shared_asset_version}" not in source:
             errors.append(f"{label}: shared interactive runtime is missing cache version {shared_asset_version}")
+        if f"assets/course/math-render.js?v={shared_asset_version}" not in source:
+            errors.append(f"{label}: shared math renderer is missing cache version {shared_asset_version}")
         for quiz in parser.quizzes:
             if not quiz["answer"]:
                 errors.append(f"{label}: quiz {quiz['id']} missing data-answer")
@@ -148,9 +152,14 @@ def page_errors(page: Path, repo: Path, course: Path, shared_asset_version: str)
                 errors.append(f"{label}: code block {index} must declare a language-* class")
     if DOLLAR_MATH_RE.search(visible):
         errors.append(f"{label}: contains unsupported $...$ math delimiters")
+    if CONTROL_CHAR_RE.search(source):
+        errors.append(f"{label}: contains a non-printing control character; check escaped LaTeX such as \\beta")
     for left, right in ((r"\(", r"\)"), (r"\[", r"\]")):
         if visible.count(left) != visible.count(right):
             errors.append(f"{label}: unbalanced math delimiters {left} / {right}")
+    visible_without_math = re.sub(r"\\\(.*?\\\)|\\\[.*?\\\]", "", visible, flags=re.DOTALL)
+    if RAW_LATEX_RE.search(visible_without_math):
+        errors.append(f"{label}: contains a LaTeX command outside supported math delimiters")
     if page.name != "index.html" and not re.search(r"参考资料|主要来源|一手资料|Sources?", visible, re.IGNORECASE):
         errors.append(f"{label}: missing primary-source reference section")
     return errors
