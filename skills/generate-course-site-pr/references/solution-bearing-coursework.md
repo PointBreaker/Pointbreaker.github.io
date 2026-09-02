@@ -1,6 +1,6 @@
 # Solution-bearing coursework
 
-Use these rules when local official discussion or homework solutions are available and the user explicitly authorizes publishing them.
+Use these rules when local official discussion or homework solutions are available, redistribution is permitted, and the user explicitly authorizes publishing them. Access to a file or public URL alone is not permission to republish a complete solution.
 
 ## Pairing and completeness
 
@@ -25,10 +25,11 @@ If no local official solution exists, show that status and omit the solution dis
 ## Implementation handouts without solutions
 
 - Use `kind: Assignment` or `kind: Lab` for long programming handouts. The shared schema and renderer support both without requiring an answer key.
-- Preserve every stable problem identifier, interface, tensor shape, formula, permitted dependency, command, deliverable, point value, runtime target, and acceptance test needed to implement the assignment without reopening the PDF.
-- Translate the handout's explanatory context as well as its task sentences. A list of deliverables alone is not a self-contained handout.
+- When current-term statement localization is publishable, preserve every stable problem identifier, interface, tensor shape, formula, permitted dependency, command, deliverable, point value, runtime target, and acceptance test needed to implement the assignment without reopening the PDF.
+- When full localization is not publishable, preserve stable official IDs and create a clean-room Chinese Problem Guide/Workbook; link the official handout for exact requirements instead of reconstructing it.
+- For a publishable localized handout, translate explanatory context as well as task sentences. A list of deliverables alone is not a self-contained handout.
 - Keep `solutionStatus: no-local-solution` and `solutionMarkdown` empty unless a publishable official solution is actually present and authorized. Non-answer hints may clarify prerequisites, debugging order, and validation strategy, but must not provide submit-ready code.
-- Render these pages as `完整 Handout：任务、约束与验收`; retain the existing assignment guide above the generated task outline.
+- Render publishable full localizations as `完整 Handout：任务、约束与验收`; otherwise render an explicitly CourseStack-authored `Problem Guide`. Retain the existing assignment guide above either generated region.
 
 ## Algorithm-course interactives
 

@@ -11,6 +11,8 @@ Use sources in this order:
 
 Respect task-specific source and network restrictions. Prefer complete local copies when the user identifies them as authoritative, and record unresolved resources rather than silently replacing them.
 
+When the user supplies only a course URL, follow [source-discovery-and-migration.md](source-discovery-and-migration.md). An official link is sufficient to begin; local resources are optional evidence, not a prerequisite the user must assemble.
+
 ## Reconciliation rules
 
 - Build one canonical schedule before drafting pages.
@@ -42,7 +44,7 @@ Follow [lesson-learning-system.md](lesson-learning-system.md) for reasoning-gap 
 ## Visual and interactive explanations
 
 - Create a visual only when it makes a relationship, state transition, geometry, comparison, or parameter effect materially easier to understand.
-- Prefer a static SVG for a fixed architecture, dataflow, tensor-shape map, or derivation overview.
+- Prefer semantic HTML/CSS or a static SVG for a fixed architecture, dataflow, tensor-shape map, or derivation overview; avoid large ASCII framework drawings when spatial relationships matter.
 - Prefer the shared declarative interactive runtime for parameterized curves, matrices that change across frames, and step-by-step processes.
 - Preserve quantitative values and attribution from official figures. Clearly label redrawn explanatory diagrams instead of presenting them as official originals.
 - Require surrounding prose that explains what the learner should notice. A figure or simulator must not stand alone without interpretation.
@@ -58,19 +60,16 @@ Follow [lesson-learning-system.md](lesson-learning-system.md) for reasoning-gap 
 - Keep code executable in spirit: use real APIs, specify version-sensitive behavior, and separate pseudocode from runnable examples.
 - Wrap every code sample in `<pre><code class="language-...">`. Choose a precise Prism language; use `pseudocode` for structured algorithm notation and `plaintext` only for diagrams, transcripts, or intentionally unhighlighted text.
 
-## Assignment localization and offline completeness
+## Assignment guidance and localization rights
 
-- Translate all student-facing titles, instructions, statements, subparts, hints, checks, and source-gap explanations into natural Simplified Chinese. Keep an English technical term in parentheses only when it improves precision.
-- Require a learner to be able to answer every displayed problem without opening an external URL, textbook, PDF, slide deck, or image. Include all numerical data, formulas allowed by the problem, matrix entries, domains, intervals, units, graph coordinates, and diagram relationships in the page.
-- Classify each displayed problem as one of: `官方题面翻译`, `依据本地资料重建`, or `站内等价练习`. Show the classification and a `可离线作答` marker in the UI.
-- Use `依据本地资料重建` only when downloaded handouts, local solution text, or other local first-party evidence supports the full conditions. Do not copy final answers into the reconstructed statement.
-- Use `站内等价练习` when the official handout contains only a textbook/problem number and local evidence cannot recover the complete wording. Create a self-contained exercise that tests the same source-backed topic and expected technique, and state clearly that it is not the official original.
-- Never leave directions such as “see the textbook,” “refer to the figure,” or “open the source PDF.” Replace missing figures with sufficient coordinates, matrices, labeled relationships, or a locally owned redrawn diagram.
-- Preserve an existing human-written guide. Generated problem extraction must live between dedicated markers and may replace only that region. A work-item page must contain both a guide and a complete problem outline.
-- Do not expose solution keys. Hints should identify an entry point, and checks should validate dimensions, units, signs, boundary behavior, or substitution without revealing the final result.
-- Treat the complete localized problem outline as a peer of the Engineering Workbook and official source, never as an appendix hidden inside Deep Reference. Follow [assignment-learning-system.md](assignment-learning-system.md) for semantic classification, stable IDs, version boundaries, Stage links, disclosure depth, and regression checks.
-- Preserve the original problem ID exactly. If current-term mapping uses a normalized alias, use it only for navigation and document the alias; do not rewrite the displayed source identifier.
-- Distinguish `current-term ID matched` from `current-term statement verified`. An older translation remains labeled with its actual source term until interfaces, tests, constraints, and deliverables are checked.
+- Translate CourseStack-authored navigation, explanations, readiness prompts, contracts, debugging guidance, predictions, gates, and source-gap notices into natural Simplified Chinese. Keep an English technical term on first use when it improves precision.
+- Publish complete localized problem statements only when the current source is verified and redistribution/localization is permitted or explicitly authorized. Public accessibility alone is not a redistribution license.
+- When full republication is not permitted, write a clean-room Chinese Problem Guide and Engineering Workbook, preserve official IDs, and link the authoritative handout/repository for exact tasks and constraints. Do not reconstruct a copyrighted statement from fragments merely to make it “offline complete.”
+- A CourseStack-authored equivalent exercise may be self-contained when pedagogically useful, but label it `站内等价练习` and never imply that it is the official problem.
+- Preserve existing legitimately localized content, but distinguish current-term verification from ID matching. Older translations remain historical assets until interfaces, tests, constraints, hardware, and deliverables are checked.
+- Do not expose solution keys. Hints identify a concept, invariant, or debugging strategy without revealing submit-ready implementation.
+- Preserve original problem IDs exactly. Normalized aliases may support anchors only when displayed IDs remain unchanged.
+- Follow [assignment-learning-system.md](assignment-learning-system.md) for active/current hierarchy, stage contracts, archive boundaries, navigation, and regression checks.
 
 ## Quiz contract
 

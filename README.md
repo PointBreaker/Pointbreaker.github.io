@@ -8,7 +8,7 @@ CourseStack（课栈）是一个面向系统与机器学习课程的开放中文
 
 ## 用 Skill 新增课程
 
-仓库内置 [`generate-course-site-pr`](skills/generate-course-site-pr/SKILL.md) Skill。它会从本地课程资源生成 CourseStack v3 课程，统一放入 `courses/<slug>/`，完成校验后向本仓库提交 PR。
+仓库内置 [`generate-course-site-pr`](skills/generate-course-site-pr/SKILL.md) Skill。只需提供官方课程链接，它会发现当前学期的一手资料、判断是新建还是迁移现有课程，并把课程重构为 CourseStack v3 的中文自学教材与 Engineering Workbooks；本地资料是可选补充。
 
 ### 安装
 
@@ -23,15 +23,14 @@ cp -R skills/generate-course-site-pr "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 ### 使用
 
-1. 把官方讲义、PDF、PPT/PPTX、作业、Lab、代码和笔记放在同一资源文件夹。
-2. 在该文件夹中启动 Codex。
-3. 提供官方课程主页，并调用：
+1. 在 CourseStack repository 中启动 Codex。
+2. 提供官方课程主页，并调用：
 
 ```text
-Use $generate-course-site-pr to turn this folder into a new CourseStack course and open a PR.
+Use $generate-course-site-pr on https://example.edu/course/ and open a PR.
 ```
 
-Skill 会盘点资源、建立课程计划、生成前端与内容、识别适合可视化的数学关系或算法过程、生成静态 SVG 或声明式交互组件、检查公式和页面、创建分支并打开 PR。它不会访问 `drive.google.com` 或 `docs.google.com`，请提前下载需要的官方资料。
+Skill 会从官方页面建立当前学期 source map，沿一手链接发现公开 slides、handouts、repositories 与 changelogs，完成版本/教学深度审计，再生成或迁移课程、修复阅读流、检查公式与页面并打开 PR。公开资料的工作副本只放在 `.course-build/`，不会随网站提交。本地已有 PDF、PPT/PPTX、作业、Lab、代码或笔记时，也可以一并提供；仓库策略不允许访问的云端资源会记录为 coverage gap。
 
 CourseStack Interactive v1 支持参数化函数图、矩阵热力图和分步推导。所有交互使用仓库内的共享运行时，不依赖外部 CDN，并强制保留静态降级图。
 

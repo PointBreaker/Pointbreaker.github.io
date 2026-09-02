@@ -76,8 +76,9 @@ def read_git_page(repo: Path, baseline_ref: str, page: Path) -> str | None:
 
 def validate_page(path: Path, baseline_html: str | None = None) -> tuple[list[str], dict]:
     html = path.read_text(encoding="utf-8")
+    baseline_ids = extract_problem_ids(extract_outline(baseline_html or ""))
     if "COMPLETE_SOURCE_OUTLINE_START" not in html:
-        return [], {"rows": 0, "problemIds": [], "baselineIds": []}
+        return [], {"rows": 0, "problemIds": [], "baselineIds": baseline_ids}
 
     errors = []
     if html.count("<!-- COMPLETE_SOURCE_OUTLINE_START -->") != 1 or html.count("<!-- COMPLETE_SOURCE_OUTLINE_END -->") != 1:
@@ -87,7 +88,6 @@ def validate_page(path: Path, baseline_html: str | None = None) -> tuple[list[st
     rows = len(re.findall(r'class="problem-row"', outline))
     offline = len(re.findall(r'class="offline-ready"', outline))
     problem_ids = extract_problem_ids(outline)
-    baseline_ids = extract_problem_ids(extract_outline(baseline_html or ""))
 
     if not re.search(r'<html[^>]+lang="zh(?:-CN)?"', html, re.I):
         errors.append("page language is not zh/zh-CN")
@@ -177,8 +177,14 @@ def main() -> int:
     course = repo / "courses" / args.slug
     info = json.loads((course / "course-info.json").read_text(encoding="utf-8"))
     checked = 0
+    archived_assignments = 0
     failures = []
     page_stats = []
+    archive_pages = []
+    for candidate in course.rglob("*.html"):
+        candidate_html = candidate.read_text(encoding="utf-8")
+        if candidate.name.startswith("archive-") or "Historical archive" in candidate_html or "历史存档" in candidate_html:
+            archive_pages.append((candidate, extract_problem_ids(extract_outline(candidate_html))))
 
     if args.baseline_ref:
         verified = subprocess.run(
@@ -204,6 +210,17 @@ def main() -> int:
         if "COMPLETE_SOURCE_OUTLINE_START" in page.read_text(encoding="utf-8"):
             checked += 1
             page_stats.append((relative, stats))
+        elif stats["baselineIds"]:
+            archived_ids = {problem_id for _, problem_ids in archive_pages for problem_id in problem_ids}
+            missing_from_archive = [problem_id for problem_id in stats["baselineIds"] if problem_id not in archived_ids]
+            if missing_from_archive:
+                errors.append(
+                    "localized problem IDs disappeared from the active page and historical archives: "
+                    + ", ".join(missing_from_archive)
+                )
+            else:
+                archived_assignments += 1
+                page_stats.append((relative, {**stats, "archived": len(stats["baselineIds"])}))
         failures.extend(f"{relative}: {error}" for error in errors)
 
     if failures:
@@ -212,11 +229,12 @@ def main() -> int:
             print(f"- {failure}")
         return 1
 
-    print(f"ASSIGNMENT_LOCALIZATION_OK pages={checked}")
+    print(f"ASSIGNMENT_LOCALIZATION_OK activePages={checked} archivedAssignments={archived_assignments}")
     for relative, stats in page_stats:
         baseline = len(stats["baselineIds"])
         suffix = f" baseline={baseline}" if args.baseline_ref else ""
-        print(f"- {relative}: problems={stats['rows']} ids={len(stats['problemIds'])}{suffix}")
+        archive_suffix = f" archived={stats.get('archived', 0)}" if stats.get("archived") else ""
+        print(f"- {relative}: problems={stats['rows']} ids={len(stats['problemIds'])}{suffix}{archive_suffix}")
     return 0
 
 

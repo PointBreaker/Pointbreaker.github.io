@@ -1,111 +1,108 @@
 # Assignment learning-system contract
 
-Use this contract for CourseStack homework, lab, project, and assignment pages. An Assignment is an Engineering Workbook that connects understanding to implementation and evidence; it is not a second Lesson and not merely a reformatted official handout.
+Use this contract for CourseStack homework, labs, projects, and assignments. An Assignment is an Engineering Workbook that turns Lesson understanding into implementation and evidence; it is not a second Lesson, a quiz bank, or version archaeology.
 
-## Three peer resources
+## Active resource hierarchy
 
-Every substantial Assignment page should make these resources visibly distinct and equally reachable:
+Every active page should make two resources immediately clear:
 
-1. **Engineering Workbook** — CourseStack's stages, gates, contracts, sanity checks, debugging guidance, predictions, experiments, hints, and reflection.
-2. **中文完整题面** — complete localized problem statements, original identifiers, tasks, constraints, deliverables, tests, and source status.
-3. **Official Handout** — the authoritative repository, README, PDF, tests, and current-term requirements.
+1. **Engineering Workbook** — CourseStack stages, contracts, sanity checks, debugging guidance, predictions, experiments, hints, gates, and reflection.
+2. **Official sources** — the current repository, README, handout/PDF, tests, datasets, and current-term requirements. These are authoritative.
 
-The Chinese problem statements are core learning material, not Deep Reference. The official source always wins when versions conflict.
+A third first-class resource, **中文完整题面**, is appropriate only when the statement is current-term verified and redistribution/localization is permitted. Do not assume that an older translation or a publicly viewable PDF can be republished as the current Chinese handout.
 
-Deep Reference is reserved for duplicated old guides, archived Cheatsheets, historical interfaces, older-term-only supplements, and other secondary material.
+When full statement localization is not publishable, provide a Chinese Problem Guide that explains goals, dependencies, interfaces at a high level, evidence expectations, and stable official IDs without reproducing the handout. Link the official source for exact requirements.
+
+## Current term vs history
+
+The active Assignment tells the learner what to build now. Handle older material according to [reading-flow.md](reading-flow.md):
+
+- still-valid engineering guidance → merge into the current Workbook;
+- useful change in method → short `Historical note · old → current`;
+- old interfaces, retired tasks, and complete prior handouts → independent archive/report outside the active DOM.
+
+Do not place a full previous-term assignment inside a large disclosure on the active page. The learner should never need to infer which tests, model, hardware, dataset, IDs, or deliverables are current.
 
 ## Preserve before restructuring
 
 For an existing page:
 
-1. Inspect current HTML, rendered DOM, shared renderer/data files, and Git history.
-2. Inventory translated problems by stable problem ID and count before editing.
-3. Separate content semantically, for example:
+1. Inspect current HTML, rendered DOM, shared renderer/data files, official links, and Git history.
+2. Inventory official IDs, anchors, stage mappings, translated problem counts, and source terms before editing.
+3. Classify content semantically: current Workbook, current official map, current verified localization, still-valid guidance, retired interfaces, historical archive, and miscellaneous reference.
+4. Preserve existing human-authored explanations that remain correct; recover missing historical content surgically rather than checking out an old whole page.
+5. Add regression assertions for counts, IDs, active/archive separation, and broken anchors when a future renderer could bury or reinsert content.
 
-```text
-translatedProblems
-officialSourceContent
-legacyGuide
-legacySupplement
-miscReference
-```
+Never classify information only because it is an “old node,” and never move all previous siblings into one generic disclosure.
 
-Do not classify information by whether it is an “old node.” Never move all previous siblings into one disclosure. Do not retranslate content that already exists.
+## Dependency-first stages
 
-If a translation is actually absent, recover only the missing problem DOM from history; never check out an old whole page over a current Workbook.
+Group current official problems into a small engineering path while preserving every official number and ID. Each stage should answer:
 
-## Workbook stages
+- **What You Are Building** and **Why This Exists**;
+- **Depends On** with section-level Lesson links;
+- **Before You Start** prompts that reveal prerequisite gaps without becoming another exam;
+- **Contract**: input, output, shape/dtype where relevant, invariants, and forbidden assumptions;
+- **Definition of Done**: Correct, Understand, and Evidence;
+- **Tiny Sanity Check** that is hand-computable or visually inspectable;
+- **Failure Signatures** and a debug ladder from shape/dtype through isolated tests to integration;
+- three progressive hints: Concept, Invariant/Structure, Debug Strategy—collapsed and never a full solution;
+- **Prediction → Controlled Experiment → Observation → Explanation** for empirical work;
+- a **Gate** that summarizes capability without hard-locking later content.
 
-Group official problems into a small dependency-first engineering path while preserving every official number and ID. Each stage should contain:
+Keep tests passing as Correct evidence, not the complete definition of understanding. Systems work needs profiles and measurement conditions; scaling work needs fit region/residual/uncertainty; data work needs population/filter/bias accounting; alignment work needs objective/proxy/exploit/evaluation evidence.
 
-- What You Are Building and Why This Exists;
-- prerequisite Lesson links and “开始前应该已经会回答” prompts;
-- Contract: input, output, shape/dtype where relevant, invariants, and forbidden assumptions;
-- Definition of Done: Correct, Understand, and Evidence;
-- Tiny Sanity Check that can be hand-computed or visually inspected;
-- Failure Signatures and a debug ladder from shape/dtype through isolated tests to full integration;
-- progressive Concept / Invariant / Debug Strategy hints, collapsed by default and never a full solution;
-- Prediction → Controlled Experiment → Observation → Explanation when the task is empirical;
-- a Gate that summarizes capability without hard-locking later content.
+## Problem identity and navigation
 
-Keep official Problem IDs visible in each stage. Tests passing is necessary but not sufficient for systems, performance, data, scaling, or alignment work.
+Preserve displayed official IDs exactly. Do not make a second manual mapping when the stage bank can drive the Problem Index.
 
-## Problem identity and bidirectional navigation
-
-Each localized problem needs one stable anchor derived from its preserved identifier:
+If current verified localized statements exist, use stable anchors such as:
 
 ```text
 train_bpe → #problem-train_bpe
 ```
 
-Workbook official-problem entries and the localized Problem Index link to that anchor. Activating a link should open the target disclosure, move keyboard focus to its summary, apply a restrained highlight, update the URL hash, and respect `prefers-reduced-motion`.
+Stage entries should open/focus the target, update the hash, apply restrained highlighting, and respect `prefers-reduced-motion`. Each problem links back to its Workbook stage; multiple stage memberships produce multiple backlinks rather than duplicate statements.
 
-Each mapped problem links back to its Workbook stage. A problem may belong to multiple stages; show multiple backlinks rather than duplicating the statement.
+Unresolved status must be explicit: `Official only`, `Current statement verified`, `Historical archive`, or `Needs Review`. An ID match alone does not prove interfaces, tests, constraints, hardware, or deliverables match the current term.
 
-Unresolved mappings must be visible as `Official only`, `Legacy only`, or `Needs Review`; never fail silently or normalize the displayed official ID. A normalized alias may support navigation only when the original IDs remain visible and the mapping is documented.
+## Disclosure depth
 
-## Problem Index and disclosure depth
-
-Place a stage-grouped Problem Index at the top of the Chinese-statement section and reuse the Workbook's stage-to-official-ID data. Do not maintain a second manual mapping.
-
-Individual problems may be collapsed by default. The normal path should be:
+For a current publishable localization, the normal path is:
 
 ```text
-中文完整题面 section → problem details
+中文完整题面 → individual problem details
 ```
 
-Do not require `Deep Reference → old guide → translated outline → problem`. Keep parent disclosure depth at one; a problem-internal advanced hint may add one more disclosure.
+Use at most one parent disclosure. A problem-internal advanced hint may add one more. Never require `Deep Reference → old guide → translated outline → problem`.
 
-## Version and source semantics
-
-Show a compact version notice that distinguishes:
-
-- official current term and version;
-- Workbook mapping basis;
-- localized statement source term;
-- legacy supplement status.
-
-An ID match is not proof that interfaces, tests, constraints, hardware, or deliverables are current. Use language such as `2026 ID Matched · Needs Review` until the statement is checked against the current official source. Never label an older translation as the current official Chinese handout.
-
-Keep repository, README, PDF, and tests easy to reach near the top and again in the Official Handout section when useful.
+Historical archive pages may keep individual problems collapsed, but must show a prominent non-active label and a direct link back to the current Workbook.
 
 ## Official task vs CourseStack guidance
 
-Visually separate Stanford/instructor requirements from CourseStack prerequisites, implementation ordering, debugging suggestions, and hints. Preserve useful legacy guidance, but move solution-like material into a clearly labeled advanced hint rather than presenting it as part of the official task.
+Visually separate instructor requirements from CourseStack prerequisites, implementation order, debugging suggestions, predictions, and hints. CourseStack scaffolds; it does not solve.
+
+Allowed guidance includes checking shapes, mask direction, numerical stability, deterministic tiny inputs, profiling methodology, and experiment controls. Do not provide submit-ready code, fill official TODOs, or present an implementation recipe as a hint.
+
+## Evidence discipline
+
+Performance conclusions require baseline, configuration, hardware, dtype/shape, warmup, synchronization, repetition count, measurement method, result, and explanation. Experimental claims require hypothesis, controlled variables, observation, uncertainty, and a conclusion whose scope matches the evidence.
+
+Do not write a naked speedup, quality gain, or reward increase as a universal fact.
 
 ## Validation
 
-For an existing course, run localization validation with a Git baseline. A refactor must not reduce the prior set of problem IDs unless the user explicitly authorized removal.
+For existing courses, compare official IDs and any publishable localized IDs against the pre-change Git baseline. A refactor must not silently delete assets; moving historical content to an independent archive is valid only when the archive, return links, and regression checks exist.
 
-Browser QA must verify at least one representative Stage → Problem flow per Assignment and random problems across the remaining pages:
+Rendered QA should verify representative Stage flows for every Assignment:
 
-- top-level Workbook / 中文题面 / Official navigation works;
-- the target opens, focuses, highlights, and has a Stage backlink;
-- no problem row remains inside Deep Reference;
-- translated problem counts and IDs match the source inventory;
-- official-only and legacy-only mappings are visible;
-- desktop retains a readable main column plus at most one side navigation;
+- Task path and current official sources are reachable at the top;
+- current IDs and source links resolve;
+- stage navigation, gates, hints, and Lesson anchors work;
+- verified localized statements, if present, open/focus and link back correctly;
+- historical problems are absent from the active DOM and archives are clearly marked;
+- desktop uses a readable main column plus at most one side navigation;
 - mobile has no page-level horizontal overflow and long titles wrap;
-- source/version notices match the actual content.
+- source/version labels describe the content actually shown.
 
-When publishing, verify more than the Git push: wait until the public page references the new cache-busted assets, then compare representative remote asset hashes with local files.
+When publishing, verify the public page and cache-busted assets rather than treating `git push` as deployment proof.

@@ -17,11 +17,13 @@ Create a visual only when it materially reduces the effort required to understan
 
 Prefer these forms:
 
+- Use semantic HTML/CSS for responsive object maps, ownership trees, paired comparisons, stage flows, and architecture diagrams that fit the site's visual language.
 - Use a source-backed static SVG for architecture, topology, dataflow, tensor shape, or a fixed derivation map.
 - Use `function-plot` when one or more parameters change a curve, optimum, boundary, loss surface slice, probability density, scaling law, or resource estimate.
 - Use `matrix-heatmap` for attention, confusion matrices, cache states, adjacency, correlation, transition weights, or other two-dimensional values. Use frames when the matrix changes across heads, layers, time, or algorithm steps.
 - Use `stepper` when a learner benefits from advancing through an algorithm, proof, pipeline, state machine, schedule, or formula derivation one stage at a time.
 - Keep executable code examples as code. Do not turn every algorithm into a simulator.
+- Use ASCII only for compact inline pipelines, transcripts, or terminal-like examples. Replace large ASCII framework diagrams when spatial relationships are part of the lesson.
 
 Choose candidates while building the course plan. Record an optional `visuals` array on each lecture or work item with `id`, `kind`, `learningGoal`, `sourceFiles`, and `reason`. Omit the array when no visualization is justified.
 
@@ -158,6 +160,8 @@ Use two to twenty-four steps. Keep each step focused on one state transition. Wh
 ## Static diagrams
 
 Generate a static SVG when interaction would not change the explanation. Use semantic groups, readable labels, explicit arrows, and a viewBox. Avoid embedding fonts, scripts, foreign objects, or base64 raster data in SVG.
+
+Prefer HTML/CSS over SVG when the diagram is mostly labeled boxes and connections, needs to wrap into a clear mobile sequence, or should inherit the course's typography and theme. In both forms, keep nodes and relationships semantic enough for surrounding text and accessible labels to explain the same structure without relying on color.
 
 For a source figure:
 

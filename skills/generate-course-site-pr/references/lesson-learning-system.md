@@ -10,7 +10,7 @@ Depth is not word count. Prefer closing a reasoning gap over adding another topi
 
 ## Audit before writing
 
-For an existing course, inspect the rendered page and source before expanding it. For each major concept, locate:
+For an existing course, first apply the version audit in [source-discovery-and-migration.md](source-discovery-and-migration.md), then inspect both rendered page and source before expanding it. Do not assume that a new title, diagram, or longer page means the underlying course has been migrated. For each major concept, locate:
 
 - a prerequisite the page silently assumes;
 - a formula or conclusion whose intermediate reasoning is omitted;
@@ -20,6 +20,8 @@ For an existing course, inspect the rendered page and source before expanding it
 - an exercise gap where the prose is deeper than the learner's opportunity to verify understanding.
 
 Search Git history before replacing a human-written explanation or exercise bank. Preserve useful content and reorganize it rather than regenerating it.
+
+Audit every official Lesson, not only representative pages. Keep a page-level depth ledger so a course-wide request cannot accidentally become a diagram-only or first-few-lessons pass.
 
 ## Core concept arc
 
@@ -86,10 +88,21 @@ Keep practice data separate from the renderer when many lessons share the same b
 Use ordinary editorial prose for the main path. Reserve special visual treatment for a small vocabulary such as Mental Model, Derivation, Misconception, Concept Check, and Deep Dive.
 
 - Avoid a card around every paragraph.
+- Keep one active current-term narrative. Merge still-valid older explanations naturally; move retired requirements out of the active flow.
+- Let the opening answer the core question quickly. Do not place five independent teaching cards before the first real section.
+- Put worked examples after the minimum mechanism required to interpret them unless the example intentionally poses the problem.
 - Collapse paper-specific detail, framework variants, historical notes, and benchmarks that are not required for the main reasoning chain.
-- Keep the lesson TOC useful but do not create a three-column reading layout.
+- Keep the lesson TOC useful but do not create a three-column reading layout or two competing TOCs.
 - Make shapes, equations, code, and comparison tables locally scrollable on mobile; never allow page-level horizontal overflow.
 - Keep sticky navigation offsets compatible with direct anchors and `prefers-reduced-motion`.
+
+Use [reading-flow.md](reading-flow.md) for the final course-wide pass. That pass should normally reduce duplication and visual weight rather than add words.
+
+## Framework diagrams
+
+Use semantic HTML/CSS or static SVG when architecture, topology, ownership, hierarchy, object relationships, tensor flow, or state transitions are materially easier to understand spatially. Prefer repository-native diagrams with responsive layout and accessible labels. Large ASCII framework drawings are not a substitute for a real diagram; retain ASCII only for compact inline pipelines or terminal-like examples.
+
+Every diagram needs nearby prose explaining what to notice. Do not add decorative visuals or claim a redrawn teaching diagram is an official figure.
 
 ## Course continuity
 
@@ -103,6 +116,7 @@ Before claiming a lesson complete:
 2. Run a question audit: list the ten most likely learner questions. If they concern the core mechanism, formula origin, concept distinction, key “why,” or a basic example, improve the page. Leave framework edge cases, research extensions, and personalized diagnosis to an adaptive tutor.
 3. Add content lint for critical technical phrases or units when a regression would be easy to reintroduce. Prefer semantic assertions over fragile full-sentence matching.
 4. Keep audit reports honest: “fixed” means the content source or rendered behavior can be detected and verified.
-5. Compare desktop and mobile screenshots in equivalent states. Test inline answer feedback, wrong/correct follow-up behavior, direct anchors, Deep Quiz disclosures, and keyboard focus.
+5. Inspect the runtime DOM for duplicate TOCs, hidden ledes, misplaced examples, nested disclosures, or renderers that reinsert archived content.
+6. Compare desktop and mobile screenshots in equivalent states. Test inline answer feedback, wrong/correct follow-up behavior, direct anchors, Deep Quiz disclosures, and keyboard focus. If screenshots or browser QA are unavailable, report that limitation instead of claiming visual verification.
 
 Do not claim the course is textbook-grade merely because every lesson contains the same headings. The mechanism, examples, misconceptions, and practice must be specific to the lesson's reasoning task.
