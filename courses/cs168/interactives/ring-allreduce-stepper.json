@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "kind": "stepper",
+  "title": "Ring AllReduce：Reduce-Scatter + AllGather",
+  "description": "以四个 worker 和四个 chunk 为例，观察每一轮发送什么，以及为何总通信量近似与 worker 数无关。",
+  "steps": [
+    {
+      "title": "切分张量",
+      "body": "每个 worker 把梯度切成 N 个 chunk；四个 worker 对应四个逻辑块。"
+    },
+    {
+      "title": "Reduce-Scatter",
+      "body": "连续 N−1 轮中，每个节点向右发送一块、从左接收一块并归约；结束时每节点拥有一个完整归约块。",
+      "formula": "rounds=N-1"
+    },
+    {
+      "title": "AllGather",
+      "body": "再用 N−1 轮沿环传播已归约块，不再相加；每个节点逐渐收齐所有块。"
+    },
+    {
+      "title": "重组并检查",
+      "body": "所有 worker 重组出相同张量。检查每块包含 N 份贡献且没有重复，才能区分“值看似接近”和协议正确。"
+    }
+  ],
+  "caption": "环算法牺牲轮数来获得均匀链路利用率；正确性来自每个 chunk 恰好经历完整归约并最终复制到每个 worker。",
+  "source": {
+    "label": "CS 168 Fall 2026 readings and schedule",
+    "url": "https://fa26.cs168.io/"
+  }
+}

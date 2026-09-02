@@ -38,7 +38,7 @@ for (const course of catalog.courses || []) {
   ok(course.path === `courses/${course.id}/`, `${course.id}: catalog path must be courses/${course.id}/`);
   ok(fs.existsSync(path.join(root, course.path, 'index.html')), `${course.id}: course entry index.html is missing`);
 }
-ok(courseIds.size === 12, `expected 12 registered courses, found ${courseIds.size}`);
+ok(courseIds.size === 13, `expected 13 registered courses, found ${courseIds.size}`);
 
 const pages = [path.join(root, 'index.html'), path.join(root, '404.html'), ...walk(path.join(root, 'courses'), '.html')];
 const idCache = new Map();
