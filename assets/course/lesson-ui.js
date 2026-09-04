@@ -1,5 +1,5 @@
 (function () {
-  const page = document.querySelector('.page');
+  const page = document.querySelector('.page, main.review-shell, article.reading-article');
   if (!page) return;
 
   const scriptUrl = new URL(document.currentScript.src, location.href);
@@ -59,22 +59,7 @@
     usedIds.add(id);
   });
 
-  if (headings.filter((heading) => heading.tagName === 'H2').length >= 3) {
-    const toc = document.createElement('aside');
-    toc.className = 'pb-toc';
-    toc.setAttribute('aria-label', '本页目录');
-    toc.innerHTML = `<p class="pb-toc-label">On this page</p>${headings.slice(0, 14).map((heading) => `<a href="#${heading.id}" data-level="${heading.tagName === 'H2' ? 2 : 3}">${heading.textContent.trim()}</a>`).join('')}`;
-    document.body.appendChild(toc);
-
-    const tocLinks = [...toc.querySelectorAll('a')];
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        tocLinks.forEach((link) => link.classList.toggle('is-active', link.hash === `#${entry.target.id}`));
-      });
-    }, { rootMargin: '-18% 0px -72% 0px' });
-    headings.forEach((heading) => observer.observe(heading));
-  }
+  const h2Headings = headings.filter((heading) => heading.tagName === 'H2');
 
   page.querySelectorAll('table').forEach((table) => {
     if (table.parentElement?.classList.contains('pb-table-scroll')) return;
@@ -261,70 +246,166 @@
   };
   if (location.hash === '#pb-comments') setCommentsOpen(true);
 
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+
+  const stageProfiles = {
+    '18-01-single-variable-calculus': [[7, '导数与极限'], [15, '导数的应用'], [23, '积分模型'], [30, '积分技巧'], [99, '级数与复盘']],
+    '18-02-multivariable-calculus': [[7, '空间与向量'], [15, '多元微分'], [23, '多重积分'], [30, '向量分析'], [99, '积分定理与复盘']],
+    '18-06-linear-algebra': [[6, '线性方程组'], [12, '子空间与基'], [19, '正交与行列式'], [25, '特征结构'], [99, '变换与应用']],
+    '6.102': [[5, '可靠代码基础'], [9, '规格与抽象'], [13, '函数与语言'], [17, '并发与异步'], [99, '网络与小语言']],
+    '6.1810': [[4, 'xv6 与系统调用'], [9, '虚拟内存'], [14, '并发与协调'], [19, '存储与崩溃'], [99, '现代系统边界']],
+    '6.5840': [[5, '分布式地基'], [10, '复制与一致性'], [15, '事务与验证'], [18, '规模化系统'], [99, '安全与开放网络']],
+    cs152: [[5, 'ISA 与流水线'], [10, '存储层次'], [15, '乱序与向量'], [20, '并行处理器'], [99, '一致性与互连']],
+    cs168: [[4, '互联网地基'], [10, '路由与转发'], [14, '可靠传输'], [18, '端到端服务'], [22, '数据中心'], [99, '无线与移动']],
+    cs170: [[2, '算法工具箱'], [4, '分治与图'], [6, '最短路与贪心'], [8, '动态规划与 LP'], [99, '难解问题']],
+    cs267: [[6, '性能与局部性'], [11, '共享与分布内存'], [16, '数值与机器学习'], [21, '结构化计算'], [99, '图与层次算法']],
+    cs336: [[4, '模型与表示'], [8, 'GPU 与并行'], [12, '扩展与推理'], [16, '数据与对齐'], [99, '强化学习']],
+    cs70: [[3, '证明与稳定性'], [6, '数论与编码'], [9, '计数与概率'], [12, '随机变量'], [99, '连续概率']],
+    eecs498: [[3, '函数与优化'], [6, '视觉表示'], [8, '序列记忆'], [12, 'Transformer'], [99, '现代生成模型']]
+  };
+
+  const profileForPage = (info) => {
+    const declared = document.body.dataset.courseProfile || info.courseTypeProfiles?.[0] || '';
+    const signature = `${declared} ${info.domain || ''} ${info.title || ''}`.toLowerCase();
+    if (/machine|learning|deep|ai|tensor|模型|机器学习|深度学习/.test(signature)) {
+      return { label: 'COMPUTE MODEL', tokens: ['tensor / shape', 'representation', 'data flow', 'gradient / compute'] };
+    }
+    if (/network|distributed|internet|operating|system|architecture|parallel|网络|系统|体系结构|并行/.test(signature)) {
+      return { label: 'SYSTEMS MODEL', tokens: ['object / packet', 'local state', 'event / message', 'table / invariant'] };
+    }
+    if (/algorithm|complex|算法/.test(signature)) {
+      return { label: 'ALGORITHM MODEL', tokens: ['input', 'state / iteration', 'invariant', 'complexity / counterexample'] };
+    }
+    if (/software|construction|编程|软件/.test(signature)) {
+      return { label: 'ENGINEERING MODEL', tokens: ['contract', 'representation', 'invariant', 'failure / evidence'] };
+    }
+    return { label: 'REASONING MODEL', tokens: ['definition', 'intuition', 'derivation', 'proof / counterexample'] };
+  };
+
+  const groupCourseItems = (items, isWork) => {
+    if (isWork) {
+      const groups = new Map();
+      items.forEach((item) => {
+        const key = item.kind || 'Practice';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+      });
+      return [...groups.entries()].map(([label, entries], index) => ({ label: `${index + 1}. ${label}`, entries }));
+    }
+    const profile = stageProfiles[courseId] || [[5, '基础'], [10, '核心机制'], [15, '推演'], [20, '工程'], [99, '综合']];
+    let start = 0;
+    return profile.map(([until, label], index) => {
+      const entries = items.slice(start, Math.min(until, items.length));
+      start = Math.min(until, items.length);
+      return { label: `${index}. ${label}`, entries };
+    }).filter((group) => group.entries.length);
+  };
+
   const mountCourseRail = (info, status, collection, current) => {
     if (!Array.isArray(collection) || current < 0) return;
-    if (document.querySelector('.reading-toc, .workbook-side-nav, .review-stage-nav')) return;
-    const rail = document.createElement('aside');
-    rail.className = 'pb-course-rail';
-    rail.setAttribute('aria-label', '课程内容');
-
-    const home = document.createElement('a');
-    home.className = 'pb-course-rail-home';
-    home.href = courseBase;
-    const code = document.createElement('span');
-    code.className = 'pb-course-rail-code';
-    code.textContent = info.code || info.courseCode || courseId.toUpperCase();
-    const homeMark = document.createElement('span');
-    homeMark.setAttribute('aria-hidden', 'true');
-    homeMark.textContent = '↗';
-    home.append(code, homeMark);
-
-    const label = document.createElement('p');
-    label.className = 'pb-course-rail-label';
-    label.textContent = collection[current].type === 'work' ? 'Practice path' : 'Course content';
-
-    const list = document.createElement('nav');
-    list.className = 'pb-course-rail-list';
-    const radius = 4;
-    const start = Math.max(0, Math.min(current - radius, collection.length - (radius * 2 + 1)));
-    collection.slice(start, start + radius * 2 + 1).forEach((item, offset) => {
-      const absoluteIndex = start + offset;
-      const link = document.createElement('a');
-      link.className = 'pb-course-rail-link';
-      link.href = `${courseBase}${item.file}`;
-      if (absoluteIndex === current) link.setAttribute('aria-current', 'page');
-      const number = document.createElement('span');
-      number.className = 'pb-course-rail-number';
-      const rawNumber = item.displayNumber || item.number || absoluteIndex + 1;
-      number.textContent = String(rawNumber).padStart(2, '0');
-      const title = document.createElement('span');
-      title.textContent = item.titleZh || item.title;
-      link.append(number, title);
-      list.append(link);
-    });
-
+    const isWork = collection[current].type === 'work';
+    const groups = groupCourseItems(collection, isWork);
     const completed = (status.lectures || []).filter((item) => item.status === 'completed').length;
     const total = Number(status.totalLectures) || (status.lectures || []).length || 1;
     const percent = Math.round(completed / total * 100);
-    const progressBox = document.createElement('div');
-    progressBox.className = 'pb-course-rail-progress';
-    const progressRow = document.createElement('div');
-    progressRow.className = 'pb-course-rail-progress-row';
-    const progressLabel = document.createElement('span');
-    progressLabel.textContent = '课程进度';
-    const progressValue = document.createElement('strong');
-    progressValue.textContent = `${completed} / ${total}`;
-    progressRow.append(progressLabel, progressValue);
-    const track = document.createElement('div');
-    track.className = 'pb-course-rail-track';
-    const fill = document.createElement('span');
-    fill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
-    track.append(fill);
-    progressBox.append(progressRow, track);
-
-    rail.append(home, label, list, progressBox);
+    const rail = document.createElement('aside');
+    rail.className = 'pb-course-rail';
+    rail.setAttribute('aria-label', '课程内容');
+    rail.innerHTML = `<a class="pb-course-rail-home" href="${courseBase}"><span class="pb-course-rail-code">${escapeHtml(info.code || info.courseCode || courseId.toUpperCase())} 课程地图</span><span aria-hidden="true">⌃</span></a>
+      <div class="pb-course-rail-scroll">
+        ${groups.map((group) => `<section class="pb-rail-group"><h2>${escapeHtml(group.label)}</h2><nav>${group.entries.map((item) => {
+          const absoluteIndex = collection.indexOf(item);
+          const rawNumber = item.displayNumber || item.number || absoluteIndex + 1;
+          return `<a class="pb-course-rail-link" href="${courseBase}${escapeHtml(item.file)}"${absoluteIndex === current ? ' aria-current="page"' : ''}><span class="pb-course-rail-number">${escapeHtml(String(rawNumber).padStart(2, '0'))}</span><span>${escapeHtml(item.titleZh || item.title)}</span></a>`;
+        }).join('')}</nav></section>`).join('')}
+      </div>
+      <div class="pb-course-rail-progress"><div class="pb-course-rail-progress-row"><span>课程进度</span><strong>${completed} / ${total}</strong></div><div class="pb-course-rail-track"><span style="width:${Math.min(100, Math.max(0, percent))}%"></span></div></div>`;
     document.body.append(rail);
+    rail.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'center' });
     document.body.classList.add('pb-has-course-rail');
+  };
+
+  const mountStudioChrome = (info, status, currentItem) => {
+    document.body.classList.add('pb-studio-shell', 'pb-has-studio-inspector');
+    document.querySelectorAll('.reading-toc, .workbook-side-nav, .review-stage-nav').forEach((node) => node.setAttribute('aria-hidden', 'true'));
+
+    const directTitle = page.querySelector(':scope > h1');
+    const sourceTitle = directTitle || page.querySelector('.guide-banner h1') || document.querySelector('.lesson-hero h1, .review-hero h1, h1');
+    const sourceEyebrow = page.querySelector(':scope > .eyebrow') || document.querySelector('.lesson-hero .eyebrow, .review-hero > * > p:first-child');
+    const sourceLede = page.querySelector(':scope > .lede') || document.querySelector('.lesson-hero .hero-lede, .review-hero .review-lede');
+
+    if (!directTitle && sourceTitle) {
+      const intro = document.createElement('header');
+      intro.className = 'pb-studio-intro';
+      intro.innerHTML = `${sourceEyebrow ? `<p class="eyebrow">${escapeHtml(sourceEyebrow.textContent.trim())}</p>` : ''}<h1>${escapeHtml(sourceTitle.textContent.trim())}</h1>${sourceLede ? `<p class="lede">${escapeHtml(sourceLede.textContent.trim())}</p>` : ''}`;
+      page.prepend(intro);
+      document.body.classList.add('pb-rebuilt-intro');
+    }
+
+    const breadcrumb = document.createElement('nav');
+    breadcrumb.className = 'pb-lesson-breadcrumb';
+    breadcrumb.setAttribute('aria-label', '面包屑');
+    breadcrumb.innerHTML = `<a href="${courseBase}">${escapeHtml(info.code || courseId)}</a><span>/</span><span>${currentItem.type === 'work' ? '实践工作台' : '课程内容'}</span><span>/</span><strong>${escapeHtml(currentItem.titleZh || currentItem.title)}</strong>`;
+    page.prepend(breadcrumb);
+
+    const labTarget = page.querySelector('[data-interactive-src], .interactive-mount, .worked-trace, .execution-trace, .guided-problem');
+    const dedicatedInteractive = labTarget?.matches('[data-interactive-src]') && /(?:distance-vector-convergence|router-pipeline-stepper|tcp-sequence-space)\.json/.test(labTarget.dataset.interactiveSrc || '');
+    if (dedicatedInteractive) document.body.classList.add('pb-dedicated-interactive');
+    const practiceTarget = page.querySelector('.quiz, .deep-checks, .explain-yourself, .closed-book-reconstruction, pre');
+    const contentTarget = h2Headings[0] || page;
+    const tabs = document.createElement('nav');
+    tabs.className = 'pb-studio-tabs';
+    tabs.setAttribute('aria-label', '学习模式');
+    const tabItems = [
+      ['内容', contentTarget],
+      ['交互实验', labTarget],
+      [currentItem.type === 'work' ? '推演与证据' : '代码与练习', practiceTarget]
+    ];
+    tabs.innerHTML = tabItems.map(([label, target], index) => `<button type="button" class="${index === 0 ? 'is-active' : ''}"${target ? '' : ' disabled'} data-target="${target?.id || ''}">${label}</button>`).join('');
+    const headingAnchor = page.querySelector(':scope > .lede, :scope > .source-note, :scope > .meta, :scope > .guide-banner, :scope > .pb-studio-intro');
+    if (headingAnchor) headingAnchor.insertAdjacentElement('afterend', tabs);
+    else page.insertBefore(tabs, page.firstChild?.nextSibling || null);
+    if (dedicatedInteractive) {
+      const interactiveSection = labTarget.closest('section');
+      if (interactiveSection) tabs.insertAdjacentElement('afterend', interactiveSection);
+    }
+    tabs.querySelectorAll('button:not([disabled])').forEach((button) => {
+      button.addEventListener('click', () => {
+        tabs.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button));
+        const target = button.dataset.target ? document.getElementById(button.dataset.target) : contentTarget;
+        target?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      });
+    });
+
+    const model = profileForPage(info);
+    const quizzes = page.querySelectorAll('.quiz').length;
+    const traces = page.querySelectorAll('.worked-trace, .execution-trace, .interactive-mount, [data-interactive-src], .guided-problem').length;
+    const codeBlocks = page.querySelectorAll('pre').length;
+    const externalLinks = [...page.querySelectorAll('a[href^="http"]')].filter((link, index, all) => all.findIndex((candidate) => candidate.href === link.href) === index).slice(0, 6);
+    const inspector = document.createElement('aside');
+    inspector.className = 'pb-studio-inspector';
+    inspector.setAttribute('aria-label', '学习状态检查器');
+    inspector.innerHTML = `<header><div><p>${escapeHtml(currentItem.type === 'work' ? 'Reasoning workspace' : 'Learning workspace')}</p><h2>${escapeHtml(model.label)}</h2></div><span><i></i> READY</span></header>
+      <div class="pb-inspector-tabs" role="tablist"><button type="button" role="tab" aria-selected="true" data-panel="state">State</button><button type="button" role="tab" aria-selected="false" data-panel="table">Table</button><button type="button" role="tab" aria-selected="false" data-panel="event">Event</button></div>
+      <section class="pb-inspector-panel is-active" data-inspector-panel="state"><p class="pb-inspector-label">MENTAL MODEL</p><dl class="pb-model-table">${model.tokens.map((token, index) => `<div><dt>${String(index + 1).padStart(2, '0')}</dt><dd>${escapeHtml(token)}</dd></div>`).join('')}</dl><p class="pb-inspector-label">LEARNING EVIDENCE</p><dl class="pb-evidence-grid"><div><dt>${h2Headings.length}</dt><dd>sections</dd></div><div><dt>${traces}</dt><dd>traces</dd></div><div><dt>${quizzes}</dt><dd>checks</dd></div><div><dt>${codeBlocks}</dt><dd>code blocks</dd></div></dl></section>
+      <section class="pb-inspector-panel" data-inspector-panel="table"><p class="pb-inspector-label">ON THIS PAGE</p><nav class="pb-inspector-toc">${h2Headings.slice(0, 16).map((heading, index) => `<a href="#${heading.id}"><span>${String(index + 1).padStart(2, '0')}</span>${escapeHtml(heading.textContent.trim())}</a>`).join('')}</nav></section>
+      <section class="pb-inspector-panel" data-inspector-panel="event"><p class="pb-inspector-label">SOURCE / NEXT ACTION</p>${externalLinks.length ? `<nav class="pb-inspector-sources">${externalLinks.map((link) => `<a href="${escapeHtml(link.href)}" target="_blank" rel="noreferrer">${escapeHtml(link.textContent.trim() || 'Source')} <span>↗</span></a>`).join('')}</nav>` : '<p class="pb-inspector-empty">本页没有外部 source；通过页尾导航继续。</p>'}<a class="pb-inspector-action" href="${practiceTarget?.id ? `#${practiceTarget.id}` : '#pb-page-end'}">进入闭卷检查 →</a></section>`;
+    if (!dedicatedInteractive) document.body.append(inspector);
+    inspector.querySelectorAll('[role="tab"]').forEach((button) => button.addEventListener('click', () => {
+      inspector.querySelectorAll('[role="tab"]').forEach((item) => item.setAttribute('aria-selected', String(item === button)));
+      inspector.querySelectorAll('.pb-inspector-panel').forEach((panel) => panel.classList.toggle('is-active', panel.dataset.inspectorPanel === button.dataset.panel));
+    }));
+
+    const tocLinks = [...inspector.querySelectorAll('.pb-inspector-toc a')];
+    if (tocLinks.length) {
+      const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        tocLinks.forEach((link) => link.classList.toggle('is-active', link.hash === `#${entry.target.id}`));
+      }), { rootMargin: '-20% 0px -72% 0px' });
+      h2Headings.forEach((heading) => observer.observe(heading));
+    }
   };
 
   Promise.all([
@@ -337,12 +418,14 @@
 
     const lectures = (status.lectures || []).map((item) => ({ ...item, type: 'lecture', file: item.lessonFile }));
     const work = (status.assignments || []).filter((item) => item.assGuideFile || item.contentFile).map((item) => ({ ...item, type: 'work', file: item.assGuideFile || item.contentFile }));
-    const collection = currentRelative.includes('/assignments/') || currentRelative.startsWith('homeworks/') || currentRelative.startsWith('labs/') || currentRelative.startsWith('projects/')
-      ? work : lectures;
-    const current = collection.findIndex((item) => item.file === currentRelative);
+    const workCurrent = work.findIndex((item) => item.file === currentRelative);
+    const lectureCurrent = lectures.findIndex((item) => item.file === currentRelative);
+    const collection = workCurrent >= 0 ? work : lectures;
+    const current = workCurrent >= 0 ? workCurrent : lectureCurrent;
     if (current < 0) return;
 
     mountCourseRail(info, status, collection, current);
+    mountStudioChrome(info, status, collection[current]);
 
     const previous = collection[current - 1];
     const next = collection[current + 1];

@@ -41,4 +41,10 @@
       list.dataset.view = button.dataset.sourceView;
     });
   });
+  document.querySelectorAll('[data-mit-panel]').forEach((button) => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-mit-panel]').forEach((item) => item.classList.toggle('is-active', item === button));
+      document.querySelectorAll('[data-mit-inspector]').forEach((panel) => panel.classList.toggle('is-active', panel.dataset.mitInspector === button.dataset.mitPanel));
+    });
+  });
 }());

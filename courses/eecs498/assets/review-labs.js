@@ -17,8 +17,9 @@
     <section><h3>Progressive hints</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p>${stage.hints.map((hint, hintIndex) => `<details><summary>Hint ${hintIndex + 1}</summary><p>${esc(hint)}</p></details>`).join('')}</section>
     <section class="review-gate"><h3>Gate · ${esc(stage.title)}</h3>${list(stage.gate)}</section>
   </article>`).join('');
+  root.classList.add('lesson-page');
   root.innerHTML = `<a class="skip-link" href="#review-content">跳到 Review Lab</a><nav class="review-bar"><a href="../index.html">← EECS498</a><a href="${esc(lab.source)}" target="_blank" rel="noreferrer">代码快照 ↗</a></nav>
   <header class="review-hero"><div class="review-shell"><p>${esc(lab.eyebrow)}</p><h1>${esc(lab.title)}</h1><p class="review-lede">${esc(lab.subtitle)}</p><div class="review-capabilities">${lab.capabilities.map((item) => `<span>${esc(item)}</span>`).join('')}</div><p class="review-boundary"><strong>Review Lab，不是作业答案。</strong>阅读现有实现，先预测，再运行小实验并解释证据；原始仓库快照是代码事实来源。</p></div></header>
   <nav class="review-stage-nav" aria-label="Review Lab stages">${lab.stages.map((stage,index)=>`<a href="#stage-${esc(stage.id)}"><span>${String(index+1).padStart(2,'0')}</span>${esc(stage.title)}</a>`).join('')}</nav>
-  <main class="review-shell" id="review-content">${stages}<section class="review-retro"><h2>Retrospective</h2>${list(['哪一个原有 mental model 被代码证据推翻了？','哪一个 bug 最适合用 tiny input 定位？','哪项优化只是换了一种资源，而没有改变模型语义？','如果重新审计一次，你会先验证哪个 invariant？'])}</section></main>`;
+  <main class="review-shell page" id="review-content">${stages}<section class="review-retro"><h2>Retrospective</h2>${list(['哪一个原有 mental model 被代码证据推翻了？','哪一个 bug 最适合用 tiny input 定位？','哪项优化只是换了一种资源，而没有改变模型语义？','如果重新审计一次，你会先验证哪个 invariant？'])}</section></main>`;
 })();

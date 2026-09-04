@@ -19,12 +19,15 @@ ok(studyFiles.length === 6, `expected self-study index + 5 workbooks, found ${st
 ok(!fs.existsSync(path.join(course, 'offline')), 'the personal offline mirror must not be published');
 
 const home = read(rootPage);
+const status = JSON.parse(read(path.join(course, 'api/status.json')));
+const dashboardScript = read(path.join(course, 'assets/dashboard.js'));
 ok(!/<iframe\b/i.test(home), 'course entry must not be an iframe wrapper');
 ok(!/offline\/sp26/i.test(home), 'course entry still links the removed offline mirror');
-ok(home.includes('CourseStack 学习层与官方题面分开'), 'course entry needs a clear source boundary');
+ok(/原文与精读，明确分层|CourseStack 学习层与官方题面分开/.test(home), 'course entry needs a clear source boundary');
 ok(home.includes('https://web.mit.edu/6.102/www/sp26/'), 'official Spring 2026 source is missing');
-ok(home.includes('self-study/ps0.html'), 'clean-room self-study route is missing');
-ok(home.includes('lectures/05-designing-specifications.html'), 'lesson 05 route is stale');
+ok(status.assignments?.some((item) => item.contentFile === 'self-study/ps0.html'), 'clean-room self-study route is missing');
+ok(status.lectures?.some((item) => item.lessonFile === 'lectures/05-designing-specifications.html'), 'lesson 05 CourseStack route is missing');
+ok(dashboardScript.includes("'05-designing-specs'"), 'lesson 05 official source route is stale');
 
 for (const file of lectureFiles) {
   const html = read(path.join(lectureDirectory, file));

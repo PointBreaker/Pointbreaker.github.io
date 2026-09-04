@@ -53,11 +53,16 @@ const coreSteppers = {
 };
 for (const [file, minimum] of Object.entries(coreSteppers)) {
   const spec = JSON.parse(fs.readFileSync(path.join(course, 'interactives', file), 'utf8'));
-  assert(spec.kind === 'stepper', `${file}: expected stepper`);
-  assert(spec.steps?.length >= minimum, `${file}: expected at least ${minimum} concrete steps`);
-  const traceText = spec.steps?.map((step) => `${step.title} ${step.body}`).join(' ') ?? '';
-  assert(spec.steps?.every((step) => step.body?.length >= 28), `${file}: step bodies must state concrete transitions`);
+  const entries = spec.kind === 'network-trace' ? spec.frames : spec.steps;
+  assert(['stepper', 'network-trace'].includes(spec.kind), `${file}: expected stepper or network-trace`);
+  assert(entries?.length >= minimum, `${file}: expected at least ${minimum} concrete steps/frames`);
+  const traceText = entries?.map((entry) => `${entry.title} ${entry.body || entry.summary || ''} ${entry.reasoning || ''} ${JSON.stringify(entry.before || {})} ${JSON.stringify(entry.after || {})}`).join(' ') ?? '';
+  assert(entries?.every((entry) => `${entry.body || entry.summary || ''} ${entry.reasoning || ''}`.length >= 28), `${file}: step/frame bodies must state concrete transitions`);
   assert(/state|table|history|TTL|FIB|ACK|UNA|NXT|MAC|IP|状态|队列|通告/.test(traceText), `${file}: trace lacks concrete state/table evidence`);
+  if (spec.kind === 'network-trace') {
+    assert(entries.every((entry) => entry.before && entry.event && entry.after), `${file}: network-trace must expose before/event/after state`);
+    assert(entries.every((entry) => Array.isArray(entry.tables) && entry.tables.length), `${file}: network-trace must include visible table evidence`);
+  }
   const fallback = path.join(course, 'figures', file.replace('.json', '-fallback.svg'));
   assert(fs.existsSync(fallback) && fs.statSync(fallback).size > 500, `${file}: meaningful fallback missing`);
 }

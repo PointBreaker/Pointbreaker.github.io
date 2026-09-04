@@ -8,60 +8,58 @@
     mount.outerHTML = `
       <a class="skip-link" href="#learning-path">跳到学习路径</a>
       <header class="course-bar">
-        <div class="shell course-bar-inner">
-          <a class="wordmark" href="${siteBase}">CourseStack</a>
-          <nav class="course-bar-links" aria-label="课程导航">
-            <a href="#learning-path">学习路径</a>
-            <a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a>
-            <a href="${siteBase}docs/course-generator.html">贡献课程</a>
-          </nav>
+        <div class="course-bar-inner">
+          <div class="dashboard-crumb"><a class="wordmark" href="${siteBase}">CourseStack</a><span>/</span><strong id="course-bar-code">Course</strong></div>
+          <nav class="course-bar-links" aria-label="课程导航"><a href="#learning-path">课程目录</a><a id="course-resources" href="#" hidden>完整资源</a><a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a><a href="${siteBase}docs/course-generator.html">贡献课程</a></nav>
         </div>
       </header>
-      <main>
-        <section class="course-hero">
-          <div class="shell course-hero-grid">
-            <div>
-              <p class="course-kicker" id="course-code">载入课程…</p>
-              <h1 id="course-title">Course</h1>
-              <p class="course-title-zh" id="course-title-zh"></p>
-              <p class="course-summary" id="course-summary"></p>
-              <div class="course-tags" id="course-tags"></div>
+      <main class="dashboard-studio">
+        <aside class="dashboard-rail" aria-label="课程地图">
+          <a class="dashboard-rail-home" href="#top"><strong id="rail-course-code">Course</strong><span>课程地图</span></a>
+          <nav id="dashboard-stage-nav"></nav>
+          <div class="dashboard-rail-progress"><span>课程进度</span><strong id="rail-progress">—</strong><div class="progress-track"><div class="progress-fill" id="rail-progress-fill"></div></div></div>
+        </aside>
+        <div class="dashboard-canvas" id="top">
+          <span id="lectures" class="dashboard-anchor" aria-hidden="true"></span><span id="labs" class="dashboard-anchor" aria-hidden="true"></span>
+          <section class="course-hero">
+            <div class="course-hero-grid">
+              <div>
+                <p class="course-kicker" id="course-code">载入课程…</p>
+                <h1 id="course-title">Course</h1>
+                <p class="course-title-zh" id="course-title-zh"></p>
+                <p class="course-summary" id="course-summary"></p>
+                <div class="course-tags" id="course-tags"></div>
+              </div>
             </div>
-            <dl class="course-facts">
-              <div><dt>学校</dt><dd id="course-university">—</dd></div>
-              <div><dt>学期</dt><dd id="course-term">—</dd></div>
-              <div><dt>教师</dt><dd id="course-instructors">—</dd></div>
-              <div><dt>语言</dt><dd id="course-language">中文讲义</dd></div>
-            </dl>
-          </div>
-        </section>
-        <section class="course-stats" aria-label="课程统计">
-          <div class="shell stats-grid">
-            <div class="metric"><strong class="metric-value" id="metric-lectures">—</strong><span class="metric-label">讲义</span></div>
-            <div class="metric"><strong class="metric-value" id="metric-work">—</strong><span class="metric-label" id="work-label">实践任务</span></div>
-            <div class="metric"><strong class="metric-value" id="metric-completed">—</strong><span class="metric-label">已完成</span></div>
-            <div class="metric"><strong class="metric-value" id="metric-progress">—</strong><span class="metric-label">课程进度</span><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div></div>
-          </div>
-        </section>
-        <section class="dashboard shell" id="learning-path" aria-labelledby="path-title">
-          <div class="dashboard-heading">
-            <div><p class="section-kicker">Learning path</p><h2 id="path-title">从讲义走向实践。</h2></div>
-            <p id="path-description">先建立概念，再用实践检验理解。每节讲义只在所属阶段出现一次。</p>
-          </div>
-          <div class="dashboard-tools">
-            <label class="dashboard-search"><span class="visually-hidden">搜索课程内容</span><input id="dashboard-search" type="search" placeholder="搜索讲义、作业、考试或概念" autocomplete="off"></label>
-            <div class="view-filters" id="view-filters" aria-label="内容类型">
-              <button class="view-filter" type="button" data-view="all" aria-pressed="true">全部</button>
-              <button class="view-filter" type="button" data-view="lectures" aria-pressed="false">讲义</button>
-              <button class="view-filter" type="button" data-view="homework" aria-pressed="false">实践</button>
-              <button class="view-filter" type="button" data-view="exams" aria-pressed="false">Exam</button>
+          </section>
+          <nav class="dashboard-mode-tabs" aria-label="课程视图"><a class="is-active" href="#learning-path">内容</a><a href="#learning-path" data-dashboard-view="homework">实践实验</a><a href="#learning-path" data-dashboard-view="exams">考试与复盘</a></nav>
+          <section class="course-stats" aria-label="课程统计">
+            <div class="stats-grid">
+              <div class="metric"><strong class="metric-value" id="metric-lectures">—</strong><span class="metric-label">讲义</span></div>
+              <div class="metric"><strong class="metric-value" id="metric-work">—</strong><span class="metric-label" id="work-label">实践任务</span></div>
+              <div class="metric"><strong class="metric-value" id="metric-completed">—</strong><span class="metric-label">已完成</span></div>
+              <div class="metric"><strong class="metric-value" id="metric-progress">—</strong><span class="metric-label">课程进度</span><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div></div>
             </div>
-          </div>
-          <p class="result-status" id="result-status" aria-live="polite">正在载入课程…</p>
-          <div class="path-list" id="path-list"></div>
-        </section>
-      </main>
-      <footer class="course-footer"><div class="shell course-footer-inner"><span>CourseStack 课栈 · 基于一手课程资料整理</span><a href="${siteBase}">返回课程目录</a></div></footer>`;
+          </section>
+          <section class="dashboard" id="learning-path" aria-labelledby="path-title">
+            <div class="dashboard-heading"><div><p class="section-kicker">Learning path</p><h2 id="path-title">从讲义走向实践。</h2></div><p id="path-description">先建立概念，再用实践检验理解。每节讲义只在所属阶段出现一次。</p></div>
+            <div class="dashboard-tools">
+              <label class="dashboard-search"><span class="visually-hidden">搜索课程内容</span><input id="dashboard-search" type="search" placeholder="搜索讲义、作业、考试或概念" autocomplete="off"></label>
+              <div class="view-filters" id="view-filters" aria-label="内容类型"><button class="view-filter" type="button" data-view="all" aria-pressed="true">全部</button><button class="view-filter" type="button" data-view="lectures" aria-pressed="false">讲义</button><button class="view-filter" type="button" data-view="homework" aria-pressed="false">实践</button><button class="view-filter" type="button" data-view="exams" aria-pressed="false">Exam</button></div>
+            </div>
+            <p class="result-status" id="result-status" aria-live="polite">正在载入课程…</p>
+            <div class="path-list" id="path-list"></div>
+          </section>
+          <footer class="course-footer"><div class="course-footer-inner"><span>CourseStack 课栈 · 基于一手课程资料整理</span><a href="${siteBase}">返回课程目录</a></div></footer>
+        </div>
+        <aside class="dashboard-inspector" aria-label="课程状态">
+          <header><div><p>COURSE STATUS</p><h2 id="inspector-course-code">Course</h2></div><span class="dashboard-live">READY</span></header>
+          <div class="dashboard-inspector-tabs"><button type="button" aria-pressed="true" data-inspector-tab="state">State</button><button type="button" aria-pressed="false" data-inspector-tab="path">Path</button><button type="button" aria-pressed="false" data-inspector-tab="source">Source</button></div>
+          <section class="dashboard-inspector-panel is-active" data-inspector-panel="state"><p class="inspector-label">COURSE PROFILE</p><dl class="course-facts"><div><dt>学校</dt><dd id="course-university">—</dd></div><div><dt>学期</dt><dd id="course-term">—</dd></div><div><dt>教师</dt><dd id="course-instructors">—</dd></div><div><dt>语言</dt><dd id="course-language">中文讲义</dd></div></dl><p class="inspector-label">LEARNING CONTRACT</p><div class="dashboard-contract"><p>概念教材</p><p>推演与状态</p><p>实践证据</p><p>闭卷重建</p></div></section>
+          <section class="dashboard-inspector-panel" data-inspector-panel="path"><p class="inspector-label">COURSE PATH</p><nav class="dashboard-inspector-path" id="dashboard-inspector-path"></nav></section>
+          <section class="dashboard-inspector-panel" data-inspector-panel="source"><p class="inspector-label">SOURCE OF TRUTH</p><p class="dashboard-source-copy" id="dashboard-source-copy">课程内容以一手资料为依据，CourseStack 负责教学化重构。</p><a class="dashboard-source-action" id="dashboard-source-action" href="#" target="_blank" rel="noopener">核对官方课程</a></section>
+        </aside>
+      </main>`;
   }
 
   const root = document.documentElement;
@@ -70,6 +68,11 @@
   const resultStatus = document.querySelector('#result-status');
   const filters = document.querySelector('#view-filters');
   if (!pathList || !search || !resultStatus || !filters) return;
+
+  document.querySelectorAll('[data-inspector-tab]').forEach((button) => button.addEventListener('click', () => {
+    document.querySelectorAll('[data-inspector-tab]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+    document.querySelectorAll('[data-inspector-panel]').forEach((panel) => panel.classList.toggle('is-active', panel.dataset.inspectorPanel === button.dataset.inspectorTab));
+  }));
 
   let info;
   let status;
@@ -111,6 +114,9 @@
     root.style.setProperty('--course-accent', info.accent || '#63e68c');
     document.title = `${info.code} · ${info.title} — CourseStack 课栈`;
     setText('#course-code', `${info.code} · ${info.domain}`);
+    setText('#course-bar-code', info.code);
+    setText('#rail-course-code', info.code);
+    setText('#inspector-course-code', info.code);
     setText('#course-title', info.title);
     setText('#course-title-zh', info.titleZh || '');
     setText('#course-summary', info.summary || '');
@@ -125,6 +131,17 @@
       source.href = info.sourceUrl || '#';
       source.textContent = info.sourceLabel || '官方课程主页';
       source.hidden = !info.sourceUrl;
+    }
+    const sourceAction = document.querySelector('#dashboard-source-action');
+    if (sourceAction) {
+      sourceAction.href = info.sourceUrl || info.homepage || '#';
+      sourceAction.hidden = !(info.sourceUrl || info.homepage);
+    }
+    setText('#dashboard-source-copy', info.sourceStatus || '课程内容以一手资料为依据，CourseStack 负责教学化重构。');
+    const resources = document.querySelector('#course-resources');
+    if (resources) {
+      resources.href = info.resourcesUrl || '#';
+      resources.hidden = !info.resourcesUrl;
     }
   }
 
@@ -141,7 +158,9 @@
     setText('#metric-work', hasExams ? `${homework.length} / ${exams.length}` : assignments.length);
     setText('#metric-completed', `${completed}/${lectures.length}`);
     setText('#metric-progress', `${percent}%`);
+    setText('#rail-progress', `${completed} / ${lectures.length}`);
     document.querySelector('#progress-fill').style.width = `${percent}%`;
+    document.querySelector('#rail-progress-fill').style.width = `${percent}%`;
     setText('#work-label', hasExams ? 'HW / Exam' : homeworkLabel);
     setText('#path-title', hasExams ? '讲义、作业与考试，按阶段衔接。' : '从讲义走向实践。');
     setText('#path-description', hasExams
@@ -287,6 +306,13 @@
     return String(first) === String(last) ? `L${first}` : `L${first}–L${last}`;
   }
 
+  function stageTopic(stage) {
+    const first = stage.lectures[0];
+    if (!first) return '综合实践';
+    const title = first.titleZh || first.title || rangeLabel(stage);
+    return String(title).replace(/^第?\s*\d+\s*(?:课|讲)?[：:\s·-]*/i, '');
+  }
+
   function laneMarkup(type, title, items, emptyText, count = items.length) {
     return `<div class="flow-lane ${type}-lane" data-lane="${type}">
       <div class="lane-heading"><span>${escapeHtml(title)}</span><strong>${count}</strong></div>
@@ -320,6 +346,11 @@
         </div>
       </section>`;
     }).join('') || '<div class="empty-state">课程内容正在整理中。</div>';
+    const stageNav = document.querySelector('#dashboard-stage-nav');
+    if (stageNav) stageNav.innerHTML = stages.map((stage, index) => `<a href="#stage-${index + 1}"><span>${String(index + 1).padStart(2, '0')}</span><strong>${escapeHtml(stageTopic(stage))}</strong><small>${escapeHtml(rangeLabel(stage))} · ${stage.lectures.length} 讲 · ${stage.homework.length + stage.exams.length} 实践</small></a>`).join('');
+    const inspectorPath = document.querySelector('#dashboard-inspector-path');
+    if (inspectorPath) inspectorPath.innerHTML = stages.map((stage, index) => `<a href="#stage-${index + 1}"><span>${String(index + 1).padStart(2, '0')}</span><strong>${escapeHtml(stageTopic(stage))}</strong><small>${escapeHtml(rangeLabel(stage))} · ${stage.lectures.length} lectures</small></a>`).join('');
+    pathList.querySelectorAll('[data-stage]').forEach((stage, index) => { stage.id = `stage-${index + 1}`; });
     applyFilters();
   }
 
@@ -370,6 +401,15 @@
     filters.querySelectorAll('[data-view]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
     applyFilters();
   });
+  document.querySelectorAll('[data-dashboard-view]').forEach((link) => link.addEventListener('click', () => {
+    const view = link.dataset.dashboardView;
+    const filter = filters.querySelector(`[data-view="${view}"]`);
+    if (!filter || filter.hidden) return;
+    activeView = view;
+    filters.querySelectorAll('[data-view]').forEach((item) => item.setAttribute('aria-pressed', String(item === filter)));
+    document.querySelectorAll('.dashboard-mode-tabs a').forEach((item) => item.classList.toggle('is-active', item === link));
+    applyFilters();
+  }));
   search.addEventListener('input', applyFilters);
 
   Promise.all([
