@@ -1,38 +1,92 @@
 {
   "version": 1,
-  "kind": "stepper",
+  "kind": "network-trace",
   "title": "Distance Vector：四节点收敛与失败",
-  "description": "在 A—1—B—2—C—1—D 上跟踪 route table、advertisement、candidate、expiration 与输出更新。",
-  "steps": [
+  "description": "在 A—1—B—2—C—1—D 上逐事件检查 route table、advertisement、candidate 与输出更新。",
+  "workspaceLabel": "Packet · State · Event",
+  "frames": [
     {
-      "title": "Round 0：只有直连",
-      "body": "A:D=∞；B:D=∞；C:D=1 via D。C 的 route table 由 link-up event 建立直连项。"
+      "label": "Round 0", "phase": "Initial state", "title": "只有直连事实，没有全局最短路", "summary": "每台 router 只安装自己能直接验证的邻接；信息尚未跨越任何一条边。", "status": "LOCAL ONLY",
+      "tables": [
+        {"title": "Router A · routes to D", "columns": ["Dest", "Next hop", "Metric"], "rows": [["D", "—", "∞"]]},
+        {"title": "Router B · routes to D", "columns": ["Dest", "Next hop", "Metric"], "rows": [["D", "—", "∞"]]},
+        {"title": "Router C · routes to D", "columns": ["Dest", "Next hop", "Metric"], "rows": [["D", "D", "1"]]}
+      ],
+      "reasoning": "Bellman–Ford 给出了更新规则，但 router 不能使用尚未收到的 D_v(D)。Round 0 的关键不是算术，而是知识边界。",
+      "focus": "Router C", "focusStatus": "connected",
+      "before": {"columns": ["State", "Value"], "rows": [["table[D]", "∞"], ["history[(D,D-port)]", "—"]]},
+      "event": {"title": "Link up: C—D cost 1", "body": "本地端口报告一个可直接验证的邻居。"},
+      "after": {"columns": ["State", "Value"], "rows": [["table[D]", "1 via D"], ["expire", "FOREVER"]]},
+      "timeline": ["C—D link-up", "C installs D=1", "C schedules advertisement", "B has not received it yet"], "timelineActive": 3
     },
     {
-      "title": "Round 1：C 通告 D=1",
-      "body": "B 更新 history[(D,C-port)]=1，计算 2+1=3，安装 D=3 via C，并触发 advertisement。",
-      "formula": "D_B(D)=c(B,C)+D_C(D)=3"
+      "label": "Round 1", "phase": "Advertisement", "title": "B 收到 C 的 D=1，并形成第一个候选", "summary": "输入不是全局图，而是一条邻居消息。B 把本地链路代价 2 与邻居距离 1 相加。", "status": "TABLE UPDATED",
+      "tables": [
+        {"title": "Advertisement on wire", "columns": ["From", "To", "Dest", "Metric"], "rows": [["C", "B", "D", "1"]]},
+        {"title": "Candidate calculation", "columns": ["Local link", "Neighbor metric", "Candidate"], "rows": [["c(B,C)=2", "D_C(D)=1", "3 via C"]]},
+        {"title": "Global snapshot", "columns": ["Router", "Route to D", "Changed?"], "rows": [["A", "∞", "no"], ["B", "3 via C", "yes"], ["C", "1 via D", "no"]]}
+      ],
+      "reasoning": "B 现在可以更新，因为 D_C(D) 已经成为 B 的本地输入。A 仍不能更新：B 的新状态还没有通过下一条 advertisement 传到 A。",
+      "focus": "Router B", "focusStatus": "processing",
+      "before": {"columns": ["State", "Value"], "rows": [["table[D]", "∞"], ["history[(D,C-port)]", "—"]]},
+      "event": {"title": "Receive C → B: D=1", "body": "candidate = link(B,C) + advertised metric = 2 + 1。"},
+      "after": {"columns": ["State", "Value"], "rows": [["history[(D,C-port)]", "1"], ["table[D]", "3 via C"], ["output", "advertise D=3"]]},
+      "timeline": ["C advertises D=1", "B records per-neighbor history", "B computes candidate 3", "B installs route", "B emits D=3"], "timelineActive": 5
     },
     {
-      "title": "Round 2：B 通告 D=3",
-      "body": "A 更新 per-neighbor history，计算 1+3=4，安装 D=4 via B。此时 C/B/A 的 D 表项分别为 1/3/4。"
+      "label": "Round 2", "phase": "Propagation", "title": "A 只能在 B 的新通告到达后学到 D=4", "summary": "信息每个 round 最多跨一条邻接关系；全局最短路存在，不代表局部节点已经知道它。", "status": "CONVERGING",
+      "tables": [
+        {"title": "Advertisement on wire", "columns": ["From", "To", "Dest", "Metric"], "rows": [["B", "A", "D", "3"]]},
+        {"title": "Candidate calculation", "columns": ["Local link", "Neighbor metric", "Candidate"], "rows": [["c(A,B)=1", "D_B(D)=3", "4 via B"]]},
+        {"title": "Route table snapshot", "columns": ["Router", "Next hop", "Metric"], "rows": [["A", "B", "4"], ["B", "C", "3"], ["C", "D", "1"]]}
+      ],
+      "reasoning": "A 的更新证据链是 A—B 的本地 cost 与 B 的最新 advertisement；它不需要、也没有 C—D 的全局拓扑。",
+      "focus": "Router A", "focusStatus": "processing",
+      "before": {"columns": ["State", "Value"], "rows": [["table[D]", "∞"], ["history[(D,B-port)]", "—"]]},
+      "event": {"title": "Receive B → A: D=3", "body": "A 对唯一候选执行 1 + 3。"},
+      "after": {"columns": ["State", "Value"], "rows": [["history[(D,B-port)]", "3"], ["table[D]", "4 via B"], ["output", "advertise D=4"]]},
+      "timeline": ["B advertises D=3", "A records history", "A computes candidate 4", "A installs route"], "timelineActive": 4
     },
     {
-      "title": "Round 3：稳定",
-      "body": "重复通告只刷新 expiration；候选未变，不产生新的 table transition。"
+      "label": "Round 3", "phase": "Invariant check", "title": "重复通告刷新新鲜度，但不必改变 best route", "summary": "候选值、next hop 与当前表项一致；协议保持稳定，同时延长动态路线的租约。", "status": "STABLE",
+      "tables": [
+        {"title": "Stable route table", "columns": ["Router", "Destination", "Next hop", "Metric"], "rows": [["A", "D", "B", "4"], ["B", "D", "C", "3"], ["C", "D", "D", "1"]]},
+        {"title": "Invariant", "columns": ["Check", "Result"], "rows": [["metric = link + neighbor metric", "pass"], ["next hop owns the evidence", "pass"], ["expiration refreshed", "pass"]]}
+      ],
+      "reasoning": "“没有 table change”仍是一个有效 transition：history 与 expiration 可以更新，而 forwarding choice 保持不变。",
+      "focus": "Router B", "focusStatus": "stable",
+      "before": {"columns": ["State", "Value"], "rows": [["table[D]", "3 via C"], ["expire", "t+8"]]},
+      "event": {"title": "Receive C → B: D=1 again", "body": "同一个 candidate 再次被验证。"},
+      "after": {"columns": ["State", "Value"], "rows": [["table[D]", "3 via C"], ["expire", "t+15"]]},
+      "timeline": ["Receive stable metric", "Refresh history", "Refresh expiration", "Suppress unchanged output"], "timelineActive": 4
     },
     {
-      "title": "Failure：C—D 断开",
-      "body": "C 删除直连候选。无保护时 C 可能采用 B 的旧 D=3，形成 5→7→9 的 count-to-infinity。"
+      "label": "Failure", "phase": "Counterfactual", "title": "C—D 断开：陈旧信息怎样开始自我证明", "summary": "若 C 在撤销传播前听见 B 仍宣告旧的 D=3，C 会误把它当成替代路线。", "status": "LOOP RISK", "statusTone": "is-warning",
+      "tables": [
+        {"title": "Stale exchange", "columns": ["Time", "B believes", "C believes"], "rows": [["t0", "3 via C", "1 direct"], ["t1", "3 via C", "∞"], ["t2", "3 via C", "5 via B"], ["t3", "7 via C", "5 via B"], ["t4", "7 via C", "9 via B"]]},
+        {"title": "What broke", "columns": ["State", "Problem"], "rows": [["B's metric 3", "derived from C's old route"], ["C's candidate 5", "treats returned evidence as independent"]]}
+      ],
+      "reasoning": "两个 router 把“我从你那里学来的旧信息”重新包装回来。数字不断增大只是症状；根因是路径来源被压缩成 metric 后丢失。",
+      "focus": "Router C", "focusStatus": "link down",
+      "before": {"columns": ["State", "Value"], "rows": [["table[D]", "1 direct"], ["B advertises", "3"]]},
+      "event": {"title": "Link C—D down + stale B update", "body": "C 删除直连后计算 2 + 3 = 5 via B。"},
+      "after": {"columns": ["State", "Value"], "rows": [["table[D]", "5 via B"], ["output", "advertise D=5"]]},
+      "timeline": ["C loses direct route", "B still says 3", "C installs 5 via B", "B later installs 7 via C", "metrics count upward"], "timelineActive": 5
     },
     {
-      "title": "Poison reverse",
-      "body": "B 因 next hop 是 C，反向向 C 宣告 D=∞。C 不采用 B 的旧路；expiration 与触发更新继续传播坏消息。"
+      "label": "Poison reverse", "phase": "Failure containment", "title": "按 outgoing neighbor 计算通告值，切断两节点回指", "summary": "B 的 best route 经 C，因此 B 向 C 发送的不是 3，而是 ∞；向 A 仍可发送 3。", "status": "CONTAINED",
+      "tables": [
+        {"title": "Per-neighbor advertisement", "columns": ["Destination", "Outgoing neighbor", "Advertised metric"], "rows": [["D", "A", "3"], ["D", "C", "∞"]]},
+        {"title": "Why history is 2D", "columns": ["Key", "Value"], "rows": [["history[(D,A-port)]", "3"], ["history[(D,C-port)]", "∞"]]}
+      ],
+      "reasoning": "同一个 destination 对不同 neighbor 必须产生不同输出，所以 advertisement state 天然是 destination × port，而不是 history[destination]。",
+      "focus": "Router B", "focusStatus": "policy active",
+      "before": {"columns": ["State", "Value"], "rows": [["table[D]", "3 via C"], ["outgoing port", "C-port"]]},
+      "event": {"title": "Build advertisement for C", "body": "检测 current next hop == outgoing neighbor。"},
+      "after": {"columns": ["State", "Value"], "rows": [["wire metric", "∞"], ["history[(D,C-port)]", "∞"]]},
+      "timeline": ["Select destination D", "Select outgoing neighbor C", "Detect route learned from C", "Substitute ∞", "Record per-port history"], "timelineActive": 5
     }
   ],
-  "caption": "每一步都回答：收到什么消息、哪份 history 改变、候选如何计算、route table 是否变化、向谁发什么。",
-  "source": {
-    "label": "Current Project 2 specification",
-    "url": "https://fa26.cs168.io/proj2/"
-  }
+  "caption": "使用左右方向键或按钮逐步推演。每一步都明确 before state、输入事件、候选计算、after state 与输出消息。",
+  "source": {"label": "Current Project 2 specification", "url": "https://fa26.cs168.io/proj2/"}
 }

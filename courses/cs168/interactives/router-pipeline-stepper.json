@@ -1,37 +1,71 @@
 {
   "version": 1,
-  "kind": "stepper",
+  "kind": "network-trace",
   "title": "Router pipeline：10.1.2.99 的一次转发",
-  "description": "用具体 FIB 与 TTL=2 的数据报跟踪验证、递减、LPM、邻居状态、排队和输出。",
-  "steps": [
+  "description": "把一个 IPv4 datagram 从 ingress validation 推到 egress queue，并在每一步检查 header、table、state 与 failure output。",
+  "workspaceLabel": "Packet · Table · Output",
+  "frames": [
     {
-      "title": "Ingress validation",
-      "body": "Before：frame 到达。Event：检查 FCS、IPv4 version/IHL/length/checksum。After：非法即丢弃；合法则去 link header。"
+      "label": "Ingress", "phase": "Packet arrival", "title": "先证明这个 packet 值得进入转发管线", "summary": "输入 frame 只提供候选字节；FCS、IPv4 version、IHL、length 与 checksum 通过后，路由器才移除本跳 link header。", "status": "VALIDATING",
+      "tables": [{"title":"Ingress packet","columns":["Field","Value","Check"],"rows":[["Dst IP","10.1.2.99","—"],["TTL","2","> 0"],["IHL / length","5 / 60","valid"],["Checksum","0x7a1c","valid"]]}],
+      "reasoning":"转发表只对合法 network-layer packet 有定义。若 validation 被跳过，任意损坏字节都可能被当作 prefix key、长度或 TTL 使用。",
+      "focus":"Ingress eth0", "focusStatus":"frame received",
+      "before":{"columns":["Object","State"],"rows":[["frame","Ethernet + IPv4"],["FIB","unchanged"]]},
+      "event":{"title":"Validate headers","body":"检查 link integrity 与 IPv4 structural invariants。"},
+      "after":{"columns":["Object","State"],"rows":[["datagram","IPv4 accepted"],["old L2 header","removed"]]},
+      "timeline":["Frame arrives","Validate FCS","Validate IP header","Strip ingress L2 header","Continue or drop"],"timelineActive":4
     },
     {
-      "title": "TTL 2→1",
-      "body": "Before：TTL=2。Event：递减并更新 IPv4 checksum。After：TTL=1；若原值≤1 则丢弃并可能输出 ICMP Time Exceeded。"
+      "label": "TTL", "phase": "Header transition", "title": "TTL 2 → 1，并重算 IPv4 checksum", "summary": "TTL 是逐 hop 状态；目的 IP 与 transport ports 仍保持端到端。", "status": "HEADER UPDATED",
+      "tables":[{"title":"Header delta","columns":["Field","Before","After"],"rows":[["TTL","2","1"],["Header checksum","0x7a1c","recomputed"],["Src IP","198.51.100.8","unchanged"],["Dst IP","10.1.2.99","unchanged"]]}],
+      "reasoning":"先判断 TTL，再递减。若原 TTL ≤ 1，继续转发会破坏“包最终停止”的不变量，并允许路由环无限消耗网络。",
+      "focus":"IPv4 header","focusStatus":"mutable per hop",
+      "before":{"columns":["State","Value"],"rows":[["TTL","2"],["checksum","old"]]},
+      "event":{"title":"Forwarding hop","body":"decrement TTL and update checksum。"},
+      "after":{"columns":["State","Value"],"rows":[["TTL","1"],["checksum","new"]]},
+      "timeline":["Read TTL","Check TTL > 1","Decrement","Recompute checksum"],"timelineActive":4
     },
     {
-      "title": "LPM：四项都检查",
-      "body": "10.1.2.99 匹配 /8、/16、/24 与 default。选择最长 /24，而不是第一项。"
+      "label": "LPM", "phase": "Table lookup", "title": "列出所有匹配项，再选择最长前缀", "summary": "10.1.2.99 同时匹配 default、/8、/16 与 /24；规则选择最具体的 /24。", "status": "FIB HIT",
+      "tables":[{"title":"Forwarding information base","columns":["Prefix","Interface","Matches?"],"rows":[["0.0.0.0/0","eth9","yes"],["10.0.0.0/8","eth1","yes"],["10.1.0.0/16","eth2","yes"],["10.1.2.0/24","eth3","yes"]]},{"title":"Selection","columns":["Destination","Winning prefix","Output"],"rows":[["10.1.2.99","10.1.2.0/24","eth3"]]}],
+      "reasoning":"LPM 不是“第一条匹配”也不是“最小数值”。prefix length 表示该 entry 掌握了多少目的地址位，因此 /24 胜出。",
+      "focus":"FIB lookup","focusStatus":"4 matches",
+      "before":{"columns":["State","Value"],"rows":[["lookup key","10.1.2.99"],["best length","none"]]},
+      "event":{"title":"Compare prefix lengths","body":"0 < 8 < 16 < 24。"},
+      "after":{"columns":["State","Value"],"rows":[["best prefix","/24"],["interface","eth3"]]},
+      "timeline":["Match default","Match /8","Match /16","Match /24","Choose longest"],"timelineActive":5
     },
     {
-      "title": "Select next hop",
-      "body": "FIB 的 /24 给出 next hop 192.0.2.3、interface eth3。目的 IP 仍为 10.1.2.99。"
+      "label": "Next hop", "phase": "Adjacency", "title": "FIB 给出 IP-level next hop，邻居表给出本跳 MAC", "summary": "目的 IP 仍是 10.1.2.99；只有 link-layer addresses 为下一段链路重新建立。", "status": "ADJACENCY HIT",
+      "tables":[{"title":"Selected route","columns":["Prefix","Next hop","Interface"],"rows":[["10.1.2.0/24","192.0.2.3","eth3"]]},{"title":"New frame","columns":["Field","Value"],"rows":[["Src MAC","eth3 MAC"],["Dst MAC","next-hop MAC"],["Src IP","198.51.100.8"],["Dst IP","10.1.2.99"]]}],
+      "reasoning":"IP addresses identify end-to-end endpoints；MAC addresses identify this link’s sender and next receiver。把目的 IP 改成 next-hop IP 会破坏端到端寻址。",
+      "focus":"Neighbor table","focusStatus":"resolved",
+      "before":{"columns":["Key","Value"],"rows":[["192.0.2.3","02:42:ac:11:00:03"]]},
+      "event":{"title":"Encapsulate for eth3","body":"使用邻居映射创建新的 link-layer header。"},
+      "after":{"columns":["Object","State"],"rows":[["frame","ready for eth3"],["IP datagram","destination unchanged"]]},
+      "timeline":["Read next hop","Lookup adjacency","Build new L2 header","Preserve L3/L4 endpoints"],"timelineActive":4
     },
     {
-      "title": "Adjacency + new frame",
-      "body": "查 eth3 邻居表获得 next-hop MAC；若 miss，触发解析并暂存。命中后创建全新的 link header。"
+      "label": "Queue", "phase": "Resource state", "title": "正确的下一跳仍可能因队列状态而无法立即发送", "summary": "packet 进入 eth3 egress queue；scheduler、buffer capacity 与 link availability 决定实际 emit 时间。", "status": "QUEUED",
+      "tables":[{"title":"Egress queue","columns":["Position","Packet","Bytes","Class"],"rows":[["1","existing-41","1500","best effort"],["2","10.1.2.99","60","best effort"]]},{"title":"Failure exits","columns":["Condition","Output"],"rows":[["queue has room","enqueue"],["queue full","drop"],["link down","drop / reroute by policy"]]}],
+      "reasoning":"routing plane 产生 FIB；forwarding plane 消费 FIB；queueing 则管理物理资源。三者回答不同问题，不能用“route exists”推导“packet will be emitted now”。",
+      "focus":"Egress eth3","focusStatus":"queue depth 2",
+      "before":{"columns":["State","Value"],"rows":[["queue depth","1"],["capacity","64"]]},
+      "event":{"title":"Enqueue 60-byte frame","body":"buffer 有空间，packet 加入 tail。"},
+      "after":{"columns":["State","Value"],"rows":[["queue depth","2"],["drop counter","unchanged"]]},
+      "timeline":["Resolve egress","Check buffer","Enqueue","Await scheduler"],"timelineActive":4
     },
     {
-      "title": "Queue + emit",
-      "body": "frame 进入 eth3 queue，scheduler 选择后发送。队列满可丢包；输出 IP TTL=1，ports 未改变。"
+      "label": "Emit", "phase": "Output", "title": "scheduler 选择 packet，本跳转发完成", "summary": "发送的是新 frame；内部 IPv4 datagram 保持端到端地址、更新后的 TTL 和 transport ports。", "status": "EMITTED",
+      "tables":[{"title":"Wire output","columns":["Layer","Changed at router?","Value"],"rows":[["Ethernet src/dst","yes","eth3 → next hop"],["IP src/dst","no","198.51.100.8 → 10.1.2.99"],["TTL","yes","1"],["TCP/UDP ports","no","end-to-end"]]}],
+      "reasoning":"一次 forwarding pipeline 的 output 不只是 interface name；它是经过验证、逐 hop header transition、table lookup、重新封装与资源调度后的具体 frame。",
+      "focus":"Wire eth3","focusStatus":"transmitting",
+      "before":{"columns":["State","Value"],"rows":[["queue head","existing-41"],["target packet","position 2"]]},
+      "event":{"title":"Scheduler services queue","body":"前一 frame 完成后选择目标 packet。"},
+      "after":{"columns":["State","Value"],"rows":[["target packet","on wire"],["queue depth","0"]]},
+      "timeline":["Select queue","Dequeue frame","Transmit bits","Next router receives"],"timelineActive":4
     }
   ],
-  "caption": "routing plane 生产 FIB；forwarding plane 对每个 packet 消费 FIB。观察每步的失败出口。",
-  "source": {
-    "label": "CS 168 Fall 2026 readings and schedule",
-    "url": "https://fa26.cs168.io/"
-  }
+  "caption":"routing plane ≠ forwarding plane。逐步检查 packet 当前在哪、header 如何变化、查哪张 table、哪个 failure exit 被触发。",
+  "source":{"label":"CS 168 Fall 2026 readings and schedule","url":"https://fa26.cs168.io/"}
 }

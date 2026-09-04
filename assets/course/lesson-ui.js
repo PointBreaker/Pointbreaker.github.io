@@ -261,6 +261,72 @@
   };
   if (location.hash === '#pb-comments') setCommentsOpen(true);
 
+  const mountCourseRail = (info, status, collection, current) => {
+    if (!Array.isArray(collection) || current < 0) return;
+    if (document.querySelector('.reading-toc, .workbook-side-nav, .review-stage-nav')) return;
+    const rail = document.createElement('aside');
+    rail.className = 'pb-course-rail';
+    rail.setAttribute('aria-label', '课程内容');
+
+    const home = document.createElement('a');
+    home.className = 'pb-course-rail-home';
+    home.href = courseBase;
+    const code = document.createElement('span');
+    code.className = 'pb-course-rail-code';
+    code.textContent = info.code || info.courseCode || courseId.toUpperCase();
+    const homeMark = document.createElement('span');
+    homeMark.setAttribute('aria-hidden', 'true');
+    homeMark.textContent = '↗';
+    home.append(code, homeMark);
+
+    const label = document.createElement('p');
+    label.className = 'pb-course-rail-label';
+    label.textContent = collection[current].type === 'work' ? 'Practice path' : 'Course content';
+
+    const list = document.createElement('nav');
+    list.className = 'pb-course-rail-list';
+    const radius = 4;
+    const start = Math.max(0, Math.min(current - radius, collection.length - (radius * 2 + 1)));
+    collection.slice(start, start + radius * 2 + 1).forEach((item, offset) => {
+      const absoluteIndex = start + offset;
+      const link = document.createElement('a');
+      link.className = 'pb-course-rail-link';
+      link.href = `${courseBase}${item.file}`;
+      if (absoluteIndex === current) link.setAttribute('aria-current', 'page');
+      const number = document.createElement('span');
+      number.className = 'pb-course-rail-number';
+      const rawNumber = item.displayNumber || item.number || absoluteIndex + 1;
+      number.textContent = String(rawNumber).padStart(2, '0');
+      const title = document.createElement('span');
+      title.textContent = item.titleZh || item.title;
+      link.append(number, title);
+      list.append(link);
+    });
+
+    const completed = (status.lectures || []).filter((item) => item.status === 'completed').length;
+    const total = Number(status.totalLectures) || (status.lectures || []).length || 1;
+    const percent = Math.round(completed / total * 100);
+    const progressBox = document.createElement('div');
+    progressBox.className = 'pb-course-rail-progress';
+    const progressRow = document.createElement('div');
+    progressRow.className = 'pb-course-rail-progress-row';
+    const progressLabel = document.createElement('span');
+    progressLabel.textContent = '课程进度';
+    const progressValue = document.createElement('strong');
+    progressValue.textContent = `${completed} / ${total}`;
+    progressRow.append(progressLabel, progressValue);
+    const track = document.createElement('div');
+    track.className = 'pb-course-rail-track';
+    const fill = document.createElement('span');
+    fill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+    track.append(fill);
+    progressBox.append(progressRow, track);
+
+    rail.append(home, label, list, progressBox);
+    document.body.append(rail);
+    document.body.classList.add('pb-has-course-rail');
+  };
+
   Promise.all([
     fetch(`${courseBase}course-info.json`, { cache: 'no-store' }).then((response) => response.json()),
     fetch(`${courseBase}api/status.json`, { cache: 'no-store' }).then((response) => response.json())
@@ -270,11 +336,13 @@
     document.documentElement.style.setProperty('--pb-accent', info.accent || '#166534');
 
     const lectures = (status.lectures || []).map((item) => ({ ...item, type: 'lecture', file: item.lessonFile }));
-    const work = (status.assignments || []).filter((item) => item.assGuideFile).map((item) => ({ ...item, type: 'work', file: item.assGuideFile }));
+    const work = (status.assignments || []).filter((item) => item.assGuideFile || item.contentFile).map((item) => ({ ...item, type: 'work', file: item.assGuideFile || item.contentFile }));
     const collection = currentRelative.includes('/assignments/') || currentRelative.startsWith('homeworks/') || currentRelative.startsWith('labs/') || currentRelative.startsWith('projects/')
       ? work : lectures;
     const current = collection.findIndex((item) => item.file === currentRelative);
     if (current < 0) return;
+
+    mountCourseRail(info, status, collection, current);
 
     const previous = collection[current - 1];
     const next = collection[current + 1];

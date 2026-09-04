@@ -1,41 +1,81 @@
 {
   "version": 1,
-  "kind": "stepper",
+  "kind": "network-trace",
   "title": "TCP：一次丢包后的完整状态演化",
   "description": "跟踪 SND.UNA/NXT/WND、重传队列、RCV.NXT、乱序队列、timer 与 wire output。",
-  "steps": [
+  "workspaceLabel": "Byte · State · Timeline",
+  "frames": [
     {
-      "title": "Initial state",
-      "body": "Sender UNA=100,NXT=100,WND=400,retx=[]；Receiver NXT=100,OOO=[]。"
+      "label":"Initial", "phase":"Initial state", "title":"两个端点先对 sequence space 达成共同边界", "summary":"本 trace 从双方都期待 byte 100 开始；发送窗口允许 400 bytes outstanding。", "status":"READY",
+      "tables":[{"title":"Sender","columns":["SND.UNA","SND.NXT","SND.WND","retx_queue"],"rows":[["100","100","400","[]"]]},{"title":"Receiver","columns":["RCV.NXT","RCV.WND","recv_queue"],"rows":[["100","400","[]"]]}],
+      "reasoning":"SND.UNA 是最早未确认字节；SND.NXT 是下一新字节。两者相等意味着当前没有 outstanding data。",
+      "focus":"Connection state", "focusStatus":"established",
+      "before":{"columns":["Boundary","Value"],"rows":[["sent prefix","<100"],["received prefix","<100"]]},
+      "event":{"title":"Application has 200 bytes","body":"sender 可以把 [100,300) 分成两个 segment。"},
+      "after":{"columns":["Permission","Value"],"rows":[["usable window","400 bytes"],["next segment","[100,200)"]]},
+      "timeline":["Connection established","Sequence boundaries aligned","Application queues data"],"timelineActive":3
     },
     {
-      "title": "Send [100,200)：lost",
-      "body": "Sender NXT→200，retx 加入 [100,200)，启动 oldest-unacked timer；Receiver 无变化。"
+      "label":"Send 1 · lost", "phase":"Transmit", "title":"发送 [100,200)，packet 丢失但 sender state 已推进", "summary":"wire delivery 失败不会自动回滚发送端；可靠性依靠 retx queue 与 timer。", "status":"GAP CREATED", "statusTone":"is-warning",
+      "tables":[{"title":"Sender delta","columns":["State","Before","After"],"rows":[["SND.NXT","100","200"],["retx_queue","[]","[[100,200)]"],["timer","off","running"]]},{"title":"Receiver","columns":["RCV.NXT","recv_queue"],"rows":[["100","[]"]]}],
+      "reasoning":"RetxQueue 不是 packet history；它只保存尚未被累计 ACK 证明安全的数据。丢包时 receiver 没有 event，因此没有任何 state change。",
+      "focus":"Sender", "focusStatus":"oldest unacked = 100",
+      "before":{"columns":["State","Value"],"rows":[["SND.UNA","100"],["SND.NXT","100"]]},
+      "event":{"title":"tx [100,200) · lost","body":"发送动作成功，网络交付失败。"},
+      "after":{"columns":["State","Value"],"rows":[["SND.UNA","100"],["SND.NXT","200"],["retx_queue","[100,200)"]]},
+      "timeline":["Create segment","Advance SND.NXT","Push RetxQueue","Start RTO","Packet lost"],"timelineActive":5
     },
     {
-      "title": "Send [200,300)：arrives",
-      "body": "Sender NXT→300；Receiver 因 [100,200) 是洞，把 [200,300) 放入 OOO，输出 ACK 100。"
+      "label":"Send 2 · arrives", "phase":"Out of order", "title":"[200,300) 到达，但 receiver 仍只能 ACK 100", "summary":"第二段的数据真实存在于 receiver，却不能推进连续前缀，因为 [100,200) 仍是洞。", "status":"BUFFERED",
+      "tables":[{"title":"Sender","columns":["SND.UNA","SND.NXT","retx_queue"],"rows":[["100","300","[100,200), [200,300)"]]},{"title":"Receiver","columns":["Incoming","RCV.NXT","Action","ACK"],"rows":[["[200,300)","100","buffer OOO","100"]]}],
+      "reasoning":"累计 ACK 指向 next expected byte。ACK 100 不是说 byte 100 已收到，而是说所有 byte <100 连续可用，100 仍缺失。",
+      "focus":"Receiver", "focusStatus":"gap at 100",
+      "before":{"columns":["State","Value"],"rows":[["RCV.NXT","100"],["recv_queue","[]"]]},
+      "event":{"title":"rx [200,300)","body":"segment 落在 receive window 内，但不从 RCV.NXT 开始。"},
+      "after":{"columns":["State","Value"],"rows":[["RCV.NXT","100"],["recv_queue","[200,300)"],["output","ACK 100"]]},
+      "timeline":["Segment arrives","acceptable_seg passes","Detect gap","Insert RecvQueue","Emit ACK 100"],"timelineActive":5
     },
     {
-      "title": "ACK 100：no progress",
-      "body": "SND.UNA 仍是 100，retx queue 不弹出；重复 ACK 没确认新连续字节。"
+      "label":"ACK 100", "phase":"No progress", "title":"重复 ACK 没有证明任何新字节安全", "summary":"SND.UNA 不移动，RetxQueue 也不能 pop；oldest-unacked timer 继续覆盖 byte 100。", "status":"WAITING",
+      "tables":[{"title":"ACK processing","columns":["ACK","Old UNA","New UNA","Popped"],"rows":[["100","100","100","none"]]},{"title":"Outstanding bytes","columns":["Range","Status"],"rows":[["[100,200)","lost / unacked"],["[200,300)","received OOO / unacked"]]}],
+      "reasoning":"只有 ACK > SND.UNA 才确认新的连续 prefix。若这里错误 pop 第一项，sender 会忘掉唯一能填洞的 segment。",
+      "focus":"Sender ACK path", "focusStatus":"duplicate ACK",
+      "before":{"columns":["State","Value"],"rows":[["SND.UNA","100"],["retx_queue","2 entries"]]},
+      "event":{"title":"rx ACK=100","body":"ack boundary 与当前 UNA 相等。"},
+      "after":{"columns":["State","Value"],"rows":[["SND.UNA","100"],["retx_queue","unchanged"]]},
+      "timeline":["Parse ACK","Check acceptability","Compare ACK vs UNA","No cumulative progress"],"timelineActive":4
     },
     {
-      "title": "Timeout + retransmit",
-      "body": "重发 [100,200)，SND.NXT 仍为 300，RTO 退避；重传不是新逻辑字节。"
+      "label":"Timeout", "phase":"Retransmission", "title":"RTO 到期只重发最早未确认段，不推进 SND.NXT", "summary":"重传使用原 sequence interval [100,200)；它不是新的逻辑字节。", "status":"RETRANSMIT", "statusTone":"is-warning",
+      "tables":[{"title":"Sender transition","columns":["State","Before","After"],"rows":[["SND.NXT","300","300"],["retx head","[100,200)","[100,200) resent"],["RTO","R","2R backoff"]]},{"title":"Wire output","columns":["SEQ","LEN","Meaning"],"rows":[["100","100","fill earliest gap"]]}],
+      "reasoning":"若重传推进 SND.NXT，sequence space 会凭空新增 100 bytes；receiver 将无法判断 original 与 retransmission 指向同一数据。",
+      "focus":"RTO timer", "focusStatus":"expired",
+      "before":{"columns":["State","Value"],"rows":[["oldest unacked","100"],["SND.NXT","300"]]},
+      "event":{"title":"Timeout","body":"选择 RetxQueue.peek() 并用原 seq 重发。"},
+      "after":{"columns":["State","Value"],"rows":[["wire","[100,200)"],["SND.NXT","300"]]},
+      "timeline":["RTO expires","Peek earliest segment","Retransmit original range","Back off timer"],"timelineActive":4
     },
     {
-      "title": "Gap closes",
-      "body": "Receiver 交付 [100,200)，再连续消费 OOO 的 [200,300)，RCV.NXT→300，OOO 清空，输出 ACK 300。"
+      "label":"Gap closes", "phase":"Receive + coalesce", "title":"缺口闭合后，receiver 一次消费两个连续区间", "summary":"先交付 [100,200)，再发现 RecvQueue 头部正好从新 RCV.NXT=200 开始，于是继续消费到 300。", "status":"PREFIX ADVANCED",
+      "tables":[{"title":"Receive queue evolution","columns":["Moment","RCV.NXT","recv_queue","Output ACK"],"rows":[["before","100","[200,300)","100"],["consume retransmit","200","[200,300)","—"],["coalesce queued","300","[]","300"]]}],
+      "reasoning":"out-of-order buffering 与 cumulative ACK 是同一个机制链：queue 保存未来数据，RCV.NXT 表示连续边界，洞补齐时边界可以跨过多段。",
+      "focus":"Receiver", "focusStatus":"delivering",
+      "before":{"columns":["State","Value"],"rows":[["RCV.NXT","100"],["recv_queue","[200,300)"]]},
+      "event":{"title":"rx retransmit [100,200)","body":"segment 起点等于 RCV.NXT。"},
+      "after":{"columns":["State","Value"],"rows":[["RCV.NXT","300"],["recv_queue","[]"],["output","ACK 300"]]},
+      "timeline":["Accept [100,200)","Advance to 200","Peek queued [200,300)","Advance to 300","Emit ACK 300"],"timelineActive":5
     },
     {
-      "title": "ACK 300：cleanup",
-      "body": "Sender UNA→300，删除两项 retx，停止 timer；发送与接收的连续前缀重新一致。"
+      "label":"ACK 300", "phase":"Cleanup", "title":"累计 ACK 跨过两项，sender 终于可以忘掉它们", "summary":"ACK 300 证明所有 bytes <300 已连续接收；SND.UNA 跳到 300，RetxQueue 清空，timer 停止。", "status":"RECOVERED",
+      "tables":[{"title":"Final state","columns":["Endpoint","Boundary","Queue","Timer"],"rows":[["Sender","SND.UNA=NXT=300","retx=[]","off"],["Receiver","RCV.NXT=300","recv=[]","—"]]},{"title":"pop_upto(300)","columns":["Range","Covered by ACK?","Action"],"rows":[["[100,200)","yes","pop"],["[200,300)","yes","pop"]]}],
+      "reasoning":"RetxQueue.pop_upto(ack) 把 wire-level ACK 转成 memory reclamation。多 pop 会丢失未确认数据，少 pop 会造成无效重传与资源泄漏。",
+      "focus":"Sender", "focusStatus":"all acknowledged",
+      "before":{"columns":["State","Value"],"rows":[["SND.UNA","100"],["retx_queue","2 entries"]]},
+      "event":{"title":"rx ACK=300","body":"ACK 位于 (UNA,NXT]，确认新的连续 prefix。"},
+      "after":{"columns":["State","Value"],"rows":[["SND.UNA","300"],["retx_queue","[]"],["timer","off"]]},
+      "timeline":["Validate ACK","Advance UNA","pop_upto(300)","Stop timer","Resume clean stream"],"timelineActive":5
     }
   ],
-  "caption": "ACK 指向下一个期望字节；重传使用原序号且不推进 SND.NXT，缺口闭合后累计 ACK 可跨过缓存段。",
-  "source": {
-    "label": "CS 168 TCP reading",
-    "url": "https://textbook.cs168.io/transport/tcp-implementation.html"
-  }
+  "caption":"ACK 指向下一个期望字节；重传沿用原序号且不推进 SND.NXT。逐步检查哪一端收到 event，以及哪一端根本没有理由改变 state。",
+  "source":{"label":"CS 168 TCP reading","url":"https://textbook.cs168.io/transport/tcp-implementation.html"}
 }

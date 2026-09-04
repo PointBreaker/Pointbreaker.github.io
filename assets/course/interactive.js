@@ -459,6 +459,122 @@
     return panel;
   }
 
+  function renderNetworkTrace(spec, specUrl) {
+    const { panel, body } = buildPanel(spec, 'Packet · State · Event');
+    panel.classList.add('cs-network-trace-panel');
+    const workspace = element('div', 'cs-network-workspace');
+    const toolbar = element('div', 'cs-network-toolbar');
+    const workspaceLabel = element('strong', '', spec.workspaceLabel || 'Packet · State · Event');
+    const controls = element('div', 'cs-network-toolbar-controls');
+    const previous = element('button', '', '←');
+    previous.type = 'button';
+    previous.setAttribute('aria-label', '上一步');
+    const frameLabel = element('span', 'cs-network-frame-label');
+    frameLabel.setAttribute('aria-live', 'polite');
+    const next = element('button', '', '→');
+    next.type = 'button';
+    next.setAttribute('aria-label', '下一步');
+    controls.append(previous, frameLabel, next);
+    toolbar.append(workspaceLabel, controls);
+
+    const grid = element('div', 'cs-network-grid');
+    const main = element('div', 'cs-network-main');
+    const inspector = element('aside', 'cs-network-inspector');
+    inspector.setAttribute('aria-label', '当前状态检查器');
+    grid.append(main, inspector);
+    workspace.append(toolbar, grid);
+    body.append(workspace);
+
+    const tableFor = (tableSpec, className = '') => {
+      const wrap = element('div', `cs-network-table-wrap ${className}`.trim());
+      if (tableSpec.title) wrap.append(element('h5', '', tableSpec.title));
+      const table = element('table', 'cs-network-table');
+      const thead = element('thead');
+      const headRow = element('tr');
+      (tableSpec.columns || []).forEach((column) => headRow.append(element('th', '', String(column))));
+      thead.append(headRow);
+      const tbody = element('tbody');
+      (tableSpec.rows || []).forEach((row) => {
+        const tr = element('tr');
+        row.forEach((cell) => tr.append(element('td', '', String(cell))));
+        tbody.append(tr);
+      });
+      table.append(thead, tbody);
+      wrap.append(table);
+      return wrap;
+    };
+
+    let current = 0;
+    const draw = () => {
+      const frame = spec.frames[current];
+      main.replaceChildren();
+      inspector.replaceChildren();
+      frameLabel.textContent = frame.label || `${current + 1} / ${spec.frames.length}`;
+      previous.disabled = current === 0;
+      next.disabled = current === spec.frames.length - 1;
+
+      const stageHead = element('div', 'cs-network-stage-head');
+      const stageCopy = element('div');
+      stageCopy.append(element('p', 'cs-network-stage-index', `Step ${current + 1} · ${frame.phase || 'Trace'}`));
+      stageCopy.append(element('h4', '', frame.title));
+      if (frame.summary) stageCopy.append(element('p', 'cs-network-summary', frame.summary));
+      stageHead.append(stageCopy);
+      if (frame.status) stageHead.append(element('span', `cs-network-status ${frame.statusTone || ''}`.trim(), frame.status));
+      main.append(stageHead);
+
+      if (Array.isArray(frame.tables) && frame.tables.length) {
+        const tables = element('div', 'cs-network-tables');
+        frame.tables.forEach((tableSpec) => tables.append(tableFor(tableSpec)));
+        main.append(tables);
+      }
+      if (frame.reasoning) {
+        const reasoning = element('div', 'cs-network-reasoning');
+        reasoning.append(element('p', 'cs-network-section-label', 'Why this update?'));
+        reasoning.append(element('p', '', frame.reasoning));
+        main.append(reasoning);
+      }
+
+      const inspectorHead = element('div', 'cs-network-inspector-head');
+      inspectorHead.append(element('strong', '', frame.focus || 'Current state'));
+      if (frame.focusStatus) inspectorHead.append(element('span', '', frame.focusStatus));
+      inspector.append(inspectorHead);
+      if (frame.before) {
+        inspector.append(element('p', 'cs-network-section-label', 'State before'));
+        inspector.append(tableFor(frame.before, 'is-inspector'));
+      }
+      if (frame.event) {
+        inspector.append(element('p', 'cs-network-section-label', 'Event'));
+        const event = element('div', 'cs-network-event');
+        event.append(element('strong', '', frame.event.title || 'Input'));
+        if (frame.event.body) event.append(element('p', '', frame.event.body));
+        inspector.append(event);
+      }
+      if (frame.after) {
+        inspector.append(element('p', 'cs-network-section-label', 'State after'));
+        inspector.append(tableFor(frame.after, 'is-inspector'));
+      }
+      if (Array.isArray(frame.timeline) && frame.timeline.length) {
+        inspector.append(element('p', 'cs-network-section-label', 'Event timeline'));
+        const timeline = element('ol', 'cs-network-timeline');
+        frame.timeline.forEach((item, index) => {
+          const entry = element('li', index < (frame.timelineActive || frame.timeline.length) ? 'is-complete' : '');
+          entry.append(element('span', '', String(index + 1)), document.createTextNode(item));
+          timeline.append(entry);
+        });
+        inspector.append(timeline);
+      }
+    };
+    previous.addEventListener('click', () => { current = Math.max(0, current - 1); draw(); });
+    next.addEventListener('click', () => { current = Math.min(spec.frames.length - 1, current + 1); draw(); });
+    panel.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft' && current > 0) { current -= 1; draw(); }
+      if (event.key === 'ArrowRight' && current < spec.frames.length - 1) { current += 1; draw(); }
+    });
+    draw();
+    appendNotes(body, spec, specUrl);
+    return panel;
+  }
+
   async function mount(host) {
     const source = host.dataset.interactiveSrc;
     if (!source) return;
@@ -473,6 +589,7 @@
       if (spec.kind === 'function-plot') panel = renderFunctionPlot(spec, specUrl);
       else if (spec.kind === 'matrix-heatmap') panel = renderMatrix(spec, specUrl);
       else if (spec.kind === 'stepper') panel = renderStepper(spec, specUrl);
+      else if (spec.kind === 'network-trace') panel = renderNetworkTrace(spec, specUrl);
       else throw new Error(`unsupported interactive kind ${spec.kind}`);
       host.replaceChildren(panel);
       host.classList.add('is-ready');

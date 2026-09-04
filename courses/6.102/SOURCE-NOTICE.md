@@ -6,4 +6,6 @@ The Spring 2026 MIT site remains authoritative for problem statements, APIs, tes
 
 https://web.mit.edu/6.102/www/sp26/
 
+The public course dashboard now exposes both layers side by side. Every lecture row links to the independently authored CourseStack digest and to the corresponding MIT reading, and every digest repeats that source switch at the top of the page. This restores access to the original reading experience without republishing the restricted mirror.
+
 The former `offline/` directory was a personal study mirror. Its own README prohibited republication, so it was removed from the published CourseStack tree. Git history retains the deletion for repository audit and recovery if the upstream rights situation is clarified.
