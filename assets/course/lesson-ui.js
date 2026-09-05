@@ -23,13 +23,13 @@
       <div class="pb-coursebar-inner">
         <div class="pb-crumb">
           <a class="pb-brand" href="${homeBase}">CourseStack</a>
-          <span aria-hidden="true">/</span>
           <a class="pb-crumb-course" href="${courseBase}" id="pb-course-name">课程 Dashboard</a>
         </div>
         <nav class="pb-coursebar-actions" aria-label="阅读导航">
           <a href="${courseBase}">课程目录</a>
           <button class="pb-comments-toggle" type="button" aria-controls="pb-comments" aria-expanded="false">讨论</button>
           <a href="#pb-page-end">跳到页尾</a>
+          <a class="pb-user" href="https://github.com/PointBreaker" target="_blank" rel="noopener" aria-label="PointBreaker 的 GitHub 主页"><img src="https://github.com/PointBreaker.png?size=64" alt=""></a>
         </nav>
       </div>
     </header>`);
@@ -413,7 +413,7 @@
     fetch(`${courseBase}api/status.json`, { cache: 'no-store' }).then((response) => response.json())
   ]).then(([info, status]) => {
     const courseName = document.querySelector('#pb-course-name');
-    courseName.textContent = info.code || info.courseCode || courseId;
+    courseName.textContent = `${info.code || info.courseCode || courseId}${info.title ? ` · ${info.title}` : ''}`;
     document.documentElement.style.setProperty('--pb-accent', info.accent || '#166534');
 
     const lectures = (status.lectures || []).map((item) => ({ ...item, type: 'lecture', file: item.lessonFile }));

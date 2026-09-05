@@ -9,8 +9,8 @@
       <a class="skip-link" href="#learning-path">跳到学习路径</a>
       <header class="course-bar">
         <div class="course-bar-inner">
-          <div class="dashboard-crumb"><a class="wordmark" href="${siteBase}">CourseStack</a><span>/</span><strong id="course-bar-code">Course</strong></div>
-          <nav class="course-bar-links" aria-label="课程导航"><a href="#learning-path">课程目录</a><a id="course-resources" href="#" hidden>完整资源</a><a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a><a href="${siteBase}docs/course-generator.html">贡献课程</a></nav>
+          <div class="dashboard-crumb"><a class="wordmark" href="${siteBase}">CourseStack</a><span class="dashboard-course-context"><strong id="course-bar-code">Course</strong><i id="course-bar-title"></i></span></div>
+          <nav class="course-bar-links" aria-label="课程导航"><a href="#learning-path">课程目录</a><a id="course-resources" href="#" hidden>完整资源</a><a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a><a href="${siteBase}docs/course-generator.html">贡献课程</a><a class="course-user" href="https://github.com/PointBreaker" target="_blank" rel="noopener" aria-label="PointBreaker 的 GitHub 主页"><img src="https://github.com/PointBreaker.png?size=64" alt=""></a></nav>
         </div>
       </header>
       <main class="dashboard-studio">
@@ -115,6 +115,7 @@
     document.title = `${info.code} · ${info.title} — CourseStack 课栈`;
     setText('#course-code', `${info.code} · ${info.domain}`);
     setText('#course-bar-code', info.code);
+    setText('#course-bar-title', info.title);
     setText('#rail-course-code', info.code);
     setText('#inspector-course-code', info.code);
     setText('#course-title', info.title);

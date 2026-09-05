@@ -2,6 +2,8 @@
 
 日期：2026-09-04
 
+2026-09-05 复核：顶栏与总课程库继续向选定方案收敛；CS336 去除重复的课程内 TOC，CS168 将 trace inspector 固定到最右侧并补全 State / Table / Event 三种真实视图。
+
 ## 目标
 
 本轮以已选定的“方案 2 · Technical Studio”为唯一视觉基准，把课程页面从居中的通用文档页升级为持续可用的学习工作台：
@@ -56,6 +58,14 @@ Course map
 - Software Construction：contract、representation、invariant、failure or evidence。
 - Mathematics / Theory：definition、intuition、derivation、proof or counterexample。
 - `State / Table / Event` 标签真实切换，不是装饰控件；同时提供本页证据计数、目录和 source / next action。
+- CS168 的三个标签直接读取当前 trace frame：State 展示 before/after，Table 展示该轮路由表，Event 展示输入事件与时间线。
+- CS336 不再同时显示课程自带 `ON THIS PAGE` 与共用 Table；正文主列扩展到约 930 px。
+
+### 顶栏与总课程库
+
+- 顶栏按方案 2 统一为 `CourseStack | 课程编号 · 课程全名 | 页面动作 | 用户入口`。
+- CourseStack 总主页从旧的深色营销式首页调整为同一套 Technical Studio：左侧领域筛选、中央课程工作区、右侧 collection / authoring contract。
+- 总主页筛选在桌面固定于左栏，在移动端变成横向可滚动筛选条。
 
 ## 内容层处理
 
@@ -79,4 +89,3 @@ Course map
 - 更新 6.102 内容 lint，使其验证新的原文/精读来源边界和真实官方 slug。
 - 更新 CS168 内容 lint，使其识别新的 `network-trace` 数据契约，并验证 `before / event / after`、table 和 timeline 证据。
 - 本地全站结果：`COURSE_CI_OK checks=14`。
-

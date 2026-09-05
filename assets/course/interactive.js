@@ -505,6 +505,7 @@
     };
 
     let current = 0;
+    let inspectorMode = 'state';
     const draw = () => {
       const frame = spec.frames[current];
       main.replaceChildren();
@@ -538,31 +539,51 @@
       inspectorHead.append(element('strong', '', frame.focus || 'Current state'));
       if (frame.focusStatus) inspectorHead.append(element('span', '', frame.focusStatus));
       inspector.append(inspectorHead);
+
+      const inspectorTabs = element('div', 'cs-network-inspector-tabs');
+      inspectorTabs.setAttribute('role', 'tablist');
+      const panels = {};
+      ['state', 'table', 'event'].forEach((mode) => {
+        const button = element('button', '', mode[0].toUpperCase() + mode.slice(1));
+        button.type = 'button';
+        button.setAttribute('role', 'tab');
+        button.setAttribute('aria-selected', String(inspectorMode === mode));
+        button.addEventListener('click', () => { inspectorMode = mode; draw(); });
+        inspectorTabs.append(button);
+        panels[mode] = element('section', `cs-network-inspector-panel${inspectorMode === mode ? ' is-active' : ''}`);
+      });
+      inspector.append(inspectorTabs);
       if (frame.before) {
-        inspector.append(element('p', 'cs-network-section-label', 'State before'));
-        inspector.append(tableFor(frame.before, 'is-inspector'));
+        panels.state.append(element('p', 'cs-network-section-label', 'State before'));
+        panels.state.append(tableFor(frame.before, 'is-inspector'));
       }
       if (frame.event) {
-        inspector.append(element('p', 'cs-network-section-label', 'Event'));
+        panels.event.append(element('p', 'cs-network-section-label', 'Event'));
         const event = element('div', 'cs-network-event');
         event.append(element('strong', '', frame.event.title || 'Input'));
         if (frame.event.body) event.append(element('p', '', frame.event.body));
-        inspector.append(event);
+        panels.event.append(event);
       }
       if (frame.after) {
-        inspector.append(element('p', 'cs-network-section-label', 'State after'));
-        inspector.append(tableFor(frame.after, 'is-inspector'));
+        panels.state.append(element('p', 'cs-network-section-label', 'State after'));
+        panels.state.append(tableFor(frame.after, 'is-inspector'));
+      }
+      if (Array.isArray(frame.tables) && frame.tables.length) {
+        frame.tables.forEach((tableSpec) => panels.table.append(tableFor(tableSpec, 'is-inspector')));
+      } else {
+        panels.table.append(element('p', 'cs-network-inspector-empty', '当前步骤没有额外表格。'));
       }
       if (Array.isArray(frame.timeline) && frame.timeline.length) {
-        inspector.append(element('p', 'cs-network-section-label', 'Event timeline'));
+        panels.event.append(element('p', 'cs-network-section-label', 'Event timeline'));
         const timeline = element('ol', 'cs-network-timeline');
         frame.timeline.forEach((item, index) => {
           const entry = element('li', index < (frame.timelineActive || frame.timeline.length) ? 'is-complete' : '');
           entry.append(element('span', '', String(index + 1)), document.createTextNode(item));
           timeline.append(entry);
         });
-        inspector.append(timeline);
+        panels.event.append(timeline);
       }
+      inspector.append(panels.state, panels.table, panels.event);
     };
     previous.addEventListener('click', () => { current = Math.max(0, current - 1); draw(); });
     next.addEventListener('click', () => { current = Math.min(spec.frames.length - 1, current + 1); draw(); });
