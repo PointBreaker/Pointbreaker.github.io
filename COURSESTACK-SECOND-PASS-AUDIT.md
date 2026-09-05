@@ -66,6 +66,7 @@
 | 空 prerequisite / legacy source 不打断阅读流 | 已修复 | [6.5840](.course-build/second-pass-audit/47-65840-final.png)；正文保留紧凑的“来源与版本说明” |
 | Project 2 归属审计表在正文列内完整换行 | 已修复 | [Project 2](.course-build/second-pass-audit/53-project-final-refined.png)；attribution table 使用固定列比例与 `overflow-wrap:anywhere` |
 | 移动端正文、讨论、项目无 viewport 溢出 | 已验证 | [CS336 移动端](.course-build/second-pass-audit/52-cs336-mobile-final.png)；500px runtime 检查通过 |
+| live branch 的公开页面实际加载新资源 | 已验证 | [公开 CS168 课程主页](.course-build/second-pass-audit/57-public-cs168-final.png)；HTML 与共享 CSS/JS 均返回 200，部署 workflow `33975857054` 成功 |
 
 ### 二次复盘结论
 
