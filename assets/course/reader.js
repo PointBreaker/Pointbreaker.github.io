@@ -4,6 +4,7 @@
   const page = document.querySelector('.page');
   if (!page) return;
   document.body.classList.add('reader');
+  const courseId = location.pathname.match(/\/courses\/([^/]+)\//)?.[1] || '';
   const translations = new Map(Object.entries({
     'Work It Out':'动手推一推','Why This Works':'为什么成立','Variation':'变式','Prediction':'想一想',
     'Closed-book reconstruction':'闭卷重建','Code Prediction':'代码预测','Then / Now':'当时与现在',
@@ -12,7 +13,19 @@
     'Framework Context':'框架提供的逻辑','YOUR CODE · Historical Implementation':'你的代码 · 历史实现',
     'YOUR CODE · Historical Modification':'你的修改 · 历史实现','Why the official problem exists：':'这组题检查什么：',
     'Common Wrong Turn：':'易错点：','Wrong assumption：':'错误假设：','Root cause：':'根本原因：',
-    'Fixed invariant：':'修复后的不变量：','Then：':'当时：','Now：':'现在：'
+    'Fixed invariant：':'修复后的不变量：','Then：':'当时：','Now：':'现在：',
+    'MENTAL MODEL':'心智模型','30-SECOND RECALL':'30 秒回顾','COURSE MAP · REPRESENTATION FLOW':'课程地图 · 表示流',
+    'Learn → Inspect → Explain':'学习 → 检查 → 解释','Depth Lab':'深度练习','Transfer Question':'迁移问题',
+    'Connection':'连接','Source of truth':'一手资料','SOURCE OF TRUTH':'一手资料','Practice':'实践','Readings':'阅读',
+    'ENGINEERING WORKBOOK':'工程工作簿','SOURCE / VERSION':'来源 / 版本','Official version':'官方版本',
+    'Mission':'任务','Final Project':'期末项目','PROJECT':'项目','Official Sources':'官方来源',
+    'Question & Hypothesis':'问题与假设','Correct Baseline':'正确基线','Controlled Experiments':'受控实验','Poster & Report':'海报与报告',
+    'Before We Start':'开始前','Deep Quiz':'深度测验','FIELD TRACE':'现场推演','FIELD MEMO':'现场笔记','FIELD INDEX':'本页目录',
+    'ACTIVE ORIENTATION':'主动定向','CLOSED-BOOK RECALL':'闭卷回顾','DEEP READING':'深度阅读','DERIVATION':'推导','BUILD':'构建',
+    'CALIBRATION':'校准','EVIDENCE':'证据','PROBLEM':'问题','IMPLEMENTATION':'实现','PAPER READING':'论文阅读',
+    'READING TARGET':'阅读目标','COVERAGE / READ THIS FIRST':'覆盖 / 先读这里','COVERAGE MATRIX':'覆盖矩阵',
+    'SOURCE VAULT / NO ABRIDGEMENT':'资料库 / 完整收录','ON THIS PAGE':'本页目录',
+    'Project':'项目','Lecture':'讲义','Discussion':'讨论','Assignment':'作业','Homework':'作业','Quiz':'测验','Review':'复盘','Lab':'实验'
   }));
   const translate = text => {
     let value = text;
@@ -21,7 +34,7 @@
   };
   const headingTerms={'Explain It Yourself':'自己讲一遍','Table Trace':'表格推演','Failure trace':'失败推演','Implementation state':'实现状态','convergence trace':'收敛推演','Lifecycle / invariant':'生命周期与不变量','从代码回到 Lesson':'从代码回到讲义','Current State':'当前状态'};
   for(const [a,b] of Object.entries(headingTerms)) translations.set(a,b);
-  page.querySelectorAll('h2,h3,summary,dt,strong,.code-label,.eyebrow').forEach(node => {
+  page.querySelectorAll('h2,h3,summary,dt,strong,small,.section-label,.field-callout span,.source-ribbon span,.code-label,.recall-kicker,.code-kicker,.provenance-kicker,.eecs-map-kicker,.eyebrow,.guide-eyebrow,.assignment-primary-nav a,.stage-label,.problem-kicker').forEach(node => {
     const walker = document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
     const texts=[]; while(walker.nextNode()) texts.push(walker.currentNode);
     texts.forEach(text => { if (!text.parentElement.closest('code,pre')) text.textContent=translate(text.textContent); });
@@ -40,7 +53,30 @@
     work.append(label,field);
   });
   const eyebrow=page.querySelector(':scope > .eyebrow');
-  if(eyebrow){const number=eyebrow.textContent.match(/(?:LECTURE|DISCUSSION|PROJECT)\s*([\dAB.]+)/i)?.[1]||'';const type=location.pathname.includes('discussion')?'讨论':location.pathname.includes('project')?'项目复盘':'第';eyebrow.textContent=`CS 168 · ${type} ${number}${type==='第'?' 讲':''}`;}
+  // CS168's packet-centric course uses a compact normalized label. Other
+  // courses keep their authored eyebrow (often containing a date, instructor,
+  // or source term) instead of being mislabeled as CS168.
+  if(eyebrow && courseId === 'cs168'){
+    const number=eyebrow.textContent.match(/(?:LECTURE|DISCUSSION|PROJECT)\s*([\dAB.]+)/i)?.[1]||'';
+    const type=location.pathname.includes('discussion')?'讨论':location.pathname.includes('project')?'项目复盘':'第';
+    eyebrow.textContent=`CS 168 · ${type} ${number}${type==='第'?' 讲':''}`;
+  }
+  // A few historical pages expose their title only inside a course-specific
+  // hero (or resolve that hero asynchronously). Re-home that identity into
+  // the textbook article so the reader profile never leaves a dark banner or
+  // a duplicate navigation shell behind.
+  const directTitle=page.querySelector(':scope > h1');
+  const existingIntro=page.querySelector(':scope > .pb-studio-intro,:scope > .pb-reader-intro');
+  const sourceTitle=directTitle||page.querySelector('.guide-banner h1')||document.querySelector('.lesson-hero h1,.review-hero h1,h1');
+  if(!directTitle&&!existingIntro&&sourceTitle){
+    const sourceEyebrow=page.querySelector('.guide-banner .guide-eyebrow')||document.querySelector('.lesson-hero .eyebrow,.review-hero > * > p:first-child');
+    const sourceLede=page.querySelector('.guide-banner .guide-lede')||document.querySelector('.lesson-hero .hero-lede,.review-hero .review-lede');
+    const intro=document.createElement('header');intro.className='pb-reader-intro';
+    if(sourceEyebrow){const node=document.createElement('p');node.className='eyebrow';node.textContent=translate(sourceEyebrow.textContent.trim());intro.append(node);}
+    const title=document.createElement('h1');title.textContent=sourceTitle.textContent.trim();intro.append(title);
+    if(sourceLede){const node=document.createElement('p');node.className='lede';node.textContent=sourceLede.textContent.trim();intro.append(node);}
+    page.prepend(intro);document.body.classList.add('pb-rebuilt-intro');
+  }
   const sources=[...page.querySelectorAll(':scope > .source-note,:scope > .warning-note, .discussion-contract > .evidence-note')];
   sources.forEach(source=>{if(!/版本|source|来源|worksheet/i.test(source.textContent))return;const disclosure=document.createElement('details');disclosure.className='source-note';const label=document.createElement('summary');label.textContent='来源与版本说明';source.before(disclosure);disclosure.append(label);while(source.firstChild)disclosure.append(source.firstChild);source.remove();});
   page.querySelector(':scope > nav:not([class])')?.setAttribute('hidden','');
@@ -54,10 +90,24 @@
   details.append(nav);aside.append(details);
   const model=page.querySelector('.mental-model,.invariant');
   if(model){const note=document.createElement('p');note.className='reader-note';note.textContent='推演时先确认：谁收到了什么事件，查什么表，更新什么状态，向谁发送什么。';aside.append(note);}
-  const intro=page.querySelector(':scope > .lede')||page.querySelector('h1');intro?.after(aside);
+  // Some course-specific enhancement scripts resolve course metadata after
+  // this reader script runs. When that happens there may not be a heading yet;
+  // keep the aside attached to the article so it is not lost inside a detached
+  // placeholder. A deferred pass also lets late-added headings appear in the
+  // lightweight table of contents.
+  const placeAside=()=>{
+    const intro=page.querySelector(':scope > .lede')||page.querySelector(':scope > h1')||page.querySelector(':scope > .pb-studio-intro')||page.querySelector(':scope > .pb-reader-intro');
+    if(!aside.isConnected) intro?.after(aside);
+    if(!aside.isConnected) page.prepend(aside);
+    const current=[...page.querySelectorAll('h2')];
+    current.forEach((heading,index)=>{if(!heading.id)heading.id=`reader-section-${index+1}`;});
+    nav.replaceChildren(...current.map((heading)=>{const link=document.createElement('a');link.href=`#${heading.id}`;link.textContent=heading.textContent;return link;}));
+  };
+  placeAside();
+  setTimeout(placeAside,0);
+  addEventListener('DOMContentLoaded',placeAside,{once:true});
   // Record visits, never infer learner completion from authoring status.json.
   const key='coursestack.learning.v1';
-  const courseId=location.pathname.match(/\/courses\/([^/]+)\//)?.[1];
   const read=()=>{try{return JSON.parse(localStorage.getItem(key)||'{}')||{};}catch{return {};}};
   const save=value=>{try{localStorage.setItem(key,JSON.stringify(value));return true;}catch{return false;}};
   const state=read(); const course=state[courseId]||{completed:[]};

@@ -1,4 +1,5 @@
 (function () {
+  document.body.classList.add('reader-dashboard');
   const scriptUrl = new URL(document.currentScript.src, location.href);
   const assetsMarker = '/assets/course/dashboard.js';
   const markerIndex = scriptUrl.pathname.lastIndexOf(assetsMarker);
@@ -10,7 +11,7 @@
       <header class="course-bar">
         <div class="course-bar-inner">
           <div class="dashboard-crumb"><a class="wordmark" href="${siteBase}">CourseStack</a><span class="dashboard-course-context"><strong id="course-bar-code">Course</strong><i id="course-bar-title"></i></span></div>
-          <nav class="course-bar-links" aria-label="课程导航"><a href="#learning-path">课程目录</a><a id="course-resources" href="#" hidden>完整资源</a><a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a><a href="${siteBase}docs/course-generator.html">贡献课程</a><a class="course-user" href="https://github.com/PointBreaker" target="_blank" rel="noopener" aria-label="PointBreaker 的 GitHub 主页"><img src="https://github.com/PointBreaker.png?size=64" alt=""></a></nav>
+          <nav class="course-bar-links" aria-label="课程导航"><a href="#learning-path">课程目录</a><a id="course-resources" href="#" hidden>完整资料</a><a id="course-source" href="#" target="_blank" rel="noopener">官方课程主页</a><a href="${siteBase}docs/course-generator.html">贡献课程</a><a class="course-user" href="https://github.com/PointBreaker" target="_blank" rel="noopener" aria-label="PointBreaker 的 GitHub 主页"><img src="https://github.com/PointBreaker.png?size=64" alt=""></a></nav>
         </div>
       </header>
       <main class="dashboard-studio">
@@ -28,11 +29,12 @@
                 <h1 id="course-title">Course</h1>
                 <p class="course-title-zh" id="course-title-zh"></p>
                 <p class="course-summary" id="course-summary"></p>
+                <p class="course-core-question" id="course-core-question"></p>
                 <div class="course-tags" id="course-tags"></div>
               </div>
             </div>
           </section>
-          <nav class="dashboard-mode-tabs" aria-label="课程视图"><a class="is-active" href="#learning-path">内容</a><a href="#learning-path" data-dashboard-view="homework">实践实验</a><a href="#learning-path" data-dashboard-view="exams">考试与复盘</a></nav>
+          <nav class="dashboard-mode-tabs" aria-label="课程视图"><a class="is-active" href="#learning-path">学习</a><a href="#learning-path" data-dashboard-view="homework">思考与实践</a><a href="#learning-path" data-dashboard-view="exams">考试与复盘</a></nav>
           <section class="course-stats" aria-label="课程统计">
             <div class="stats-grid">
               <div class="metric"><strong class="metric-value" id="metric-lectures">—</strong><span class="metric-label">讲义</span></div>
@@ -41,11 +43,13 @@
               <div class="metric"><strong class="metric-value" id="metric-progress">—</strong><span class="metric-label">课程进度</span><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div></div>
             </div>
           </section>
+          <section class="dashboard-resume" id="dashboard-resume" aria-labelledby="resume-title"><div><p class="section-kicker">继续学习</p><h2 id="resume-title">从这里开始</h2><p id="resume-copy">从第一讲开始，建立这门课的坐标系。</p><progress id="resume-progress" value="0" max="1" aria-label="课程完成进度"></progress><small id="resume-status">已完成 0 项</small></div><a class="reader-button" id="resume-action" href="#learning-path">开始学习</a></section>
+          <section class="reader-method-strip" id="learning-methods" aria-labelledby="method-title"><div class="dashboard-heading"><div><p class="section-kicker">学习方法</p><h2 id="method-title">学习、思考、实践。</h2></div><p>每一种入口都解决一个不同的问题：先理解，再推演，最后在代码或实验中验证。</p></div><div class="reader-methods"><article><h3>学习</h3><p>通过讲义建立概念、机制和不变量。</p><a href="#learning-path" data-dashboard-view="lectures">查看讲义</a></article><article><h3>思考</h3><p>通过讨论题手推状态、表格与失败情形。</p><a href="#learning-path" data-dashboard-view="homework">查看讨论</a></article><article><h3>实践</h3><p>通过作业、实验或项目把理解落到证据。</p><a href="#learning-path" data-dashboard-view="homework">查看实践</a></article></div></section>
           <section class="dashboard" id="learning-path" aria-labelledby="path-title">
-            <div class="dashboard-heading"><div><p class="section-kicker">Learning path</p><h2 id="path-title">从讲义走向实践。</h2></div><p id="path-description">先建立概念，再用实践检验理解。每节讲义只在所属阶段出现一次。</p></div>
+            <div class="dashboard-heading"><div><p class="section-kicker">课程地图</p><h2 id="path-title">从讲义走向实践。</h2></div><p id="path-description">先建立概念，再用实践检验理解。每节讲义只在所属阶段出现一次。</p></div>
             <div class="dashboard-tools">
               <label class="dashboard-search"><span class="visually-hidden">搜索课程内容</span><input id="dashboard-search" type="search" placeholder="搜索讲义、作业、考试或概念" autocomplete="off"></label>
-              <div class="view-filters" id="view-filters" aria-label="内容类型"><button class="view-filter" type="button" data-view="all" aria-pressed="true">全部</button><button class="view-filter" type="button" data-view="lectures" aria-pressed="false">讲义</button><button class="view-filter" type="button" data-view="homework" aria-pressed="false">实践</button><button class="view-filter" type="button" data-view="exams" aria-pressed="false">Exam</button></div>
+              <div class="view-filters" id="view-filters" aria-label="内容类型"><button class="view-filter" type="button" data-view="all" aria-pressed="true">全部</button><button class="view-filter" type="button" data-view="lectures" aria-pressed="false">讲义</button><button class="view-filter" type="button" data-view="homework" aria-pressed="false">实践</button><button class="view-filter" type="button" data-view="exams" aria-pressed="false">考试</button></div>
             </div>
             <p class="result-status" id="result-status" aria-live="polite">正在载入课程…</p>
             <div class="path-list" id="path-list"></div>
@@ -54,10 +58,10 @@
         </div>
         <aside class="dashboard-inspector" aria-label="课程状态">
           <header><div><p>COURSE STATUS</p><h2 id="inspector-course-code">Course</h2></div><span class="dashboard-live">READY</span></header>
-          <div class="dashboard-inspector-tabs"><button type="button" aria-pressed="true" data-inspector-tab="state">State</button><button type="button" aria-pressed="false" data-inspector-tab="path">Path</button><button type="button" aria-pressed="false" data-inspector-tab="source">Source</button></div>
-          <section class="dashboard-inspector-panel is-active" data-inspector-panel="state"><p class="inspector-label">COURSE PROFILE</p><dl class="course-facts"><div><dt>学校</dt><dd id="course-university">—</dd></div><div><dt>学期</dt><dd id="course-term">—</dd></div><div><dt>教师</dt><dd id="course-instructors">—</dd></div><div><dt>语言</dt><dd id="course-language">中文讲义</dd></div></dl><p class="inspector-label">LEARNING CONTRACT</p><div class="dashboard-contract"><p>概念教材</p><p>推演与状态</p><p>实践证据</p><p>闭卷重建</p></div></section>
-          <section class="dashboard-inspector-panel" data-inspector-panel="path"><p class="inspector-label">COURSE PATH</p><nav class="dashboard-inspector-path" id="dashboard-inspector-path"></nav></section>
-          <section class="dashboard-inspector-panel" data-inspector-panel="source"><p class="inspector-label">SOURCE OF TRUTH</p><p class="dashboard-source-copy" id="dashboard-source-copy">课程内容以一手资料为依据，CourseStack 负责教学化重构。</p><a class="dashboard-source-action" id="dashboard-source-action" href="#" target="_blank" rel="noopener">核对官方课程</a></section>
+          <div class="dashboard-inspector-tabs"><button type="button" aria-pressed="true" data-inspector-tab="state">状态</button><button type="button" aria-pressed="false" data-inspector-tab="path">路径</button><button type="button" aria-pressed="false" data-inspector-tab="source">来源</button></div>
+          <section class="dashboard-inspector-panel is-active" data-inspector-panel="state"><p class="inspector-label">课程画像</p><dl class="course-facts"><div><dt>学校</dt><dd id="course-university">—</dd></div><div><dt>学期</dt><dd id="course-term">—</dd></div><div><dt>教师</dt><dd id="course-instructors">—</dd></div><div><dt>语言</dt><dd id="course-language">中文讲义</dd></div></dl><p class="inspector-label">学习约定</p><div class="dashboard-contract"><p>概念教材</p><p>推演与状态</p><p>实践证据</p><p>闭卷重建</p></div></section>
+          <section class="dashboard-inspector-panel" data-inspector-panel="path"><p class="inspector-label">课程路径</p><nav class="dashboard-inspector-path" id="dashboard-inspector-path"></nav></section>
+          <section class="dashboard-inspector-panel" data-inspector-panel="source"><p class="inspector-label">一手资料</p><p class="dashboard-source-copy" id="dashboard-source-copy">课程内容以一手资料为依据，CourseStack 负责教学化重构。</p><a class="dashboard-source-action" id="dashboard-source-action" href="#" target="_blank" rel="noopener">核对官方课程</a></section>
         </aside>
       </main>`;
   }
@@ -93,6 +97,18 @@
   const itemLabel = (item) => [item.kind, item.type, item.title, item.titleZh].filter(Boolean).join(' ');
   const isExam = (item) => EXAM_PATTERN.test(itemLabel(item));
   const isFinalExam = (item) => FINAL_PATTERN.test(itemLabel(item));
+  const localize = (value) => String(value || '')
+    .replace(/Discussion/gi, '讨论')
+    .replace(/Homework/gi, '作业')
+    .replace(/Assignment/gi, '作业')
+    .replace(/Project/gi, '项目')
+    .replace(/Review Lab/gi, '复盘实验')
+    .replace(/Review/gi, '复盘')
+    .replace(/Workbooks?/gi, '工作簿')
+    .replace(/Labs?/gi, '实验')
+    .replace(/Proof & Probability/gi, '证明与概率')
+    .replace(/Exam/gi, '考试')
+    .replace(/Quiz/gi, '测验');
 
   function normalizePath(value, workItem = false) {
     const path = String(value || '').replace(/^\.\//, '');
@@ -110,17 +126,27 @@
     return info.assignments?.length ? info.assignments : (status.assignments || []);
   }
 
+  function learningRecord() {
+    try { return JSON.parse(localStorage.getItem('coursestack.learning.v1') || '{}') || {}; } catch (_) { return {}; }
+  }
+
+  function itemPath(item) {
+    const file = item?.lessonFile || item?.assGuideFile || item?.contentFile || '';
+    return file ? new URL(normalizePath(file, item?.assGuideFile || item?.contentFile), location.href).pathname : '';
+  }
+
   function hydrateHeader() {
     root.style.setProperty('--course-accent', info.accent || '#63e68c');
-    document.title = `${info.code} · ${info.title} — CourseStack 课栈`;
+    document.title = `${info.code} · ${document.body.classList.contains('reader-dashboard') ? (info.titleZh || info.title) : info.title} — CourseStack 课栈`;
     setText('#course-code', `${info.code} · ${info.domain}`);
     setText('#course-bar-code', info.code);
-    setText('#course-bar-title', info.title);
+    setText('#course-bar-title', document.body.classList.contains('reader-dashboard') ? (info.titleZh || info.title) : info.title);
     setText('#rail-course-code', info.code);
     setText('#inspector-course-code', info.code);
-    setText('#course-title', info.title);
-    setText('#course-title-zh', info.titleZh || '');
+    setText('#course-title', document.body.classList.contains('reader-dashboard') ? `${info.code}：${info.titleZh || info.title}` : info.title);
+    setText('#course-title-zh', document.body.classList.contains('reader-dashboard') ? info.title : (info.titleZh || ''));
     setText('#course-summary', info.summary || '');
+    setText('#course-core-question', info.coreQuestion || '先问清楚：这门课试图解释什么现象，又需要你最终能够推导或实现什么？');
     setText('#course-university', info.university || '');
     setText('#course-term', info.term || '');
     setText('#course-instructors', (info.instructors || []).join(' · '));
@@ -151,9 +177,11 @@
     const assignments = getAssignments();
     const homework = assignments.filter((item) => !isExam(item));
     const exams = assignments.filter(isExam);
-    const completed = lectures.filter((lecture) => lecture.status === 'completed').length;
+    const record = learningRecord();
+    const completedPaths = new Set(record[info.id]?.completed || []);
+    const completed = lectures.filter((lecture) => completedPaths.has(itemPath(lecture))).length;
     const percent = lectures.length ? Math.round(completed / lectures.length * 100) : 0;
-    const homeworkLabel = hasExams ? 'HW' : (info.workItemLabel || status.workItemLabel || '实践');
+    const homeworkLabel = hasExams ? '作业' : localize(info.workItemLabel || status.workItemLabel || '实践');
 
     setText('#metric-lectures', lectures.length);
     setText('#metric-work', hasExams ? `${homework.length} / ${exams.length}` : assignments.length);
@@ -162,16 +190,31 @@
     setText('#rail-progress', `${completed} / ${lectures.length}`);
     document.querySelector('#progress-fill').style.width = `${percent}%`;
     document.querySelector('#rail-progress-fill').style.width = `${percent}%`;
-    setText('#work-label', hasExams ? 'HW / Exam' : homeworkLabel);
+    setText('#work-label', hasExams ? '作业 / 考试' : homeworkLabel);
     setText('#path-title', hasExams ? '讲义、作业与考试，按阶段衔接。' : '从讲义走向实践。');
     setText('#path-description', hasExams
-      ? '从左到右阅读：先掌握本阶段讲义，再完成 HW，最后用 Exam 检验整组知识。累计考试不会重复铺开之前的讲义。'
+      ? '从左到右阅读：先掌握本阶段讲义，再完成作业，最后用考试检验整组知识。累计考试不会重复铺开之前的讲义。'
       : '先建立概念，再用实践检验理解。每节讲义只在所属阶段出现一次。');
 
     const homeworkFilter = filters.querySelector('[data-view="homework"]');
     const examFilter = filters.querySelector('[data-view="exams"]');
     if (homeworkFilter) homeworkFilter.textContent = homeworkLabel;
     if (examFilter) examFilter.hidden = !hasExams;
+    const resume = document.querySelector('#dashboard-resume');
+    const last = record[info.id]?.last;
+    const validLast = last && [...lectures, ...getAssignments()].some((item) => itemPath(item) === last.path);
+    const first = lectures[0];
+    if (resume) {
+      const target = validLast ? last : first;
+      const targetPath = target ? (validLast ? target.path : itemPath(target)) : '#learning-path';
+      setText('#resume-title', validLast ? '继续学习' : '从这里开始');
+      setText('#resume-copy', validLast ? (last.title || '回到上次阅读的位置') : (first?.titleZh || first?.title || '从第一讲开始，建立这门课的坐标系。'));
+      setText('#resume-status', `已完成 ${completed} / ${lectures.length} 讲 · 记录保存在当前浏览器`);
+      const progress = document.querySelector('#resume-progress');
+      if (progress) { progress.max = Math.max(1, lectures.length); progress.value = completed; }
+      const action = document.querySelector('#resume-action');
+      if (action) { action.href = targetPath; action.textContent = validLast ? '继续学习' : '开始学习'; }
+    }
   }
 
   function buildStages() {
@@ -245,16 +288,19 @@
     const state = lecture.status || 'upcoming';
     const stateLabel = state === 'completed' ? '已完成' : state === 'current' ? '进行中' : '待学习';
     const searchText = [lecture.number, lecture.title, detail].join(' ').toLowerCase();
+    const title = lecture.titleZh || lecture.title;
+    const secondary = lecture.titleZh && lecture.title && lecture.titleZh !== lecture.title
+      ? `<small>${escapeHtml(lecture.title)}</small>` : '';
     return `<a class="lesson-link" data-card data-type="lectures" data-search="${escapeHtml(searchText)}" href="${escapeHtml(normalizePath(lecture.lessonFile))}">
       <span class="lesson-number">L${escapeHtml(lecture.number)}</span>
-      <span class="lesson-title">${escapeHtml(lecture.title)}</span>
+      <span class="lesson-title">${escapeHtml(title)}${secondary}</span>
       <span class="lesson-detail">${escapeHtml(detail)}</span>
       <span class="lesson-status ${escapeHtml(state)}">${stateLabel}</span>
     </a>`;
   }
 
   function workMarkup(item, type) {
-    const kind = item.kind || item.type || (type === 'exams' ? 'Exam' : info.workItemLabel || status.workItemLabel || 'Assignment');
+    const kind = localize(item.kind || item.type || (type === 'exams' ? '考试' : info.workItemLabel || status.workItemLabel || '作业'));
     const file = item.assGuideFile || item.contentFile;
     const href = file ? normalizePath(file, true) : '';
     const tag = href ? 'a' : 'article';
@@ -264,10 +310,10 @@
     const searchText = [kind, item.number, visibleNumber, item.title, item.titleZh, item.description].join(' ').toLowerCase();
     const usesSourceFacingNumber = item.displayNumber != null || item.resourceNumber != null || hasMultipleWorkKinds;
     const sequenceLabel = type === 'exams'
-      ? `Exam ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
+      ? `考试 ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
       : hasExams && !usesSourceFacingNumber
-        ? `HW ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
-        : `${kind} ${visibleNumber}`;
+        ? `作业 ${String(item.courseStackDisplayNumber).padStart(2, '0')}`
+      : `${kind} ${visibleNumber}`;
     return `<${tag} class="flow-card ${type === 'exams' ? 'exam-card' : 'homework-card'}" data-card data-type="${type}" data-search="${escapeHtml(searchText)}"${linkAttribute}>
       <p class="card-kicker">${escapeHtml(sequenceLabel)}</p>
       <h4>${escapeHtml(item.titleZh || item.title)}</h4>
@@ -290,7 +336,7 @@
         String(b.displayNumber ?? b.resourceNumber ?? b.number), undefined, { numeric: true }
       );
     }).forEach((item) => {
-      const kind = item.kind || item.type || 'Assignment';
+      const kind = localize(item.kind || item.type || 'Assignment');
       if (!groups.has(kind)) groups.set(kind, []);
       groups.get(kind).push(item);
     });
@@ -328,14 +374,14 @@
     getAssignments().forEach((item) => {
       item.courseStackDisplayNumber = isExam(item) ? ++examNumber : ++homeworkNumber;
     });
-    const homeworkTitle = hasExams ? 'HW' : (info.workItemLabel || status.workItemLabel || '实践');
+    const homeworkTitle = hasExams ? '作业' : localize(info.workItemLabel || status.workItemLabel || '实践');
     pathList.innerHTML = stages.map((stage, index) => {
       const lectureCards = stage.lectures.map(lessonMarkup);
       const homeworkCards = workGroupMarkup(stage.homework, 'homework');
       const examCards = stage.exams.map((item) => workMarkup(item, 'exams'));
       return `<section class="flow-stage${hasExams ? '' : ' two-lane'}" data-stage>
         <header class="stage-heading">
-          <p>Stage ${String(index + 1).padStart(2, '0')}</p>
+          <p>阶段 ${String(index + 1).padStart(2, '0')}</p>
           <h3>${escapeHtml(rangeLabel(stage))}</h3>
           <span>${stage.lectures.length} 节讲义</span>
         </header>
@@ -343,7 +389,7 @@
           ${laneMarkup('lectures', '讲义', lectureCards, '本阶段暂无讲义')}
           <div class="flow-arrow" data-arrow data-from="lectures" data-to="homework" aria-hidden="true"><span>→</span></div>
           ${laneMarkup('homework', homeworkTitle, homeworkCards, `本阶段暂无 ${homeworkTitle}`, stage.homework.length)}
-          ${hasExams ? `<div class="flow-arrow" data-arrow data-from="homework" data-to="exams" aria-hidden="true"><span>→</span></div>${laneMarkup('exams', 'Exam', examCards, '本阶段暂无 Exam')}` : ''}
+          ${hasExams ? `<div class="flow-arrow" data-arrow data-from="homework" data-to="exams" aria-hidden="true"><span>→</span></div>${laneMarkup('exams', '考试', examCards, '本阶段暂无考试')}` : ''}
         </div>
       </section>`;
     }).join('') || '<div class="empty-state">课程内容正在整理中。</div>';
@@ -389,8 +435,8 @@
       if (visible) visibleCounts.stages += 1;
     });
 
-    const parts = [`${visibleCounts.lectures} 节讲义`, `${visibleCounts.homework} 个 ${hasExams ? 'HW' : (info.workItemLabel || status.workItemLabel || '实践')}`];
-    if (hasExams) parts.push(`${visibleCounts.exams} 个 Exam`);
+    const parts = [`${visibleCounts.lectures} 节讲义`, `${visibleCounts.homework} 个 ${hasExams ? '作业' : localize(info.workItemLabel || status.workItemLabel || '实践')}`];
+    if (hasExams) parts.push(`${visibleCounts.exams} 个考试`);
     parts.push(`${visibleCounts.stages} 个阶段`);
     resultStatus.textContent = `${query || activeView !== 'all' ? '显示 ' : ''}${parts.join(' · ')}`;
   }

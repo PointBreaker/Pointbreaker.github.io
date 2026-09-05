@@ -1,6 +1,7 @@
 (function () {
   const page = document.querySelector('.page, main.review-shell, article.reading-article');
   if (!page) return;
+  document.body.classList.add('reader');
 
   const scriptUrl = new URL(document.currentScript.src, location.href);
   const assetsMarker = '/assets/course/lesson-ui.js';
@@ -331,7 +332,10 @@
     document.body.classList.add('pb-studio-shell', 'pb-has-studio-inspector');
     document.querySelectorAll('.reading-toc, .workbook-side-nav, .review-stage-nav').forEach((node) => node.setAttribute('aria-hidden', 'true'));
 
-    const directTitle = page.querySelector(':scope > h1');
+    // The shared reader may have already re-homed a title from a legacy hero
+    // while course metadata was still loading. Treat that intro as authoritative
+    // and avoid creating a second heading block when the promise resolves.
+    const directTitle = page.querySelector(':scope > h1, :scope > .pb-reader-intro h1, :scope > .pb-studio-intro h1');
     const sourceTitle = directTitle || page.querySelector('.guide-banner h1') || document.querySelector('.lesson-hero h1, .review-hero h1, h1');
     const sourceEyebrow = page.querySelector(':scope > .eyebrow') || document.querySelector('.lesson-hero .eyebrow, .review-hero > * > p:first-child');
     const sourceLede = page.querySelector(':scope > .lede') || document.querySelector('.lesson-hero .hero-lede, .review-hero .review-lede');

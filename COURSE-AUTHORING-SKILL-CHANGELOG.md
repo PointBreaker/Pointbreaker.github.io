@@ -93,3 +93,9 @@ Gold slice 未通过前不得批量扩写。无法从 source 回答机制对象�
 状态新增 `OUTLINE_ONLY / PARTIAL / DIGESTED / GOLD`。Anti-Outline Gate 会拒绝只含题组索引、generic workflow、hint 与 PDF link 的页面；Coverage Gate 将 `course-info.json` 中冻结的 substantive official IDs 与每个 `data-official-ids` 精确比对。新增 `scripts/audit_discussion_coverage.py` 检查 ID 集合、完整学习循环、quiz 密度和 Gold 结构证据，并再次明确：自动化只证明结构与映射，`FULL / DIGESTED / GOLD` 仍必须经过 source-level human review、reading-flow 与浏览器渲染验证。
 
 CS168 反向验证覆盖 13 份 Spring 2026 worksheet/solution、225 个实质小问。D03 与 D06 先形成 Gold Standard，再扩展到其余 11 份 DIGESTED workbook；这一过程验证了 profile 能按主题选择不同推理原语：DV table evolution、TCP byte timeline、LPM table、cwnd curve、DNS dependency graph、DHCP/ARP/NAT packet fields、Clos traffic assignment、multicast tree state 与 wireless handoff timeline，而不是机械复制相同卡片数量。
+
+## Shared Chinese Reader profile
+
+本轮前端审计发现，课程内容虽然共享了 Lesson shell，课程首页与少数历史自定义页面仍会退回深色 studio、英文导航或重复 inspector。Skill 现在把视觉层也纳入 production procedure：平台主页、所有课程主页与 Lecture / Discussion / Project / Lab / Review / Exam 内容页必须复用 `reader.css`、`reader-dashboard.css`、`reader.js` 与统一语义组件 token。默认结构是“平台主页 → 课程身份与继续学习 → 阶段地图 → 学习/思考/实践 → 正文阅读”，而不是 dashboard 卡片堆。
+
+新增 Reader gates：中文为主的导航与按钮、单一 measured reading column、无重复 TOC/持久 inspector、source 降权、代码 header + copy、心智模型/不变量/易错点/失败/历史/来源统一样式，以及 desktop/mobile 的 overflow、math、focus、reveal、progress 与 graceful fallback 检查。遗留 dark hero 或异步课程脚本必须把标题重挂到 reader intro，不能留下重复标题或导航。所有课程先验证至少一个 Lecture、一个 Discussion、一个 Project/Workbook、课程主页和平台主页，再扩展共享样式；无法迁移的 legacy 页面必须记录原因，不能默认为“页面存在即完成”。

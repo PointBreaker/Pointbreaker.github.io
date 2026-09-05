@@ -169,6 +169,21 @@ After content depth is complete, stop adding topics. Apply [references/reading-f
 
 Aim for equal or lower word count during this pass.
 
+### 8.1 Apply the shared Chinese Reader profile
+
+CourseStack is a long-form Chinese technical textbook, not a dashboard. When a course is created or refreshed, apply the shared reader layer to the platform home, that course home, and every published content family (Lecture, Discussion, Project/Workbook, Lab, Review, and Exam). Reuse the shared `reader.css`, `reader-dashboard.css`, `reader.js`, and semantic component tokens instead of inventing course-local visual systems.
+
+The default information architecture is:
+
+```text
+platform home → course identity / resume → stage map → Lecture / Discussion / Project
+content page → breadcrumb / title / core question → prose / diagram / table / code / trace → contextual notes → next step
+```
+
+Use Chinese as the primary UI language while retaining necessary English technical terms. Keep one measured reading column, a light auxiliary TOC only when the page has no equivalent navigation, and a responsive inline fallback below desktop widths. Normalize shared components for `心智模型 / Why / Invariant / 易错点 / Failure / Historical Note / Source`, code headers and copy, Prediction/Hint/Reveal/Variation, and progress/resume controls. Legacy heroes must be re-homed into the reader intro when needed, so a dark banner or delayed course script cannot create a duplicate title/navigation. Do not add a second TOC, persistent inspector, opening card wall, decorative gradient, or heavy metadata panel merely because a course has extra data.
+
+Before calling the visual layer complete, render at least one Lecture, one Discussion, one Project/Workbook, the platform home, and the course home at desktop and mobile widths. Check that Chinese labels, source disclosures, code/math, links, keyboard focus, copy/reveal interactions, progress state, and horizontal overflow remain usable. A page that loads but still looks like an unrelated legacy dashboard is not complete; migrate its CSS boundary or explicitly record the exception and reason.
+
 ### 9. Run Depth QA and validate observable behavior
 
 First run the evidence-oriented depth audit:
