@@ -4,6 +4,15 @@
   const search = document.querySelector('#course-search');
   const results = document.querySelector('#results-note');
   if (!grid || !filtersRoot || !search || !results) return;
+  document.querySelector('.library-tools')?.append(filtersRoot);
+  document.querySelector('.home-rail')?.remove();
+  document.querySelectorAll('.reader-featured > a').forEach((card,index)=>{const img=document.createElement('img');img.src=`assets/vendor/tabler/${['cpu','network','brain'][index]}.svg`;img.alt='';img.width=34;img.height=34;card.prepend(img);});
+  const resume=document.querySelector('#home-resume');
+  try {
+    const history=JSON.parse(localStorage.getItem('coursestack.learning.v1')||'{}');
+    const recent=Object.values(history).filter(item=>item.last?.path?.startsWith('/courses/')).sort((a,b)=>b.last.at-a.last.at)[0];
+    if(recent&&resume){resume.querySelector('h2').textContent='继续学习';resume.querySelector('p').textContent=recent.last.title;const link=resume.querySelector('a');link.textContent='继续学习';link.href=recent.last.path;}
+  } catch (_) {}
 
   let courses = [];
   let activeDomain = 'all';
@@ -41,7 +50,7 @@
           <span class="course-index">Course ${String(index + 1).padStart(2, '0')}</span>
         </div>
         <p class="course-domain">${escapeHtml(course.domain)}</p>
-        <h3 class="course-title">${escapeHtml(course.title)}<span class="course-title-zh">${escapeHtml(course.titleZh)}</span></h3>
+        <h3 class="course-title">${escapeHtml(course.titleZh||course.title)}<span class="course-title-zh">${escapeHtml(course.title)}</span></h3>
         <p class="course-summary">${escapeHtml(course.summary)}</p>
         <div class="course-meta">
           <span><strong>${escapeHtml(course.lectures)}</strong> 讲义</span>
@@ -70,6 +79,9 @@
     })
     .then((data) => {
       courses = data.courses || [];
+      if(resume?.querySelector('a')?.textContent==='继续学习'){
+        try {const history=JSON.parse(localStorage.getItem('coursestack.learning.v1')||'{}');const id=resume.querySelector('a').getAttribute('href').match(/\/courses\/([^/]+)\//)?.[1];const item=courses.find(c=>c.path.includes(`/${id}/`));if(item){const done=(history[id]?.completed||[]).filter(path=>/\/lessons\/\d/.test(path)).length;const progress=document.createElement('progress');progress.max=item.lectures;progress.value=Math.min(done,item.lectures);progress.setAttribute('aria-label','已完成讲义');const label=document.createElement('small');label.textContent=`已完成 ${done} / ${item.lectures} 讲`;resume.querySelector('div').append(progress,label);}}catch(_){}
+      }
       document.querySelector('#course-count').textContent = String(courses.length).padStart(2, '0');
       document.querySelector('#lecture-count').textContent = courses.reduce((sum, course) => sum + Number(course.lectures || 0), 0);
       document.querySelector('#work-count').textContent = courses.reduce((sum, course) => sum + Number(course.workItems || 0), 0);

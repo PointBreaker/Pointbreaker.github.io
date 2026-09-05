@@ -153,7 +153,7 @@
     panel.setAttribute('aria-label', spec.title);
     const header = element('header', 'cs-interactive-header');
     const copy = element('div');
-    copy.append(element('p', 'cs-interactive-kicker', 'Interactive learning'));
+    copy.append(element('p', 'cs-interactive-kicker', '交互推演'));
     copy.append(element('h3', 'cs-interactive-title', spec.title));
     if (spec.description) copy.append(element('p', 'cs-interactive-description', spec.description));
     header.append(copy, element('span', 'cs-interactive-badge', kindLabel));
@@ -460,11 +460,11 @@
   }
 
   function renderNetworkTrace(spec, specUrl) {
-    const { panel, body } = buildPanel(spec, 'Packet · State · Event');
+    const { panel, body } = buildPanel(spec, '数据包 · 状态 · 事件');
     panel.classList.add('cs-network-trace-panel');
     const workspace = element('div', 'cs-network-workspace');
     const toolbar = element('div', 'cs-network-toolbar');
-    const workspaceLabel = element('strong', '', spec.workspaceLabel || 'Packet · State · Event');
+    const workspaceLabel = element('strong', '', document.body.classList.contains('reader') ? '逐步推演：数据包、状态与事件' : spec.workspaceLabel || '数据包 · 状态 · 事件');
     const controls = element('div', 'cs-network-toolbar-controls');
     const previous = element('button', '', '←');
     previous.type = 'button';
@@ -510,7 +510,7 @@
       const frame = spec.frames[current];
       main.replaceChildren();
       inspector.replaceChildren();
-      frameLabel.textContent = frame.label || `${current + 1} / ${spec.frames.length}`;
+      frameLabel.textContent = (frame.label || `${current + 1} / ${spec.frames.length}`).replace(/Round (\d+)/g,'第 $1 轮');
       previous.disabled = current === 0;
       next.disabled = current === spec.frames.length - 1;
 
@@ -544,7 +544,7 @@
       inspectorTabs.setAttribute('role', 'tablist');
       const panels = {};
       ['state', 'table', 'event'].forEach((mode) => {
-        const button = element('button', '', mode[0].toUpperCase() + mode.slice(1));
+        const button = element('button', '', {state:'状态',table:'表格',event:'事件'}[mode]);
         button.type = 'button';
         button.setAttribute('role', 'tab');
         button.setAttribute('aria-selected', String(inspectorMode === mode));
@@ -554,18 +554,18 @@
       });
       inspector.append(inspectorTabs);
       if (frame.before) {
-        panels.state.append(element('p', 'cs-network-section-label', 'State before'));
+        panels.state.append(element('p', 'cs-network-section-label', '变化前的状态'));
         panels.state.append(tableFor(frame.before, 'is-inspector'));
       }
       if (frame.event) {
-        panels.event.append(element('p', 'cs-network-section-label', 'Event'));
+        panels.event.append(element('p', 'cs-network-section-label', '输入事件'));
         const event = element('div', 'cs-network-event');
         event.append(element('strong', '', frame.event.title || 'Input'));
         if (frame.event.body) event.append(element('p', '', frame.event.body));
         panels.event.append(event);
       }
       if (frame.after) {
-        panels.state.append(element('p', 'cs-network-section-label', 'State after'));
+        panels.state.append(element('p', 'cs-network-section-label', '变化后的状态'));
         panels.state.append(tableFor(frame.after, 'is-inspector'));
       }
       if (Array.isArray(frame.tables) && frame.tables.length) {
@@ -574,7 +574,7 @@
         panels.table.append(element('p', 'cs-network-inspector-empty', '当前步骤没有额外表格。'));
       }
       if (Array.isArray(frame.timeline) && frame.timeline.length) {
-        panels.event.append(element('p', 'cs-network-section-label', 'Event timeline'));
+        panels.event.append(element('p', 'cs-network-section-label', '事件时间线'));
         const timeline = element('ol', 'cs-network-timeline');
         frame.timeline.forEach((item, index) => {
           const entry = element('li', index < (frame.timelineActive || frame.timeline.length) ? 'is-complete' : '');

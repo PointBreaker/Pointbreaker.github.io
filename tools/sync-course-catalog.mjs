@@ -40,7 +40,7 @@ for (const course of catalog.courses) {
 const cards = catalog.courses.map((course, index) => `      <a class="course-card" href="${escapeHtml(course.path)}" style="--course-accent:${escapeHtml(course.accent || '#63e68c')}">
         <div class="course-card-top"><span class="course-code">${escapeHtml(course.code)}</span><span class="course-index">Course ${String(index + 1).padStart(2, '0')}</span></div>
         <p class="course-domain">${escapeHtml(course.domain)}</p>
-        <h3 class="course-title">${escapeHtml(course.title)}<span class="course-title-zh">${escapeHtml(course.titleZh)}</span></h3>
+        <h3 class="course-title">${escapeHtml(course.titleZh || course.title)}<span class="course-title-zh">${escapeHtml(course.title)}</span></h3>
         <p class="course-summary">${escapeHtml(course.summary)}</p>
         <div class="course-meta"><span><strong>${course.lectures}</strong> 讲义</span><span><strong>${course.workItems}</strong> ${escapeHtml(course.workLabel)}</span><span>${escapeHtml(course.university)}</span><span>${escapeHtml(course.term)}</span></div>
         <div class="course-tags">${(course.tags || []).map((tag) => `<span class="course-tag">${escapeHtml(tag)}</span>`).join('')}</div>

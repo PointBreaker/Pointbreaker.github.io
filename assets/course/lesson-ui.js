@@ -122,13 +122,13 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'pb-copy-code';
-    button.textContent = '复制';
+    button.textContent = '复制代码';
     button.addEventListener('click', async () => {
       const code = pre.querySelector('code');
       try {
         await navigator.clipboard.writeText((code || pre).innerText);
         button.textContent = '已复制';
-        setTimeout(() => { button.textContent = '复制'; }, 1400);
+        setTimeout(() => { button.textContent = '复制代码'; }, 1400);
       } catch (_) {
         button.textContent = '复制失败';
       }
@@ -351,7 +351,7 @@
     page.prepend(breadcrumb);
 
     const labTarget = page.querySelector('[data-interactive-src], .interactive-mount, .worked-trace, .execution-trace, .guided-problem');
-    const dedicatedInteractive = labTarget?.matches('[data-interactive-src]') && /(?:distance-vector-convergence|router-pipeline-stepper|tcp-sequence-space)\.json/.test(labTarget.dataset.interactiveSrc || '');
+    const dedicatedInteractive = !document.body.classList.contains('reader') && labTarget?.matches('[data-interactive-src]') && /(?:distance-vector-convergence|router-pipeline-stepper|tcp-sequence-space)\.json/.test(labTarget.dataset.interactiveSrc || '');
     if (dedicatedInteractive) document.body.classList.add('pb-dedicated-interactive');
     const practiceTarget = page.querySelector('.quiz, .deep-checks, .explain-yourself, .closed-book-reconstruction, pre');
     const contentTarget = h2Headings[0] || page;
@@ -413,7 +413,7 @@
     fetch(`${courseBase}api/status.json`, { cache: 'no-store' }).then((response) => response.json())
   ]).then(([info, status]) => {
     const courseName = document.querySelector('#pb-course-name');
-    courseName.textContent = `${info.code || info.courseCode || courseId}${info.title ? ` · ${info.title}` : ''}`;
+    courseName.textContent = `${info.code || info.courseCode || courseId}${info.title ? ` · ${document.body.classList.contains('reader') ? info.titleZh || info.title : info.title}` : ''}`;
     document.documentElement.style.setProperty('--pb-accent', info.accent || '#166534');
 
     const lectures = (status.lectures || []).map((item) => ({ ...item, type: 'lecture', file: item.lessonFile }));
