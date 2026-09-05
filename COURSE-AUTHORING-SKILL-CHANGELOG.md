@@ -99,3 +99,9 @@ CS168 反向验证覆盖 13 份 Spring 2026 worksheet/solution、225 个实质�
 本轮前端审计发现，课程内容虽然共享了 Lesson shell，课程首页与少数历史自定义页面仍会退回深色 studio、英文导航或重复 inspector。Skill 现在把视觉层也纳入 production procedure：平台主页、所有课程主页与 Lecture / Discussion / Project / Lab / Review / Exam 内容页必须复用 `reader.css`、`reader-dashboard.css`、`reader.js` 与统一语义组件 token。默认结构是“平台主页 → 课程身份与继续学习 → 阶段地图 → 学习/思考/实践 → 正文阅读”，而不是 dashboard 卡片堆。
 
 新增 Reader gates：中文为主的导航与按钮、单一 measured reading column、无重复 TOC/持久 inspector、source 降权、代码 header + copy、心智模型/不变量/易错点/失败/历史/来源统一样式，以及 desktop/mobile 的 overflow、math、focus、reveal、progress 与 graceful fallback 检查。遗留 dark hero 或异步课程脚本必须把标题重挂到 reader intro，不能留下重复标题或导航。所有课程先验证至少一个 Lecture、一个 Discussion、一个 Project/Workbook、课程主页和平台主页，再扩展共享样式；无法迁移的 legacy 页面必须记录原因，不能默认为“页面存在即完成”。
+
+## Second-pass refinement gate
+
+本轮审查把“首轮渲染通过”与“可以交付”明确分开。新流程要求以外部 reviewer 视角重新截图并打开桌面/移动页面，至少记录十个具体问题，按 P0/P1/P2 排序，优先修复共享层，再做一次完整 runtime review。新增检查包括：异步数据页的 loading/empty/filtered/no-exam 状态不能暴露死控件；带自定义 display 的页面必须显式处理 `[hidden]`；无 JS/慢网络仍保留静态课程入口；标题、中文 metadata 与筛选编号稳定；selected/correct/incorrect/active/copied/completed 反馈语义一致；空 prerequisite/source 块、重复目录与 legacy hero 不得破坏 reading flow。
+
+这次反向验证发现并修复了真实例子：dashboard 的 `[hidden]` 被 `display:flex` 覆盖导致无考试课程仍显示“考试与复盘”；批量补充 titleZh 时 JSON 插入错误；触屏复制按钮和本地课程 quiz 反馈需要可发现的状态；旧 source note 会被隐藏 hero 一并吞掉。由此确认 second-pass gate 必须检查 computed style 与 runtime DOM，不能只检查静态 HTML 或“脚本加载成功”。

@@ -32,9 +32,19 @@
                 <p class="course-core-question" id="course-core-question"></p>
                 <div class="course-tags" id="course-tags"></div>
               </div>
+              <aside class="course-hero-side" aria-label="学习合同">
+                <p class="course-hero-side-kicker">学习合同</p>
+                <h2 id="course-contract-title">从理解到可验证</h2>
+                <p class="course-hero-side-copy" id="course-contract-copy">每一阶段都把概念变成一条可以检查的推理链。</p>
+                <ol>
+                  <li><span>01</span><strong id="course-step-1-title">先建立模型</strong><small id="course-step-1-copy">知道对象、状态与边界</small></li>
+                  <li><span>02</span><strong id="course-step-2-title">再推一遍</strong><small id="course-step-2-copy">沿事件、表格或公式核对</small></li>
+                  <li><span>03</span><strong id="course-step-3-title">最后验证</strong><small id="course-step-3-copy">用练习、代码或证据复盘</small></li>
+                </ol>
+              </aside>
             </div>
           </section>
-          <nav class="dashboard-mode-tabs" aria-label="课程视图"><a class="is-active" href="#learning-path">学习</a><a href="#learning-path" data-dashboard-view="homework">思考与实践</a><a href="#learning-path" data-dashboard-view="exams">考试与复盘</a></nav>
+          <nav class="dashboard-mode-tabs" aria-label="课程视图"><a class="is-active" href="#learning-path">学习</a><a href="#learning-path" data-dashboard-view="homework">思考与实践</a><a href="#learning-path" data-dashboard-view="exams" data-dashboard-exams-tab>考试与复盘</a></nav>
           <section class="course-stats" aria-label="课程统计">
             <div class="stats-grid">
               <div class="metric"><strong class="metric-value" id="metric-lectures">—</strong><span class="metric-label">讲义</span></div>
@@ -147,6 +157,19 @@
     setText('#course-title-zh', document.body.classList.contains('reader-dashboard') ? info.title : (info.titleZh || ''));
     setText('#course-summary', info.summary || '');
     setText('#course-core-question', info.coreQuestion || '先问清楚：这门课试图解释什么现象，又需要你最终能够推导或实现什么？');
+    setText('#course-contract-title', info.contractTitle || '从理解到可验证');
+    setText('#course-contract-copy', info.contractCopy || '每一阶段都把概念变成一条可以检查的推理链。');
+    const learningSteps = Array.isArray(info.learningSteps) && info.learningSteps.length === 3
+      ? info.learningSteps
+      : [
+        { title: '先建立模型', description: '知道对象、状态与边界' },
+        { title: '再推一遍', description: '沿事件、表格或公式核对' },
+        { title: '最后验证', description: '用练习、代码或证据复盘' }
+      ];
+    learningSteps.forEach((step, index) => {
+      setText(`#course-step-${index + 1}-title`, step.title);
+      setText(`#course-step-${index + 1}-copy`, step.description);
+    });
     setText('#course-university', info.university || '');
     setText('#course-term', info.term || '');
     setText('#course-instructors', (info.instructors || []).join(' · '));
@@ -200,6 +223,7 @@
     const examFilter = filters.querySelector('[data-view="exams"]');
     if (homeworkFilter) homeworkFilter.textContent = homeworkLabel;
     if (examFilter) examFilter.hidden = !hasExams;
+    document.querySelectorAll('[data-dashboard-exams-tab]').forEach((tab) => { tab.hidden = !hasExams; });
     const resume = document.querySelector('#dashboard-resume');
     const last = record[info.id]?.last;
     const validLast = last && [...lectures, ...getAssignments()].some((item) => itemPath(item) === last.path);
@@ -382,7 +406,7 @@
       return `<section class="flow-stage${hasExams ? '' : ' two-lane'}" data-stage>
         <header class="stage-heading">
           <p>阶段 ${String(index + 1).padStart(2, '0')}</p>
-          <h3>${escapeHtml(rangeLabel(stage))}</h3>
+          <h3>${escapeHtml(rangeLabel(stage))}<small>${escapeHtml(stageTopic(stage))}</small></h3>
           <span>${stage.lectures.length} 节讲义</span>
         </header>
         <div class="flow-grid">
@@ -472,6 +496,7 @@
     hydrateHeader();
     hydrateStats();
     renderPaths();
+    document.body.classList.add('dashboard-ready');
   }).catch(() => {
     pathList.innerHTML = '<div class="load-error">课程数据暂时无法读取，请刷新页面后重试。</div>';
     resultStatus.textContent = '课程载入失败';

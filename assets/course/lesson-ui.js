@@ -351,7 +351,8 @@
     const breadcrumb = document.createElement('nav');
     breadcrumb.className = 'pb-lesson-breadcrumb';
     breadcrumb.setAttribute('aria-label', '面包屑');
-    breadcrumb.innerHTML = `<a href="${courseBase}">${escapeHtml(info.code || courseId)}</a><span>/</span><span>${currentItem.type === 'work' ? '实践工作台' : '课程内容'}</span><span>/</span><strong>${escapeHtml(currentItem.titleZh || currentItem.title)}</strong>`;
+    const breadcrumbTitle = page.querySelector('h1')?.textContent.trim() || currentItem.titleZh || currentItem.title;
+    breadcrumb.innerHTML = `<a href="${courseBase}">${escapeHtml(info.code || courseId)}</a><span>/</span><span>${currentItem.type === 'work' ? '实践工作台' : '课程内容'}</span><span>/</span><strong>${escapeHtml(breadcrumbTitle)}</strong>`;
     page.prepend(breadcrumb);
 
     const labTarget = page.querySelector('[data-interactive-src], .interactive-mount, .worked-trace, .execution-trace, .guided-problem');
@@ -434,7 +435,11 @@
     const previous = collection[current - 1];
     const next = collection[current + 1];
     const label = collection[current].type === 'lecture' ? '讲义' : '实践';
-    const titleFor = (item) => item ? `${item.number ? `${item.kind || label} ${item.number} · ` : ''}${item.title}` : '';
+    const localizedKind = (item) => {
+      const value = String(item?.kind || label || '');
+      return value.replace(/Discussion/gi, '讨论').replace(/Homework|Assignment/gi, '作业').replace(/Project/gi, '项目').replace(/Review Lab/gi, '复盘实验').replace(/Lab/gi, '实验').replace(/Lecture/gi, '讲义');
+    };
+    const titleFor = (item) => item ? `${item.number ? `${localizedKind(item)} ${item.number} · ` : ''}${item.titleZh || item.title}` : '';
     const pager = document.createElement('nav');
     pager.className = 'pb-pager';
     pager.setAttribute('aria-label', '前后内容');

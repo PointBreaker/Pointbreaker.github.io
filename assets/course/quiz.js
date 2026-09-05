@@ -16,8 +16,12 @@ document.querySelectorAll(".quiz, [data-quiz]").forEach((quiz) => {
   buttons.forEach((button) => {
     if (!button.hasAttribute("aria-pressed")) button.setAttribute("aria-pressed", "false");
     button.addEventListener("click", () => {
-      buttons.forEach((candidate) => candidate.setAttribute("aria-pressed", "false"));
+      buttons.forEach((candidate) => {
+        candidate.setAttribute("aria-pressed", "false");
+        candidate.classList.remove("is-selected", "is-correct", "is-incorrect");
+      });
       button.setAttribute("aria-pressed", "true");
+      button.classList.add("is-selected");
 
       if (!answer && !button.dataset.answer) {
         feedback.dataset.state = "neutral";
@@ -33,6 +37,7 @@ document.querySelectorAll(".quiz, [data-quiz]").forEach((quiz) => {
       const incorrectText = quiz.dataset.incorrect || button.dataset.incorrect || "再想想。";
 
       feedback.dataset.state = isCorrect ? "correct" : "incorrect";
+      button.classList.add(isCorrect ? "is-correct" : "is-incorrect");
       feedback.textContent = isCorrect ? correctText : incorrectText;
       window.renderCourseMath?.(feedback);
     });

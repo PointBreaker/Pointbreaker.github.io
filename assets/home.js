@@ -43,11 +43,11 @@
       return;
     }
 
-    grid.innerHTML = visible.map((course, index) => `
+    grid.innerHTML = visible.map((course) => `
       <a class="course-card" href="${escapeHtml(course.path)}" style="--course-accent:${escapeHtml(course.accent || '#63e68c')}">
         <div class="course-card-top">
           <span class="course-code">${escapeHtml(course.code)}</span>
-          <span class="course-index">Course ${String(index + 1).padStart(2, '0')}</span>
+          <span class="course-index">Course ${String(courses.indexOf(course) + 1).padStart(2, '0')}</span>
         </div>
         <p class="course-domain">${escapeHtml(course.domain)}</p>
         <h3 class="course-title">${escapeHtml(course.titleZh||course.title)}<span class="course-title-zh">${escapeHtml(course.title)}</span></h3>
@@ -59,6 +59,7 @@
           <span>${escapeHtml(course.term)}</span>
         </div>
         <div class="course-tags">${(course.tags || []).map((tag) => `<span class="course-tag">${escapeHtml(tag)}</span>`).join('')}</div>
+        <span class="course-card-action">进入课程 →</span>
       </a>
     `).join('');
   }

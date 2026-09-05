@@ -184,6 +184,21 @@ Use Chinese as the primary UI language while retaining necessary English technic
 
 Before calling the visual layer complete, render at least one Lecture, one Discussion, one Project/Workbook, the platform home, and the course home at desktop and mobile widths. Check that Chinese labels, source disclosures, code/math, links, keyboard focus, copy/reveal interactions, progress state, and horizontal overflow remain usable. A page that loads but still looks like an unrelated legacy dashboard is not complete; migrate its CSS boundary or explicitly record the exception and reason.
 
+### 8.2 Run a second-pass refinement review
+
+Do not treat the first visually valid build as finished. Review it as an external submission after the initial QA has passed. Capture fresh desktop and mobile screenshots, open them, and record at least ten concrete findings across Product/UX, visual hierarchy, content depth, interaction, consistency, and engineering. Classify each as `P0` (blocks comprehension or creates a misleading state), `P1` (materially lowers learning quality or discoverability), or `P2` (polish), then fix the highest-impact findings in the shared layer before touching course-specific exceptions.
+
+The second pass must explicitly check:
+
+- async states: loading, empty, failed, filtered, and no-exam views must not flash or expose dead controls; author CSS must honor `[hidden]` for every page shell that overrides `display`;
+- no-JavaScript and slow-network fallback: static course cards, first lesson links, source links, and meaningful labels remain usable while JSON or enhancement scripts load;
+- title and metadata fidelity: each course has a primary Chinese title (or an honest bilingual fallback) and each rendered lesson/work item has a stable human-readable title, without exposing `undefined`, placeholder copy, or unstable filtered numbering;
+- interaction feedback: selected, correct, incorrect, expanded, copied, active-section, and completed states are visually distinct and announced by the relevant ARIA state;
+- reading rhythm: no duplicate TOC/inspector, no empty prerequisite or source block, no legacy hero swallowing the title, and no card wall where a continuous explanation is needed;
+- refinement evidence: after fixes, repeat the screenshots and representative interactions. Do not close an issue because the source HTML looks correct; verify the runtime DOM and computed layout.
+
+Record the findings and before/after evidence in a repository report when the review is a substantial course or platform change. Screenshots support layout and state claims, but do not by themselves establish full accessibility compliance; retain keyboard and assistive-technology checks as separate follow-up work.
+
 ### 9. Run Depth QA and validate observable behavior
 
 First run the evidence-oriented depth audit:
