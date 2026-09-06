@@ -11,7 +11,53 @@
 <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260905a">
 <script defer src="../assets/review-lab-bank.js?v=20260829a"></script>
 <script defer src="../assets/review-labs.js?v=20260905a"></script>
-<script defer src="../../../assets/course/lesson-ui.js?v=20260905e"></script>
-<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260905l"></head>
-<body data-review-lab="a3"><script defer src="../../../assets/course/reader.js?v=20260905m"></script></body>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260906r1"></script>
+<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/platform.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/reference-reader.css?v=20260906r1"><script defer src="../../../assets/course/platform.js?v=20260906r1"></script></head>
+<body class="cs-platform reader" data-review-lab="a3">
+<a class="skip-link" href="#review-content">跳到 Review Lab</a><nav class="review-bar"><a href="../index.html">← EECS498</a><a href="https://github.com/PointBreaker/EECS498/tree/1b495ae8c4db1343a12a39ac626a0a84dcada300/A3" target="_blank" rel="noreferrer">代码快照 ↗</a></nav>
+  <header class="review-hero"><div class="review-shell"><p>A3 · DEEP NETWORKS</p><h1>模块化反向传播与卷积网络</h1><p class="review-lede">把 layer cache、optimizer state、normalization 与 convolution 当成可审计的对象生命周期。</p><div class="review-capabilities"><span>Layer contracts</span><span>Optimizer state</span><span>CNN debugging</span></div><p class="review-boundary"><strong>Review Lab，不是作业答案。</strong>阅读现有实现，先预测，再运行小实验并解释证据；原始仓库快照是代码事实来源。</p></div></header>
+  <nav class="review-stage-nav" aria-label="复盘阶段"><a href="#stage-layers"><span>01</span>网络层的契约</a><a href="#stage-optimizers"><span>02</span>优化器状态</a><a href="#stage-convolution"><span>03</span>卷积的形状与局部性</a><a href="#stage-cnn-gate"><span>04</span>CNN 证据检查</a></nav>
+  <main class="review-shell page" id="review-content"><article class="review-stage" id="stage-layers">
+    <header><span>阶段 01</span><h2>网络层的契约</h2><p>为 affine、ReLU、normalization 建立 forward/backward 对偶契约。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>模块化只在 cache 身份和 shape 可追踪时才减少复杂度。</p><div class="review-links"><a href="../lessons/0002-backprop-computational-graphs.html">讲义 2 · 反向传播 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 upstream gradient</li><li>会推 bias gradient reduction</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>x,w,b + upstream dout</dd></div><div><dt>输出</dt><dd>out + dx,dw,db</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>每个 gradient 对应原对象 shape</li><li>backward 使用同一次 forward cache</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>用全局可变状态偷传 cache</li><li>广播后忘记按被广播轴求和</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>用 N=2,D=3,C=2 手推 affine backward 的三个输出 shape。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>db 带 batch 维</strong><p>优先检查：broadcast reduction</p></div><div><strong>单层对、组合错</strong><p>优先检查：cache 顺序与接口</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>组合层的数值梯度应与逐层链式组合一致。</dd></div><div><dt>做实验</dt><dd>对 affine-ReLU composite 做 sparse gradient check。</dd></div><div><dt>留证据</dt><dd><ul><li>每个参数 relative error</li><li>非光滑点处理</li><li>输入规模</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先测独立 layer</p></details><details><summary>提示 2</summary><p>再测 sandwich</p></details><details><summary>提示 3</summary><p>打印 cache 类型与 shape</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 网络层的契约</h3><ul><li>每层独立通过</li><li>组合通过</li><li>能从计算图解释三条梯度</li></ul></section>
+  </article><article class="review-stage" id="stage-optimizers">
+    <header><span>阶段 02</span><h2>优化器状态</h2><p>区分 gradient、momentum、second moment 与 parameter update。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>Adam/SGD 的差异来自状态和缩放，不是“更聪明”的标签。</p><div class="review-links"><a href="../lessons/0003-optimization-training-dynamics.html">讲义 3 · 训练动力学 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能手算一维 momentum</li><li>能区分优化状态与模型参数</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>w,dw,config</dd></div><div><dt>输出</dt><dd>next_w,next_config</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>状态 shape 与参数一致</li><li>step 计数单调且每次只增一次</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>跨参数共享同一 mutable config</li><li>把 weight decay 与 L2 gradient 永远视为等价</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>一个参数 w=1、g=2，手算两步 momentum，再运行实现。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>第二步像第一步</strong><p>优先检查：状态没有持久化</p></div><div><strong>不同参数互相污染</strong><p>优先检查：config aliasing</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>momentum 在同向梯度下累积速度；梯度反向时会有惯性。</dd></div><div><dt>做实验</dt><dd>用预设梯度序列 [2,2,-2] 比较 SGD/momentum/Adam 的 update。</dd></div><div><dt>留证据</dt><dd><ul><li>每步 state</li><li>每步 delta w</li><li>超参数</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先用标量</p></details><details><summary>提示 2</summary><p>打印 state identity</p></details><details><summary>提示 3</summary><p>检查 step 增量位置</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 优化器状态</h3><ul><li>标量轨迹一致</li><li>能解释状态记忆</li><li>不同参数状态隔离</li></ul></section>
+  </article><article class="review-stage" id="stage-convolution">
+    <header><span>阶段 03</span><h2>卷积的形状与局部性</h2><p>沿 N,C,H,W、filter 与 stride/pad 推导输出及反向。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>CNN 把空间局部性和权重共享写进参数结构。</p><div class="review-links"><a href="../lessons/0004-cnn-spatial-structure.html">讲义 4 · CNN 空间结构 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>会从一个窗口手算 dot product</li><li>能解释 parameter sharing</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>x [N,C,H,W], w [F,C,HH,WW]</dd></div><div><dt>输出</dt><dd>out [N,F,Hout,Wout]</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>同一 filter 在所有位置共享</li><li>输出尺寸满足整数滑动窗口</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>把 channel 当空间轴</li><li>只记公式不检查边界窗口</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>N=C=F=1，3×3 输入配 2×2 filter，stride=1，无 padding，手算 2×2 输出。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>输出错一格</strong><p>优先检查：边界与 stride 起点</p></div><div><strong>每个位置参数不同</strong><p>优先检查：是否丢失权重共享</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>stride 增大降低空间分辨率；padding 可保持尺寸但引入边界假设。</dd></div><div><dt>做实验</dt><dd>固定 filter 比较 stride/pad 四种配置的 shape 与一个角落值。</dd></div><div><dt>留证据</dt><dd><ul><li>公式预测</li><li>实际 shape</li><li>边界值来源</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先画窗口坐标</p></details><details><summary>提示 2</summary><p>确认 NCHW 次序</p></details><details><summary>提示 3</summary><p>只看左上输出单元</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 卷积的形状与局部性</h3><ul><li>toy 输出正确</li><li>shape 预测正确</li><li>能解释共享与局部性</li></ul></section>
+  </article><article class="review-stage" id="stage-cnn-gate">
+    <header><span>阶段 04</span><h2>CNN 证据检查</h2><p>用 activation、gradient 与 timing 解释网络是否正确且值得。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>更深或更快都不是单一结论；必须知道改变了什么资源和表示。</p><div class="review-links"><a href="../lessons/0004-cnn-spatial-structure.html">讲义 4 · CNN 空间结构 →</a><a href="../lessons/0005-vision-representations.html">讲义 5 · 视觉表示 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>知道 GPU timing 需同步</li><li>能解释 activation distribution</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>baseline CNN + one controlled change</dd></div><div><dt>输出</dt><dd>correctness/performance evidence</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>相同数据与训练预算</li><li>同时记录模型行为和运行配置</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>把 wall time 差异归因于 kernel 而不 warmup</li><li>只挑最好一次</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>先让单 batch 过拟合，再比较一个 architecture change。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>train loss NaN</strong><p>优先检查：normalization、learning rate、gradient norm</p></div><div><strong>速度反而慢</strong><p>优先检查：shape、warmup、kernel overhead</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>改变 normalization 可能改善训练稳定性，但不会自动减少 FLOPs。</dd></div><div><dt>做实验</dt><dd>固定 seed/batch/steps，记录 loss、gradient norm、latency。</dd></div><div><dt>留证据</dt><dd><ul><li>baseline/config</li><li>重复次数</li><li>机制解释</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>正确性先于 benchmark</p></details><details><summary>提示 2</summary><p>tiny overfit 后再 profile</p></details><details><summary>提示 3</summary><p>用 profiler 验证瓶颈</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · CNN 证据检查</h3><ul><li>能过拟合小 batch</li><li>性能测量条件完整</li><li>结论区分优化与统计效果</li></ul></section>
+  </article><section class="review-retro"><h2>复盘与迁移</h2><ul><li>哪一个原有心智模型被代码证据推翻了？</li><li>哪一个 bug 最适合用最小输入定位？</li><li>哪项优化只是换了一种资源，而没有改变模型语义？</li><li>如果重新审计一次，你会先验证哪个不变量？</li></ul></section></main>
+<script defer src="../../../assets/course/reader.js?v=20260906r1"></script>
+</body>
 </html>

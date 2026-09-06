@@ -11,7 +11,53 @@
 <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260905a">
 <script defer src="../assets/review-lab-bank.js?v=20260829a"></script>
 <script defer src="../assets/review-labs.js?v=20260905a"></script>
-<script defer src="../../../assets/course/lesson-ui.js?v=20260905e"></script>
-<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260905l"></head>
-<body data-review-lab="a6"><script defer src="../../../assets/course/reader.js?v=20260905m"></script></body>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260906r1"></script>
+<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/platform.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/reference-reader.css?v=20260906r1"><script defer src="../../../assets/course/platform.js?v=20260906r1"></script></head>
+<body class="cs-platform reader" data-review-lab="a6">
+<a class="skip-link" href="#review-content">跳到 Review Lab</a><nav class="review-bar"><a href="../index.html">← EECS498</a><a href="https://github.com/PointBreaker/EECS498/tree/1b495ae8c4db1343a12a39ac626a0a84dcada300/A6" target="_blank" rel="noreferrer">代码快照 ↗</a></nav>
+  <header class="review-hero"><div class="review-shell"><p>A6 · GENERATIVE MODELS</p><h1>VAE 与 GAN：两个不同的生成契约</h1><p class="review-lede">分别审计显式变分目标与对抗博弈，不把“能生成图片”当作同一种机制。</p><div class="review-capabilities"><span>ELBO accounting</span><span>Reparameterization</span><span>Adversarial diagnostics</span></div><p class="review-boundary"><strong>Review Lab，不是作业答案。</strong>阅读现有实现，先预测，再运行小实验并解释证据；原始仓库快照是代码事实来源。</p></div></header>
+  <nav class="review-stage-nav" aria-label="复盘阶段"><a href="#stage-vae-objective"><span>01</span>VAE 的目标函数</a><a href="#stage-reparameterization"><span>02</span>重参数化</a><a href="#stage-gan-game"><span>03</span>对抗博弈</a><a href="#stage-generative-gate"><span>04</span>生成模型的证据</a></nav>
+  <main class="review-shell page" id="review-content"><article class="review-stage" id="stage-vae-objective">
+    <header><span>阶段 01</span><h2>VAE 的目标函数</h2><p>拆开 reconstruction 与 KL，并说清每一项约束谁。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>两项失衡会导致只重建或只贴近 prior。</p><div class="review-links"><a href="../lessons/0014-generative-models.html">讲义 14 · 生成建模 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 approximate posterior</li><li>会手算 μ=0,logvar=0 的 KL</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>x, μ, logvar, reconstruction</dd></div><div><dt>输出</dt><dd>scalar ELBO loss</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>reconstruction 与 KL 分项记录</li><li>batch/reduction convention 一致</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>只报告 total loss</li><li>把 KL 符号写反</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>单维 μ=0,logvar=0 时手算 KL；再令 μ=1 比较。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>KL 为负</strong><p>优先检查：公式符号/reduction</p></div><div><strong>KL 很快接近 0 且 decoder 忽略 z</strong><p>优先检查：posterior collapse</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>增大 KL 权重会更强约束 latent，但可能牺牲 reconstruction。</dd></div><div><dt>做实验</dt><dd>固定模型与 batch，比较两个 KL weight 的分项轨迹。</dd></div><div><dt>留证据</dt><dd><ul><li>recon</li><li>KL</li><li>latent statistics</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先单维检查</p></details><details><summary>提示 2</summary><p>分项打印</p></details><details><summary>提示 3</summary><p>确认 logvar 不是 std</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · VAE 的目标函数</h3><ul><li>KL 边界正确</li><li>分项可复现</li><li>能解释 trade-off</li></ul></section>
+  </article><article class="review-stage" id="stage-reparameterization">
+    <header><span>阶段 02</span><h2>重参数化</h2><p>让随机采样保留从 loss 到 μ/logvar 的可微路径。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>直接从参数化分布采样会让普通反向传播无法穿过随机节点。</p><div class="review-links"><a href="../lessons/0014-generative-models.html">讲义 14 · 生成建模 →</a><a href="../lessons/0002-backprop-computational-graphs.html">讲义 2 · 反向传播 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能画随机节点计算图</li><li>知道 exp(0.5 logvar) 的来源</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>μ, logvar, ε~N(0,I)</dd></div><div><dt>输出</dt><dd>z=μ+σ⊙ε</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>ε 不需 gradient</li><li>σ 由 logvar 正确转换</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>把 logvar 直接当 σ</li><li>在 z 上 detach</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>μ=2,logvar=0,ε=-1 时手算 z，并预测 dz/dμ。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>μ/logvar grad 为 None</strong><p>优先检查：detach/no_grad</p></div><div><strong>variance 爆炸</strong><p>优先检查：logvar→std 转换</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>固定 ε 时 z 对 μ 的局部导数为 1；随机性来自多次 ε。</dd></div><div><dt>做实验</dt><dd>固定 seed 做 gradient check，再换 seed 看样本变化。</dd></div><div><dt>留证据</dt><dd><ul><li>ε</li><li>z</li><li>μ/logvar grad</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>打印 grad_fn</p></details><details><summary>提示 2</summary><p>固定 epsilon</p></details><details><summary>提示 3</summary><p>单元素开始</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 重参数化</h3><ul><li>toy z 正确</li><li>gradient path 存在</li><li>能解释随机与可微并存</li></ul></section>
+  </article><article class="review-stage" id="stage-gan-game">
+    <header><span>阶段 03</span><h2>对抗博弈</h2><p>分开 discriminator 与 generator 的目标、参数和 update。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>GAN 是动态博弈；一个网络的改进会改变另一个网络看到的 objective。</p><div class="review-links"><a href="../lessons/0014-generative-models.html">讲义 14 · 生成建模 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 non-saturating G loss</li><li>会区分 detach 的位置</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>real x, noise z</dd></div><div><dt>输出</dt><dd>D/G losses + samples</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>每步只更新目标网络参数</li><li>fake 在 D/G step 的 gradient 边界正确</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>两个 optimizer 同时更新全部参数</li><li>只看一方 loss 判断成功</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>一维参数分别属于 G/D，逐步写出 D step 与 G step 哪个 gradient 应存在。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>G 从不变化</strong><p>优先检查：fake 是否在 G step 也 detach</p></div><div><strong>D/G 参数同时变化</strong><p>优先检查：optimizer param list/zero_grad</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>D 太强可能让 G 梯度差；loss 平衡不保证样本多样。</dd></div><div><dt>做实验</dt><dd>记录两方 loss、gradient norm 与固定 noise samples。</dd></div><div><dt>留证据</dt><dd><ul><li>D/G loss</li><li>D/G grad norm</li><li>fixed-noise grid</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先断言参数集合不交叉</p></details><details><summary>提示 2</summary><p>每步比较参数 diff</p></details><details><summary>提示 3</summary><p>固定噪声观察模式</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 对抗博弈</h3><ul><li>更新边界正确</li><li>样本轨迹可比较</li><li>不以单一 loss 下结论</li></ul></section>
+  </article><article class="review-stage" id="stage-generative-gate">
+    <header><span>阶段 04</span><h2>生成模型的证据</h2><p>用重建、采样、多样性与失败模式比较 VAE/GAN。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>不同目标没有一个共享的“训练 loss 越低越好”标尺。</p><div class="review-links"><a href="../lessons/0014-generative-models.html">讲义 14 · 生成建模 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 blurry reconstruction 与 mode collapse</li><li>知道 qualitative evidence 需要固定 protocol</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>trained models + fixed eval protocol</dd></div><div><dt>输出</dt><dd>mechanism-aware comparison</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>固定输入/噪声便于纵向比较</li><li>同时检查质量与覆盖</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>用 VAE loss 与 GAN loss 数值直接比较</li><li>只挑最好样本</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>为 VAE 固定输入重建，为 GAN 固定 noise，写出各自最可能暴露的失败。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>样本漂亮但高度重复</strong><p>优先检查：mode collapse/coverage</p></div><div><strong>重建模糊但 latent 平滑</strong><p>优先检查：像素 likelihood 与目标取舍</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>VAE 通常有可解释 objective 与覆盖倾向；GAN 可能更锐利但训练/覆盖更难。</dd></div><div><dt>做实验</dt><dd>用固定网格、latent interpolation 与最近邻检查建立证据包。</dd></div><div><dt>留证据</dt><dd><ul><li>固定协议</li><li>失败样本而非只放最好</li><li>目标边界解释</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先定义成功标准</p></details><details><summary>提示 2</summary><p>每种模型用适合它的证据</p></details><details><summary>提示 3</summary><p>加入反例样本</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 生成模型的证据</h3><ul><li>比较不混用 loss 尺度</li><li>质量与覆盖都有证据</li><li>能解释两种机制为何不同</li></ul></section>
+  </article><section class="review-retro"><h2>复盘与迁移</h2><ul><li>哪一个原有心智模型被代码证据推翻了？</li><li>哪一个 bug 最适合用最小输入定位？</li><li>哪项优化只是换了一种资源，而没有改变模型语义？</li><li>如果重新审计一次，你会先验证哪个不变量？</li></ul></section></main>
+<script defer src="../../../assets/course/reader.js?v=20260906r1"></script>
+</body>
 </html>

@@ -94,7 +94,7 @@ for (const [id, lab] of Object.entries(reviewBank)) {
   }
 }
 const reviewRenderer = fs.readFileSync(path.join(root, "courses/eecs498/assets/review-labs.js"), "utf8");
-for (const marker of ["Tiny sanity check", "Prediction → Experiment → Evidence", "Progressive hints", "Retrospective"]) {
+for (const marker of ["用最小例子检查", "预测 → 实验 → 证据", "渐进提示", "复盘与迁移"]) {
   if (!reviewRenderer.includes(marker)) { console.error(`FAIL: Review Lab renderer missing ${marker}`); failures += 1; }
 }
 

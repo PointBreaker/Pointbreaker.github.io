@@ -11,7 +11,53 @@
 <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260905a">
 <script defer src="../assets/review-lab-bank.js?v=20260829a"></script>
 <script defer src="../assets/review-labs.js?v=20260905a"></script>
-<script defer src="../../../assets/course/lesson-ui.js?v=20260905e"></script>
-<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260905l"></head>
-<body data-review-lab="a4"><script defer src="../../../assets/course/reader.js?v=20260905m"></script></body>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260906r1"></script>
+<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/platform.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/reference-reader.css?v=20260906r1"><script defer src="../../../assets/course/platform.js?v=20260906r1"></script></head>
+<body class="cs-platform reader" data-review-lab="a4">
+<a class="skip-link" href="#review-content">跳到 Review Lab</a><nav class="review-bar"><a href="../index.html">← EECS498</a><a href="https://github.com/PointBreaker/EECS498/tree/1b495ae8c4db1343a12a39ac626a0a84dcada300/A4" target="_blank" rel="noreferrer">代码快照 ↗</a></nav>
+  <header class="review-hero"><div class="review-shell"><p>A4 · REPRESENTATIONS &amp; SEQUENCES</p><h1>从可视化到序列记忆</h1><p class="review-lede">审计 autograd、style loss、RNN/LSTM/attention，并把历史实现连到 Transformer。</p><div class="review-capabilities"><span>Autograd reasoning</span><span>Sequence state</span><span>Attention transfer</span></div><p class="review-boundary"><strong>Review Lab，不是作业答案。</strong>阅读现有实现，先预测，再运行小实验并解释证据；原始仓库快照是代码事实来源。</p></div></header>
+  <nav class="review-stage-nav" aria-label="复盘阶段"><a href="#stage-autograd"><span>01</span>自动微分的边界</a><a href="#stage-rnn"><span>02</span>循环状态</a><a href="#stage-lstm-attention"><span>03</span>LSTM 与注意力</a><a href="#stage-sequence-gate"><span>04</span>序列模型的证据</a></nav>
+  <main class="review-shell page" id="review-content"><article class="review-stage" id="stage-autograd">
+    <header><span>阶段 01</span><h2>自动微分的边界</h2><p>辨认哪些 tensor 需要 gradient，哪些只是固定输入或 target。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>错误的 requires_grad 边界会浪费显存或切断优化链。</p><div class="review-links"><a href="../lessons/0005-vision-representations.html">讲义 5 · 视觉表示 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 leaf tensor</li><li>知道 zero_grad 与 detach 不同</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>image/features/targets</dd></div><div><dt>输出</dt><dd>scalar objective + selected gradients</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>只优化目标对象</li><li>loss 由可微路径连接到目标</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>对 target 累积无用 gradient</li><li>在中途 detach 优化对象</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>用 x² 的两步优化观察 gradient accumulation，然后显式清零。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>第二步 gradient 异常变大</strong><p>优先检查：是否清零</p></div><div><strong>loss 变化但目标不更新</strong><p>优先检查：optimizer 参数与 leaf</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>若只优化输入图像，模型权重应固定而图像有 gradient。</dd></div><div><dt>做实验</dt><dd>记录一次 backward 后各类 tensor 的 grad 是否存在。</dd></div><div><dt>留证据</dt><dd><ul><li>requires_grad</li><li>is_leaf</li><li>grad norm</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先列优化对象</p></details><details><summary>提示 2</summary><p>检查 optimizer param list</p></details><details><summary>提示 3</summary><p>沿 grad_fn 回溯</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 自动微分的边界</h3><ul><li>gradient 边界正确</li><li>无意外参数更新</li><li>能解释累积</li></ul></section>
+  </article><article class="review-stage" id="stage-rnn">
+    <header><span>阶段 02</span><h2>循环状态</h2><p>沿时间追 hidden state 与 shared weights。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>RNN 的参数共享跨时间，但 activation 和梯度路径随 T 增长。</p><div class="review-links"><a href="../lessons/0007-rnn-through-time.html">讲义 7 · RNN →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>会手推两步 recurrence</li><li>能区分 h_t activation 与 Wh parameter</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>x [N,T,D], h0 [N,H]</dd></div><div><dt>输出</dt><dd>h [N,T,H]</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>同一 Wx/Wh 每步共享</li><li>第 t 状态只依赖过去</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>为每个时间步创建新参数</li><li>把 time 与 batch 轴互换</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>N=1,T=2,D=H=1，给定标量权重手算 h1,h2。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>不同 T 参数量改变</strong><p>优先检查：是否错误创建 per-step weight</p></div><div><strong>未来 token 影响过去</strong><p>优先检查：时间方向或 mask</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>T 增大参数量不变，但串行路径和 memory 增长。</dd></div><div><dt>做实验</dt><dd>比较 T=8/16 的参数量、activation 数和 latency。</dd></div><div><dt>留证据</dt><dd><ul><li>参数量</li><li>shape</li><li>运行时间</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先展开两步</p></details><details><summary>提示 2</summary><p>打印每步 h</p></details><details><summary>提示 3</summary><p>确认 weight identity</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 循环状态</h3><ul><li>toy recurrence 对</li><li>参数跨步共享</li><li>能解释串行瓶颈</li></ul></section>
+  </article><article class="review-stage" id="stage-lstm-attention">
+    <header><span>阶段 03</span><h2>LSTM 与注意力</h2><p>区分门控记忆路径与基于内容的动态读取。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>LSTM 改善梯度通路，attention 改变信息访问方式。</p><div class="review-links"><a href="../lessons/0008-lstm-memory.html">讲义 8 · LSTM →</a><a href="../lessons/0010-transformer-attention-routing.html">讲义 10 · Attention →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 sigmoid gate 范围</li><li>会从 score 得到 weighted sum</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>sequence states + query</dd></div><div><dt>输出</dt><dd>updated state or weighted context</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>attention weights 在 key 轴归一化</li><li>LSTM cell/hidden 身份不混淆</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>把 attention 当固定平均</li><li>认为 LSTM 消除全部长程问题</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>给三个 scalar values 和权重 [0.2,0.3,0.5] 手算 context，再改变 query 解释权重变化。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>权重和不为 1</strong><p>优先检查：softmax axis</p></div><div><strong>所有 query 得到同一 context</strong><p>优先检查：score 是否依赖 query</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>attention 可并行比较位置；RNN/LSTM 必须沿 recurrence 顺序产生 state。</dd></div><div><dt>做实验</dt><dd>固定表示，比较 recurrent update 与 attention read 的依赖图和 latency 趋势。</dd></div><div><dt>留证据</dt><dd><ul><li>依赖图</li><li>权重分布</li><li>T 增长趋势</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先区分 state update 与 memory read</p></details><details><summary>提示 2</summary><p>检查 softmax 轴</p></details><details><summary>提示 3</summary><p>用两个不同 query</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · LSTM 与注意力</h3><ul><li>context 手算正确</li><li>能解释两种机制边界</li><li>连接到 Transformer QKV</li></ul></section>
+  </article><article class="review-stage" id="stage-sequence-gate">
+    <header><span>阶段 04</span><h2>序列模型的证据</h2><p>用 teacher forcing、mask 与 generation trace 解释序列模型。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>训练 loss 正确不代表自回归生成路径正确。</p><div class="review-links"><a href="../lessons/0012-transformer-seq2seq-training.html">讲义 12 · Seq2Seq 训练 →</a><a href="../lessons/0013-transformer-to-modern-llms.html">讲义 13 · 现代 LLM →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>会解释 teacher forcing</li><li>能画 causal dependency</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>tokens/mask/targets</dd></div><div><dt>输出</dt><dd>loss + generated sequence</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>target shift 一致</li><li>生成时不能读取未来 token</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>训练和生成使用不同 token convention</li><li>用完整 target 泄漏未来</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>构造长度 3 序列，逐位置写 input、target 与允许 attention 的位置。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>训练极好生成崩坏</strong><p>优先检查：shift/mask/解码路径</p></div><div><strong>第一个 token loss 异常</strong><p>优先检查：BOS 与 label 对齐</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>正确 causal mask 下，改变未来 token 不应影响过去 logits。</dd></div><div><dt>做实验</dt><dd>复制输入只改最后 token，比较前面位置 logits。</dd></div><div><dt>留证据</dt><dd><ul><li>mask</li><li>logit max diff</li><li>token convention</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先画三角 mask</p></details><details><summary>提示 2</summary><p>逐位置对齐 labels</p></details><details><summary>提示 3</summary><p>检查 generation 第一步</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 序列模型的证据</h3><ul><li>future-invariance 通过</li><li>shift 可解释</li><li>训练与推理路径一致</li></ul></section>
+  </article><section class="review-retro"><h2>复盘与迁移</h2><ul><li>哪一个原有心智模型被代码证据推翻了？</li><li>哪一个 bug 最适合用最小输入定位？</li><li>哪项优化只是换了一种资源，而没有改变模型语义？</li><li>如果重新审计一次，你会先验证哪个不变量？</li></ul></section></main>
+<script defer src="../../../assets/course/reader.js?v=20260906r1"></script>
+</body>
 </html>

@@ -7,7 +7,11 @@
   document.querySelector('.library-tools')?.append(filtersRoot);
   document.querySelector('.home-rail')?.remove();
   document.querySelectorAll('.reader-featured > a').forEach((card,index)=>{const img=document.createElement('img');img.src=`assets/vendor/tabler/${['cpu','network','brain'][index]}.svg`;img.alt='';img.width=34;img.height=34;card.prepend(img);});
+  document.querySelectorAll('.reader-methods h3').forEach((title,index)=>{const img=document.createElement('img');img.src=`assets/vendor/tabler/${['book','bulb','cube'][index]}.svg`;img.alt='';img.width=25;img.height=25;title.prepend(img);});
   const resume=document.querySelector('#home-resume');
+  const topics=document.createElement('section');topics.className='cs-home-topics';
+  topics.innerHTML='<h2>按主题探索</h2><nav aria-label="精选学习主题">'+[['cpu','computer-architecture','计算机体系结构'],['network','computer-networks','计算机网络'],['cube','distributed-systems','分布式系统'],['brain','ml-systems','机器学习系统'],['math','linear-algebra','数学基础'],['code','software-engineering','软件工程']].map(([icon,key,label])=>`<a href="#course-library" data-topic="${key}"><img src="assets/vendor/tabler/${icon}.svg" alt="">${label}</a>`).join('')+'</nav>';
+  resume?.after(topics);
   try {
     const history=JSON.parse(localStorage.getItem('coursestack.learning.v1')||'{}');
     const recent=Object.values(history).filter(item=>item.last?.path?.startsWith('/courses/')).sort((a,b)=>b.last.at-a.last.at)[0];
@@ -72,6 +76,7 @@
     renderCourses();
   });
   search.addEventListener('input', renderCourses);
+  topics.addEventListener('click',event=>{const link=event.target.closest('[data-topic]');if(!link)return;activeDomain=link.dataset.topic;search.value='';renderFilters();renderCourses();});
 
   fetch('courses.json', { cache: 'no-store' })
     .then((response) => {

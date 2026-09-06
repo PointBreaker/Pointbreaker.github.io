@@ -70,8 +70,8 @@ for (const spec of specs) {
 const renderer = fs.readFileSync(path.join(root, 'assets/course/reasoning-workbook.js'), 'utf8');
 const bridgeRenderer = fs.readFileSync(path.join(root, 'assets/course/reasoning-workbook-bridge.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'assets/course/reasoning-workbook.css'), 'utf8');
-assert(renderer.includes('Contract / proof obligation'), 'renderer must expose proof/algorithm contract');
-assert(renderer.includes('Tiny sanity / counterexample'), 'renderer must expose tiny counterexample');
+assert(renderer.includes('契约与证明义务') && renderer.includes('data.contract.map'), 'renderer must expose proof/algorithm contract');
+assert(renderer.includes('小例子与反例检查') && renderer.includes('data.sanity'), 'renderer must expose tiny counterexample');
 assert(renderer.includes('Failure signatures'), 'renderer must expose failure signatures');
 assert(renderer.includes('role="status"') && renderer.includes('aria-live="polite"'), 'readiness feedback must be announced');
 assert(bridgeRenderer.includes('insertAdjacentElement') && !bridgeRenderer.includes('<h2'), 'lesson bridge must not create a second TOC section');

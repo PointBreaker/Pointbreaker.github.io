@@ -11,7 +11,43 @@
 <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260905a">
 <script defer src="../assets/review-lab-bank.js?v=20260829a"></script>
 <script defer src="../assets/review-labs.js?v=20260905a"></script>
-<script defer src="../../../assets/course/lesson-ui.js?v=20260905e"></script>
-<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260905l"></head>
-<body data-review-lab="a1"><script defer src="../../../assets/course/reader.js?v=20260905m"></script></body>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260906r1"></script>
+<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/platform.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/reference-reader.css?v=20260906r1"><script defer src="../../../assets/course/platform.js?v=20260906r1"></script></head>
+<body class="cs-platform reader" data-review-lab="a1">
+<a class="skip-link" href="#review-content">跳到 Review Lab</a><nav class="review-bar"><a href="../index.html">← EECS498</a><a href="https://github.com/PointBreaker/EECS498/tree/1b495ae8c4db1343a12a39ac626a0a84dcada300/A1" target="_blank" rel="noreferrer">代码快照 ↗</a></nav>
+  <header class="review-hero"><div class="review-shell"><p>A1 · TENSOR FOUNDATIONS</p><h1>从 tensor 操作到可信实验</h1><p class="review-lede">不重写当年的作业；用小输入、shape ledger 与证据重新审计 KNN 和向量化。</p><div class="review-capabilities"><span>Tensor contract</span><span>Vectorization</span><span>Experimental evidence</span></div><p class="review-boundary"><strong>Review Lab，不是作业答案。</strong>阅读现有实现，先预测，再运行小实验并解释证据；原始仓库快照是代码事实来源。</p></div></header>
+  <nav class="review-stage-nav" aria-label="复盘阶段"><a href="#stage-tensor-contract"><span>01</span>张量契约</a><a href="#stage-knn-decision"><span>02</span>KNN 决策规则</a><a href="#stage-evidence"><span>03</span>证据检查</a></nav>
+  <main class="review-shell page" id="review-content"><article class="review-stage" id="stage-tensor-contract">
+    <header><span>阶段 01</span><h2>张量契约</h2><p>能逐轴解释 batch、feature 与 class，而不是靠广播碰巧运行。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>后面的每一个模型都建立在 shape、dtype、device 与 broadcasting 的可预测性上。</p><div class="review-links"><a href="../lessons/0001-neural-networks-are-functions.html">讲义 1 · 函数链 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 [M,1,D] 与 [1,N,D] 如何广播</li><li>能区分 view/reshape 与数据复制</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>X_train [N,D], X_test [M,D]</dd></div><div><dt>输出</dt><dd>distance [M,N]</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>每个单元只对应一对样本</li><li>结果非负，完全相同输入距离为 0</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>把 batch 轴当 feature 轴</li><li>依赖隐式广播但说不出扩张方向</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>取 M=2,N=3,D=2，用纸手算六个平方距离，再与代码逐项比较。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>shape 正确但每行完全相同</strong><p>优先检查：广播轴或 reduction dimension</p></div><div><strong>距离出现负数</strong><p>优先检查：平方和公式、数值误差与是否漏掉 square</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>把 one-loop 改成 no-loop 后，数值应该一致；运行时间会下降，但临时 tensor 可能增大。</dd></div><div><dt>做实验</dt><dd>固定同一小输入，比较 two-loop / one-loop / no-loop 的最大绝对误差与 wall time。</dd></div><div><dt>留证据</dt><dd><ul><li>三种实现误差</li><li>输入 shape/dtype/device</li><li>是否同步计时、重复次数</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先写出目标 distance matrix 的每个轴</p></details><details><summary>提示 2</summary><p>检查 sum 的 dimension，而不是先改公式</p></details><details><summary>提示 3</summary><p>把输入缩到 2×3×2 并打印广播后的 shape</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 张量契约</h3><ul><li>三种实现逐项一致</li><li>能闭卷解释广播</li><li>测量记录包含配置</li></ul></section>
+  </article><article class="review-stage" id="stage-knn-decision">
+    <header><span>阶段 02</span><h2>KNN 决策规则</h2><p>让距离矩阵经过 top-k 与多数表决产生确定预测。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>距离计算正确不代表分类正确；tie-break、axis 与 label dtype 都属于算法契约。</p><div class="review-links"><a href="../lessons/0001-neural-networks-are-functions.html">讲义 1 · 函数链 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能解释 k 改变 bias/variance</li><li>能区分最近样本索引与样本标签</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>distance [M,N], y_train [N]</dd></div><div><dt>输出</dt><dd>y_pred [M]</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>每个 test example 独立投票</li><li>平票规则确定且可复现</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>在训练样本轴外取 top-k</li><li>依赖 unordered 容器决定平票</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>构造三个训练点，令两个类别 1:1 平票；先写出预期 tie-break 再运行。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>所有测试样本预测相同</strong><p>优先检查：top-k 的 axis 与 batch indexing</p></div><div><strong>重复运行偶尔改变答案</strong><p>优先检查：平票规则或无序集合</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>k=1 对局部噪声敏感；k 增大通常更平滑，但过大可能吞掉局部结构。</dd></div><div><dt>做实验</dt><dd>在固定 split 上画 k 与 validation accuracy，不使用 test set 选 k。</dd></div><div><dt>留证据</dt><dd><ul><li>每个 k 的 validation accuracy</li><li>固定 split/seed</li><li>最终 test 只评一次</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先确认 nearest indices 的 shape</p></details><details><summary>提示 2</summary><p>将 labels 和 indices 同时打印</p></details><details><summary>提示 3</summary><p>对单个 test example 手推投票</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · KNN 决策规则</h3><ul><li>tiny tie case 确定</li><li>validation 选择与 test 评估分离</li><li>能解释 k 的取舍</li></ul></section>
+  </article><article class="review-stage" id="stage-evidence">
+    <header><span>阶段 03</span><h2>证据检查</h2><p>把“代码跑通”升级成可复现实验结论。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>Notebook 输出若缺配置、基线和分离的数据集，只能说明一次运行发生过。</p><div class="review-links"><a href="../lessons/0003-optimization-training-dynamics.html">讲义 3 · 训练动力学 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能说明 baseline 是什么</li><li>知道随机种子不等于完全确定性</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>实现 + 数据 split + 配置</dd></div><div><dt>输出</dt><dd>可复现结论</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>验证集用于选择，测试集用于最终报告</li><li>比较只改变一个主要变量</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>用 test accuracy 反复调参</li><li>只报告最好数字不报告条件</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>故意交换 validation/test 的角色，解释为什么结果会乐观且不可复用。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>每次结果差异很大</strong><p>优先检查：split、seed 与并列投票</p></div><div><strong>validation 很高但 test 明显掉点</strong><p>优先检查：是否对 validation 过拟合</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>向量化应改变速度而非预测；k 改变预测而非距离。</dd></div><div><dt>做实验</dt><dd>建立 2×2 ablation：loop/no-loop × 两个 k，分别记录数值一致性、速度和 accuracy。</dd></div><div><dt>留证据</dt><dd><ul><li>baseline</li><li>单变量变化</li><li>结果与机制解释</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先把“实现优化”和“模型超参数”分栏</p></details><details><summary>提示 2</summary><p>预测哪些指标应该不变</p></details><details><summary>提示 3</summary><p>若结论反常，先检查控制变量</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 证据检查</h3><ul><li>能从证据区分性能优化与算法变化</li><li>记录足够复现</li><li>写出一条被数据否定的原预测</li></ul></section>
+  </article><section class="review-retro"><h2>复盘与迁移</h2><ul><li>哪一个原有心智模型被代码证据推翻了？</li><li>哪一个 bug 最适合用最小输入定位？</li><li>哪项优化只是换了一种资源，而没有改变模型语义？</li><li>如果重新审计一次，你会先验证哪个不变量？</li></ul></section></main>
+<script defer src="../../../assets/course/reader.js?v=20260906r1"></script>
+</body>
 </html>

@@ -124,6 +124,7 @@
     button.type = 'button';
     button.className = 'pb-copy-code';
     button.textContent = '复制代码';
+    button.setAttribute('aria-live','polite');
     button.addEventListener('click', async () => {
       const code = pre.querySelector('code');
       try {
@@ -135,6 +136,15 @@
       }
     });
     pre.appendChild(button);
+    const code=pre.querySelector(':scope > code');
+    const language=pre.dataset.language;
+    // Number real code, not ASCII topologies or prose traces. The gutter is
+    // excluded from copy/selection and preserves the original source string.
+    if(code&&!['text','plaintext'].includes(language)&&code.textContent.includes('\n')){
+      const gutter=document.createElement('span');gutter.className='cs-code-lines';gutter.setAttribute('aria-hidden','true');
+      gutter.textContent=Array.from({length:code.textContent.trimEnd().split('\n').length},(_,index)=>index+1).join('\n');
+      pre.classList.add('cs-numbered-code');pre.append(gutter);
+    }
   });
 
   const endMarker = document.createElement('div');
@@ -355,6 +365,10 @@
     breadcrumb.innerHTML = `<a href="${courseBase}">${escapeHtml(info.code || courseId)}</a><span>/</span><span>${currentItem.type === 'work' ? '实践工作台' : '课程内容'}</span><span>/</span><strong>${escapeHtml(breadcrumbTitle)}</strong>`;
     page.prepend(breadcrumb);
 
+    // The reference reader owns navigation and marginalia. Do not construct
+    // an invisible second inspector, its observers, or duplicate mode tabs.
+    if (document.body.classList.contains('reader')) return;
+
     const labTarget = page.querySelector('[data-interactive-src], .interactive-mount, .worked-trace, .execution-trace, .guided-problem');
     const dedicatedInteractive = !document.body.classList.contains('reader') && labTarget?.matches('[data-interactive-src]') && /(?:distance-vector-convergence|router-pipeline-stepper|tcp-sequence-space)\.json/.test(labTarget.dataset.interactiveSrc || '');
     if (dedicatedInteractive) document.body.classList.add('pb-dedicated-interactive');
@@ -429,7 +443,13 @@
     const current = workCurrent >= 0 ? workCurrent : lectureCurrent;
     if (current < 0) return;
 
-    mountCourseRail(info, status, collection, current);
+    if(!document.body.classList.contains('reader'))mountCourseRail(info, status, collection, current);
+    const authoredTitle=page.querySelector('h1');
+    const chineseTitle=collection[current].titleZh;
+    if(authoredTitle&&chineseTitle&&/[a-zA-Z]{5}.*[（(][\u3400-\u9fff]/.test(authoredTitle.textContent)){
+      authoredTitle.dataset.originalTitle=authoredTitle.textContent;
+      authoredTitle.textContent=chineseTitle;
+    }
     mountStudioChrome(info, status, collection[current]);
 
     const previous = collection[current - 1];

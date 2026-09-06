@@ -11,7 +11,53 @@
 <link rel="stylesheet" href="../../../assets/course/lesson.css?v=20260905a">
 <script defer src="../assets/review-lab-bank.js?v=20260829a"></script>
 <script defer src="../assets/review-labs.js?v=20260905a"></script>
-<script defer src="../../../assets/course/lesson-ui.js?v=20260905e"></script>
-<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260905l"></head>
-<body data-review-lab="a5"><script defer src="../../../assets/course/reader.js?v=20260905m"></script></body>
+<script defer src="../../../assets/course/lesson-ui.js?v=20260906r1"></script>
+<link rel="stylesheet" href="../../../assets/course/reader.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/platform.css?v=20260906r1"><link rel="stylesheet" href="../../../assets/course/reference-reader.css?v=20260906r1"><script defer src="../../../assets/course/platform.js?v=20260906r1"></script></head>
+<body class="cs-platform reader" data-review-lab="a5">
+<a class="skip-link" href="#review-content">跳到 Review Lab</a><nav class="review-bar"><a href="../index.html">← EECS498</a><a href="https://github.com/PointBreaker/EECS498/tree/1b495ae8c4db1343a12a39ac626a0a84dcada300/A5" target="_blank" rel="noreferrer">代码快照 ↗</a></nav>
+  <header class="review-hero"><div class="review-shell"><p>A5 · DETECTION</p><h1>从 dense feature 到结构化预测</h1><p class="review-lede">用 anchor、IoU、matching、loss 与 NMS 审计检测系统的对象关系。</p><div class="review-capabilities"><span>Box geometry</span><span>Matching invariants</span><span>Detection evaluation</span></div><p class="review-boundary"><strong>Review Lab，不是作业答案。</strong>阅读现有实现，先预测，再运行小实验并解释证据；原始仓库快照是代码事实来源。</p></div></header>
+  <nav class="review-stage-nav" aria-label="复盘阶段"><a href="#stage-geometry"><span>01</span>边界框的几何</a><a href="#stage-matching-loss"><span>02</span>匹配与损失</a><a href="#stage-nms"><span>03</span>非极大值抑制</a><a href="#stage-detector-gate"><span>04</span>检测器的证据</a></nav>
+  <main class="review-shell page" id="review-content"><article class="review-stage" id="stage-geometry">
+    <header><span>阶段 01</span><h2>边界框的几何</h2><p>让坐标约定、面积与 IoU 在 tiny boxes 上完全确定。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>大多数检测 bug 先表现为几何约定错，而不是网络不够强。</p><div class="review-links"><a href="../lessons/0006-detection-structured-prediction.html">讲义 6 · 结构化预测 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>能手算两个方框交并面积</li><li>知道像素闭区间约定影响 +1</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>boxes [N,4]</dd></div><div><dt>输出</dt><dd>IoU [N,M]</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>IoU ∈ [0,1]</li><li>无交集时 intersection 为 0</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>混用 xyxy 与 xywh</li><li>宽高为负仍继续计算</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>手算 [0,0,2,2] 与 [1,1,3,3] 的 IoU，并注明坐标约定。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>IoU 大于 1</strong><p>优先检查：union/intersection 或负宽高</p></div><div><strong>相同框 IoU 不是 1</strong><p>优先检查：面积约定</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>相同框 IoU=1，完全分离=0，部分重叠介于两者。</dd></div><div><dt>做实验</dt><dd>建立三组 boxes 作为 geometry regression。</dd></div><div><dt>留证据</dt><dd><ul><li>坐标 convention</li><li>手算值</li><li>实现值</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先画平面</p></details><details><summary>提示 2</summary><p>clamp intersection</p></details><details><summary>提示 3</summary><p>独立测试 area</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 边界框的几何</h3><ul><li>三个边界 case 通过</li><li>约定写入 contract</li><li>矩阵轴可解释</li></ul></section>
+  </article><article class="review-stage" id="stage-matching-loss">
+    <header><span>阶段 02</span><h2>匹配与损失</h2><p>把 anchors 分成 positive/negative/ignore，并分别计算分类和回归损失。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>错误 matching 会让模型从矛盾标签学习。</p><div class="review-links"><a href="../lessons/0006-detection-structured-prediction.html">讲义 6 · 结构化预测 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>会解释 threshold 区间</li><li>能区分 classification 与 box target</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>anchors, GT boxes/classes</dd></div><div><dt>输出</dt><dd>matched targets + losses</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>回归只作用于 positive</li><li>每个 target 规则确定</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>让 ignore 样本进入分类损失</li><li>按预测分数而非 GT 匹配</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>给 4 个 anchors 的 IoU [0.8,0.55,0.3,0.05]，按给定阈值手工分类。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>box loss 被大量背景主导</strong><p>优先检查：positive mask</p></div><div><strong>正样本数量为 0</strong><p>优先检查：阈值与 best-match 规则</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>提高 positive threshold 通常减少正样本并提高匹配质量，但可能降低 recall。</dd></div><div><dt>做实验</dt><dd>固定预测，只改变 matching threshold，记录样本数与 loss 组成。</dd></div><div><dt>留证据</dt><dd><ul><li>positive/ignore/negative count</li><li>loss components</li><li>threshold</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先只输出 labels</p></details><details><summary>提示 2</summary><p>再检查 regression targets</p></details><details><summary>提示 3</summary><p>最后接 loss</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 匹配与损失</h3><ul><li>匹配可手推</li><li>loss mask 正确</li><li>能解释阈值取舍</li></ul></section>
+  </article><article class="review-stage" id="stage-nms">
+    <header><span>阶段 03</span><h2>非极大值抑制</h2><p>让 score sorting 与 IoU suppression 产生确定候选集合。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>NMS 是离散决策，不属于训练网络本身，却直接改变 precision/recall。</p><div class="review-links"><a href="../lessons/0006-detection-structured-prediction.html">讲义 6 · 结构化预测 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>会手推三框 NMS</li><li>能区分 class-aware/class-agnostic</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>boxes + scores</dd></div><div><dt>输出</dt><dd>kept indices</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>先保留高分候选</li><li>suppression 只比较指定类别策略</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>按输入顺序处理</li><li>把 NMS threshold 当置信度 threshold</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>三个框中两个高度重叠，第三个独立；写出不同 IoU threshold 的保留集合。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>低分框压掉高分框</strong><p>优先检查：排序方向</p></div><div><strong>不同类别互相删除</strong><p>优先检查：NMS 是否应 class-aware</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>降低 NMS IoU threshold 会更激进抑制，可能提高 precision、降低 recall。</dd></div><div><dt>做实验</dt><dd>固定模型输出 sweep 两个 NMS threshold。</dd></div><div><dt>留证据</dt><dd><ul><li>kept count</li><li>precision/recall</li><li>类别策略</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先排序</p></details><details><summary>提示 2</summary><p>每轮只保留一个最高分</p></details><details><summary>提示 3</summary><p>打印被谁抑制</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 非极大值抑制</h3><ul><li>toy trace 正确</li><li>阈值效果可解释</li><li>结果确定</li></ul></section>
+  </article><article class="review-stage" id="stage-detector-gate">
+    <header><span>阶段 04</span><h2>检测器的证据</h2><p>用错误类型而非单一 mAP 解释检测器。</p></header>
+    <section class="why-this-works"><h3>为什么需要它</h3><p>mAP 聚合了分类、定位、漏检与重复框，不能单独定位 bug。</p><div class="review-links"><a href="../lessons/0006-detection-structured-prediction.html">讲义 6 · 结构化预测 →</a></div></section>
+    <section><h3>开始前应该已经会回答</h3><ul><li>会区分 FP/FN/localization error</li><li>知道 confidence threshold 改变 operating point</li></ul></section>
+    <section><h3>输入、输出与契约</h3><div class="review-contract"><dl><div><dt>输入</dt><dd>predictions + GT + evaluation config</dd></div><div><dt>输出</dt><dd>metric + error evidence</dd></div></dl><div class="invariant"><strong>不变量</strong><ul><li>坐标尺度一致</li><li>metric 配置与类别集合记录</li></ul></div><div class="misconception"><strong>不成立的假设</strong><ul><li>只看一张好图</li><li>在不同 NMS/score threshold 下直接比 mAP</li></ul></div></div></section>
+    <section class="review-sanity"><h3>用最小例子检查</h3><p>挑一张图手工标注每个 prediction 属于 TP/duplicate/localization/background。</p></section>
+    <section><h3>如果你看到……</h3><div class="failure-grid"><div><strong>可视化看似对但 mAP 低</strong><p>优先检查：坐标缩放、类别 id、evaluation config</p></div><div><strong>很多重复框</strong><p>优先检查：NMS 与 matching</p></div></div></section>
+    <section class="review-loop"><h3>预测 → 实验 → 证据</h3><dl><div><dt>先预测</dt><dd>若主要问题是定位，放宽 evaluation IoU 会显著改善；若是分类则不会。</dd></div><div><dt>做实验</dt><dd>在两个 evaluation IoU 下分解错误，并查看代表样本。</dd></div><div><dt>留证据</dt><dd><ul><li>metric config</li><li>error counts</li><li>representative evidence</li></ul></dd></div></dl></section>
+    <section><h3>渐进提示</h3><p class="hint-note">先独立排查 10–15 分钟，再按需展开。</p><details><summary>提示 1</summary><p>先验证坐标反变换</p></details><details><summary>提示 2</summary><p>再拆分类与定位</p></details><details><summary>提示 3</summary><p>最后调 threshold</p></details></section>
+    <section class="review-gate"><h3>闭卷检查 · 检测器的证据</h3><ul><li>metric 可复现</li><li>至少三类错误有证据</li><li>提出针对机制的下一实验</li></ul></section>
+  </article><section class="review-retro"><h2>复盘与迁移</h2><ul><li>哪一个原有心智模型被代码证据推翻了？</li><li>哪一个 bug 最适合用最小输入定位？</li><li>哪项优化只是换了一种资源，而没有改变模型语义？</li><li>如果重新审计一次，你会先验证哪个不变量？</li></ul></section></main>
+<script defer src="../../../assets/course/reader.js?v=20260906r1"></script>
+</body>
 </html>

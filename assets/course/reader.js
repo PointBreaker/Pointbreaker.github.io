@@ -29,7 +29,10 @@
     'Official solution':'官方解答','official solution':'官方解答','worksheet':'工作表','Worksheet':'工作表','source of truth':'一手资料',
     'CourseStack Explanation':'CourseStack 解析','CourseStack explanation':'CourseStack 解析',
     'DIAGRAM IN CONTEXT':'机制图','ACTIVE ORIENTATION':'主动定向','DEEP READING':'深度阅读',
-    'Ready to test this?':'准备好检验了吗？','Course discussion':'课程讨论','Source boundary':'来源边界'
+    'Ready to test this?':'准备好检验了吗？','Course discussion':'课程讨论','Source boundary':'来源边界',
+    'OBJECTS':'对象','TOY EXAMPLE':'最小例子','TOY TRACE':'最小推演','MECHANISM':'机制','WHY NOT?':'另一种做法为什么不行？',
+    'Objects':'对象','Toy example':'最小例子','Toy trace':'最小推演','Mechanism':'机制','Why not?':'另一种做法为什么不行？',
+    'Mental Model / Key Result':'心智模型 / 关键结论','Mental Model':'心智模型'
   }));
   const translate = text => {
     let value = text;
@@ -44,6 +47,12 @@
     texts.forEach(text => { if (!text.parentElement.closest('code,pre')) text.textContent=translate(text.textContent); });
   });
   translateUiLabels();
+  const translateReasoningLabels=()=>{
+    page.querySelectorAll('.reasoning-label,.lesson-build-kicker,.concept-lab-eyebrow').forEach(node=>{const translated=translate(node.textContent);if(translated!==node.textContent)node.textContent=translated;});
+    page.querySelectorAll('[data-block-label]').forEach(node=>{node.dataset.blockLabel=translate(node.dataset.blockLabel);});
+  };
+  translateReasoningLabels();setTimeout(translateReasoningLabels,1000);
+  if(courseId==='6.102')page.querySelector('.source-switch a[aria-current="page"]')?.setAttribute('href',location.pathname);
   // Course-specific scripts can add their labels after this reader profile.
   // Repeat only the narrow UI selector set, never the prose body.
   setTimeout(translateUiLabels,120);
@@ -55,7 +64,7 @@
   const notes = { 'mental-model':'model','misconception':'misconception','misconception-analysis':'misconception','wrong-turn':'misconception','invariant':'invariant','why-this-works':'why','counterfactual':'failure','historical-note':'history','warning-note':'failure' };
   Object.entries(notes).forEach(([cls,type]) => page.querySelectorAll(`.${cls}`).forEach(node => {node.classList.add('reader-note');node.dataset.note=type;}));
   page.querySelectorAll('.code-mechanism dl').forEach(node => node.classList.add('code-annotation'));
-  page.querySelectorAll('pre').forEach(pre=>{const lang=pre.dataset.language;pre.dataset.language=({python:'Python',typescript:'TypeScript',javascript:'JavaScript',plaintext:'文本 / 推演',text:'文本 / 推演',pseudocode:'伪代码',bash:'Shell'})[lang]||lang||'代码';});
+  page.querySelectorAll('pre').forEach(pre=>{const lang=pre.dataset.language;pre.dataset.language=({python:'Python',py:'Python',ts:'TypeScript',typescript:'TypeScript',js:'JavaScript',javascript:'JavaScript',cpp:'C++',c:'C',rust:'Rust',go:'Go',json:'JSON',plaintext:'文本 / 推演',text:'文本 / 推演',pseudocode:'伪代码',bash:'Shell'})[lang]||lang||'代码';});
   page.querySelectorAll('.work-it-out').forEach((work,index)=>{
     if(work.querySelector('textarea,input'))return;
     const label=document.createElement('label');label.className='reader-work-label';label.textContent='写下你的推演，再展开解析核对';
@@ -97,23 +106,55 @@
   const sources=[...page.querySelectorAll(':scope > .source-note,:scope > .warning-note,.lesson-hero .source-note,.review-hero .source-note,.guide-banner .source-note,.discussion-contract > .evidence-note')];
   sources.forEach(source=>{if(!/版本|source|来源|worksheet/i.test(source.textContent))return;const disclosure=document.createElement('details');disclosure.className='source-note reader-source-disclosure';const label=document.createElement('summary');label.textContent='来源与版本说明';const hiddenHero=source.closest('.lesson-hero,.review-hero,.guide-banner');if(hiddenHero&&sourceAnchor)sourceAnchor.after(disclosure);else source.before(disclosure);disclosure.append(label);while(source.firstChild)disclosure.append(source.firstChild);source.remove();});
   page.querySelector(':scope > nav:not([class])')?.setAttribute('hidden','');
-  const headings=[...page.querySelectorAll('h2')];
+  const outlineHeadings=()=>[...page.querySelectorAll('h2')].filter(h=>!h.closest('.reader-note,.quiz,details,.reader-completion,.reader-aside,.reader-marginalia'));
+  const headings=outlineHeadings();
   const aside=document.createElement('aside'); aside.className='reader-aside'; aside.setAttribute('aria-label','本页目录与注释');
-  const details=document.createElement('details'); details.open=matchMedia('(min-width:1181px)').matches;
-  matchMedia('(min-width:1181px)').addEventListener('change',event=>{details.open=event.matches;});
+  const details=document.createElement('details'); details.open=matchMedia('(min-width:901px)').matches;
+  matchMedia('(min-width:901px)').addEventListener('change',event=>{details.open=event.matches;});
   const summary=document.createElement('summary'); summary.textContent='本页目录'; details.append(summary);
   const nav=document.createElement('nav');
   headings.forEach((h,i)=>{ if(!h.id) h.id=`reader-section-${i+1}`; const a=document.createElement('a');a.href=`#${h.id}`;a.dataset.index=String(i+1).padStart(2,'0');a.textContent=h.textContent;nav.append(a); });
   details.append(nav);aside.append(details);
-  const model=page.querySelector('.mental-model,.invariant');
-  if(model){const note=document.createElement('p');note.className='reader-note';note.textContent='推演时先确认：谁收到了什么事件，查什么表，更新什么状态，向谁发送什么。';aside.append(note);}
+  // The right column contains evidence from THIS page, never generic networking
+  // copy on a math/ML lesson. Keep the authored block in place for mobile reading.
+  const marginalia=document.createElement('aside');marginalia.className='reader-marginalia';marginalia.setAttribute('aria-label','阅读注释');
+  const noteTypes=[['model','心智模型','brain','.mental-model,.math-reasoning__mental,.learning-map,.mental-model-callout,.recall,.card.idea,blockquote'],['invariant','不变量','circle-check','.invariant,.invariant-box'],['misconception','易错点','alert-triangle','.misconception,.misconception-analysis,.wrong-turn,.pitfall,.card.warning'],['history','历史说明','history','.historical-note,.evidence-note,.source-note,.source-switch'],['practice','想一想','bulb','.quiz,.review-sanity']];
+  const clean=node=>{const clone=node.cloneNode(true);clone.querySelectorAll('.katex-mathml,script,button,textarea,summary').forEach(n=>n.remove());return clone.textContent.replace(/\s+/g,' ').trim();};
+  const populateNotes=()=>{
+    marginalia.replaceChildren();
+    for(const [type,label,icon,selector] of noteTypes){
+      if(marginalia.children.length===4)break;
+      let source=(type==='model'?page.querySelector('.mental-model,.math-reasoning__mental'):null)||page.querySelector(selector);
+      if(!source){const pattern=({model:/心智模型|知识地图/,invariant:/不变量|表示不变式/,misconception:/误区|易错|常见错误/,history:/历史实现|历史说明/})[type];const title=pattern&&[...page.querySelectorAll('h2,h3,strong')].find(h=>pattern.test(h.textContent));if(title)source=/^H[23]$/.test(title.tagName)?title.nextElementSibling:title.parentElement;}
+      if(!source||source.closest('.reader-marginalia'))continue;
+      const textNode=[...source.querySelectorAll('p:not(.eyebrow):not(.code-label),li')].find(node=>clean(node).length>=12)||source;
+      // A table is structured evidence, not a sentence. Never flatten its
+      // headers and cells into an unreadable marginal "invariant".
+      if(textNode.matches('table,pre')||textNode.querySelector('table,pre'))continue;
+      let text=clean(textNode).replace(/^(?:心智模型|不变量|易错点)\s*[:：]?\s*/,'');if(text.length<12)continue;
+      if(text.length>120){const sentence=text.slice(0,120).match(/^[\s\S]*[。；！？]/)?.[0];text=(sentence?.length>30?sentence:text.slice(0,110)+'…');}
+      if(!source.id)source.id=`reader-note-${type}`;
+      const note=document.createElement('section');note.className='reader-margin-note';note.dataset.note=type;
+      let noteLabel=label;
+      if(source.matches('.card.idea,blockquote'))noteLabel=source.querySelector('h3')?.textContent.replace(/^\d+[.、]\s*/,'')||'概念速记';
+      if(source.matches('.card.warning'))noteLabel=source.querySelector('h3')?.textContent||'需要留意';
+      if(type==='history'&&!source.matches('.historical-note')&&!/历史实现|历史说明/.test(source.textContent))noteLabel='来源说明';
+      const head=document.createElement('h2');const img=document.createElement('img');img.src=new URL(`../vendor/tabler/${icon}.svg`,new URL('assets/course/',location.origin));img.alt='';img.width=18;img.height=18;head.append(img,noteLabel);
+      const p=document.createElement('p');
+      if(textNode.querySelector('.katex')&&clean(textNode).length<200){p.innerHTML=textNode.innerHTML;p.querySelectorAll('script,button,textarea').forEach(n=>n.remove());}
+      else p.textContent=text;
+      const a=document.createElement('a');a.href=`#${source.id}`;a.textContent='在正文中查看';a.addEventListener('click',()=>{let n=source;while(n&&n!==page){if(n.tagName==='DETAILS')n.open=true;n=n.parentElement;}});
+      note.append(head,p,a);marginalia.append(note);
+    }
+    if(marginalia.children.length&&!marginalia.isConnected)page.append(marginalia);
+  };
   // Some course-specific enhancement scripts resolve course metadata after
   // this reader script runs. When that happens there may not be a heading yet;
   // keep the aside attached to the article so it is not lost inside a detached
   // placeholder. A deferred pass also lets late-added headings appear in the
   // lightweight table of contents.
   const updateAsideActive=()=>{
-    const currentHeadings=[...page.querySelectorAll('h2')];
+    const currentHeadings=outlineHeadings();
     if(!currentHeadings.length) return;
     let current=currentHeadings[0];
     for(const heading of currentHeadings){ if(heading.getBoundingClientRect().top <= 132) current=heading; else break; }
@@ -127,15 +168,36 @@
     const intro=page.querySelector(':scope > .lede')||page.querySelector(':scope > h1')||page.querySelector(':scope > .pb-studio-intro')||page.querySelector(':scope > .pb-reader-intro');
     if(!aside.isConnected) intro?.after(aside);
     if(!aside.isConnected) page.prepend(aside);
-    const current=[...page.querySelectorAll('h2')];
+    const current=outlineHeadings();
     current.forEach((heading,index)=>{if(!heading.id)heading.id=`reader-section-${index+1}`;});
-    nav.replaceChildren(...current.map((heading,index)=>{const link=document.createElement('a');link.href=`#${heading.id}`;link.dataset.index=String(index+1).padStart(2,'0');link.textContent=heading.textContent;return link;}));
+    nav.replaceChildren(...current.map((heading,index)=>{const link=document.createElement('a');link.href=`#${heading.id}`;link.dataset.index=String(index+1).padStart(2,'0');link.textContent=clean(heading);return link;}));
     updateAsideActive();
+    populateNotes();
   };
   placeAside();
+  const asideFooter=document.createElement('footer');asideFooter.className='reader-outline-footer';
+  const courseLink=document.createElement('a');courseLink.href=`/courses/${courseId}/`;courseLink.textContent='返回课程地图';asideFooter.append(courseLink);
+  const exercise=page.querySelector('[data-interactive-src],.guided-problem,.quiz,.math-reasoning__check');
+  if(exercise){if(!exercise.id)exercise.id='reader-first-exercise';const link=document.createElement('a');link.href=`#${exercise.id}`;link.textContent='进入推演与练习';asideFooter.append(link);}
+  const sourceLink=[...page.querySelectorAll('a[href]')].find(a=>/\.pdf(?:$|[?#])/i.test(a.href));
+  if(sourceLink){const link=document.createElement('a');link.href=sourceLink.href;link.textContent='原始讲义 / 工作表';asideFooter.append(link);}
+  aside.append(asideFooter);
   setTimeout(placeAside,0);
   setTimeout(placeAside,250);
   setTimeout(placeAside,900);
+  // Course-specific lessons can arrive after their data bank resolves. Observe
+  // substantive sections, not text/KaTeX/our own sidebars, to avoid feedback loops.
+  let refreshTimer;
+  new MutationObserver(records=>{
+    const changed=records.some(record=>!record.target.closest?.('.reader-aside,.reader-marginalia')&&[...record.addedNodes].some(node=>node.nodeType===1&&(node.matches('section,article,main,.lesson-shell')||node.querySelector('h2,.mental-model'))));
+    if(!changed)return;
+    clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>{
+      translateUiLabels();
+      translateReasoningLabels();
+      Object.entries(notes).forEach(([cls,type])=>page.querySelectorAll(`.${cls}`).forEach(node=>{node.classList.add('reader-note');node.dataset.note=type;}));
+      placeAside();
+    },100);
+  }).observe(page,{childList:true,subtree:true});
   addEventListener('DOMContentLoaded',placeAside,{once:true});
   addEventListener('scroll',updateAsideActive,{passive:true});
   addEventListener('resize',updateAsideActive);
