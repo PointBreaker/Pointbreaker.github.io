@@ -1,7 +1,7 @@
 // Static course homes: one reference composition, distinct curricula, real links.
 import fs from 'node:fs';
 const catalog=JSON.parse(fs.readFileSync('courses.json','utf8')).courses;
-const version='20260906r1';
+const version='20260906r2';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=n=>`<img src="../../assets/vendor/tabler/${n}.svg" alt="" width="20" height="20">`;
 // Bounds follow the existing lecture numbering (including 6b and 25b), not dates.
